@@ -7,14 +7,11 @@
 
 /**
  * TODO LIST
- *  - Checkmate
- *  - Stalemate
- *  - generate potential moves function
  *  - Min/max function with alpha/beta pruning.
  *  - Evaluation function
  *      - test initially with piece value counting.
  *      - Neural network
- *      - Monte Carlo Tree Search?
+ *      - Monte Carlo Tree Search
  * 
  */
 

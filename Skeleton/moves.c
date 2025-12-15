@@ -4,21 +4,65 @@
 #include <string.h>
 #include "debug.h"
 
-/*move* generateMoveList(bitboard* board)
+move* generateMoveList(bitboard* board)
 {
-    move* moveArray = calloc(32, sizeof(move));
+    move** movesArrayList = calloc(16, sizeof(move));
     int size = 0;
-    if(board->turn == WHITE)
+    for(int currentSquare = 0; currentSquare < 64; currentSquare++)
     {
-        int currentSquare = 0;
-
+        if((board->turn == WHITE && board->pieces_w&(1ull<<currentSquare)) ||
+            (board->turn == BLACK && board->pieces_b&(1ull<<currentSquare)))
+        {
+            int piece = findPieceOnSquare(board, currentSquare);
+            move* tempMoves = generatePieceMoves(board, piece, currentSquare, piece);
+            if(tempMoves[0].startSquare != -1)
+            {
+                movesArrayList[size] = tempMoves;
+                size++;
+            }
+        }
     }
-    else
+
+    //Game over, no moves available.
+    //stalemate/checkmate gets decided elsewhere.
+    if(size == 0) 
     {
-
+        free(movesArrayList);
+        return NULL;
     }
-    return moveArray;
-}*/
+
+    int totalMoveCount = 0;
+    for(int i = 0; i < size; i++)
+    {
+        int j = 0;
+        while(movesArrayList[i][j].startSquare != -1) 
+        {
+            totalMoveCount++;
+            j++;
+        }
+    }
+
+    move* totalMoveList = calloc(totalMoveCount + 1, sizeof(move));
+    int nextInsertIndex = 0;
+    for(int i = 0; i < size; i++)
+    {
+        int j = 0;
+        while(movesArrayList[i][j].startSquare != -1)
+        {
+            memcpy(&totalMoveList[nextInsertIndex], &movesArrayList[i][j], sizeof(move));
+            j++;
+            nextInsertIndex++;
+        }
+        free(movesArrayList[i]);
+    }
+    free(movesArrayList);
+
+    move terminatingMove = {0};
+    terminatingMove.startSquare = -1;
+    totalMoveList[totalMoveCount] = terminatingMove;
+
+    return totalMoveList;
+}
 
 move* generatePieceMoves(bitboard* board, int piece, int square, int color)
 {
@@ -1353,6 +1397,41 @@ int moveFromString(bitboard* board, char* str)
         if(isPinned(board, startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
         board->turn=WHITE;
     }
+
+    //Calculate checkmate/stalemate
+    move* moveList = generateMoveList(board);
+    if(!moveList)
+    {
+        if(board->turn == WHITE)
+        {
+            if(board->in_check_w)
+            {
+                //White has been checkmated
+                printf("\nBlack wins!\n\n");
+            }
+            else
+            {
+                //White has been stalemated
+                printf("\nDraw! (White stalemated)\n\n");
+            }
+        }
+        else
+        {
+            if(board->in_check_b)
+            {
+                //Black has been checkmated
+                printf("\nWhite wins!\n\n");
+            }
+            else
+            {
+                //Black has been stalemated
+                printf("\nDraw! (Black stalemated)\n\n");
+            }
+        }
+        free(moveList);
+        exit(0);
+    }
+    free(moveList);
 
     return 0;
 }
