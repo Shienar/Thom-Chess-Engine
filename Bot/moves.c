@@ -59,6 +59,7 @@ move* generateMoveList(bitboard* board)
 
     move terminatingMove = {0};
     terminatingMove.startSquare = -1;
+    terminatingMove.endSquare = totalMoveCount;
     totalMoveList[totalMoveCount] = terminatingMove;
 
     return totalMoveList;
@@ -82,10 +83,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
                 {
                     //Promotion (Knight)
                     move newMove_Knight = {0};
-                    newMove_Knight.color = color;
                     newMove_Knight.startSquare = square;
                     newMove_Knight.endSquare = currentSquare;
-                    newMove_Knight.piece = PAWN;
+                    newMove_Knight.piece = PAWN|color;
                     newMove_Knight.promoteTo = KNIGHT;
 
                     moveArray[size] = newMove_Knight;
@@ -93,10 +93,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
                     
                     //Promotion (Bishop)
                     move newMove_Bishop = {0};
-                    newMove_Bishop.color = color;
                     newMove_Bishop.startSquare = square;
                     newMove_Bishop.endSquare = currentSquare;
-                    newMove_Bishop.piece = PAWN;
+                    newMove_Bishop.piece = PAWN|color;
                     newMove_Bishop.promoteTo = BISHOP;
 
                     moveArray[size] = newMove_Bishop;
@@ -104,10 +103,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
                     
                     //Promotion (Rook)
                     move newMove_Rook = {0};
-                    newMove_Rook.color = color;
                     newMove_Rook.startSquare = square;
                     newMove_Rook.endSquare = currentSquare;
-                    newMove_Rook.piece = PAWN;
+                    newMove_Rook.piece = PAWN|color;
                     newMove_Rook.promoteTo = ROOK;
 
                     moveArray[size] = newMove_Rook;
@@ -115,10 +113,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
                     
                     //Promotion (Queen)
                     move newMove_Queen = {0};
-                    newMove_Queen.color = color;
                     newMove_Queen.startSquare = square;
                     newMove_Queen.endSquare = currentSquare;
-                    newMove_Queen.piece = PAWN;
+                    newMove_Queen.piece = PAWN|color;
                     newMove_Queen.promoteTo = QUEEN;
 
                     moveArray[size] = newMove_Queen;
@@ -128,10 +125,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
                 else
                 {
                     move newMove = {0};
-                    newMove.color = color;
                     newMove.startSquare = square;
                     newMove.endSquare = currentSquare;
-                    newMove.piece = PAWN;
+                    newMove.piece = PAWN|color;
 
                     moveArray[size] = newMove;
                     size++;
@@ -170,10 +166,9 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
             if(moveMask&1)
             {
                 move newMove = {0};
-                newMove.color = color;
                 newMove.startSquare = square;
                 newMove.endSquare = currentSquare;
-                newMove.piece = piece;
+                newMove.piece = piece|color;
 
                 moveArray[size] = newMove;
                 size++;
@@ -190,7 +185,7 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
     {
         memcpy(&tempBoard, board, sizeof(bitboard));
         //Check if move is legal.
-        if(movePiece(&tempBoard, moveArray[i].startSquare, moveArray[i].endSquare, moveArray[i].piece|moveArray[i].color, moveArray[i].promoteTo) == 0)
+        if(movePiece(&tempBoard, moveArray[i].startSquare, moveArray[i].endSquare, moveArray[i].piece, moveArray[i].promoteTo) == 0)
         {
             if((ISWHITE(color) && isThreatened(&tempBoard, tempBoard.kingSquare_w, WHITE)) ||
                 (ISBLACK(color) && isThreatened(&tempBoard, tempBoard.kingSquare_b, BLACK)))
@@ -572,10 +567,10 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
     if(ISWHITE(color))
     {
         //Frontleft capture check
-        if(board->pieces_b&(1ull<<(square+7))) returnValue|=(1ull<<(square+7));
+        if(board->pieces_b&(1ull<<(square+7)) && getColumn(square) > 1) returnValue|=(1ull<<(square+7));
         
         //Frontright capture check
-        if(board->pieces_b&(1ull<<(square+9))) returnValue|=(1ull<<(square+9));
+        if(board->pieces_b&(1ull<<(square+9)) && getColumn(square) < 8) returnValue|=(1ull<<(square+9));
 
         //One move forward check
         if(!(board->pieces_all&(1ull<<(square+8))))
@@ -595,10 +590,10 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
     else
     {
         //Frontleft capture check
-        if(board->pieces_w&(1ull<<(square-7))) returnValue|=(1ull<<(square-7));
+        if(board->pieces_w&(1ull<<(square-7)) && getColumn(square) < 8) returnValue|=(1ull<<(square-7));
         
         //Frontright capture check
-        if(board->pieces_w&(1ull<<(square-9))) returnValue|=(1ull<<(square-9));
+        if(board->pieces_w&(1ull<<(square-9)) && getColumn(square > 1)) returnValue|=(1ull<<(square-9));
 
         //One move forward check
         if(!(board->pieces_all&(1ull<<(square-8))))
@@ -932,7 +927,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for pawn move.")
+        DEBUG("Invalid color for pawn move. (%02x)", color)
         return -1;
     }
 
@@ -1004,7 +999,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Set new board positions.
         board_clear_square(board, startSquare, (color|PAWN));
 
-        if(endSquare > 55)
+        if(endSquare < 8)
         {
             //Promotion
             board_set(board, endSquare, (color|promoteTo));
@@ -1312,59 +1307,14 @@ int moveFromString(bitboard* board, char* str)
 
     int startSquare = getSquareNumber(start);
     int endSquare = getSquareNumber(end);
-    int promoteTo = 0;
     int piece = findPieceOnSquare(board, startSquare);
     if(!piece)
     {
         DEBUG("Could not find piece on start square.")
         return -1;
     }
-    
-    if(ISBLACK(piece) && board->turn == WHITE)
-    {
-        DEBUG("Attempted to move black piece on white's turn.")
-        return -1;
-    }
-    else if(ISWHITE(piece) && board->turn == BLACK)
-    {
-        DEBUG("Attempted to move white piece on black's turn.")
-        return -1;
-    }
 
-    move* potentialMoveList = generatePieceMoves(board, piece, startSquare, piece&0xF0);
-    if(potentialMoveList == NULL)
-    {
-        DEBUG("Failed to generate potential moves.")
-        return -1;
-    }
-    int moveIndex = 0;
-    int isLegal = 0;
-    while(potentialMoveList[moveIndex].startSquare != -1)
-    { 
-        if(potentialMoveList[moveIndex].startSquare == startSquare && potentialMoveList[moveIndex].endSquare == endSquare)
-        {
-            isLegal = 1;
-            //break;
-        }
-        moveIndex++;
-    }
-    free(potentialMoveList);
-    if(!isLegal)
-    {
-        DEBUG("Piece move is not legal.")
-        return -1;
-    }
-
-    /*
-    //Players aren't allowed to move pinned pieces out of the pin.
-    if((board->turn == WHITE && isPinned(board, startSquare, board->kingSquare_w, WHITE) && isPinned(board, startSquare, board->kingSquare_w, WHITE) != isPinned(board, endSquare, board->kingSquare_w, WHITE)) ||
-        (board->turn == BLACK && isPinned(board, startSquare, board->kingSquare_b, BLACK) &&  isPinned(board, startSquare, board->kingSquare_b, BLACK) != isPinned(board, endSquare, board->kingSquare_b, BLACK)))
-    {
-        DEBUG("Cannot move piece on %s (%d) out of a pin.", start, startSquare)
-        return -1;
-    }
-    */
-
+    int promoteTo = 0;
     switch(promotion)
     {
         case 'q':
@@ -1382,19 +1332,68 @@ int moveFromString(bitboard* board, char* str)
         default:
             break;
     }
-    if(movePiece(board, startSquare, endSquare, piece, promoteTo)) return -1;
+    
+    move newMove = {0};
+    newMove.startSquare = startSquare;
+    newMove.endSquare = endSquare;
+    newMove.piece = piece;
+    newMove.promoteTo = promoteTo;
+
+    return moveFromStruct(board, newMove);
+}
+
+
+int moveFromStruct(bitboard* board, move m)
+{   
+    if(ISBLACK(m.piece) && board->turn == WHITE)
+    {
+        DEBUG("Attempted to move black piece on white's turn.")
+        return -1;
+    }
+    else if(ISWHITE(m.piece) && board->turn == BLACK)
+    {
+        DEBUG("Attempted to move white piece on black's turn.")
+        return -1;
+    }
+
+    move* potentialMoveList = generatePieceMoves(board, m.piece, m.startSquare, m.piece&0xF0);
+    if(potentialMoveList == NULL)
+    {
+        DEBUG("Failed to generate potential moves.")
+        return -1;
+    }
+    int moveIndex = 0;
+    int isLegal = 0;
+    while(potentialMoveList[moveIndex].startSquare != -1)
+    { 
+        if(potentialMoveList[moveIndex].startSquare == m.startSquare && potentialMoveList[moveIndex].endSquare == m.endSquare)
+        {
+            isLegal = 1;
+            //break;
+        }
+        moveIndex++;
+    }
+    free(potentialMoveList);
+    if(!isLegal)
+    {
+        DEBUG("Piece move is not legal.")
+        return -1;
+    }
+
+    
+    if(movePiece(board, m.startSquare, m.endSquare, m.piece, m.promoteTo)) return -1;
 
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
     {
         if(board->in_check_w) board->in_check_w = 0;
-        if(isPinned(board, startSquare, board->kingSquare_b, BLACK)) board->in_check_b = 1;
+        if(isPinned(board, m.startSquare, board->kingSquare_b, BLACK)) board->in_check_b = 1;
         board->turn=BLACK;
     }
     else
     {
         if(board->in_check_b) board->in_check_b = 0;
-        if(isPinned(board, startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
+        if(isPinned(board, m.startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
         board->turn=WHITE;
     }
 

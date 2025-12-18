@@ -19,7 +19,6 @@ typedef struct move {
     int startSquare;
     int endSquare;
     int piece;
-    int color;
     int promoteTo;
 } move;
 
@@ -47,6 +46,7 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color);
 int moveKing(bitboard *board, int startSquare, int endSquare, int color);
 
 int movePiece(bitboard *board, int startSquare, int endSquare, int piece, int promoteTo);
+int moveFromStruct(bitboard* board, move m);
 int moveFromString(bitboard* board, char* str);
 
 #endif
