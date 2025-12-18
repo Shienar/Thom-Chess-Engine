@@ -5,16 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * TODO LIST
- *  - Min/max function with alpha/beta pruning.
- *  - Evaluation function
- *      - test initially with piece value counting.
- *      - Neural network
- *      - Monte Carlo Tree Search
- * 
- */
-
 int main(int argc, char** argv)
 {
     /**
