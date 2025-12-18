@@ -5,11 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "engine.h"
+#include <windows.h>
 
 /**
  * To-do list: 
- *  - pawn on a4 can capture h2
- *  - engine can refuse promotion
+ *  - Game is now crashing on engine move. (Memory mismanagement?)
+ *  - some kind of overflow error is occuring with the piece masks.
+ *  - three-fold repetition
+ *      - hash table of previous moves.
  */
 
 int main(int argc, char** argv)
@@ -22,9 +25,25 @@ int main(int argc, char** argv)
     int depth = 6;
     int onlyEngines = 0;
     int onlyHumans = 0;
+    int threadCount = 1;
+    double delay = 0;
     for(int i = 1; i < argc; i++)
     {
-        if(strcmp(argv[i], "-v") == 0)
+        if(strcmp(argv[i], "--help") == 0)
+        {
+            printf("\n\n");
+            printf("--help\t\tPrints out this message\n");
+            printf("-v\t\tVerbose board information\n");
+            printf("--black\t\tPlay as black\n");
+            printf("--depth\t\tChange the depth, takes one integer parameter\n");
+            printf("-h\t\tHuman v human game\n");
+            printf("-e\t\tEngine v Engine game\n");
+            printf("--threads\tChange the number of threads for min/max search, takes one integer parameter, max 4.\n");
+            printf("--delay\t\tSpecify the number of milliseconds the computer will wait after each move.\n");
+            printf("\n\n");
+            exit(0);
+        }
+        else if(strcmp(argv[i], "-v") == 0)
         {
             verbose = 1;
         }
@@ -46,6 +65,17 @@ int main(int argc, char** argv)
         {
             onlyHumans = 0;
             onlyEngines = 1;
+        }
+        else if(strcmp(argv[i], "--threads") == 0)
+        {
+            i++;
+            threadCount = atoi(argv[i]);
+            threadCount = min(threadCount, 4);
+        }
+        else if(strcmp(argv[i], "--delay") == 0)
+        {
+            i++;
+            delay = atof(argv[i]);
         }
     }
 
@@ -77,11 +107,27 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move bestMove = calculateBestMove(&board, &boardWeights, depth);
+                move* bestMove = calculateBestMove(&board, &boardWeights, depth, threadCount);
                 error = moveFromStruct(&board, bestMove);
             }while(error != 0);
             board_print(&board, verbose);
+            if(delay) Sleep(delay);
         }
         
+        if(board.victor == WHITE)
+        {
+            printf("White wins!\n\n");
+            break;
+        }
+        else if(board.victor == BLACK)
+        {
+            printf("Black wins!\n\n");
+            break;
+        }
+        else if (board.victor == (WHITE|BLACK))
+        {
+            printf("Draw!\n\n");
+            break;
+        }
     }
 }

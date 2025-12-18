@@ -27,6 +27,16 @@
 #define REMOVE = 0x100
 #define SHOULDREMOVE(piece) (piece&REMOVE == REMOVE)
 
+typedef struct move {
+    int startSquare;
+    int endSquare;
+    int piece;
+    int promoteTo;
+    int capturedPiece;
+    int capturedPieceSquare; //Not always the same as endsquare because of en passant
+    struct move* nextMove;
+} move;
+
 //a1 = 0, h1 = 7
 //a2 = 8, h2 = 15
 //a3 = 16, h3 = 23
@@ -58,10 +68,6 @@ typedef struct bitboard {
     int kingSquare_b;
     int kingSquare_w;
 
-    int lastPieceMove;
-    int lastSquareMove;
-    int startOfLastSquareMove;
-
     int canQueensideCastle_b;
     int canKingsideCastle_b;
     int canQueensideCastle_w;
@@ -73,6 +79,12 @@ typedef struct bitboard {
 
     //Turn
     int turn;
+
+    //Checkmate
+    int victor;
+
+    //History
+    move* moveStackTop;
 } bitboard;
 
 #define columnNames "abcdefgh"
@@ -94,5 +106,9 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
 void board_print(bitboard* board, int printValues);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
+
+int moves_push(bitboard* board, move* m);
+move* moves_pop(bitboard* board);
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare);
 
 #endif

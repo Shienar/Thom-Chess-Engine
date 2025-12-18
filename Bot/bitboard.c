@@ -95,9 +95,7 @@ void board_reset(bitboard* board)
     board->kingSquare_w  = 4;
     
     //En passant
-    board->lastPieceMove = 0;
-    board->lastSquareMove = 0;
-    board->startOfLastSquareMove = 0;
+    board->moveStackTop = NULL; 
 
     //Castling
     board->canQueensideCastle_b = 1;
@@ -111,6 +109,9 @@ void board_reset(bitboard* board)
 
     //Turn
     board->turn = WHITE;
+
+    //Checkmate
+    board->victor = 0;
 }
 
 //Sets all the position bits to 0 for an empty board
@@ -376,7 +377,7 @@ void board_set(bitboard* board, int square, int piece)
     {
         DEBUG("Cannot set square %d - out of bounds [0, 63]", square)
         return;
-    } 
+    }
 
     uint64_t applyMask = (1ull<<square);
 
@@ -483,6 +484,7 @@ void board_print(bitboard* board, int printValues)
     piece_print(boardArray, board->king_w, 'k');
     piece_print(boardArray, board->king_b, 'K');
 
+    printf("\n");
     for(int row = 7; row >= 0; row--)
     {
         for(int column = 0; column <= 7; column++)
@@ -499,6 +501,7 @@ void board_print(bitboard* board, int printValues)
         }
         printf("\n");
     }
+    printf("\n");
 }
 
 
@@ -518,9 +521,6 @@ void values_print(bitboard* board)
     printf("BISHOP: %016llx %016llx\n", board->bishop_w, board->bishop_b);
     printf("QUEEN: %016llx %016llx\n", board->queen_w, board->queen_b);
     printf("KING: %016llx %016llx\n\t(%d) (%d)\n", board->king_w, board->king_b, board->kingSquare_w, board->kingSquare_b);
-    printf("Last Piece Move: %02x\n", board->lastPieceMove);
-    printf("Last square Move Source: %d\n", board->startOfLastSquareMove);
-    printf("Last square Move Destination: %d\n", board->lastSquareMove);
     printf("Can white kingside castle: %d\n", board->canKingsideCastle_w);
     printf("Can white queenside castle: %d\n", board->canQueensideCastle_w);
     printf("Can black kingside castle: %d\n", board->canKingsideCastle_b);
@@ -544,4 +544,54 @@ void bitmask_print(uint64_t mask, char fill)
         }
         printf("\n");
     }
+}
+
+
+int moves_push(bitboard* board, move* m)
+{
+    if(!board || !m)
+    {
+        DEBUG("Failed to push move")
+        return -1;
+    }
+
+    if(!board->moveStackTop)
+    {
+        board->moveStackTop = m;
+    }
+    else
+    {
+        m->nextMove = board->moveStackTop;
+        board->moveStackTop = m;
+    }
+    return 0;
+}
+
+move* moves_pop(bitboard* board)
+{
+    if(!board)
+    {
+        DEBUG("Failed to pop move from null board")
+        return NULL;
+    }
+
+    move* tempMove = board->moveStackTop;
+    board->moveStackTop = board->moveStackTop->nextMove;
+    tempMove->nextMove = NULL;
+    return tempMove;
+}
+
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare)
+{
+    move* m = calloc(1, sizeof(move));
+    if(!m) return NULL;
+
+    m->startSquare = startSquare;
+    m->endSquare = endSquare;
+    m->promoteTo = promoteTo;
+    m->piece = piece;
+    m->capturedPiece = capturedPiece;
+    m->capturedPieceSquare = capturedPieceSquare;
+    m->nextMove = NULL;
+    return m;
 }

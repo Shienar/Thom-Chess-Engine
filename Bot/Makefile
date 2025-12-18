@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -g -std=c99
 OBJFILES = main.c moves.c bitboard.c engine.c
-TARGET = TomBot
+TARGET = ChessBot
 
 all: $(TARGET)
 

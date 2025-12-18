@@ -4,132 +4,85 @@
 #include <string.h>
 #include "debug.h"
 
-move* generateMoveList(bitboard* board)
+move** generateMoveList(bitboard* board)
 {
-    move** movesArrayList = calloc(16, sizeof(move));
     int size = 0;
+    int capacity = 32;
+    move** movesList = calloc(capacity, sizeof(move*));
     for(int currentSquare = 0; currentSquare < 64; currentSquare++)
     {
         if((board->turn == WHITE && board->pieces_w&(1ull<<currentSquare)) ||
             (board->turn == BLACK && board->pieces_b&(1ull<<currentSquare)))
         {
             int piece = findPieceOnSquare(board, currentSquare);
-            move* tempMoves = generatePieceMoves(board, piece, currentSquare, piece);
-            if(tempMoves[0].startSquare != -1)
+            move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece);
+            int index = 0;
+            while(tempMoves[index]->startSquare != -1)
             {
-                movesArrayList[size] = tempMoves;
+                if(size >= capacity)
+                {
+                    capacity+=8;
+                    movesList = realloc(movesList, capacity*sizeof(move*));
+                }
+                movesList[size] = calloc(1, sizeof(move));
+                memcpy(movesList[size], tempMoves[index], sizeof(move));
+                free(tempMoves[index]);
                 size++;
+                index++;
             }
+            free(tempMoves[index]);
+            free(tempMoves);
         }
     }
+
 
     //Game over, no moves available.
     //stalemate/checkmate gets decided elsewhere.
     if(size == 0) 
     {
-        free(movesArrayList);
+        free(movesList);
         return NULL;
     }
 
-    int totalMoveCount = 0;
-    for(int i = 0; i < size; i++)
-    {
-        int j = 0;
-        while(movesArrayList[i][j].startSquare != -1) 
-        {
-            totalMoveCount++;
-            j++;
-        }
-    }
+    movesList = realloc(movesList, (size+1)*sizeof(move*));
+    move* terminatingMove = createMove(-1, size, 0, 0, 0, 0);
+    movesList[size] = terminatingMove;
 
-    move* totalMoveList = calloc(totalMoveCount + 1, sizeof(move));
-    int nextInsertIndex = 0;
-    for(int i = 0; i < size; i++)
-    {
-        int j = 0;
-        while(movesArrayList[i][j].startSquare != -1)
-        {
-            memcpy(&totalMoveList[nextInsertIndex], &movesArrayList[i][j], sizeof(move));
-            j++;
-            nextInsertIndex++;
-        }
-        free(movesArrayList[i]);
-    }
-    free(movesArrayList);
-
-    move terminatingMove = {0};
-    terminatingMove.startSquare = -1;
-    terminatingMove.endSquare = totalMoveCount;
-    totalMoveList[totalMoveCount] = terminatingMove;
-
-    return totalMoveList;
+    return movesList;
 }
 
-move* generatePieceMoves(bitboard* board, int piece, int square, int color)
+move** generatePieceMoves(bitboard* board, int piece, int square, int color)
 {
-    move* moveArray = calloc(32, sizeof(move));
+    move** moveArray = calloc(40, sizeof(move*));
     int size = 0;
     uint64_t moveMask;
     if(ISPAWN(piece))
     {
         moveMask = pawnMoves(board, square, color);
         int currentSquare = 0;
-
         while(moveMask)
         {
             if(moveMask&1)
             {
+                int targetPiece = findPieceOnSquare(board, currentSquare);
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
                 {
-                    //Promotion (Knight)
-                    move newMove_Knight = {0};
-                    newMove_Knight.startSquare = square;
-                    newMove_Knight.endSquare = currentSquare;
-                    newMove_Knight.piece = PAWN|color;
-                    newMove_Knight.promoteTo = KNIGHT;
-
-                    moveArray[size] = newMove_Knight;
+                    //Promotion
+                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare);
                     size++;
                     
-                    //Promotion (Bishop)
-                    move newMove_Bishop = {0};
-                    newMove_Bishop.startSquare = square;
-                    newMove_Bishop.endSquare = currentSquare;
-                    newMove_Bishop.piece = PAWN|color;
-                    newMove_Bishop.promoteTo = BISHOP;
-
-                    moveArray[size] = newMove_Bishop;
+                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare);
                     size++;
                     
-                    //Promotion (Rook)
-                    move newMove_Rook = {0};
-                    newMove_Rook.startSquare = square;
-                    newMove_Rook.endSquare = currentSquare;
-                    newMove_Rook.piece = PAWN|color;
-                    newMove_Rook.promoteTo = ROOK;
-
-                    moveArray[size] = newMove_Rook;
+                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare);
                     size++;
                     
-                    //Promotion (Queen)
-                    move newMove_Queen = {0};
-                    newMove_Queen.startSquare = square;
-                    newMove_Queen.endSquare = currentSquare;
-                    newMove_Queen.piece = PAWN|color;
-                    newMove_Queen.promoteTo = QUEEN;
-
-                    moveArray[size] = newMove_Queen;
+                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare);
                     size++;
-
                 }
                 else
                 {
-                    move newMove = {0};
-                    newMove.startSquare = square;
-                    newMove.endSquare = currentSquare;
-                    newMove.piece = PAWN|color;
-
-                    moveArray[size] = newMove;
+                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare);
                     size++;
                 }
             }
@@ -165,44 +118,42 @@ move* generatePieceMoves(bitboard* board, int piece, int square, int color)
         {
             if(moveMask&1)
             {
-                move newMove = {0};
-                newMove.startSquare = square;
-                newMove.endSquare = currentSquare;
-                newMove.piece = piece|color;
-
-                moveArray[size] = newMove;
+                int targetPiece = findPieceOnSquare(board, currentSquare);
+                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare);
                 size++;
             }
             moveMask = moveMask >> 1;
             currentSquare++;
         }
     }
-    
-    move* legalMoveArray = calloc(size, sizeof(move));
-    bitboard tempBoard = {0};
+
+    move** legalMoveArray = calloc(size, sizeof(move*));
+    bitboard* tempBoard = calloc(1, sizeof(bitboard));
     int legalSize = 0;
     for(int i = 0; i < size; i++)
     {
-        memcpy(&tempBoard, board, sizeof(bitboard));
+        memcpy(tempBoard, board, sizeof(bitboard));
         //Check if move is legal.
-        if(movePiece(&tempBoard, moveArray[i].startSquare, moveArray[i].endSquare, moveArray[i].piece, moveArray[i].promoteTo) == 0)
+        if(movePiece(tempBoard, moveArray[i]->startSquare, moveArray[i]->endSquare, moveArray[i]->piece, moveArray[i]->promoteTo) == 0)
         {
-            if((ISWHITE(color) && isThreatened(&tempBoard, tempBoard.kingSquare_w, WHITE)) ||
-                (ISBLACK(color) && isThreatened(&tempBoard, tempBoard.kingSquare_b, BLACK)))
+            if((ISWHITE(color) && isThreatened(tempBoard, tempBoard->kingSquare_w, WHITE)) ||
+                (ISBLACK(color) && isThreatened(tempBoard, tempBoard->kingSquare_b, BLACK)))
             {
                 continue;
             }
 
-            legalMoveArray[legalSize] = moveArray[i];
+            legalMoveArray[legalSize] = calloc(1, sizeof(move));
+            memcpy(legalMoveArray[legalSize], moveArray[i], sizeof(move));
             legalSize++;
         }
     }
+    free(tempBoard);
+    for(int i = 0; i < size; i++) free(moveArray[i]);
+    free(moveArray);
 
     legalMoveArray = realloc(legalMoveArray, (legalSize+1)*sizeof(move));
     if(legalMoveArray == NULL) return NULL;
-
-    move terminatingMove = {0};
-    terminatingMove.startSquare = -1;
+    move* terminatingMove = createMove(-1, legalSize, 0, 0, 0, 0);
     legalMoveArray[legalSize] = terminatingMove;
 
     return legalMoveArray;
@@ -544,26 +495,25 @@ int isThreatened(bitboard* board, int square, int squareColor)
     {
         bishopqueen = board->bishop_b|board->queen_b;
         rookqueen = board->rook_b|board->queen_b;
-        if(((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b))) return 1;
-        if(knightMoves(board, square, squareColor)&(board->knight_b)) return 1;
+        if(((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b))) return THREAT_TYPE_PAWN;
+        if(knightMoves(board, square, squareColor)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
     }
     else if(ISBLACK(squareColor))
     {
         bishopqueen = board->bishop_w|board->queen_w;
         rookqueen = board->rook_w|board->queen_w;
-        if(((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w))) return 1;
-        if(knightMoves(board, square, squareColor)&(board->knight_w)) return 1;
+        if(((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w))) return THREAT_TYPE_PAWN;
+        if(knightMoves(board, square, squareColor)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
     }
-    if(bishopMoves(board, square, squareColor)&(bishopqueen)) return 1;
-    if(rookMoves(board, square, squareColor)&(rookqueen)) return 1;
+    if(bishopMoves(board, square, squareColor)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
+    if(rookMoves(board, square, squareColor)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
 
-    return 0;
+    return THREAT_TYPE_NONE;
 }
 
 uint64_t pawnMoves(bitboard* board, int square, int color)
 {
     uint64_t returnValue = 0;
-
     if(ISWHITE(color))
     {
         //Frontleft capture check
@@ -582,9 +532,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
 
         //En passant
-        if(ISPAWN(board->lastPieceMove) && abs(square - board->lastSquareMove) == 1 && abs(board->lastSquareMove - board->startOfLastSquareMove) == 16)
+        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && abs(square - board->moveStackTop->nextMove->endSquare) == 1 && abs(board->moveStackTop->nextMove->endSquare - board->moveStackTop->nextMove->startSquare) == 16)
         {
-            returnValue|=(1ull<<(board->lastSquareMove + 8));
+            returnValue|=(1ull<<(board->moveStackTop->nextMove->endSquare + 8));
         }
     }
     else
@@ -593,7 +543,7 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         if(board->pieces_w&(1ull<<(square-7)) && getColumn(square) < 8) returnValue|=(1ull<<(square-7));
         
         //Frontright capture check
-        if(board->pieces_w&(1ull<<(square-9)) && getColumn(square > 1)) returnValue|=(1ull<<(square-9));
+        if(board->pieces_w&(1ull<<(square-9)) && getColumn(square) > 1) returnValue|=(1ull<<(square-9));
 
         //One move forward check
         if(!(board->pieces_all&(1ull<<(square-8))))
@@ -605,9 +555,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
         
         //En passant
-        if(ISPAWN(board->lastPieceMove) && abs(square - board->lastSquareMove) == 1 && abs(board->lastSquareMove - board->startOfLastSquareMove) == 16)
+        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && abs(square - board->moveStackTop->nextMove->endSquare) == 1 && abs(board->moveStackTop->nextMove->endSquare - board->moveStackTop->nextMove->startSquare) == 16)
         {
-            returnValue|=(1ull<<(board->lastSquareMove - 8));
+            returnValue|=(1ull<<(board->moveStackTop->nextMove->endSquare - 8));
         }
     }
 
@@ -644,7 +594,7 @@ uint64_t knightMoves(bitboard* board, int square, int color)
     if(column + 2 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-6));
     if(column + 1 <= 8 && row - 2 >= 1) returnedValue|=(1ull<<(square-15));
     if(column - 1 >= 1 && row - 2 >= 1) returnedValue|=(1ull<<(square-17));
-    if(column - 2 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-10));
+    if(column - 2 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-10));
 
     if(ISWHITE(color))
     {
@@ -887,14 +837,14 @@ uint64_t kingMoves(bitboard* board, int square, int color)
      *  8: endSquare = square - 7
      */
     
-    if(column - 1 >= 1 && row + 1 <= 8) returnedValue|=(1ull<<(square+7));
-    if(row + 1 <= 8) returnedValue|=(1ull<<(square+8));
-    if(column + 1 <= 8 && row + 1 <= 8) returnedValue|=(1ull<<(square+9));
-    if(column - 1 >= 1) returnedValue|=(1ull<<(square-1));
-    if(column + 1 <= 8) returnedValue|=(1ull<<(square+1));
-    if(column - 1 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-9));
-    if(row - 1 >= 1) returnedValue|=(1ull<<(square-8));
-    if(column + 1 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-7));
+    if(column - 1 >= 1 && row + 1 <= 8 && !isThreatened(board, square+7, color)) returnedValue|=(1ull<<(square+7));
+    if(row + 1 <= 8 && !isThreatened(board, square+8, color)) returnedValue|=(1ull<<(square+8));
+    if(column + 1 <= 8 && row + 1 <= 8 && !isThreatened(board, square+9, color)) returnedValue|=(1ull<<(square+9));
+    if(column - 1 >= 1 && !isThreatened(board, square-1, color)) returnedValue|=(1ull<<(square-1));
+    if(column + 1 <= 8 && !isThreatened(board, square+1, color)) returnedValue|=(1ull<<(square+1));
+    if(column - 1 >= 1 && row - 1 >= 1 && !isThreatened(board, square-9, color)) returnedValue|=(1ull<<(square-9));
+    if(row - 1 >= 1 && !isThreatened(board, square-8, color)) returnedValue|=(1ull<<(square-8));
+    if(column + 1 <= 8 && row - 1 >= 1 && !isThreatened(board, square-7, color)) returnedValue|=(1ull<<(square-7));
 
     if(ISWHITE(color))
     {
@@ -958,42 +908,52 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Diagonal Capture
 
         //Check for en passant.
-        if(ISPAWN(board->lastPieceMove) && (getColumn(endSquare) == getColumn(board->lastSquareMove)) && 
-            ((ISWHITE(color) && (board->lastSquareMove - endSquare == -8)) ||
-            (ISBLACK(color) && (board->lastSquareMove - endSquare == 8))))
+        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->nextMove->endSquare)) && 
+            ((ISWHITE(color) && (board->moveStackTop->nextMove->endSquare - endSquare == -8)) ||
+            (ISBLACK(color) && (board->moveStackTop->nextMove->endSquare - endSquare == 8))))
         {
             //Check if target pawn is pinned to turn's king.
-            if(ISWHITE(color) && isPinned(board, board->lastSquareMove, board->kingSquare_w, WHITE))
+            if(ISWHITE(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_w, WHITE))
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_w, kingSquareName);
                 char pawnSquareName[3] = {0};
-                getSquareName(board->lastSquareMove, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->lastSquareMove, kingSquareName, board->kingSquare_w)
+                getSquareName(board->moveStackTop->endSquare, pawnSquareName);
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
                 return -1;
             }
-            else if(ISBLACK(color) && isPinned(board, board->lastSquareMove, board->kingSquare_b, BLACK))
+            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_b, BLACK))
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_b, kingSquareName);
                 char pawnSquareName[3] = {0};
-                getSquareName(board->lastSquareMove, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->lastSquareMove, kingSquareName, board->kingSquare_b)
+                getSquareName(board->moveStackTop->nextMove->endSquare, pawnSquareName);
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->moveStackTop->nextMove->endSquare, kingSquareName, board->kingSquare_b)
                 return -1;
             }
 
             //Check if capturing other pawn reveals a discovered check.
-            if(ISWHITE(color) && isPinned(board, board->lastSquareMove, board->kingSquare_b, BLACK))
+            if(ISWHITE(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_b, BLACK))
             {
                 board->in_check_b = 1;
             }
-            else if(ISBLACK(color) && isPinned(board, board->lastSquareMove, board->kingSquare_w, WHITE))
+            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_w, WHITE))
             {
                 board->in_check_w = 1;
             }
 
             //En passant capture
-            board_clear_square(board, board->lastSquareMove, (PAWN));
+            if(board->moveStackTop)
+            {
+                board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+                board->moveStackTop->capturedPieceSquare = endSquare;
+            }
+            board_clear_square(board, board->moveStackTop->nextMove->endSquare, (PAWN));
+        }
+        else if(board->moveStackTop)
+        {
+            board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+            board->moveStackTop->capturedPieceSquare = endSquare;
         }
 
         //Set new board positions.
@@ -1025,7 +985,6 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
 
 int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
 {
-
     if(board == NULL)
     {
         DEBUG("Cannot move knight. Board is NULL")
@@ -1045,6 +1004,12 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
     {
         DEBUG("Invalid color for knight move.")
         return -1;
+    }
+
+    if(board->moveStackTop)
+    {
+        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     //Set new board positions after ensuring position is valid.
@@ -1087,6 +1052,12 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
     
+    if(board->moveStackTop)
+    {
+        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+        board->moveStackTop->capturedPieceSquare = endSquare;
+    }
+
     board_clear_square(board, startSquare, (color|BISHOP));
     board_set(board, endSquare, (color|BISHOP));
 
@@ -1124,6 +1095,12 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
     {
         DEBUG("Invalid color for rook move.")
         return -1;
+    }
+
+    if(board->moveStackTop)
+    {
+        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     board_clear_square(board, startSquare, (color|ROOK));
@@ -1182,6 +1159,12 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
 
+    if(board->moveStackTop)
+    {
+        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+        board->moveStackTop->capturedPieceSquare = endSquare;
+    }
+
     board_clear_square(board, startSquare, (color|QUEEN));
     board_set(board, endSquare, (color|QUEEN));
 
@@ -1221,14 +1204,6 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
 
-    if(isThreatened(board, endSquare, color))
-    {
-        char endSquareName[3] = {0};
-        getSquareName(endSquare, endSquareName);
-        DEBUG("King cannot reach defended square %s (%d)", endSquareName, endSquare)
-        return -1;
-    }
-
     if(ISBLACK(color)) 
     {
         board->kingSquare_b = endSquare;
@@ -1248,6 +1223,12 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
             board->canQueensideCastle_w = 0;
             board->canKingsideCastle_w = 0;
         }
+    }
+
+    if(board->moveStackTop)
+    {
+        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
+        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     board_clear_square(board, startSquare, (color|KING));
@@ -1288,10 +1269,6 @@ int movePiece(bitboard *board, int startSquare, int endSquare, int piece, int pr
         DEBUG("Attempted to move invalid piece type.")
         return -1;
     }
-    
-    board->startOfLastSquareMove = startSquare;
-    board->lastSquareMove = endSquare;
-    board->lastPieceMove = piece;
 
     return error;
 }
@@ -1332,31 +1309,25 @@ int moveFromString(bitboard* board, char* str)
         default:
             break;
     }
-    
-    move newMove = {0};
-    newMove.startSquare = startSquare;
-    newMove.endSquare = endSquare;
-    newMove.piece = piece;
-    newMove.promoteTo = promoteTo;
 
-    return moveFromStruct(board, newMove);
+    //Captured piece info gets added in later.
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, 0, 0));
 }
 
-
-int moveFromStruct(bitboard* board, move m)
+int moveFromStruct(bitboard* board, move* m)
 {   
-    if(ISBLACK(m.piece) && board->turn == WHITE)
+    if(ISBLACK(m->piece) && board->turn == WHITE)
     {
-        DEBUG("Attempted to move black piece on white's turn.")
+        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare)
         return -1;
     }
-    else if(ISWHITE(m.piece) && board->turn == BLACK)
+    else if(ISWHITE(m->piece) && board->turn == BLACK)
     {
-        DEBUG("Attempted to move white piece on black's turn.")
+        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m->startSquare, m->endSquare)
         return -1;
     }
 
-    move* potentialMoveList = generatePieceMoves(board, m.piece, m.startSquare, m.piece&0xF0);
+    move** potentialMoveList = generatePieceMoves(board, m->piece, m->startSquare, m->piece&0xF0);
     if(potentialMoveList == NULL)
     {
         DEBUG("Failed to generate potential moves.")
@@ -1364,14 +1335,14 @@ int moveFromStruct(bitboard* board, move m)
     }
     int moveIndex = 0;
     int isLegal = 0;
-    while(potentialMoveList[moveIndex].startSquare != -1)
+    while(potentialMoveList[moveIndex]->startSquare != -1)
     { 
-        if(potentialMoveList[moveIndex].startSquare == m.startSquare && potentialMoveList[moveIndex].endSquare == m.endSquare)
+        if(!isLegal && potentialMoveList[moveIndex]->startSquare == m->startSquare && potentialMoveList[moveIndex]->endSquare == m->endSquare)
         {
             isLegal = 1;
-            //break;
         }
         moveIndex++;
+        free(potentialMoveList[moveIndex]);
     }
     free(potentialMoveList);
     if(!isLegal)
@@ -1380,25 +1351,30 @@ int moveFromStruct(bitboard* board, move m)
         return -1;
     }
 
-    
-    if(movePiece(board, m.startSquare, m.endSquare, m.piece, m.promoteTo)) return -1;
+    moves_push(board, m);
+    if(movePiece(board, m->startSquare, m->endSquare, m->piece, m->promoteTo) != 0) 
+    {
+        DEBUG("Failed to move piece from struct.")
+        moves_pop(board);
+        return -1;
+    }
 
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
     {
         if(board->in_check_w) board->in_check_w = 0;
-        if(isPinned(board, m.startSquare, board->kingSquare_b, BLACK)) board->in_check_b = 1;
+        if(isPinned(board, m->startSquare, board->kingSquare_b, BLACK)) board->in_check_b = 1;
         board->turn=BLACK;
     }
     else
     {
         if(board->in_check_b) board->in_check_b = 0;
-        if(isPinned(board, m.startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
+        if(isPinned(board, m->startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
         board->turn=WHITE;
     }
 
     //Calculate checkmate/stalemate
-    move* moveList = generateMoveList(board);
+    move** moveList = generateMoveList(board);
     if(!moveList)
     {
         if(board->turn == WHITE)
@@ -1406,12 +1382,12 @@ int moveFromStruct(bitboard* board, move m)
             if(board->in_check_w)
             {
                 //White has been checkmated
-                printf("\nBlack wins!\n\n");
+                board->victor = BLACK;
             }
             else
             {
                 //White has been stalemated
-                printf("\nDraw! (White stalemated)\n\n");
+                board->victor = BLACK|WHITE;
             }
         }
         else
@@ -1419,18 +1395,92 @@ int moveFromStruct(bitboard* board, move m)
             if(board->in_check_b)
             {
                 //Black has been checkmated
-                printf("\nWhite wins!\n\n");
+                board->victor = WHITE;
             }
             else
             {
                 //Black has been stalemated
-                printf("\nDraw! (Black stalemated)\n\n");
+                board->victor = BLACK|WHITE;
             }
         }
-        free(moveList);
-        exit(0);
     }
-    free(moveList);
+    else
+    {
+        int index = 0;
+        while(moveList[index]->startSquare != -1) 
+        {
+            free(moveList[index]);
+            index++;
+        }
+        free(moveList);
+    }
+    
+    return 0;
+}
 
+int unmove(bitboard *board)
+{
+    if(!board)
+    {
+        DEBUG("Cannot undo a move from a NULL board.")
+        return -1;
+    }
+
+    move* m = moves_pop(board);
+    if(!m)
+    {
+        DEBUG("No move history to undo.")
+        return -1;
+    }
+
+    if(ISKING(m->piece) && abs(m->endSquare-m->startSquare) == 2)
+    {
+        //Undo castle.
+        if(m->endSquare == 2)
+        {
+            //White queenside castle
+            board_clear_square(board, 2, KING|WHITE);
+            board_clear_square(board, 3, ROOK|WHITE);
+            board_set(board, ROOK|WHITE, 0);
+            board_set(board, KING|WHITE, 4);
+        }
+        else if(m->endSquare == 6)
+        {
+            //White kingside castle
+            board_clear_square(board, 6, KING|WHITE);
+            board_clear_square(board, 5, ROOK|WHITE);
+            board_set(board, ROOK|WHITE, 7);
+            board_set(board, KING|WHITE, 4);
+        }
+        else if(m->endSquare == 58)
+        {
+            //Black queenside castle
+            board_clear_square(board, 58, KING|BLACK);
+            board_clear_square(board, 59, ROOK|BLACK);
+            board_set(board, ROOK|BLACK, 56);
+            board_set(board, KING|BLACK, 60);
+        }
+        else if(m->endSquare == 62)
+        {
+            //Black kingside castle
+            board_clear_square(board, 62, KING|BLACK);
+            board_clear_square(board, 61, ROOK|BLACK);
+            board_set(board, ROOK|BLACK, 63);
+            board_set(board, KING|BLACK, 60);
+        }
+    }
+    else
+    {
+        if(m->promoteTo) board_clear_square(board, m->endSquare, m->promoteTo);
+        board_clear_square(board, m->endSquare, m->piece);
+        board_set(board, m->startSquare, m->piece);
+
+        if(m->capturedPiece) board_set(board, m->capturedPieceSquare, m->capturedPieceSquare);
+    }
+
+    if(board->turn == WHITE) board->turn = BLACK;
+    else if (board->turn==BLACK) board->turn = WHITE;
+
+    free(m);
     return 0;
 }

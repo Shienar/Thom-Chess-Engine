@@ -3,6 +3,7 @@
 
 #include "bitboard.h"
 #include "moves.h"
+#include <windows.h>
 
 typedef struct {
     double pawnPieceWeights[64];
@@ -20,6 +21,15 @@ typedef struct {
     double kingWeight;
 } weights;
 
+// Windows multithreading.
+typedef struct {
+    HANDLE parentWaitSemaphore;
+    HANDLE threadCountSemaphore;
+    bitboard* board;
+    weights* weights;
+    int depth;
+    double* returnValue;
+} threadParam;
 
 /**
  * Initializes piece weights.
@@ -44,11 +54,11 @@ double evaluate(bitboard* board, weights* w);
  *  - If engine is black, choose the move with the lowest score.
  *  - If engine is white, choose the move with the highest score.
  */
-double alpha_beta(bitboard board, weights* weights, double alpha, double beta, int depth);
+double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, int depth);
 
 /**
  * Calls alpha_beta as describe above and returns the best move.
  */
-move calculateBestMove(bitboard* board, weights* weights, int depth);
+move *calculateBestMove(bitboard* board, weights* weights, int depth, int maxthreads);
 
 #endif

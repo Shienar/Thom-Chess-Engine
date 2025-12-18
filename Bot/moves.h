@@ -15,16 +15,15 @@
 #define PIN_TYPE_DOWNLEFT 7
 #define PIN_TYPE_DOWNRIGHT 8
 
-typedef struct move {
-    int startSquare;
-    int endSquare;
-    int piece;
-    int promoteTo;
-} move;
+#define THREAT_TYPE_NONE 0
+#define THREAT_TYPE_PAWN 1
+#define THREAT_TYPE_KNIGHT 2
+#define THREAT_TYPE_BISHOPQUEEN 3
+#define THREAT_TYPE_ROOKQUEEN 4
 
 //Legal moves
-move* generateMoveList(bitboard* board);
-move* generatePieceMoves(bitboard* board, int piece, int square, int color);
+move** generateMoveList(bitboard* board);
+move** generatePieceMoves(bitboard* board, int piece, int square, int color);
 
 int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColor);
 int isThreatened(bitboard* board, int square, int squareColor);
@@ -46,7 +45,9 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color);
 int moveKing(bitboard *board, int startSquare, int endSquare, int color);
 
 int movePiece(bitboard *board, int startSquare, int endSquare, int piece, int promoteTo);
-int moveFromStruct(bitboard* board, move m);
+int moveFromStruct(bitboard* board, move* m);
 int moveFromString(bitboard* board, char* str);
+
+int unmove(bitboard *board);
 
 #endif
