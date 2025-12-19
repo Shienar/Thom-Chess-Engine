@@ -513,7 +513,9 @@ void board_print(bitboard* board, int printValues, int printHistory)
             getSquareName(m->startSquare, startSquareName);
             getSquareName(m->endSquare, endSquareName);
             getSquareName(m->capturedPieceSquare, capturedSquareName);
-            printf("\t[%02x->%02x]: %s->%s, Captured %02x on %s\n", m->piece, m->promoteTo, startSquareName, endSquareName, m->capturedPiece, capturedSquareName);
+            printf("\t[%02x->%02x]: %s->%s", m->piece, m->promoteTo, startSquareName, endSquareName);
+            if(m->capturedPiece) printf(" Captured %02x on %s", m->capturedPiece, capturedSquareName);
+            printf("\n");
         }
         printf("\n");
     }

@@ -10,6 +10,7 @@
 /**
  * To-do list: 
  *  - Undo moves
+ *  - En passant is broken.
  */
 
 int main(int argc, char** argv)
@@ -110,7 +111,8 @@ int main(int argc, char** argv)
             }
             else if(buffer[0] == 'u')
             {
-                unmove(&board);
+                move* tempMove = unmove(&board);
+                if(tempMove) free(tempMove);
                 board_print(&board, verbose, printHistory);
             }
             else

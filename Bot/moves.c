@@ -555,9 +555,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
 
         //En passant
-        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && abs(square - board->moveStackTop->nextMove->endSquare) == 1 && abs(board->moveStackTop->nextMove->endSquare - board->moveStackTop->nextMove->startSquare) == 16)
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && abs(square - board->moveStackTop->endSquare) == 1 && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
         {
-            returnValue|=(1ull<<(board->moveStackTop->nextMove->endSquare + 8));
+            returnValue|=(1ull<<(board->moveStackTop->endSquare + 8));
         }
     }
     else
@@ -578,9 +578,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
         
         //En passant
-        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && abs(square - board->moveStackTop->nextMove->endSquare) == 1 && abs(board->moveStackTop->nextMove->endSquare - board->moveStackTop->nextMove->startSquare) == 16)
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && abs(square - board->moveStackTop->endSquare) == 1 && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
         {
-            returnValue|=(1ull<<(board->moveStackTop->nextMove->endSquare - 8));
+            returnValue|=(1ull<<(board->moveStackTop->endSquare - 8));
         }
     }
 
@@ -931,12 +931,12 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Diagonal Capture
 
         //Check for en passant.
-        if(board->moveStackTop && board->moveStackTop->nextMove && ISPAWN(board->moveStackTop->nextMove->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->nextMove->endSquare)) && 
-            ((ISWHITE(color) && (board->moveStackTop->nextMove->endSquare - endSquare == -8)) ||
-            (ISBLACK(color) && (board->moveStackTop->nextMove->endSquare - endSquare == 8))))
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && 
+            ((ISWHITE(color) && (board->moveStackTop->endSquare - endSquare == -8)) ||
+            (ISBLACK(color) && (board->moveStackTop->endSquare - endSquare == 8))))
         {
             //Check if target pawn is pinned to turn's king.
-            if(ISWHITE(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_w, WHITE))
+            if(ISWHITE(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE))
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_w, kingSquareName);
@@ -945,7 +945,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
                 return -1;
             }
-            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_b, BLACK))
+            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK))
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_b, kingSquareName);
@@ -956,25 +956,16 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
             }
 
             //Check if capturing other pawn reveals a discovered check.
-            if(ISWHITE(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_b, BLACK))
+            if(ISWHITE(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK))
             {
                 board->in_check_b = 1;
             }
-            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->nextMove->endSquare, board->kingSquare_w, WHITE))
+            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE))
             {
                 board->in_check_w = 1;
             }
 
-            //En passant capture
-            if(board->moveStackTop) 
-            {
-                board->moveStackTop->capturedPiece = PAWN;
-                if(ISWHITE(color)) board->moveStackTop->capturedPiece|=BLACK;
-                else board->moveStackTop->capturedPiece|=WHITE;
-
-                board->moveStackTop->capturedPieceSquare = board->moveStackTop->nextMove->endSquare;
-            }
-            board_clear_square(board, board->moveStackTop->nextMove->endSquare, PAWN);
+            board_clear_square(board, board->moveStackTop->endSquare, PAWN);
         }
 
         //Set new board positions.
@@ -1300,13 +1291,25 @@ int moveFromString(bitboard* board, char* str)
         default:
             break;
     }
+
     int capturedPiece = findPieceOnSquare(board, endSquare);
+    int capturedSquare = endSquare;
+    if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
+        abs(startSquare - board->moveStackTop->endSquare) == 1 && 
+        abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+    {
+        //en passant
+        capturedPiece = board->moveStackTop->piece;
+        capturedSquare = board->moveStackTop->endSquare;
+    }
+
     int castlingMask = 0;
     if(board->canKingsideCastle_w) castlingMask|=1;
     if(board->canQueensideCastle_w) castlingMask|=2;
     if(board->canKingsideCastle_b) castlingMask|=4;
     if(board->canQueensideCastle_b) castlingMask|=8;
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, endSquare, castlingMask));
+
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, castlingMask));
 }
 
 int moveFromStruct(bitboard* board, move* m)
@@ -1350,13 +1353,13 @@ int moveFromStruct(bitboard* board, move* m)
         return -1;
     }
 
-    moves_push(board, m);
     if(movePiece(board, m->startSquare, m->endSquare, m->piece, m->promoteTo) != 0) 
     {
         DEBUG("Failed to move piece from struct.")
-        moves_pop(board);
         return -1;
     }
+
+    moves_push(board, m);
 
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
@@ -1481,7 +1484,7 @@ move* unmove(bitboard *board)
         board_clear_square(board, m->endSquare, m->piece);
         board_set(board, m->startSquare, m->piece);
 
-        if(m->capturedPiece) board_set(board, m->capturedPiece, m->capturedPieceSquare);
+        if(m->capturedPiece) board_set(board, m->capturedPieceSquare, m->capturedPiece);
 
         if(ISKING(m->piece))
         {
@@ -1489,7 +1492,6 @@ move* unmove(bitboard *board)
             else board->kingSquare_b = m->startSquare;
         }
     }
-
     
     board->canKingsideCastle_w = m->previousCastleRights&1;
     board->canQueensideCastle_w = (m->previousCastleRights&2)>>1;

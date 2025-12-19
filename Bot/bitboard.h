@@ -104,7 +104,7 @@ void board_reset(bitboard* board);
 void board_clear(bitboard* board);
 
 void board_clear_square(bitboard* board, int square, int pieceType);
-void board_set(bitboard* board, int piece, int square);
+void board_set(bitboard* board, int square, int piece);
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
 void board_print(bitboard* board, int printValues, int printHistory);
