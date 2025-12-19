@@ -49,6 +49,6 @@ int movePiece(bitboard *board, int startSquare, int endSquare, int piece, int pr
 int moveFromStruct(bitboard* board, move* m);
 int moveFromString(bitboard* board, char* str);
 
-int unmove(bitboard *board);
+move* unmove(bitboard *board);
 
 #endif

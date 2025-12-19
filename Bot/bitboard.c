@@ -453,7 +453,7 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
     }
 }
 
-void board_print(bitboard* board, int printValues)
+void board_print(bitboard* board, int printValues, int printHistory)
 {
     if(board == NULL)
     {
@@ -464,7 +464,7 @@ void board_print(bitboard* board, int printValues)
     if(printValues) values_print(board);
 
     //8 rows x (8 columns + null terminator)
-    char boardArray[8][9] = {"--------\0", "-------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0"};
+    char boardArray[8][9] = {"--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0"};
 
     piece_print(boardArray, board->pawn_w, 'p');
     piece_print(boardArray, board->pawn_b, 'P');
@@ -501,7 +501,16 @@ void board_print(bitboard* board, int printValues)
         }
         printf("\n");
     }
-    printf("\n");
+    if(printHistory)
+    {
+        printf("Recent Moves:\n");
+        for(move* m = board->moveStackTop; m != NULL; m= m->nextMove)
+        {
+            printf("\t[%02x]: %d->%d\n", m->piece, m->startSquare, m->endSquare);
+        }
+        printf("\n");
+    }
+    
 }
 
 
@@ -581,7 +590,7 @@ move* moves_pop(bitboard* board)
     return tempMove;
 }
 
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare)
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights)
 {
     move* m = calloc(1, sizeof(move));
     if(!m) return NULL;
@@ -592,6 +601,7 @@ move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int c
     m->piece = piece;
     m->capturedPiece = capturedPiece;
     m->capturedPieceSquare = capturedPieceSquare;
+    m->previousCastleRights = castleRights;
     m->nextMove = NULL;
     return m;
 }

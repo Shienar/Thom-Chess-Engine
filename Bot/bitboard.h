@@ -34,6 +34,7 @@ typedef struct move {
     int promoteTo;
     int capturedPiece;
     int capturedPieceSquare; //Not always the same as endsquare because of en passant
+    int previousCastleRights; // var&1 == white kingside; var&2 == white queenside; var&4 = black kingsidee; var&8 = black queenside
     struct move* nextMove;
 } move;
 
@@ -103,12 +104,12 @@ void board_clear_square(bitboard* board, int square, int pieceType);
 void board_set(bitboard* board, int piece, int square);
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
-void board_print(bitboard* board, int printValues);
+void board_print(bitboard* board, int printValues, int printHistory);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
 
 int moves_push(bitboard* board, move* m);
 move* moves_pop(bitboard* board);
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare);
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights);
 
 #endif

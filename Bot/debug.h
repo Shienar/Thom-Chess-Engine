@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#define TOGGLEDEBUG 1
+#define TOGGLEDEBUG 0
 #define DEBUG(x, args...) if(TOGGLEDEBUG) \
 { \
     printf("ERROR: %s:%d -- ", __FILE__, __LINE__);  \

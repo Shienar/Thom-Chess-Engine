@@ -112,12 +112,10 @@ double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, 
 
 void CALLBACK alpha_beta_thread_func(PTP_CALLBACK_INSTANCE Instance, PVOID voidParam, PTP_WORK Work)
 {
-    printf("Thread start\n");
     threadParam* params = (threadParam*) voidParam;
     *(params->returnValue) = alpha_beta(params->board, params->weights, DBL_MIN, DBL_MAX, params->depth -1);
     ReleaseSemaphore(params->parentWaitSemaphore, 1, NULL);
     ReleaseSemaphore(params->threadCountSemaphore, 1, NULL);
-    printf("Thread end\n");
 }
 
 move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThreads)
