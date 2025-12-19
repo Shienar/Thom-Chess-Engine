@@ -93,9 +93,6 @@ void board_reset(bitboard* board)
 
     board->kingSquare_b = 60;
     board->kingSquare_w  = 4;
-    
-    //En passant
-    board->moveStackTop = NULL; 
 
     //Castling
     board->canQueensideCastle_b = 1;
@@ -112,6 +109,10 @@ void board_reset(bitboard* board)
 
     //Checkmate
     board->victor = 0;
+
+    //History
+    board->moveStackTop = NULL;
+    board->ht = create_hashTable();
 }
 
 //Sets all the position bits to 0 for an empty board
@@ -503,10 +504,16 @@ void board_print(bitboard* board, int printValues, int printHistory)
     }
     if(printHistory)
     {
+        char startSquareName[3] = {'\0'};
+        char endSquareName[3] = {'\0'};
+        char capturedSquareName[3] = {'\0'};
         printf("Recent Moves:\n");
         for(move* m = board->moveStackTop; m != NULL; m= m->nextMove)
         {
-            printf("\t[%02x]: %d->%d\n", m->piece, m->startSquare, m->endSquare);
+            getSquareName(m->startSquare, startSquareName);
+            getSquareName(m->endSquare, endSquareName);
+            getSquareName(m->capturedPieceSquare, capturedSquareName);
+            printf("\t[%02x->%02x]: %s->%s, Captured %02x on %s\n", m->piece, m->promoteTo, startSquareName, endSquareName, m->capturedPiece, capturedSquareName);
         }
         printf("\n");
     }
@@ -585,6 +592,7 @@ move* moves_pop(bitboard* board)
     }
 
     move* tempMove = board->moveStackTop;
+    if(!tempMove) return NULL;
     board->moveStackTop = board->moveStackTop->nextMove;
     tempMove->nextMove = NULL;
     return tempMove;

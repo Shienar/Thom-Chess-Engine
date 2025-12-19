@@ -1,7 +1,8 @@
 #ifndef MOVES
-
 #define MOVES
+
 #include "bitboard.h"
+#include "hashtable.h"
 
 //Questioned piece is this direction from selected king.
 //Assume a1 is bottomleft

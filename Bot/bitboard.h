@@ -3,6 +3,8 @@
 #define BITBOARD_H
 
 #include <stdint.h>
+struct hashtable;
+#include "hashtable.h"
 
 #define WHITE 0x10
 #define BLACK 0x20
@@ -86,6 +88,7 @@ typedef struct bitboard {
 
     //History
     move* moveStackTop;
+    struct hashtable* ht;
 } bitboard;
 
 #define columnNames "abcdefgh"

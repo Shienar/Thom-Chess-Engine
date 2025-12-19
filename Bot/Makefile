@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g -std=c99
-OBJFILES = main.c moves.c bitboard.c engine.c
+OBJFILES = main.c moves.c bitboard.c engine.c hashtable.c debug.c
 TARGET = ChessBot
 
 all: $(TARGET)

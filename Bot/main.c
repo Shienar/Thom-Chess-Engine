@@ -9,8 +9,7 @@
 
 /**
  * To-do list: 
- *  - three-fold repetition
- *      - hash table of previous moves.
+ *  - Undo moves
  */
 
 int main(int argc, char** argv)
@@ -35,6 +34,7 @@ int main(int argc, char** argv)
             printf("-v\t\tVerbose board information\n");
             printf("--black\t\tPlay as black\n");
             printf("--depth\t\tChange the depth, takes one integer parameter\n");
+            printf("--debug\t\tEnable debug messages\n");
             printf("--human\t\tHuman v human game\n");
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
@@ -55,6 +55,10 @@ int main(int argc, char** argv)
         {
             i++;
             depth = atoi(argv[i]);
+        }
+        else if(strcmp(argv[i], "--debug") == 0)
+        {
+            enableDebugMessages();
         }
         else if(strcmp(argv[i], "--history") == 0)
         {
@@ -104,8 +108,16 @@ int main(int argc, char** argv)
                 printf("Exiting program...");
                 exit(1);
             }
-            error = moveFromString(&board, buffer);
-            if(!error) board_print(&board, verbose, printHistory);
+            else if(buffer[0] == 'u')
+            {
+                unmove(&board);
+                board_print(&board, verbose, printHistory);
+            }
+            else
+            {
+                error = moveFromString(&board, buffer);
+                if(!error) board_print(&board, verbose, printHistory);
+            }
         }
         else
         {   
@@ -133,5 +145,21 @@ int main(int argc, char** argv)
             printf("Draw!\n\n");
             break;
         }
+    }
+    
+    if(printHistory)
+    {
+        char startSquareName[3] = {'\0'};
+        char endSquareName[3] = {'\0'};
+        char capturedSquareName[3] = {'\0'};
+        printf("Recent Moves:\n");
+        for(move* m = board.moveStackTop; m != NULL; m= m->nextMove)
+        {
+            getSquareName(m->startSquare, startSquareName);
+            getSquareName(m->endSquare, endSquareName);
+            getSquareName(m->capturedPieceSquare, capturedSquareName);
+            printf("\t[%02x->%02x]: %s->%s, Captured %d on %s\n", m->piece, m->promoteTo, startSquareName, endSquareName, m->capturedPiece, capturedSquareName);
+        }
+        printf("\n");
     }
 }

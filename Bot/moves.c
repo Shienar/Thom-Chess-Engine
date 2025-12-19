@@ -968,15 +968,13 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
             //En passant capture
             if(board->moveStackTop) 
             {
-                board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-                board->moveStackTop->capturedPieceSquare = endSquare;
+                board->moveStackTop->capturedPiece = PAWN;
+                if(ISWHITE(color)) board->moveStackTop->capturedPiece|=BLACK;
+                else board->moveStackTop->capturedPiece|=WHITE;
+
+                board->moveStackTop->capturedPieceSquare = board->moveStackTop->nextMove->endSquare;
             }
-            board_clear_square(board, board->moveStackTop->nextMove->endSquare, (PAWN));
-        }
-        else if(board->moveStackTop)
-        {
-            board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-            board->moveStackTop->capturedPieceSquare = endSquare;
+            board_clear_square(board, board->moveStackTop->nextMove->endSquare, PAWN);
         }
 
         //Set new board positions.
@@ -1029,12 +1027,6 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
 
-    if(board->moveStackTop)
-    {
-        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-        board->moveStackTop->capturedPieceSquare = endSquare;
-    }
-
     //Set new board positions after ensuring position is valid.
     board_clear_square(board, startSquare, (color|KNIGHT));
     board_set(board, endSquare, (color|KNIGHT));
@@ -1074,12 +1066,6 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
         DEBUG("Invalid color for bishop move.")
         return -1;
     }
-    
-    if(board->moveStackTop)
-    {
-        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-        board->moveStackTop->capturedPieceSquare = endSquare;
-    }
 
     board_clear_square(board, startSquare, (color|BISHOP));
     board_set(board, endSquare, (color|BISHOP));
@@ -1118,12 +1104,6 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
     {
         DEBUG("Invalid color for rook move.")
         return -1;
-    }
-
-    if(board->moveStackTop)
-    {
-        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     board_clear_square(board, startSquare, (color|ROOK));
@@ -1180,12 +1160,6 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
     {
         DEBUG("Invalid color for queen move.")
         return -1;
-    }
-
-    if(board->moveStackTop)
-    {
-        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     board_clear_square(board, startSquare, (color|QUEEN));
@@ -1246,12 +1220,6 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
             board->canQueensideCastle_w = 0;
             board->canKingsideCastle_w = 0;
         }
-    }
-
-    if(board->moveStackTop)
-    {
-        board->moveStackTop->capturedPiece = findPieceOnSquare(board, endSquare);
-        board->moveStackTop->capturedPieceSquare = endSquare;
     }
 
     board_clear_square(board, startSquare, (color|KING));
@@ -1332,14 +1300,13 @@ int moveFromString(bitboard* board, char* str)
         default:
             break;
     }
-
-    //Captured piece info gets added in later.
+    int capturedPiece = findPieceOnSquare(board, endSquare);
     int castlingMask = 0;
     if(board->canKingsideCastle_w) castlingMask|=1;
     if(board->canQueensideCastle_w) castlingMask|=2;
     if(board->canKingsideCastle_b) castlingMask|=4;
     if(board->canQueensideCastle_b) castlingMask|=8;
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, 0, 0, castlingMask));
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, endSquare, castlingMask));
 }
 
 int moveFromStruct(bitboard* board, move* m)
@@ -1375,7 +1342,11 @@ int moveFromStruct(bitboard* board, move* m)
     freeMoveList(potentialMoveList);
     if(!isLegal)
     {
-        DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %d->%d", moveIndex, m->piece, m->startSquare, m->endSquare)
+        char startSquareName[3] = {'\0'};
+        char endSquareName[3] = {'\0'};
+        getSquareName(m->startSquare, startSquareName);
+        getSquareName(m->endSquare, endSquareName);
+        DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
         return -1;
     }
 
@@ -1401,40 +1372,48 @@ int moveFromStruct(bitboard* board, move* m)
         board->turn=WHITE;
     }
 
-    //Calculate checkmate/stalemate
-    move** moveList = generateMoveList(board);
-    if(!moveList)
+    //3-fold repetition check
+    if(increment_table_value(board->ht, hashKey(board), 1) >= 3)
     {
-        if(board->turn == WHITE)
+        board->victor = WHITE|BLACK;
+    }
+    else
+    {
+        //Calculate checkmate/stalemate
+        move** moveList = generateMoveList(board);
+        if(!moveList)
         {
-            if(board->in_check_w)
+            if(board->turn == WHITE)
             {
-                //White has been checkmated
-                board->victor = BLACK;
+                if(board->in_check_w)
+                {
+                    //White has been checkmated
+                    board->victor = BLACK;
+                }
+                else
+                {
+                    //White has been stalemated
+                    board->victor = BLACK|WHITE;
+                }
             }
             else
             {
-                //White has been stalemated
-                board->victor = BLACK|WHITE;
+                if(board->in_check_b)
+                {
+                    //Black has been checkmated
+                    board->victor = WHITE;
+                }
+                else
+                {
+                    //Black has been stalemated
+                    board->victor = BLACK|WHITE;
+                }
             }
         }
         else
         {
-            if(board->in_check_b)
-            {
-                //Black has been checkmated
-                board->victor = WHITE;
-            }
-            else
-            {
-                //Black has been stalemated
-                board->victor = BLACK|WHITE;
-            }
+            freeMoveList(moveList);
         }
-    }
-    else
-    {
-        freeMoveList(moveList);
     }
     
     return 0;
@@ -1448,6 +1427,7 @@ move* unmove(bitboard *board)
         return NULL;
     }
 
+    decrement_table_value(board->ht, hashKey(board));
     move* m = moves_pop(board);
     if(!m)
     {
