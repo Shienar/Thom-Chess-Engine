@@ -81,14 +81,12 @@ double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, 
                 alpha = fmax(alpha, currentEvaluation);
                 if(alpha >= beta) 
                 {
-                    for(int j = 0; j < moveCount; j++) free(childMoves[j]);
-                    free(childMoves);
+                    freeMoveList(childMoves);
                     return beta;
                 }
             }
         }
-        for(int j = 0; j < moveCount; j++) free(childMoves[j]);
-        free(childMoves);
+        freeMoveList(childMoves);
         return alpha;
     }
     else
@@ -102,14 +100,12 @@ double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, 
                 beta = fmin(beta, currentEvaluation);
                 if(alpha >= beta) 
                 {
-                    for(int j = 0; j < moveCount; j++) free(childMoves[j]);
-                    free(childMoves);
+                    freeMoveList(childMoves);
                     return alpha;
                 }
             }
         }
-        for(int j = 0; j < moveCount; j++) free(childMoves[j]);
-        free(childMoves);
+        freeMoveList(childMoves);
         return beta;
     }
 }

@@ -24,6 +24,7 @@
 //Legal moves
 move** generateMoveList(bitboard* board);
 move** generatePieceMoves(bitboard* board, int piece, int square, int color);
+void freeMoveList(move** moveList);
 
 int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColor);
 int isThreatened(bitboard* board, int square, int squareColor);

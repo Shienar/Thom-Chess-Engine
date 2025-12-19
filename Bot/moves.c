@@ -9,6 +9,7 @@ move** generateMoveList(bitboard* board)
     int size = 0;
     int capacity = 32;
     move** movesList = calloc(capacity, sizeof(move*));
+    if(!movesList) return NULL;
     for(int currentSquare = 0; currentSquare < 64; currentSquare++)
     {
         if((board->turn == WHITE && board->pieces_w&(1ull<<currentSquare)) ||
@@ -23,15 +24,14 @@ move** generateMoveList(bitboard* board)
                 {
                     capacity+=8;
                     movesList = realloc(movesList, capacity*sizeof(move*));
+                    if(!movesList) return NULL;
                 }
                 movesList[size] = calloc(1, sizeof(move));
                 memcpy(movesList[size], tempMoves[index], sizeof(move));
-                free(tempMoves[index]);
                 size++;
                 index++;
             }
-            free(tempMoves[index]);
-            free(tempMoves);
+            freeMoveList(tempMoves);
         }
     }
 
@@ -45,6 +45,7 @@ move** generateMoveList(bitboard* board)
     }
 
     movesList = realloc(movesList, (size+1)*sizeof(move*));
+    if(!movesList) return NULL;
     move* terminatingMove = createMove(-1, size, 0, 0, 0, 0);
     movesList[size] = terminatingMove;
 
@@ -148,8 +149,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
         }
     }
     free(tempBoard);
-    for(int i = 0; i < size; i++) free(moveArray[i]);
-    free(moveArray);
+    freeMoveList(moveArray);
 
     legalMoveArray = realloc(legalMoveArray, (legalSize+1)*sizeof(move));
     if(legalMoveArray == NULL) return NULL;
@@ -157,6 +157,23 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
     legalMoveArray[legalSize] = terminatingMove;
 
     return legalMoveArray;
+}
+
+void freeMoveList(move** moveList)
+{
+    if(!moveList) return;
+
+    int index = 0;
+    while(moveList[index] && moveList[index]->startSquare != -1)
+    {
+        free(moveList[index]);
+        moveList[index] = NULL;
+        index++;
+    }
+
+    if(moveList[index]) free(moveList[index]);
+    free(moveList);
+    moveList = NULL;
 }
 
 int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColor)
@@ -1342,9 +1359,8 @@ int moveFromStruct(bitboard* board, move* m)
             isLegal = 1;
         }
         moveIndex++;
-        free(potentialMoveList[moveIndex]);
     }
-    free(potentialMoveList);
+    freeMoveList(potentialMoveList);
     if(!isLegal)
     {
         DEBUG("Piece move is not legal.")
@@ -1406,13 +1422,7 @@ int moveFromStruct(bitboard* board, move* m)
     }
     else
     {
-        int index = 0;
-        while(moveList[index]->startSquare != -1) 
-        {
-            free(moveList[index]);
-            index++;
-        }
-        free(moveList);
+        freeMoveList(moveList);
     }
     
     return 0;

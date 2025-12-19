@@ -9,8 +9,7 @@
 
 /**
  * To-do list: 
- *  - Game is now crashing on engine move. (Memory mismanagement?)
- *  - some kind of overflow error is occuring with the piece masks.
+ *  - Freeing list crashes only within engine.c alpha-beta code.
  *  - three-fold repetition
  *      - hash table of previous moves.
  */
