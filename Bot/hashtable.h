@@ -5,7 +5,8 @@
 struct bitboard;
 #include "bitboard.h"
 
-#define STARTING_CAPACITY 16
+#define STARTING_CAPACITY 32
+
 #define FNV_OFFSET_BASIS 14695981039346656037ull
 #define FNV_PRIME 1099511628211ull
 

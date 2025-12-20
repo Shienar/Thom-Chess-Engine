@@ -8,9 +8,8 @@
 #include <windows.h>
 
 /**
- * To-do list: 
- *  - Undo moves
- *  - En passant is broken.
+ * TODO: Hash table key management isn't working right. 
+ * Pointers are getting freed or lost and its causing segfaults.
  */
 
 int main(int argc, char** argv)

@@ -1376,46 +1376,54 @@ int moveFromStruct(bitboard* board, move* m)
     }
 
     //3-fold repetition check
-    if(increment_table_value(board->ht, hashKey(board), 1) >= 3)
+    char* key = hashKey(board);
+    if(!key)
     {
-        board->victor = WHITE|BLACK;
+        DEBUG("Cannot log move. Generated hashkey is NULL")
     }
     else
     {
-        //Calculate checkmate/stalemate
-        move** moveList = generateMoveList(board);
-        if(!moveList)
+        if(increment_table_value(board->ht, key, 1) >= 3)
         {
-            if(board->turn == WHITE)
+            board->victor = WHITE|BLACK;
+        }
+        else
+        {
+            //Calculate checkmate/stalemate
+            move** moveList = generateMoveList(board);
+            if(!moveList)
             {
-                if(board->in_check_w)
+                if(board->turn == WHITE)
                 {
-                    //White has been checkmated
-                    board->victor = BLACK;
+                    if(board->in_check_w)
+                    {
+                        //White has been checkmated
+                        board->victor = BLACK;
+                    }
+                    else
+                    {
+                        //White has been stalemated
+                        board->victor = BLACK|WHITE;
+                    }
                 }
                 else
                 {
-                    //White has been stalemated
-                    board->victor = BLACK|WHITE;
+                    if(board->in_check_b)
+                    {
+                        //Black has been checkmated
+                        board->victor = WHITE;
+                    }
+                    else
+                    {
+                        //Black has been stalemated
+                        board->victor = BLACK|WHITE;
+                    }
                 }
             }
             else
             {
-                if(board->in_check_b)
-                {
-                    //Black has been checkmated
-                    board->victor = WHITE;
-                }
-                else
-                {
-                    //Black has been stalemated
-                    board->victor = BLACK|WHITE;
-                }
+                freeMoveList(moveList);
             }
-        }
-        else
-        {
-            freeMoveList(moveList);
         }
     }
     
@@ -1430,7 +1438,13 @@ move* unmove(bitboard *board)
         return NULL;
     }
 
-    decrement_table_value(board->ht, hashKey(board));
+    char* key = hashKey(board);
+    if(!key)
+    {
+        DEBUG("Cannot unmove. Generated hashkey is NULL")
+        return NULL;
+    }
+    decrement_table_value(board->ht, key);
     move* m = moves_pop(board);
     if(!m)
     {

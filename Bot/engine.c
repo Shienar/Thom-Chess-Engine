@@ -112,16 +112,22 @@ double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, 
 
 void CALLBACK alpha_beta_thread_func(PTP_CALLBACK_INSTANCE Instance, PVOID voidParam, PTP_WORK Work)
 {
+    printf("Thread started.\n");
     threadParam* params = (threadParam*) voidParam;
     *(params->returnValue) = alpha_beta(params->board, params->weights, DBL_MIN, DBL_MAX, params->depth -1);
     ReleaseSemaphore(params->parentWaitSemaphore, 1, NULL);
     ReleaseSemaphore(params->threadCountSemaphore, 1, NULL);
+    printf("Thread ended.\n");
 }
 
 move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThreads)
 {
     move** childMoves = generateMoveList(board);
-    if(!childMoves) return NULL;
+    if(!childMoves) 
+    {
+        DEBUG("Child move list was NULL upon creation.")
+        return NULL;
+    }
 
     int moveCount = 0;
     while(childMoves[moveCount]->startSquare != -1) moveCount++;
@@ -132,9 +138,29 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
 
     //Forces parent to wait for all children
     HANDLE sharedSemaphore = CreateSemaphoreW(NULL, 0, moveCount, NULL);
+    if(sharedSemaphore == NULL)
+    {
+        freeMoveList(childMoves);
+        free(childBoards);
+        free(childScores);
+        free(threadParamArray);
+        DEBUG("Shared semaphore was NULL upon creation.")
+        return NULL;
+    }
 
     //Limits the maximum number of searching threads.
     HANDLE threadCountSemaphore = CreateSemaphoreW(NULL, maxThreads, moveCount, NULL);
+    if(threadCountSemaphore == NULL)
+    {
+        freeMoveList(childMoves);
+        free(childBoards);
+        free(childScores);
+        free(threadParamArray);
+        CloseHandle(sharedSemaphore);
+        DEBUG("Thread count semaphore was NULL upon creation.")
+        return NULL;
+    }
+
 
     for(int i = 0; i < moveCount; i++)
     {
@@ -149,6 +175,7 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
         threadParamArray[i].returnValue = &childScores[i];
 
         WaitForSingleObject(threadCountSemaphore, INFINITE);
+
 
         PTP_WORK newWork = CreateThreadpoolWork(alpha_beta_thread_func, &threadParamArray[i], NULL);
         if(newWork == NULL)

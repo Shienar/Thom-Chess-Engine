@@ -4,6 +4,40 @@
 #include <string.h>
 #include <stdlib.h>
 
+/**
+ * Internal resizing function
+ */
+void ht_resize(hashtable* ht, int shrink)
+{
+    size_t newCapacity;
+    if(shrink) newCapacity = ht->capacity/2;
+    else newCapacity = ht->capacity*2;
+
+    table_entry* newArray = calloc(newCapacity, sizeof(table_entry));
+    if(!newArray) return;
+
+    for(size_t i = 0; i < ht->capacity; i++)
+    {
+        if(ht->array[i].key != NULL) 
+        {
+            uint64_t hashCode = getHashCode(ht->array[i].key);
+            size_t index = hashCode%newCapacity;
+
+            //Linear insertion
+            while(newArray[index].key != NULL)
+            {
+                index++;
+                if(index >= newCapacity) index=0;
+            }
+            newArray[index].key = ht->array[i].key;
+            newArray[index].count = ht->array[i].count;
+        }
+    }
+    free(ht->array);
+    ht->array = newArray;
+    ht->capacity = newCapacity;
+}
+
 hashtable* create_hashTable()
 {
     hashtable* newTable = calloc(1, sizeof(hashtable));
@@ -39,10 +73,10 @@ void destroy_hashTable(hashtable* ht)
 uint64_t getHashCode(char* key)
 {
     uint64_t hashCode = FNV_OFFSET_BASIS;
-    for(char* c = key; *c != '\0'; c++)
+    for(int i = 0; i < 64; i++)
     {
         hashCode *= FNV_PRIME;
-        hashCode ^= (uint64_t)(unsigned char)(*c);
+        hashCode ^= (uint64_t)(unsigned char)(key[i]);
     }
     return hashCode;
 }
@@ -104,22 +138,7 @@ int increment_table_value(hashtable* ht, char* key, int amount)
     if(ht->size >= ht->capacity/2)
     {
         //Expand
-        ht->capacity*=2;
-        table_entry* oldTableArray = ht->array;
-        ht->array = calloc(ht->capacity, sizeof(table_entry));
-        if(!ht->array) 
-        {
-            ht->array = oldTableArray;
-            ht->capacity/=2;
-            return INT32_MIN;
-        }
-
-        for(int i = 0; i < ht->capacity/2; i++)
-        {
-            if(oldTableArray[i].key) increment_table_value(ht, oldTableArray[i].key, oldTableArray[i].count);
-        }
-
-        free(oldTableArray);
+        ht_resize(ht, 0);
     }
 
     return ht->array[index].count;
@@ -148,25 +167,10 @@ int decrement_table_value(hashtable* ht, char* key)
                 ht->array[index].count = 0;
                 ht->size--;
 
-                if(ht->size <= ht->capacity/4)
+                if(ht->size > STARTING_CAPACITY && ht->size < ht->capacity/4)
                 {
                     //Shrink
-                    ht->capacity/=2;
-                    table_entry* oldTableArray = ht->array;
-                    ht->array = calloc(ht->capacity, sizeof(table_entry));
-                    if(!ht->array) 
-                    {
-                        ht->capacity*=2;
-                        ht->array = oldTableArray;
-                        return INT32_MIN;
-                    }
-
-                    for(int i = 0; i < ht->capacity*2; i++)
-                    {
-                        if(oldTableArray[i].key) increment_table_value(ht, oldTableArray[i].key, oldTableArray[i].count);
-                    }
-
-                    free(oldTableArray);
+                    ht_resize(ht, 1);
                 }
             }
             return ht->array[index].count;
