@@ -100,8 +100,9 @@ void getSquareName(int square, char* target);
 int getSquareNumber(char* squareName);
 int findPieceOnSquare(bitboard* board, int square);
 
-void board_reset(bitboard* board);
-void board_clear(bitboard* board);
+bitboard* create_board();
+void destroy_board(bitboard* board);
+void copy_board(bitboard* dest, bitboard* source);
 
 void board_clear_square(bitboard* board, int square, int pieceType);
 void board_set(bitboard* board, int square, int piece);

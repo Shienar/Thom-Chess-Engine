@@ -8,8 +8,7 @@
 #include <windows.h>
 
 /**
- * TODO: Hash table key management isn't working right. 
- * Pointers are getting freed or lost and its causing segfaults.
+ * TODO: Check for memory leaks
  */
 
 int main(int argc, char** argv)
@@ -87,8 +86,7 @@ int main(int argc, char** argv)
         }
     }
 
-    bitboard board = {0};
-    board_reset(&board);
+    bitboard* board = create_board();
 
     weights boardWeights = {0};
     initPieceWeights(&boardWeights, 0);
@@ -96,11 +94,11 @@ int main(int argc, char** argv)
     char buffer[6] = {'\0'};
     int error = 0;
 
-    board_print(&board, 0, printHistory);
+    board_print(board, 0, printHistory);
 
     while(1)
     {
-        if(onlyHumans || (board.turn == player_color && !onlyEngines))
+        if(onlyHumans || (board->turn == player_color && !onlyEngines))
         {
             fgets(buffer, 6, stdin);
             if(buffer[0] == 'q')
@@ -110,38 +108,38 @@ int main(int argc, char** argv)
             }
             else if(buffer[0] == 'u')
             {
-                move* tempMove = unmove(&board);
+                move* tempMove = unmove(board);
                 if(tempMove) free(tempMove);
-                board_print(&board, verbose, printHistory);
+                board_print(board, verbose, printHistory);
             }
             else
             {
-                error = moveFromString(&board, buffer);
-                if(!error) board_print(&board, verbose, printHistory);
+                error = moveFromString(board, buffer);
+                if(!error) board_print(board, verbose, printHistory);
             }
         }
         else
         {   
             do
             {
-                move* bestMove = calculateBestMove(&board, &boardWeights, depth, threadCount);
-                error = moveFromStruct(&board, bestMove);
+                move* bestMove = calculateBestMove(board, &boardWeights, depth, threadCount);
+                error = moveFromStruct(board, bestMove);
             }while(error != 0);
-            board_print(&board, verbose, printHistory);
+            board_print(board, verbose, printHistory);
             if(delay) Sleep(delay);
         }
         
-        if(board.victor == WHITE)
+        if(board->victor == WHITE)
         {
             printf("White wins!\n\n");
             break;
         }
-        else if(board.victor == BLACK)
+        else if(board->victor == BLACK)
         {
             printf("Black wins!\n\n");
             break;
         }
-        else if (board.victor == (WHITE|BLACK))
+        else if (board->victor == (WHITE|BLACK))
         {
             printf("Draw!\n\n");
             break;
@@ -154,7 +152,7 @@ int main(int argc, char** argv)
         char endSquareName[3] = {'\0'};
         char capturedSquareName[3] = {'\0'};
         printf("Recent Moves:\n");
-        for(move* m = board.moveStackTop; m != NULL; m= m->nextMove)
+        for(move* m = board->moveStackTop; m != NULL; m= m->nextMove)
         {
             getSquareName(m->startSquare, startSquareName);
             getSquareName(m->endSquare, endSquareName);

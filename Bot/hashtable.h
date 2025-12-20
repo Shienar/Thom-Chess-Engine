@@ -26,6 +26,8 @@ typedef struct hashtable {
  */
 hashtable* create_hashTable();
 
+hashtable* copy_hashTable(hashtable* src);
+
 /**
  * Frees hash table and corresponding array + allocated array elements.
  */
@@ -35,13 +37,13 @@ void destroy_hashTable(hashtable* ht);
  * Fowler–Noll–Vo hash function
  * https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
  */
-uint64_t getHashCode(char* key);
+uint64_t getHashCode(const char* key);
 
 /**
  * Converts a bitboard to a hash key.
  * Allocates the memory required.
  */
-char* hashKey(struct bitboard* board);
+void hashKey(struct bitboard* board, char* target);
 
 /**
  * increments a tablue value and returns the new value.
@@ -49,7 +51,7 @@ char* hashKey(struct bitboard* board);
  * Either frees or assigns the key.
  * returns INT32_MIN on error
  */
-int increment_table_value(hashtable* ht, char* key, int amount);
+int increment_table_value(hashtable* ht, const char* key, int amount);
 
 /**
  * decrements a tablue value and returns the new value.
@@ -57,6 +59,6 @@ int increment_table_value(hashtable* ht, char* key, int amount);
  * Frees the temporary key that it gets passed.
  * returns INT32_MIN on error
  */
-int decrement_table_value(hashtable* ht, char* key);
+int decrement_table_value(hashtable* ht, const char* key);
 
 #endif

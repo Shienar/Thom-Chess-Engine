@@ -7,12 +7,12 @@
 /**
  * Internal resizing function
  */
-void ht_resize(hashtable* ht, int shrink)
+void ht_resize(hashtable* ht, int shouldShrink)
 {
     size_t newCapacity;
-    if(shrink) newCapacity = ht->capacity/2;
+    if(shouldShrink) newCapacity = ht->capacity/2;
     else newCapacity = ht->capacity*2;
-
+     
     table_entry* newArray = calloc(newCapacity, sizeof(table_entry));
     if(!newArray) return;
 
@@ -46,11 +46,39 @@ hashtable* create_hashTable()
     newTable->size = 0;
     newTable->capacity = STARTING_CAPACITY;
 
-    newTable->array = calloc(STARTING_CAPACITY, sizeof(table_entry));
+    newTable->array = calloc(newTable->capacity, sizeof(table_entry));
     if(!newTable->array)
     {
         free(newTable);
         return NULL;
+    }
+
+    return newTable;
+}
+
+hashtable* copy_hashTable(hashtable* src)
+{
+    hashtable* newTable = calloc(1, sizeof(hashtable));
+    if(!newTable) return NULL;
+
+    newTable->size = src->size;
+    newTable->capacity = src->capacity;
+
+    newTable->array = calloc(newTable->capacity, sizeof(table_entry));
+    if(!newTable->array)
+    {
+        free(newTable);
+        return NULL;
+    }
+
+    for(int i = 0; i < newTable->capacity; i++)
+    {
+        if(src->array[i].key != NULL)
+        {
+            newTable->array[i].count = src->array[i].count;
+            newTable->array[i].key = calloc(65, sizeof(char));
+            strncpy(newTable->array[i].key, src->array[i].key, 65);
+        }
     }
 
     return newTable;
@@ -63,15 +91,21 @@ void destroy_hashTable(hashtable* ht)
     {
         for(int i = 0; i < ht->capacity; i++)
         {
-            if(ht->array[i].key != NULL) free(ht->array[i].key);
+            if(ht->array[i].key != NULL) 
+            {
+                free(ht->array[i].key);
+                ht->array[i].key = NULL;
+            }
         }
     }
     free(ht->array);
     free(ht);
 }
 
-uint64_t getHashCode(char* key)
+uint64_t getHashCode(const char* key)
 {
+    if(!key) { printf("X"); return 0; }
+
     uint64_t hashCode = FNV_OFFSET_BASIS;
     for(int i = 0; i < 64; i++)
     {
@@ -81,11 +115,9 @@ uint64_t getHashCode(char* key)
     return hashCode;
 }
 
-char* hashKey(bitboard* board)
+void hashKey(bitboard* board, char* key)
 {
-    if(!board) return NULL;
-    char* key = calloc(65, sizeof(char));
-    if(!key) return NULL;
+    if(!board) return;
 
     memset(key, 'e', 64);
     key[64] = '\0';
@@ -107,11 +139,9 @@ char* hashKey(bitboard* board)
         else if(board->king_b&mask) key[currentSquare] = 'K';
         mask = mask<<1;
     }
-
-    return key;
 }
 
-int increment_table_value(hashtable* ht, char* key, int amount)
+int increment_table_value(hashtable* ht, const char* key, int amount)
 {
     if(!ht) return INT32_MIN;
 
@@ -122,8 +152,7 @@ int increment_table_value(hashtable* ht, char* key, int amount)
     {
         if(strcmp(ht->array[index].key, key) == 0)
         {
-            ht->array[index].count+= amount;
-            free(key);
+            ht->array[index].count += amount;
             return ht->array[index].count;
         }
 
@@ -131,7 +160,9 @@ int increment_table_value(hashtable* ht, char* key, int amount)
         if(index >= ht->capacity) index=0;
     }
 
-    ht->array[index].key = key;
+    ht->array[index].key = calloc(65, sizeof(char));
+    if(ht->array[index].key == NULL) return INT32_MIN;
+    strncpy(ht->array[index].key, key, 65);
     ht->array[index].count = amount;
     ht->size++;
 
@@ -144,13 +175,9 @@ int increment_table_value(hashtable* ht, char* key, int amount)
     return ht->array[index].count;
 }
 
-int decrement_table_value(hashtable* ht, char* key)
+int decrement_table_value(hashtable* ht, const char* key)
 {
-    if(!ht) 
-    {
-        free(key);
-        return INT32_MIN;
-    }
+    if(!ht) return INT32_MIN;
     uint64_t hashCode = getHashCode(key);
     int index = hashCode%ht->capacity;
 
@@ -159,26 +186,26 @@ int decrement_table_value(hashtable* ht, char* key)
         if(strcmp(ht->array[index].key, key) == 0) 
         {
             ht->array[index].count--;
+            int returnedCount = ht->array[index].count;
             if(ht->array[index].count <= 0)
             {
                 free(ht->array[index].key);
-                free(key);
                 ht->array[index].key = NULL;
                 ht->array[index].count = 0;
                 ht->size--;
-
-                if(ht->size > STARTING_CAPACITY && ht->size < ht->capacity/4)
-                {
-                    //Shrink
-                    ht_resize(ht, 1);
-                }
             }
-            return ht->array[index].count;
+
+            if(ht->size < ht->capacity/4)
+            {
+                //Shrink
+                ht_resize(ht, 1);
+            }
+
+            return returnedCount;
         }
 
         index++;
         if(index >= ht->capacity) index=0;
     }
-    free(key);
     return INT32_MIN;
 }

@@ -112,12 +112,10 @@ double alpha_beta(bitboard* board, weights* weights, double alpha, double beta, 
 
 void CALLBACK alpha_beta_thread_func(PTP_CALLBACK_INSTANCE Instance, PVOID voidParam, PTP_WORK Work)
 {
-    printf("Thread started.\n");
     threadParam* params = (threadParam*) voidParam;
     *(params->returnValue) = alpha_beta(params->board, params->weights, DBL_MIN, DBL_MAX, params->depth -1);
     ReleaseSemaphore(params->parentWaitSemaphore, 1, NULL);
     ReleaseSemaphore(params->threadCountSemaphore, 1, NULL);
-    printf("Thread ended.\n");
 }
 
 move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThreads)
@@ -132,7 +130,7 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
     int moveCount = 0;
     while(childMoves[moveCount]->startSquare != -1) moveCount++;
 
-    bitboard* childBoards = calloc(moveCount, sizeof(bitboard));
+    bitboard** childBoards = calloc(moveCount, sizeof(bitboard*));
     double* childScores = calloc(moveCount, sizeof(double));
     threadParam* threadParamArray = calloc(moveCount, sizeof(threadParam));
 
@@ -164,12 +162,17 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
 
     for(int i = 0; i < moveCount; i++)
     {
-        memcpy(&childBoards[i], board, sizeof(bitboard));
-        moveFromStruct(&childBoards[i], childMoves[i]);
+        childBoards[i] = calloc(1, sizeof(bitboard));
+        copy_board(childBoards[i], board);
+
+        //Tempmove copy gets freed with the boards.
+        move* tempMove = calloc(1, sizeof(move));
+        memcpy(tempMove, childMoves[i], sizeof(move));
+        moveFromStruct(childBoards[i], tempMove);
 
         threadParamArray[i].parentWaitSemaphore = sharedSemaphore;
         threadParamArray[i].threadCountSemaphore = threadCountSemaphore;
-        threadParamArray[i].board = &childBoards[i];
+        threadParamArray[i].board = childBoards[i];
         threadParamArray[i].weights = weights;
         threadParamArray[i].depth = depth;
         threadParamArray[i].returnValue = &childScores[i];
@@ -190,6 +193,7 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
     for(int i = 0; i < moveCount; i++) WaitForSingleObject(sharedSemaphore, INFINITE);
     CloseHandle(sharedSemaphore);
     CloseHandle(threadCountSemaphore);
+    for(int i = 0; i < moveCount; i++) destroy_board(childBoards[i]);
     free(childBoards);
     free(threadParamArray);
 
@@ -200,21 +204,16 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
         if(childScores[i] > maxScore)
         {
             maxScore = childScores[i];
-            free(bestMove);
             bestMove = childMoves[i];
-        }
-        else
-        {
-            free(childMoves[i]);
         }
     }
 
-    move* pBestMove = calloc(1, sizeof(move));
-    memcpy(pBestMove, bestMove, sizeof(move));
+    move* bestMoveCopy = calloc(1, sizeof(move));
+    memcpy(bestMoveCopy, bestMove, sizeof(move));
+    bestMoveCopy->nextMove = NULL;
 
-    free(bestMove);
     free(childScores);
-    free(childMoves);
+    freeMoveList(childMoves);
 
-    return pBestMove;
+    return bestMoveCopy;
 }

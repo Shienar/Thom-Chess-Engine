@@ -61,12 +61,9 @@ int getSquareNumber(char* squareName)
 }
 
 //Resets the board to an opening position
-void board_reset(bitboard* board)
+bitboard* create_board()
 {
-    if(board == NULL) {
-        DEBUG("Error resetting board. Board is NULL")
-        return;
-    }
+    bitboard* board = calloc(1, sizeof(bitboard));
 
     board->pawn_w = 0x000000000000FF00;
     board->pawn_b = 0x00FF000000000000;
@@ -113,17 +110,92 @@ void board_reset(bitboard* board)
     //History
     board->moveStackTop = NULL;
     board->ht = create_hashTable();
+
+    return board;
 }
 
-//Sets all the position bits to 0 for an empty board
-void board_clear(bitboard* board)
+void destroy_board(bitboard* board)
 {
-    if(board == NULL) {
-        DEBUG("Error clearing board. Board is NULL")
-        return;
+    destroy_hashTable(board->ht);
+    while(board->moveStackTop)
+    {
+        move* tempMove = board->moveStackTop;
+        board->moveStackTop = board->moveStackTop->nextMove;
+        free(tempMove);
     }
+    free(board);
+}
 
-    memset(board, 0, sizeof(bitboard));
+void copy_board(bitboard* dest, bitboard* source)
+{
+    if(!dest || !source) return;
+
+    dest->pawn_w = source->pawn_w;
+    dest->pawn_b = source->pawn_b;
+    
+    dest->bishop_w = source->bishop_w;
+    dest->bishop_b = source->bishop_b;
+    
+    dest->knight_w = source->knight_w;
+    dest->knight_b = source->knight_b;
+    
+    dest->rook_w = source->rook_w;
+    dest->rook_b = source->rook_b;
+    
+    dest->queen_w = source->queen_w;
+    dest->queen_b = source->queen_b;
+    
+    dest->king_w = source->king_w;
+    dest->king_b = source->king_b;
+
+    dest->pieces_w = source->pieces_w;
+    dest->pieces_b = source->pieces_b;
+    dest->pieces_all = source->pieces_all;
+
+    dest->kingSquare_b = source->kingSquare_b;
+    dest->kingSquare_w  = source->kingSquare_w;
+
+    //Castling
+    dest->canQueensideCastle_b = source->canQueensideCastle_b;
+    dest->canKingsideCastle_b = source->canKingsideCastle_b;
+    dest->canQueensideCastle_w = source->canQueensideCastle_w;
+    dest->canKingsideCastle_w = source->canKingsideCastle_w;
+
+    //Check
+    dest->in_check_w = source->in_check_w;
+    dest->in_check_b = source->in_check_b;
+
+    //Turn
+    dest->turn = source->turn;
+
+    //Checkmate
+    dest->victor = source->victor;
+
+    //History:
+    if(source->moveStackTop)
+    {
+        dest->moveStackTop = calloc(1, sizeof(move));
+        move* currentMove = source->moveStackTop;
+        memcpy(dest->moveStackTop, currentMove, sizeof(move));
+        dest->moveStackTop->nextMove = NULL;
+        move* currentCopy = dest->moveStackTop;
+        currentMove = currentMove->nextMove;
+        while(currentMove)
+        {
+            move* nextCopy= calloc(1, sizeof(move));
+            memcpy(nextCopy, currentMove, sizeof(move));
+            nextCopy->nextMove = NULL;
+            currentCopy->nextMove = nextCopy;
+            currentCopy = nextCopy;
+            currentMove = currentMove->nextMove;
+        }
+    }
+    else
+    {
+        dest->moveStackTop = NULL;
+    }
+    
+    dest->ht = create_hashTable();
 }
 
 int findPieceOnSquare(bitboard* board, int square)
