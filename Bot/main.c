@@ -32,6 +32,7 @@ int main(int argc, char** argv)
             printf("--black\t\tPlay as black\n");
             printf("--depth\t\tChange the depth, takes one integer parameter\n");
             printf("--debug\t\tEnable debug messages\n");
+            printf("--leaks\t\tTrack memory leaks. Heavily reduces performance\n");
             printf("--human\t\tHuman v human game\n");
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
@@ -57,6 +58,10 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--debug") == 0)
         {
             enableDebugMessages();
+        }
+        else if(strcmp(argv[i], "--leaks") == 0)
+        {
+            enableLeakTracking();
         }
         else if(strcmp(argv[i], "--history") == 0)
         {
@@ -117,7 +122,7 @@ int main(int argc, char** argv)
             else if(buffer[0] == 'u')
             {
                 move* tempMove = unmove(board);
-                if(tempMove) free(tempMove);
+                if(tempMove) FREE(tempMove);
                 board_print(board, verbose, printHistory);
             }
             else
@@ -171,6 +176,6 @@ int main(int argc, char** argv)
     }
 
     destroy_board(board);
-    printf("Press ENTER to exit\n");
-    fgets(buffer, 6, stdin);
+
+    dump_allocations();
 }

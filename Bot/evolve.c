@@ -1,6 +1,6 @@
 #include "evolve.h"
+#include "debug.h"
 #include <time.h>
-#include <stdlib.h>
 
 void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIteration)
 {
@@ -12,22 +12,22 @@ void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIt
             weights* newWeights2 = createTweakedCopy(starting_weights);
             if(compareEngines(newWeights, newWeights2) < 0)
             {
-                free(newWeights);
+                FREE(newWeights);
                 newWeights = newWeights2;
             }
             else
             {
-                free(newWeights2);
+                FREE(newWeights2);
             }
         }
         if(compareEngines(starting_weights, newWeights) < 0)
         {
-            free(starting_weights);
+            FREE(starting_weights);
             starting_weights = newWeights;
         }
         else
         {
-            free(newWeights);
+            FREE(newWeights);
         }
     }
 }
@@ -35,7 +35,7 @@ void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIt
 weights* createTweakedCopy(weights* original_weight)
 {
     srand(time(NULL));
-    weights* w = calloc(1, sizeof(weights));
+    weights* w = CALLOC(1, sizeof(weights));
     if(!w) return NULL;
 
     for(int i = 0; i < 64; i++)
