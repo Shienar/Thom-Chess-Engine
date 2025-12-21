@@ -1,16 +1,13 @@
 #include "moves.h"
-#include "bitboard.h"
 #include "debug.h"
+#include "evolve.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include "engine.h"
 #include <windows.h>
 
 /**
- * TODO: Check for memory leaks
+ * TODO: Fix memory leak somewhere.
  */
-
 int main(int argc, char** argv)
 {
     /**
@@ -24,6 +21,7 @@ int main(int argc, char** argv)
     int threadCount = 4;
     double delay = 0;
     int printHistory = 0;
+    int shouldTrain = 0;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
@@ -39,6 +37,7 @@ int main(int argc, char** argv)
             printf("--engine\t\tEngine v Engine game\n");
             printf("--threads\tChange the number of threads for min/max search, takes one integer parameter, max 8.\n");
             printf("--delay\t\tSpecify the number of milliseconds the computer will wait after each move.\n");
+            printf("--train\t\tTrains the chess engine with hill climbing\n");
             printf("\n\n");
             exit(0);
         }
@@ -84,6 +83,15 @@ int main(int argc, char** argv)
             i++;
             delay = atof(argv[i]);
         }
+        else if(strcmp(argv[i], "--train") == 0)
+        {
+            shouldTrain = 1;
+        }
+    }
+
+    if(shouldTrain)
+    {
+        exit(0);
     }
 
     bitboard* board = create_board();
@@ -161,4 +169,8 @@ int main(int argc, char** argv)
         }
         printf("\n");
     }
+
+    destroy_board(board);
+    printf("Press ENTER to exit\n");
+    fgets(buffer, 6, stdin);
 }
