@@ -2,7 +2,6 @@
 #include "moves.h"
 #include "bitboard.h"
 #include "debug.h"
-#include <stdlib.h>
 #include <string.h>
 #include <float.h>
 #include <math.h>
@@ -130,18 +129,18 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
     int moveCount = 0;
     while(childMoves[moveCount]->startSquare != -1) moveCount++;
 
-    bitboard** childBoards = calloc(moveCount, sizeof(bitboard*));
-    double* childScores = calloc(moveCount, sizeof(double));
-    threadParam* threadParamArray = calloc(moveCount, sizeof(threadParam));
+    bitboard** childBoards = CALLOC(moveCount, sizeof(bitboard*));
+    double* childScores = CALLOC(moveCount, sizeof(double));
+    threadParam* threadParamArray = CALLOC(moveCount, sizeof(threadParam));
 
     //Forces parent to wait for all children
     HANDLE sharedSemaphore = CreateSemaphoreW(NULL, 0, moveCount, NULL);
     if(sharedSemaphore == NULL)
     {
         freeMoveList(childMoves);
-        free(childBoards);
-        free(childScores);
-        free(threadParamArray);
+        FREE(childBoards);
+        FREE(childScores);
+        FREE(threadParamArray);
         DEBUG("Shared semaphore was NULL upon creation.")
         return NULL;
     }
@@ -151,9 +150,9 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
     if(threadCountSemaphore == NULL)
     {
         freeMoveList(childMoves);
-        free(childBoards);
-        free(childScores);
-        free(threadParamArray);
+        FREE(childBoards);
+        FREE(childScores);
+        FREE(threadParamArray);
         CloseHandle(sharedSemaphore);
         DEBUG("Thread count semaphore was NULL upon creation.")
         return NULL;
@@ -162,11 +161,11 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
 
     for(int i = 0; i < moveCount; i++)
     {
-        childBoards[i] = calloc(1, sizeof(bitboard));
+        childBoards[i] = CALLOC(1, sizeof(bitboard));
         copy_board(childBoards[i], board);
 
         //Tempmove copy gets freed with the boards.
-        move* tempMove = calloc(1, sizeof(move));
+        move* tempMove = CALLOC(1, sizeof(move));
         memcpy(tempMove, childMoves[i], sizeof(move));
         moveFromStruct(childBoards[i], tempMove);
 
@@ -194,8 +193,8 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
     CloseHandle(sharedSemaphore);
     CloseHandle(threadCountSemaphore);
     for(int i = 0; i < moveCount; i++) destroy_board(childBoards[i]);
-    free(childBoards);
-    free(threadParamArray);
+    FREE(childBoards);
+    FREE(threadParamArray);
 
     double maxScore = childScores[0];
     move* bestMove = childMoves[0];
@@ -208,11 +207,11 @@ move* calculateBestMove(bitboard* board, weights* weights, int depth, int maxThr
         }
     }
 
-    move* bestMoveCopy = calloc(1, sizeof(move));
+    move* bestMoveCopy = CALLOC(1, sizeof(move));
     memcpy(bestMoveCopy, bestMove, sizeof(move));
     bestMoveCopy->nextMove = NULL;
 
-    free(childScores);
+    FREE(childScores);
     freeMoveList(childMoves);
 
     return bestMoveCopy;

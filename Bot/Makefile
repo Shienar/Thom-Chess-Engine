@@ -6,7 +6,7 @@ TARGET = ChessBot
 all: $(TARGET)
 
 $(TARGET): $(OBJFILES)
-	$(CC) $(CFLAGS) -gdwarf-2 -o $(TARGET) $(OBJFILES)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES)
 
 clean:
 	rm -f $(TARGET) *~

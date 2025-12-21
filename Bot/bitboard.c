@@ -1,7 +1,6 @@
 #include "bitboard.h"
 #include "debug.h"
 #include <string.h>
-#include <stdlib.h>
 #include <math.h>
 
 //Returns value in range [1, 8]
@@ -63,7 +62,7 @@ int getSquareNumber(char* squareName)
 //Resets the board to an opening position
 bitboard* create_board()
 {
-    bitboard* board = calloc(1, sizeof(bitboard));
+    bitboard* board = CALLOC(1, sizeof(bitboard));
 
     board->pawn_w = 0x000000000000FF00;
     board->pawn_b = 0x00FF000000000000;
@@ -121,9 +120,9 @@ void destroy_board(bitboard* board)
     {
         move* tempMove = board->moveStackTop;
         board->moveStackTop = board->moveStackTop->nextMove;
-        free(tempMove);
+        FREE(tempMove);
     }
-    free(board);
+    FREE(board);
 }
 
 void copy_board(bitboard* dest, bitboard* source)
@@ -174,7 +173,7 @@ void copy_board(bitboard* dest, bitboard* source)
     //History:
     if(source->moveStackTop)
     {
-        dest->moveStackTop = calloc(1, sizeof(move));
+        dest->moveStackTop = CALLOC(1, sizeof(move));
         move* currentMove = source->moveStackTop;
         memcpy(dest->moveStackTop, currentMove, sizeof(move));
         dest->moveStackTop->nextMove = NULL;
@@ -182,7 +181,7 @@ void copy_board(bitboard* dest, bitboard* source)
         currentMove = currentMove->nextMove;
         while(currentMove)
         {
-            move* nextCopy= calloc(1, sizeof(move));
+            move* nextCopy= CALLOC(1, sizeof(move));
             memcpy(nextCopy, currentMove, sizeof(move));
             nextCopy->nextMove = NULL;
             currentCopy->nextMove = nextCopy;
@@ -674,7 +673,7 @@ move* moves_pop(bitboard* board)
 
 move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights)
 {
-    move* m = calloc(1, sizeof(move));
+    move* m = CALLOC(1, sizeof(move));
     if(!m) return NULL;
 
     m->startSquare = startSquare;

@@ -1,6 +1,5 @@
 #include "bitboard.h"
 #include "moves.h"
-#include <stdlib.h>
 #include <string.h>
 #include "debug.h"
 
@@ -8,7 +7,7 @@ move** generateMoveList(bitboard* board)
 {
     int size = 0;
     int capacity = 32;
-    move** movesList = calloc(capacity, sizeof(move*));
+    move** movesList = CALLOC(capacity, sizeof(move*));
     if(!movesList) return NULL;
     for(int currentSquare = 0; currentSquare < 64; currentSquare++)
     {
@@ -26,7 +25,7 @@ move** generateMoveList(bitboard* board)
                     movesList = realloc(movesList, capacity*sizeof(move*));
                     if(!movesList) return NULL;
                 }
-                movesList[size] = calloc(1, sizeof(move));
+                movesList[size] = CALLOC(1, sizeof(move));
                 memcpy(movesList[size], tempMoves[index], sizeof(move));
                 size++;
                 index++;
@@ -40,7 +39,7 @@ move** generateMoveList(bitboard* board)
     //stalemate/checkmate gets decided elsewhere.
     if(size == 0) 
     {
-        free(movesList);
+        FREE(movesList);
         return NULL;
     }
 
@@ -54,7 +53,7 @@ move** generateMoveList(bitboard* board)
 
 move** generatePieceMoves(bitboard* board, int piece, int square, int color)
 {
-    move** moveArray = calloc(40, sizeof(move*));
+    move** moveArray = CALLOC(40, sizeof(move*));
     if(!moveArray) return NULL;
     int castlingMask = 0;
     if(board->canKingsideCastle_w) castlingMask|=1;
@@ -134,7 +133,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
         }
     }
 
-    move** legalMoveArray = calloc(size, sizeof(move*));
+    move** legalMoveArray = CALLOC(size, sizeof(move*));
     bitboard* tempBoard = create_board();
     int legalSize = 0;
     for(int i = 0; i < size; i++)
@@ -149,7 +148,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
                 continue;
             }
 
-            legalMoveArray[legalSize] = calloc(1, sizeof(move));
+            legalMoveArray[legalSize] = CALLOC(1, sizeof(move));
             memcpy(legalMoveArray[legalSize], moveArray[i], sizeof(move));
             legalSize++;
         }
@@ -172,13 +171,13 @@ void freeMoveList(move** moveList)
     int index = 0;
     while(moveList[index] && moveList[index]->startSquare != -1)
     {
-        free(moveList[index]);
+        FREE(moveList[index]);
         moveList[index] = NULL;
         index++;
     }
 
-    if(moveList[index]) free(moveList[index]);
-    free(moveList);
+    if(moveList[index]) FREE(moveList[index]);
+    FREE(moveList);
     moveList = NULL;
 }
 
@@ -1314,6 +1313,8 @@ int moveFromString(bitboard* board, char* str)
 
 int moveFromStruct(bitboard* board, move* m)
 {   
+    if(!m) return -1;
+    
     if(ISBLACK(m->piece) && board->turn == WHITE)
     {
         DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare)
