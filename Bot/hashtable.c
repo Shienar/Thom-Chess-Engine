@@ -1,8 +1,8 @@
 #include "hashtable.h"
 #include "bitboard.h"
 #include "stdio.h"
-#include "debug.h"
 #include <string.h>
+#include <stdlib.h>
 
 /**
  * Internal resizing function
@@ -13,7 +13,7 @@ void ht_resize(hashtable* ht, int shouldShrink)
     if(shouldShrink) newCapacity = ht->capacity/2;
     else newCapacity = ht->capacity*2;
      
-    table_entry* newArray = CALLOC(newCapacity, sizeof(table_entry));
+    table_entry* newArray = calloc(newCapacity, sizeof(table_entry));
     if(!newArray) return;
 
     for(size_t i = 0; i < ht->capacity; i++)
@@ -33,23 +33,23 @@ void ht_resize(hashtable* ht, int shouldShrink)
             newArray[index].count = ht->array[i].count;
         }
     }
-    FREE(ht->array);
+    free(ht->array);
     ht->array = newArray;
     ht->capacity = newCapacity;
 }
 
 hashtable* create_hashTable()
 {
-    hashtable* newTable = CALLOC(1, sizeof(hashtable));
+    hashtable* newTable = calloc(1, sizeof(hashtable));
     if(!newTable) return NULL;
 
     newTable->size = 0;
     newTable->capacity = STARTING_CAPACITY;
 
-    newTable->array = CALLOC(newTable->capacity, sizeof(table_entry));
+    newTable->array = calloc(newTable->capacity, sizeof(table_entry));
     if(!newTable->array)
     {
-        FREE(newTable);
+        free(newTable);
         return NULL;
     }
 
@@ -58,16 +58,16 @@ hashtable* create_hashTable()
 
 hashtable* copy_hashTable(hashtable* src)
 {
-    hashtable* newTable = CALLOC(1, sizeof(hashtable));
+    hashtable* newTable = calloc(1, sizeof(hashtable));
     if(!newTable) return NULL;
 
     newTable->size = src->size;
     newTable->capacity = src->capacity;
 
-    newTable->array = CALLOC(newTable->capacity, sizeof(table_entry));
+    newTable->array = calloc(newTable->capacity, sizeof(table_entry));
     if(!newTable->array)
     {
-        FREE(newTable);
+        free(newTable);
         return NULL;
     }
 
@@ -76,7 +76,7 @@ hashtable* copy_hashTable(hashtable* src)
         if(src->array[i].key != NULL)
         {
             newTable->array[i].count = src->array[i].count;
-            newTable->array[i].key = CALLOC(65, sizeof(char));
+            newTable->array[i].key = calloc(65, sizeof(char));
             strncpy(newTable->array[i].key, src->array[i].key, 65);
         }
     }
@@ -93,13 +93,13 @@ void destroy_hashTable(hashtable* ht)
         {
             if(ht->array[i].key != NULL) 
             {
-                FREE(ht->array[i].key);
+                free(ht->array[i].key);
                 ht->array[i].key = NULL;
             }
         }
     }
-    FREE(ht->array);
-    FREE(ht);
+    free(ht->array);
+    free(ht);
 }
 
 uint64_t getHashCode(const char* key)
@@ -160,7 +160,7 @@ int increment_table_value(hashtable* ht, const char* key, int amount)
         if(index >= ht->capacity) index=0;
     }
 
-    ht->array[index].key = CALLOC(65, sizeof(char));
+    ht->array[index].key = calloc(65, sizeof(char));
     if(ht->array[index].key == NULL) return INT32_MIN;
     strncpy(ht->array[index].key, key, 65);
     ht->array[index].count = amount;
@@ -189,7 +189,7 @@ int decrement_table_value(hashtable* ht, const char* key)
             int returnedCount = ht->array[index].count;
             if(ht->array[index].count <= 0)
             {
-                FREE(ht->array[index].key);
+                free(ht->array[index].key);
                 ht->array[index].key = NULL;
                 ht->array[index].count = 0;
                 ht->size--;
