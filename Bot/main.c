@@ -6,7 +6,19 @@
 #include <windows.h>
 
 /**
- * TODO: Fix memory leak somewhere.
+ * TODO: 
+ *  - Memory leaks:
+ *      - Human v Human in moves.c:10, 136
+ *      - Test for human vs engine memory leaks.
+ *  - Rewrite engine.c to use iterative deepening
+ *      - Transposition tables
+ *          - Need to flesh out hash table functions
+ *      - Sorted alpha/beta inputs
+ *      - Make it work as a single-threaded function, then try
+ *      to optimize it for multithreading
+ *          - Need to research this a bit more.  There's a decent
+ *          amount of scholarly articles about multithread optimizations
+ *          for alpha/beta
  */
 int main(int argc, char** argv)
 {

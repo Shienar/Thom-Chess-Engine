@@ -35,12 +35,13 @@ typedef struct memoryBlock {
 extern memoryBlock *allocatedList;
 
 void* allocate_debug(size_t count, size_t size, const char* file, int line);
+void* realloc_debug(void* addr, size_t size, const char* file, int line);
 void free_debug(void* addr);
 void dump_allocations();
 
 #define CALLOC(count, size) allocate_debug(count, size, __FILE__, __LINE__)
-#define CALLOC(count, size, file, line) allocate_debug(count, size, file, line)
-#define FREE(addr) free_debug(addr);
+#define REALLOC(addr, size) realloc_debug(addr, size, __FILE__, __LINE__)
+#define FREE(addr) free_debug(addr)
 
 /***************************/
 

@@ -170,7 +170,15 @@ void copy_board(bitboard* dest, bitboard* source)
     //Checkmate
     dest->victor = source->victor;
 
-    //History:
+    //History: 
+    
+    //Make sure to free a preexisting move stack to avoid memory leaks.
+    while(dest->moveStackTop)
+    {
+        move* tempMove = dest->moveStackTop;
+        dest->moveStackTop = dest->moveStackTop->nextMove;
+        FREE(tempMove);
+    }
     if(source->moveStackTop)
     {
         dest->moveStackTop = CALLOC(1, sizeof(move));
@@ -194,7 +202,8 @@ void copy_board(bitboard* dest, bitboard* source)
         dest->moveStackTop = NULL;
     }
     
-    dest->ht = create_hashTable();
+    destroy_hashTable(dest->ht); 
+    dest->ht = copy_hashTable(source->ht);
 }
 
 int findPieceOnSquare(bitboard* board, int square)

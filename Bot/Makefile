@@ -3,10 +3,10 @@ CFLAGS = -Wall -g -std=c99
 OBJFILES = *.c
 TARGET = ChessBot
 
-all: $(TARGET)
+all: clean $(TARGET)
 
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES)
 
 clean:
-	rm -f $(TARGET) *~
+	rm -f $(TARGET) *~ leaks.txt

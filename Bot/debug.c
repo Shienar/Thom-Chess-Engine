@@ -46,6 +46,31 @@ void* allocate_debug(size_t count, size_t size, const char* file, int line)
     return returnAddr;
 }
 
+
+void* realloc_debug(void* addr, size_t size, const char* file, int line)
+{
+    void* returnAddr = realloc(addr, size);
+
+    if(trackLeaks && returnAddr != NULL)
+    {
+        WaitForSingleObject(leakListLock, INFINITE);
+        for(memoryBlock* curNode = allocatedList; curNode != NULL; curNode = curNode->next)
+        {
+            if(curNode->addr == addr)
+            {
+                curNode->addr = returnAddr;
+                curNode->size = size;
+                curNode->filename = file;
+                curNode->line = line;
+                break;
+            }
+        }
+        ReleaseMutex(leakListLock);
+    }
+
+    return returnAddr;
+}
+
 void free_debug(void* addr)
 {
     if(!addr) return;
@@ -78,10 +103,18 @@ void dump_allocations()
     {   
         FILE* output = fopen("leaks.txt", "w");
         if(!output) return;
-        for(memoryBlock* curNode = allocatedList; curNode != NULL; curNode = curNode->next)
+        if(allocatedList)
         {
-            fprintf(output, "%s:%d - Allocated address <%p> of size %lld\n", curNode->filename, curNode->line, curNode->addr, curNode->size);
+            for(memoryBlock* curNode = allocatedList; curNode != NULL; curNode = curNode->next)
+            {
+                fprintf(output, "%s:%d - Allocated address <%p> of size %lld\n", curNode->filename, curNode->line, curNode->addr, curNode->size);
+            }
         }
+        else
+        {
+            fprintf(output, "No leaks detected!");
+        }
+        
         fclose(output);
     }
 }

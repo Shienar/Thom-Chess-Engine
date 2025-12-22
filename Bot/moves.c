@@ -22,7 +22,7 @@ move** generateMoveList(bitboard* board)
                 if(size >= capacity)
                 {
                     capacity+=8;
-                    movesList = realloc(movesList, capacity*sizeof(move*));
+                    movesList = REALLOC(movesList, capacity*sizeof(move*));
                     if(!movesList) return NULL;
                 }
                 movesList[size] = CALLOC(1, sizeof(move));
@@ -43,7 +43,7 @@ move** generateMoveList(bitboard* board)
         return NULL;
     }
 
-    movesList = realloc(movesList, (size+1)*sizeof(move*));
+    movesList = REALLOC(movesList, (size+1)*sizeof(move*));
     if(!movesList) return NULL;
     move* terminatingMove = createMove(-1, size, 0, 0, 0, 0, 0);
     movesList[size] = terminatingMove;
@@ -156,7 +156,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
     destroy_board(tempBoard);
     freeMoveList(moveArray);
 
-    legalMoveArray = realloc(legalMoveArray, (legalSize+1)*sizeof(move));
+    legalMoveArray = REALLOC(legalMoveArray, (legalSize+1)*sizeof(move));
     if(legalMoveArray == NULL) return NULL;
     move* terminatingMove = createMove(-1, legalSize, 0, 0, 0, 0, 0);
     legalMoveArray[legalSize] = terminatingMove;
