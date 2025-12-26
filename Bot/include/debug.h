@@ -1,9 +1,9 @@
 #ifndef DEBUGGER
 #define DEBUGGER
 
+#include "structs.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <windows.h>
 
 extern int printDebugMessages;
 extern int trackLeaks;
@@ -23,7 +23,6 @@ void disableLeakTracking();
 }
 
 /*** Memory leak checker ***/
-
 typedef struct memoryBlock {
     void* addr;
     size_t size;

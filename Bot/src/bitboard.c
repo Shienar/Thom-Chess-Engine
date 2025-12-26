@@ -1,5 +1,6 @@
-#include "bitboard.h"
-#include "debug.h"
+#include "../include/structs.h"
+#include "../include/debug.h"
+#include "../include/bitboard.h"
 #include <string.h>
 #include <math.h>
 

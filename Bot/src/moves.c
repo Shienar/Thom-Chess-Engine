@@ -1,9 +1,9 @@
-#include "bitboard.h"
-#include "moves.h"
+#include "../include/bitboard.h"
+#include "../include/moves.h"
 #include <string.h>
-#include "debug.h"
+#include "../include/debug.h"
 
-move** generateMoveList(bitboard* board)
+move** generateMoveList(bitboard* board, int capturesOnly)
 {
     int size = 0;
     int capacity = 32;
@@ -15,9 +15,9 @@ move** generateMoveList(bitboard* board)
             (board->turn == BLACK && board->pieces_b&(1ull<<currentSquare)))
         {
             int piece = findPieceOnSquare(board, currentSquare);
-            move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece);
+            move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece, capturesOnly);
             int index = 0;
-            while(tempMoves[index]->startSquare != -1)
+            while(tempMoves[index] != NULL)
             {
                 if(size >= capacity)
                 {
@@ -45,13 +45,12 @@ move** generateMoveList(bitboard* board)
 
     movesList = REALLOC(movesList, (size+1)*sizeof(move*));
     if(!movesList) return NULL;
-    move* terminatingMove = createMove(-1, size, 0, 0, 0, 0, 0);
-    movesList[size] = terminatingMove;
+    movesList[size] = NULL;
 
     return movesList;
 }
 
-move** generatePieceMoves(bitboard* board, int piece, int square, int color)
+move** generatePieceMoves(bitboard* board, int piece, int square, int color, int capturesOnly)
 {
     move** moveArray = CALLOC(40, sizeof(move*));
     if(!moveArray) return NULL;
@@ -62,13 +61,18 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
     if(board->canQueensideCastle_b) castlingMask|=8;
     int size = 0;
     uint64_t moveMask;
+
+    uint64_t opposingPieceMask;
+    if(ISWHITE(color)) opposingPieceMask = board->pieces_b;
+    else opposingPieceMask = board->pieces_w;
+
     if(ISPAWN(piece))
     {
         moveMask = pawnMoves(board, square, color);
         int currentSquare = 0;
         while(moveMask)
         {
-            if(moveMask&1)
+            if(moveMask&1 && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
@@ -93,6 +97,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
                 }
             }
             moveMask = moveMask >> 1;
+            opposingPieceMask = opposingPieceMask >> 1;
             currentSquare++;
         }
     }
@@ -122,13 +127,14 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
 
         while(moveMask)
         {
-            if(moveMask&1)
+            if(moveMask&1  && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
                 moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, castlingMask);
                 size++;
             }
             moveMask = moveMask >> 1;
+            opposingPieceMask = opposingPieceMask >> 1;
             currentSquare++;
         }
     }
@@ -158,8 +164,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color)
 
     legalMoveArray = REALLOC(legalMoveArray, (legalSize+1)*sizeof(move));
     if(legalMoveArray == NULL) return NULL;
-    move* terminatingMove = createMove(-1, legalSize, 0, 0, 0, 0, 0);
-    legalMoveArray[legalSize] = terminatingMove;
+    legalMoveArray[legalSize] = NULL;
 
     return legalMoveArray;
 }
@@ -169,7 +174,7 @@ void freeMoveList(move** moveList)
     if(!moveList) return;
 
     int index = 0;
-    while(moveList[index] && moveList[index]->startSquare != -1)
+    while(moveList[index])
     {
         FREE(moveList[index]);
         moveList[index] = NULL;
@@ -1326,7 +1331,7 @@ int moveFromStruct(bitboard* board, move* m)
         return -1;
     }
 
-    move** potentialMoveList = generatePieceMoves(board, m->piece, m->startSquare, m->piece&0xF0);
+    move** potentialMoveList = generatePieceMoves(board, m->piece, m->startSquare, m->piece&0xF0, 0);
     if(potentialMoveList == NULL)
     {
         DEBUG("Failed to generate potential moves.")
@@ -1334,7 +1339,7 @@ int moveFromStruct(bitboard* board, move* m)
     }
     int moveIndex = 0;
     int isLegal = 0;
-    while(potentialMoveList[moveIndex]->startSquare != -1)
+    while(potentialMoveList[moveIndex])
     { 
         if(!isLegal && potentialMoveList[moveIndex]->startSquare == m->startSquare && potentialMoveList[moveIndex]->endSquare == m->endSquare)
         {
@@ -1386,7 +1391,7 @@ int moveFromStruct(bitboard* board, move* m)
     else
     {
         //Calculate checkmate/stalemate
-        move** moveList = generateMoveList(board);
+        move** moveList = generateMoveList(board, 0);
         if(!moveList)
         {
             if(board->turn == WHITE)

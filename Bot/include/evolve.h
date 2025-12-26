@@ -1,16 +1,16 @@
 #ifndef EVOLVE
 #define EVOLVE
 
-#include "engine.h"
+#include "structs.h"
 #define ENGINE_DEPTH 4
 #define MUTATION_CHANCE 0.1
 
 /**
  * Steepest Ascent Hill Climbing
  */
-void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIteration);
+void hill_climb(engine* starting_weights, int maxIterations, int numTweaksPerIteration);
 
-weights* createTweakedCopy(weights* original_weight);
+engine* createTweakedCopy(engine* original_weight);
 
 /**
  * Compares engines by having them play two games, once with each color.
@@ -18,7 +18,7 @@ weights* createTweakedCopy(weights* original_weight);
  * Returns 0 on draw.
  * Returns -1 if w2 won.
  */
-int compareEngines(weights* w1, weights* w2);
+int compareEngines(engine* w1, engine* w2);
 
 /**
  * Plays a game between engines
@@ -26,6 +26,6 @@ int compareEngines(weights* w1, weights* w2);
  * Returns 0 on draw.
  * Returns -1 if black won.
  */
-int play_engine_game(weights* whiteWeights, weights* blackWeights);
+int play_engine_game(engine* whiteWeights, engine* blackWeights);
 
 #endif

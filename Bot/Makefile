@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -g -std=c99
-OBJFILES = *.c
+OBJFILES = src/*.c
 TARGET = ChessBot
 
 all: clean $(TARGET)

@@ -1,15 +1,17 @@
-#include "evolve.h"
-#include "debug.h"
+#include "../include/evolve.h"
+#include "../include/debug.h"
+#include "../include/bitboard.h"
+#include "../include/moves.h"
 #include <time.h>
 
-void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIteration)
+void hill_climb(engine* starting_weights, int maxIterations, int numTweaksPerIteration)
 {
     for(int i = 0; i < maxIterations; i++)
     {
-        weights* newWeights = createTweakedCopy(starting_weights);
+        engine* newWeights = createTweakedCopy(starting_weights);
         for(int j = 0; j < numTweaksPerIteration - 1; j++)
         {
-            weights* newWeights2 = createTweakedCopy(starting_weights);
+            engine* newWeights2 = createTweakedCopy(starting_weights);
             if(compareEngines(newWeights, newWeights2) < 0)
             {
                 FREE(newWeights);
@@ -32,10 +34,10 @@ void hill_climb(weights* starting_weights, int maxIterations, int numTweaksPerIt
     }
 }
 
-weights* createTweakedCopy(weights* original_weight)
+engine* createTweakedCopy(engine* original_weight)
 {
     srand(time(NULL));
-    weights* w = CALLOC(1, sizeof(weights));
+    engine* w = CALLOC(1, sizeof(engine));
     if(!w) return NULL;
 
     for(int i = 0; i < 64; i++)
@@ -72,12 +74,12 @@ weights* createTweakedCopy(weights* original_weight)
     return w;
 }
 
-int compareEngines(weights* w1, weights* w2)
+int compareEngines(engine* w1, engine* w2)
 {
     return play_engine_game(w1, w2) - play_engine_game(w2, w1);
 }
 
-int play_engine_game(weights* whiteWeights, weights* blackWeights)
+int play_engine_game(engine* whiteWeights, engine* blackWeights)
 {
     bitboard* board = create_board();
     while(board->victor == 0)

@@ -1,4 +1,4 @@
-#include "debug.h"
+#include "../include/debug.h"
 
 int printDebugMessages = 0;
 int trackLeaks = 0;

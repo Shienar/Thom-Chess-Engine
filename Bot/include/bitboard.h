@@ -2,8 +2,7 @@
 
 #define BITBOARD_H
 
-#include <stdint.h>
-struct hashtable;
+#include "structs.h"
 #include "hashtable.h"
 
 #define WHITE 0x10
@@ -28,68 +27,6 @@ struct hashtable;
 
 #define REMOVE = 0x100
 #define SHOULDREMOVE(piece) (piece&REMOVE == REMOVE)
-
-typedef struct move {
-    int startSquare;
-    int endSquare;
-    int piece;
-    int promoteTo;
-    int capturedPiece;
-    int capturedPieceSquare; //Not always the same as endsquare because of en passant
-    int previousCastleRights; // var&1 == white kingside; var&2 == white queenside; var&4 = black kingsidee; var&8 = black queenside
-    struct move* nextMove;
-} move;
-
-//a1 = 0, h1 = 7
-//a2 = 8, h2 = 15
-//a3 = 16, h3 = 23
-//a4 = 24, h4 = 31
-//a5 = 32, h5 = 39
-//a6 = 40, h6 = 47
-//a7 = 48, h7 = 55
-//a8 = 56, h8 = 63
-typedef struct bitboard {
-    uint64_t pawn_w;
-    uint64_t knight_w;
-    uint64_t bishop_w;
-    uint64_t rook_w;
-    uint64_t queen_w;
-    uint64_t king_w;
-    
-    uint64_t pawn_b;
-    uint64_t knight_b;
-    uint64_t bishop_b;
-    uint64_t rook_b;
-    uint64_t queen_b;
-    uint64_t king_b;
-
-    uint64_t pieces_w;
-    uint64_t pieces_b;
-    uint64_t pieces_all;
-
-    //Constantly referenced for check checking. 0-63
-    int kingSquare_b;
-    int kingSquare_w;
-
-    int canQueensideCastle_b;
-    int canKingsideCastle_b;
-    int canQueensideCastle_w;
-    int canKingsideCastle_w;
-
-    //Check
-    int in_check_w;
-    int in_check_b;
-
-    //Turn
-    int turn;
-
-    //Checkmate
-    int victor;
-
-    //History
-    move* moveStackTop;
-    struct hashtable* ht;
-} bitboard;
 
 #define columnNames "abcdefgh"
 

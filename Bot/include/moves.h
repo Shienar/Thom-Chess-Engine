@@ -1,7 +1,7 @@
 #ifndef MOVES
 #define MOVES
 
-#include "bitboard.h"
+#include "structs.h"
 #include "hashtable.h"
 
 //Questioned piece is this direction from selected king.
@@ -22,9 +22,10 @@
 #define THREAT_TYPE_BISHOPQUEEN 3
 #define THREAT_TYPE_ROOKQUEEN 4
 
-//Legal moves
-move** generateMoveList(bitboard* board);
-move** generatePieceMoves(bitboard* board, int piece, int square, int color);
+//Legal moves.
+//Lists are null-terminated.
+move** generateMoveList(bitboard* board, int capturesOnly);
+move** generatePieceMoves(bitboard* board, int piece, int square, int color, int capturesOnly);
 void freeMoveList(move** moveList);
 
 int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColor);

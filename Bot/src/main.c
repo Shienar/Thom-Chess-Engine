@@ -1,24 +1,19 @@
-#include "moves.h"
-#include "debug.h"
-#include "evolve.h"
+#include "../include/moves.h"
+#include "../include/debug.h"
+#include "../include/evolve.h"
+#include "../include/bitboard.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
 
 /**
- * TODO: 
- *  - Memory leaks:
- *      - Human v Human in moves.c:10, 136
- *      - Test for human vs engine memory leaks.
+ * TODO:
+ *  - Store principal variation within the engine.
+ *      - Triangular PV-Table
+ *  - Transposition table values need to get updated when searched at a higher depth.
  *  - Rewrite engine.c to use iterative deepening
- *      - Transposition tables
- *          - Need to flesh out hash table functions
- *      - Sorted alpha/beta inputs
- *      - Make it work as a single-threaded function, then try
- *      to optimize it for multithreading
- *          - Need to research this a bit more.  There's a decent
- *          amount of scholarly articles about multithread optimizations
- *          for alpha/beta
+ *      - Check the best move from last first.
+ *      - Store the principle variation and check it first. Then, check the move list.
  */
 int main(int argc, char** argv)
 {
@@ -31,7 +26,7 @@ int main(int argc, char** argv)
     int onlyEngines = 0;
     int onlyHumans = 0;
     int threadCount = 4;
-    double delay = 0;
+    double maxTime = 0;
     int printHistory = 0;
     int shouldTrain = 0;
     for(int i = 1; i < argc; i++)
@@ -49,7 +44,7 @@ int main(int argc, char** argv)
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
             printf("--threads\tChange the number of threads for min/max search, takes one integer parameter, max 8.\n");
-            printf("--delay\t\tSpecify the number of milliseconds the computer will wait after each move.\n");
+            printf("--maxTime\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--train\t\tTrains the chess engine with hill climbing\n");
             printf("\n\n");
             exit(0);
@@ -95,10 +90,10 @@ int main(int argc, char** argv)
             threadCount = atoi(argv[i]);
             threadCount = min(threadCount, 8);
         }
-        else if(strcmp(argv[i], "--delay") == 0)
+        else if(strcmp(argv[i], "--maxTime") == 0)
         {
             i++;
-            delay = atof(argv[i]);
+            maxTime = atof(argv[i]);
         }
         else if(strcmp(argv[i], "--train") == 0)
         {
@@ -113,8 +108,8 @@ int main(int argc, char** argv)
 
     bitboard* board = create_board();
 
-    weights boardWeights = {0};
-    initPieceWeights(&boardWeights, 0);
+    engine engine = {0};
+    initEnginePieceWeights(&engine, 0);
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -147,11 +142,10 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move* bestMove = calculateBestMove(board, &boardWeights, depth, threadCount);
+                move* bestMove = calculateBestMove(board, &engine, depth, maxTime);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose, printHistory);
-            if(delay) Sleep(delay);
         }
         
         if(board->victor == WHITE)

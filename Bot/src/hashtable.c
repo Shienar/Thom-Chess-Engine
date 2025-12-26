@@ -1,8 +1,9 @@
-#include "hashtable.h"
-#include "bitboard.h"
-#include "stdio.h"
-#include "debug.h"
+#include "../include/hashtable.h"
+#include "../include/bitboard.h"
+#include "../include/stdio.h"
+#include "../include/debug.h"
 #include <string.h>
+#include <float.h>
 
 /**
  * Internal resizing function
@@ -71,7 +72,7 @@ hashtable* copy_hashTable(hashtable* src)
         return NULL;
     }
 
-    for(int i = 0; i < newTable->capacity; i++)
+    for(size_t i = 0; i < newTable->capacity; i++)
     {
         if(src->array[i].key != NULL)
         {
@@ -89,7 +90,7 @@ void destroy_hashTable(hashtable* ht)
     if(!ht) return;
     if(ht->array)
     {
-        for(int i = 0; i < ht->capacity; i++)
+        for(size_t i = 0; i < ht->capacity; i++)
         {
             if(ht->array[i].key != NULL) 
             {
@@ -104,7 +105,7 @@ void destroy_hashTable(hashtable* ht)
 
 uint64_t getHashCode(const char* key)
 {
-    if(!key) { printf("X"); return 0; }
+    if(!key)  return 0;
 
     uint64_t hashCode = FNV_OFFSET_BASIS;
     for(int i = 0; i < 64; i++)
@@ -141,14 +142,14 @@ void hashKey(bitboard* board, char* key)
     }
 }
 
-int increment_table_value(hashtable* ht, const char* key, int amount)
+double increment_table_value(hashtable* ht, const char* key, double amount)
 {
-    if(!ht) return INT32_MIN;
+    if(!ht) return DBL_MIN;
 
     uint64_t hashCode = getHashCode(key);
-    int index = hashCode%ht->capacity;
+    size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].key != NULL)
+    while(ht->array[index].key != NULL && ht->array[index].count != DBL_MIN)
     {
         if(strcmp(ht->array[index].key, key) == 0)
         {
@@ -161,7 +162,7 @@ int increment_table_value(hashtable* ht, const char* key, int amount)
     }
 
     ht->array[index].key = CALLOC(65, sizeof(char));
-    if(ht->array[index].key == NULL) return INT32_MIN;
+    if(ht->array[index].key == NULL) return DBL_MIN;
     strncpy(ht->array[index].key, key, 65);
     ht->array[index].count = amount;
     ht->size++;
@@ -175,23 +176,23 @@ int increment_table_value(hashtable* ht, const char* key, int amount)
     return ht->array[index].count;
 }
 
-int decrement_table_value(hashtable* ht, const char* key)
+double decrement_table_value(hashtable* ht, const char* key)
 {
-    if(!ht) return INT32_MIN;
+    if(!ht) return DBL_MIN;
     uint64_t hashCode = getHashCode(key);
-    int index = hashCode%ht->capacity;
+    size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].key != NULL)
+    while(ht->array[index].key != NULL && ht->array[index].count != DBL_MIN)
     {
         if(strcmp(ht->array[index].key, key) == 0) 
         {
             ht->array[index].count--;
-            int returnedCount = ht->array[index].count;
+            double returnedCount = ht->array[index].count;
             if(ht->array[index].count <= 0)
             {
                 FREE(ht->array[index].key);
                 ht->array[index].key = NULL;
-                ht->array[index].count = 0;
+                ht->array[index].count = DBL_MIN; //Tombstone
                 ht->size--;
             }
 
@@ -207,5 +208,34 @@ int decrement_table_value(hashtable* ht, const char* key)
         index++;
         if(index >= ht->capacity) index=0;
     }
-    return INT32_MIN;
+    return DBL_MIN;
+}
+
+double transposition_table_evaluate(bitboard* board, engine* engine)
+{
+    if(!engine || !board) return 0;
+
+    if(engine->transpositionTable == NULL) 
+    {
+        engine->transpositionTable = create_hashTable();
+    }
+
+    char key[65];
+    hashKey(board, key);
+    uint64_t hashCode = getHashCode(key);
+    size_t index = hashCode%engine->transpositionTable->capacity;
+
+    while(engine->transpositionTable->array[index].key != NULL && engine->transpositionTable->array[index].count != DBL_MIN)
+    {
+        if(strcmp(engine->transpositionTable->array[index].key, key) == 0)
+        {
+            return engine->transpositionTable->array[index].count;
+        }
+
+        index++;
+        if(index >= engine->transpositionTable->capacity) index=0;
+    }
+
+    engine->transpositionTable->array[index].count = evaluate(board, engine);
+    return engine->transpositionTable->array[index].count;
 }
