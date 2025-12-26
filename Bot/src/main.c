@@ -7,14 +7,10 @@
 #include <windows.h>
 
 /**
- * TODO:
- *  - Store principal variation within the engine.
- *      - Triangular PV-Table
- *  - Transposition table values need to get updated when searched at a higher depth.
- *  - Rewrite engine.c to use iterative deepening
- *      - Check the best move from last first.
- *      - Store the principle variation and check it first. Then, check the move list.
+ * TODO List:
+ *  - Quiescent search optimizations.
  */
+
 int main(int argc, char** argv)
 {
     /**
@@ -26,7 +22,7 @@ int main(int argc, char** argv)
     int onlyEngines = 0;
     int onlyHumans = 0;
     int threadCount = 4;
-    double maxTime = 0;
+    double maxTime = 3;
     int printHistory = 0;
     int shouldTrain = 0;
     for(int i = 1; i < argc; i++)

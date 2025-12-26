@@ -60,23 +60,26 @@ double evaluate(bitboard* board, engine* w)
     return score_w - score_b;
 }
 
-double quiesce(bitboard* board, engine* engine, double alpha, double beta)
+int counter1, counter2, counter3, counter4 = 0;
+double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth)
 {
     double best = transposition_table_evaluate(board, engine);
 
-    if(best >= beta) return best;
+    if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
 
     move** captureMoves = generateMoveList(board, 1);
     if(captureMoves != NULL)
     {
+        counter2++;
         int index = 0;
         while(captureMoves[index])
         {
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                double score = -quiesce(board, engine, alpha, beta);
+                double score = -quiesce(board, engine, alpha, beta, depth - 1);
+                counter3++;
                 unmove(board);
                 if(score >= beta)
                 {
@@ -86,21 +89,20 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta)
                 else if(score > best) best = score;
                 else if(score > alpha) alpha = score;
             }
+            index++;
         }
         freeMoveList(captureMoves);
     }
+    counter4++;
     return best;
 }
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-int counter0, counter1, counter2, counter3 = 0;
-double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex)
+double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex, clock_t timeLimit)
 {
-    printf("\rDepth=%d %d %d %d %d", depth, counter0++, counter1, counter2, counter3);
-    if(depth == 0) return quiesce(board, engine, alpha, beta);
+    if(depth == 0 || clock() > timeLimit) return quiesce(board, engine, alpha, beta, 3);
 
-    counter1++; //TODO
     move* principalMove = &engine->pvTable[pvIndex];
     double score = 0;
 
@@ -110,8 +112,7 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
         //Check the principal move.
         if(!moveFromStruct(board, principalMove))
         {
-            counter2++;
-            score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth);
+            score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
             unmove(board);
 
             if(score >= beta) return beta;
@@ -131,10 +132,9 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
         {
             if(!moveFromStruct(board, moveList[index]))
             {
-                counter3++;
-                score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth);
+                score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
                 //Re-search PV node
-                if (score > alpha && beta - alpha > 0) score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth);
+                if (score > alpha && beta - alpha > 0) score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
                 
                 unmove(board);
 
@@ -165,13 +165,14 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
 
-    for(int currentDepth = 1; currentDepth < maxDepth; currentDepth++)
+    for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         if(clock() > endTime) break;
-        principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, 0);
+        principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, 0, endTime);
     }
 
     destroy_hashTable(engine->transpositionTable);
+    engine->transpositionTable = NULL;
 
     move* bestMove = CALLOC(1, sizeof(move));
     memcpy(bestMove, &engine->pvTable[0], sizeof(move));

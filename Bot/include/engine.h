@@ -21,12 +21,12 @@ double evaluate(bitboard* board, engine* w);
  * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
  * position is reached. (Do extra searching for subsequent capture moves).
  */
-double quiesce(bitboard* board, engine* engine, double alpha, double beta);
+double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth);
 
 /**
  * Depth = "Depth remaining" = Maxdepth - ply (distance from root)
  */
-double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex);
+double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex, clock_t timeLimit);
 
 /**
  * Iterative deepening function.
