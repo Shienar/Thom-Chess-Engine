@@ -2,12 +2,15 @@
 #include "../include/moves.h"
 #include "../include/bitboard.h"
 #include "../include/debug.h"
+#include "../include/evolve.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>
 
 void initEnginePieceWeights(engine* w, int useExisting)
 {
+    if(useExisting && !loadEngineWeights(w)) return;
+    
     for(int i = 0; i < 64; i++)
     {
         w->pawnPieceWeights[i] = rand()%3;
@@ -25,8 +28,6 @@ void initEnginePieceWeights(engine* w, int useExisting)
     w->bishopWeight = 3;
     w->queenWeight = 9;
     w->kingWeight = 25;
-
-
 }
 
 double evaluate(bitboard* board, engine* w)
@@ -60,7 +61,6 @@ double evaluate(bitboard* board, engine* w)
     return score_w - score_b;
 }
 
-int counter1, counter2, counter3, counter4 = 0;
 double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth)
 {
     double best = transposition_table_evaluate(board, engine);
@@ -71,7 +71,6 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta, int d
     move** captureMoves = generateMoveList(board, 1);
     if(captureMoves != NULL)
     {
-        counter2++;
         int index = 0;
         while(captureMoves[index])
         {
@@ -79,7 +78,6 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta, int d
             if(!moveFromStruct(board, currentMove))
             {
                 double score = -quiesce(board, engine, alpha, beta, depth - 1);
-                counter3++;
                 unmove(board);
                 if(score >= beta)
                 {
@@ -93,7 +91,6 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta, int d
         }
         freeMoveList(captureMoves);
     }
-    counter4++;
     return best;
 }
 

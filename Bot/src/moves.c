@@ -1511,6 +1511,8 @@ move* unmove(bitboard *board)
 
     if(board->turn == WHITE) board->turn = BLACK;
     else if (board->turn==BLACK) board->turn = WHITE;
+    
+    board->victor = 0;
 
     return m;
 }

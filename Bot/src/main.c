@@ -8,7 +8,14 @@
 
 /**
  * TODO List:
+ *  - Replace tweak operation with gaussian convolution.
+ *      - Box-Muller algorithm.
  *  - Quiescent search optimizations.
+ *  - Inconsistent bug that prevents the player from checking opponent. 
+ *      - Game thinks that they are of other color?
+ *      - Cannot reproduce.
+ *  - Fix bug where engine tries to move black piece on white turn (and vice versa).
+ *  -
  */
 
 int main(int argc, char** argv)
@@ -25,6 +32,8 @@ int main(int argc, char** argv)
     double maxTime = 3;
     int printHistory = 0;
     int shouldTrain = 0;
+    int maxTrainingIterations = 10;
+    int tweaksPerIteration = 3;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
@@ -40,8 +49,8 @@ int main(int argc, char** argv)
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
             printf("--threads\tChange the number of threads for min/max search, takes one integer parameter, max 8.\n");
-            printf("--maxTime\t\tSpecify maximum computation time per turn in seconds.\n");
-            printf("--train\t\tTrains the chess engine with hill climbing\n");
+            printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
+            printf("--train\t\tTrains the chess engine with hill climbing. The next two variables should be maxIterations ands tweaksPerIteration\n");
             printf("\n\n");
             exit(0);
         }
@@ -82,11 +91,10 @@ int main(int argc, char** argv)
         }
         else if(strcmp(argv[i], "--threads") == 0)
         {
-            i++;
-            threadCount = atoi(argv[i]);
+            threadCount = atoi(argv[++i]);
             threadCount = min(threadCount, 8);
         }
-        else if(strcmp(argv[i], "--maxTime") == 0)
+        else if(strcmp(argv[i], "--time") == 0)
         {
             i++;
             maxTime = atof(argv[i]);
@@ -94,18 +102,30 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--train") == 0)
         {
             shouldTrain = 1;
+            maxTrainingIterations = atoi(argv[++i]);;
+            tweaksPerIteration = atoi(argv[++i]);;
         }
     }
+    
+    srand(time(NULL));
 
     if(shouldTrain)
     {
+        printf("Starting Training.\n");
+        engine* trainableEngine = CALLOC(1, sizeof(engine));
+        initEnginePieceWeights(trainableEngine, 1);
+
+        hill_climb(trainableEngine, maxTrainingIterations, tweaksPerIteration, depth, maxTime);
+
+        printf("Training Complete.\n");
+        dump_allocations();
         exit(0);
     }
 
     bitboard* board = create_board();
 
-    engine engine = {0};
-    initEnginePieceWeights(&engine, 0);
+    engine opponentEngine = {0};
+    initEnginePieceWeights(&opponentEngine, 1);
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -138,7 +158,7 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move* bestMove = calculateBestMove(board, &engine, depth, maxTime);
+                move* bestMove = calculateBestMove(board, &opponentEngine, depth, maxTime);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose, printHistory);
