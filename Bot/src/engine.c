@@ -165,6 +165,7 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         if(clock() > endTime) break;
+
         principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, 0, endTime);
     }
 

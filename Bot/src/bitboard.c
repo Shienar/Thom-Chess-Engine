@@ -583,24 +583,7 @@ void board_print(bitboard* board, int printValues, int printHistory)
         }
         printf("\n");
     }
-    if(printHistory)
-    {
-        char startSquareName[3] = {'\0'};
-        char endSquareName[3] = {'\0'};
-        char capturedSquareName[3] = {'\0'};
-        printf("Recent Moves:\n");
-        for(move* m = board->moveStackTop; m != NULL; m= m->nextMove)
-        {
-            getSquareName(m->startSquare, startSquareName);
-            getSquareName(m->endSquare, endSquareName);
-            getSquareName(m->capturedPieceSquare, capturedSquareName);
-            printf("\t[%02x->%02x]: %s->%s", m->piece, m->promoteTo, startSquareName, endSquareName);
-            if(m->capturedPiece) printf(" Captured %02x on %s", m->capturedPiece, capturedSquareName);
-            printf("\n");
-        }
-        printf("\n");
-    }
-    
+    if(printHistory) dumpMoves(board);
 }
 
 
@@ -695,4 +678,25 @@ move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int c
     m->previousCastleRights = castleRights;
     m->nextMove = NULL;
     return m;
+}
+
+void recursivePrint(move* m)
+{
+    if(m)
+    {
+        recursivePrint(m->nextMove);
+
+        char startSquareName[3] = {'\0'};
+        char endSquareName[3] = {'\0'};
+        getSquareName(m->startSquare, startSquareName);
+        getSquareName(m->endSquare, endSquareName);
+
+        printf("%s%s ", startSquareName, endSquareName);
+    }
+}
+
+void dumpMoves(bitboard* board)
+{
+    recursivePrint(board->moveStackTop);
+    printf("\n");
 }

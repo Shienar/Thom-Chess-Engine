@@ -8,14 +8,12 @@
 
 /**
  * TODO List:
- *  - Replace tweak operation with gaussian convolution.
- *      - Box-Muller algorithm.
  *  - Quiescent search optimizations.
  *  - Inconsistent bug that prevents the player from checking opponent. 
  *      - Game thinks that they are of other color?
  *      - Cannot reproduce.
  *  - Fix bug where engine tries to move black piece on white turn (and vice versa).
- *  -
+ *  - Zero'd out move returned when trying to get out of check.
  */
 
 int main(int argc, char** argv)

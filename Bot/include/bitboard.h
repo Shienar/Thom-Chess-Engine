@@ -53,4 +53,5 @@ int moves_push(bitboard* board, move* m);
 move* moves_pop(bitboard* board);
 move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights);
 
+void dumpMoves(bitboard* board);
 #endif

@@ -3,9 +3,13 @@
 #include "../include/bitboard.h"
 #include "../include/moves.h"
 #include <time.h>
+#include <math.h>
+
+double pi_2 = 6.28;
 
 void hill_climb(engine* starting_weights, int maxIterations, int numTweaksPerIteration, int maxDepth, int maxTime)
 {
+    if(pi_2 == 6.28) pi_2 = 2 * acos(-1.0);
     for(int i = 0; i < maxIterations; i++)
     {
         engine* newWeights = createTweakedCopy(starting_weights);
@@ -37,9 +41,15 @@ void hill_climb(engine* starting_weights, int maxIterations, int numTweaksPerIte
     printf("\n");
 }
 
+/**
+ * Box-Muller transform.
+ * The learning rate can be interpreted as the standard deviation of the normal distribution.
+ */
 double generateRandomNumber() 
 {
-    return LEARNING_RATE * (((double)rand()/(double)RAND_MAX)*2.0 - 1.0);
+    double u1; 
+    do { u1 = (double)rand() / (double) RAND_MAX; } while(u1 == 0);
+    return LEARNING_RATE * sqrt(-2.0 * log(u1)) * cos(pi_2 *  (double)rand()/(double)RAND_MAX);
 }
 
 engine* createTweakedCopy(engine* original_weight)
@@ -145,6 +155,7 @@ int play_engine_game(engine* whiteWeights, engine* blackWeights, int maxDepth, i
         if(board->turn == WHITE) bestMove = calculateBestMove(board, whiteWeights, maxDepth, maxTime);
         else bestMove = calculateBestMove(board, blackWeights, maxDepth, maxTime);
         moveFromStruct(board, bestMove);
+        board_print(board, 0, 1);
     }
     
     int returnValue = 0;

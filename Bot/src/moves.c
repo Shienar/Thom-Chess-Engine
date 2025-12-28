@@ -52,6 +52,21 @@ move** generateMoveList(bitboard* board, int capturesOnly)
 
 move** generatePieceMoves(bitboard* board, int piece, int square, int color, int capturesOnly)
 {
+    if(piece == 0)
+    {
+        DEBUG("Cannot generate piece moves on invalid piece type.")
+        return NULL;
+    }
+    else if(square < 0 || square > 63)
+    {
+        DEBUG("Cannot generate piece moves from invalid square.")
+        return NULL;
+    }
+    else if(!ISWHITE(color) && !ISBLACK(color))
+    {
+        DEBUG("Cannot generate piece moves from invalid color.")
+        return NULL;
+    }
     move** moveArray = CALLOC(40, sizeof(move*));
     if(!moveArray) return NULL;
     int castlingMask = 0;
@@ -1328,6 +1343,16 @@ int moveFromStruct(bitboard* board, move* m)
     else if(ISWHITE(m->piece) && board->turn == BLACK)
     {
         DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m->startSquare, m->endSquare)
+        return -1;
+    }
+    else if(m->startSquare < 0 || m->startSquare > 63 || m->endSquare < 0 || m->endSquare > 63)
+    {
+        DEBUG("Piece cannot move out of bounds (%d -> %d).", m->startSquare, m->endSquare)
+        return -1;
+    }
+    else if(m->startSquare == m->endSquare)
+    {
+        DEBUG("Piece cannot move in place on square %d.", m->startSquare)
         return -1;
     }
 

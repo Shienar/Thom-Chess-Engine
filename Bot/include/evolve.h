@@ -5,7 +5,9 @@
 #define MUTATION_CHANCE 0.1
 #define LEARNING_RATE 0.1
 #define MAX_WEIGHT 25
-#define MIN_WEIGHT 0
+#define MIN_WEIGHT 0.25
+
+extern double pi_2;
 
 /**
  * Steepest Ascent Hill Climbing
