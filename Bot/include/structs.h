@@ -22,7 +22,9 @@ typedef struct move {
     int promoteTo;
     int capturedPiece;
     int capturedPieceSquare; //Not always the same as endsquare because of en passant
-    int previousCastleRights; // var&1 == white kingside; var&2 == white queenside; var&4 = black kingsidee; var&8 = black queenside
+    
+    //Flags from the previous board state.
+    int flags; 
     struct move* nextMove;
 } move;
 
@@ -57,14 +59,15 @@ typedef struct bitboard {
     int kingSquare_b;
     int kingSquare_w;
 
-    int canQueensideCastle_b;
-    int canKingsideCastle_b;
-    int canQueensideCastle_w;
-    int canKingsideCastle_w;
-
-    //Check
-    int in_check_w;
-    int in_check_b;
+    /**
+     * flags&1 == canKingsideCastle_w
+     * flags&2 == canQueensideCastle_w 
+     * flags&4 == canKingsideCastle_b
+     * flags&8 == canQueensideCastle_b
+     * flags&16 == in_check_w
+     * flags&32 == in_check_b
+     */ 
+    int flags;
 
     //Turn
     int turn;

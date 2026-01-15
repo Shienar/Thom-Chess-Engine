@@ -5,11 +5,8 @@
 #include <time.h>
 #include <math.h>
 
-double pi_2 = 6.28;
-
 void hill_climb(engine* starting_weights, int maxIterations, int numTweaksPerIteration, int maxDepth, int maxTime)
 {
-    if(pi_2 == 6.28) pi_2 = 2 * acos(-1.0);
     for(int i = 0; i < maxIterations; i++)
     {
         engine* newWeights = createTweakedCopy(starting_weights);
@@ -68,32 +65,32 @@ engine* createTweakedCopy(engine* original_weight)
         w->queenPieceWeights[i] = original_weight->queenPieceWeights[i];
         w->kingPieceWeights[i] = original_weight->kingPieceWeights[i];
 
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE) 
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
         {
             do { newValue = w->pawnPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->pawnPieceWeights[i] = newValue;
         }
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE)
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64)
         {
             do { newValue = w->knightPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->knightPieceWeights[i] = newValue;
         }
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE)
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64)
         {
             do { newValue = w->bishopPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->bishopPieceWeights[i] = newValue;
         }
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE) 
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
         {
             do { newValue = w->rookPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->rookPieceWeights[i] = newValue;
         }
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE) 
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
         {
             do { newValue = w->queenPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->queenPieceWeights[i] = newValue;
         }
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE) 
+        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
         {
             do { newValue = w->kingPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->kingPieceWeights[i] = newValue;

@@ -25,6 +25,30 @@
 #define ISQUEEN(piece) ((piece&0xF) == QUEEN)
 #define ISKING(piece) ((piece&0xF) == KING)
 
+/**
+ * flags&1 == canKingsideCastle_w
+ * flags&2 == canQueensideCastle_w 
+ * flags&4 == canKingsideCastle_b
+ * flags&8 == canQueensideCastle_b
+ * flags&16 == in_check_w
+ * flags&32 == in_check_b
+ */
+#define KINGSIDE_CASTLE_WHITE(flag) (flag&1)
+#define QUEENSIDE_CASTLE_WHITE(flag) ((flag&2)>>1)
+#define KINGSIDE_CASTLE_BLACK(flag) ((flag&4)>>2)
+#define QUEENSIDE_CASTLE_BLACK(flag) ((flag&8)>>3)
+#define BAN_KINGCASTLE_W(flag) (flag&=(~1))
+#define BAN_QUEENCASTLE_W(flag) (flag&=(~2))
+#define BAN_KINGCASTLE_B(flag) (flag&=(~4))
+#define BAN_QUEENCASTLE_B(flag) (flag&=(~8))
+
+#define INCHECK_W(flag) ((flag&16)>>4)
+#define INCHECK_B(flag) ((flag&32)>>5)
+#define CHECK_W(flag) (flag|=16)
+#define CHECK_B(flag) (flag|=32)
+#define UNCHECK_W(flag) (flag&=(~16))
+#define UNCHECK_B(flag) (flag&=(~32))
+
 #define REMOVE = 0x100
 #define SHOULDREMOVE(piece) (piece&REMOVE == REMOVE)
 

@@ -69,11 +69,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
     }
     move** moveArray = CALLOC(40, sizeof(move*));
     if(!moveArray) return NULL;
-    int castlingMask = 0;
-    if(board->canKingsideCastle_w) castlingMask|=1;
-    if(board->canQueensideCastle_w) castlingMask|=2;
-    if(board->canKingsideCastle_b) castlingMask|=4;
-    if(board->canQueensideCastle_b) castlingMask|=8;
+    int boardFlagMask = board->flags;
     int size = 0;
     uint64_t moveMask;
 
@@ -93,21 +89,21 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
                 {
                     //Promotion
-                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare, castlingMask);
+                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare, boardFlagMask);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare, castlingMask);
+                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare, boardFlagMask);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare, castlingMask);
+                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare, boardFlagMask);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare, castlingMask);
+                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare, boardFlagMask);
                     size++;
                 }
                 else
                 {
-                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare, castlingMask);
+                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare, boardFlagMask);
                     size++;
                 }
             }
@@ -145,7 +141,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
             if(moveMask&1  && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
-                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, castlingMask);
+                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, boardFlagMask);
                 size++;
             }
             moveMask = moveMask >> 1;
@@ -977,11 +973,11 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
             //Check if capturing other pawn reveals a discovered check.
             if(ISWHITE(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK))
             {
-                board->in_check_b = 1;
+                CHECK_B(board->flags);
             }
             else if(ISBLACK(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE))
             {
-                board->in_check_w = 1;
+                CHECK_W(board->flags);
             }
 
             board_clear_square(board, board->moveStackTop->endSquare, PAWN);
@@ -1004,11 +1000,11 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
     //Calculate direct check attacks.
     if(ISWHITE(color) && board->king_b&(pawnMoves(board, endSquare, WHITE)))
     {
-        board->in_check_b = 1;
+        CHECK_B(board->flags);
     }
     else if(ISBLACK(color) && board->king_w&(pawnMoves(board, endSquare, BLACK)))
     {
-        board->in_check_w = 1;
+        CHECK_W(board->flags);
     }
 
     return 0;
@@ -1044,11 +1040,11 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
     //Calculate direct check attacks.
     if(ISWHITE(color) && board->king_b&(knightMoves(board, endSquare, WHITE)))
     {
-        board->in_check_b = 1;
+        CHECK_B(board->flags);
     }
     else if(ISBLACK(color) && board->king_w&(knightMoves(board, endSquare, BLACK)))
     {
-        board->in_check_w = 1;
+        CHECK_W(board->flags);
     }
 
     return 0;
@@ -1083,11 +1079,11 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
     //Calculate direct check attacks.
     if(ISWHITE(color) && board->king_b&(bishopMoves(board, endSquare, WHITE)))
     {
-        board->in_check_b = 1;
+        CHECK_B(board->flags);
     }
     else if(ISBLACK(color) && board->king_w&(bishopMoves(board, endSquare, BLACK)))
     {
-        board->in_check_w = 1;
+        CHECK_W(board->flags);
     }
 
     return 0;
@@ -1121,29 +1117,29 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
 
     if(ISWHITE(color))
     {
-        if(startSquare == 0 && board->canQueensideCastle_w) 
+        if(startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) 
         {
-            board->canQueensideCastle_w = 0;
+            BAN_QUEENCASTLE_W(board->flags);
         }
-        else if(startSquare == 7 && board->canKingsideCastle_w) 
+        else if(startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) 
         {
-            board->canKingsideCastle_w = 0;
+            BAN_KINGCASTLE_W(board->flags);
         }
 
-        if(board->king_b&(rookMoves(board, endSquare, WHITE))) board->in_check_b = 1;
+        if(board->king_b&(rookMoves(board, endSquare, WHITE))) CHECK_B(board->flags);
     }
     else if(ISBLACK(color))
     {
-        if(startSquare == 56 && board->canQueensideCastle_b) 
+        if(startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) 
         {
-            board->canQueensideCastle_b = 0;
+            BAN_QUEENCASTLE_B(board->flags);
         }
-        else if(startSquare == 63 && board->canKingsideCastle_b) 
+        else if(startSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) 
         {
-            board->canKingsideCastle_b = 0;
+            BAN_KINGCASTLE_B(board->flags);
         }
 
-        if(board->king_w&(rookMoves(board, endSquare, BLACK))) board->in_check_w = 1;
+        if(board->king_w&(rookMoves(board, endSquare, BLACK))) CHECK_W(board->flags);
     }
     
     return 0;
@@ -1178,11 +1174,11 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
     //Calculate direct check attacks.
     if(ISWHITE(color) && board->king_b&(queenMoves(board, endSquare, WHITE)))
     {
-        board->in_check_b = 1;
+        CHECK_B(board->flags);
     }
     else if(ISBLACK(color) && board->king_w&(queenMoves(board, endSquare, BLACK)))
     {
-        board->in_check_w = 1;
+        CHECK_W(board->flags);
     }
 
     return 0;
@@ -1215,20 +1211,20 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
     {
         board->kingSquare_b = endSquare;
 
-        if(board->canQueensideCastle_b || board->canKingsideCastle_b)
+        if(QUEENSIDE_CASTLE_BLACK(board->flags) || KINGSIDE_CASTLE_BLACK(board->flags))
         {
-            board->canQueensideCastle_b = 0;
-            board->canKingsideCastle_b = 0;
+            BAN_QUEENCASTLE_B(board->flags);
+            BAN_KINGCASTLE_B(board->flags);
         }
     }
     else
     {
         board->kingSquare_w = endSquare;
 
-        if(board->canQueensideCastle_w || board->canKingsideCastle_w)
+        if(QUEENSIDE_CASTLE_WHITE(board->flags) || KINGSIDE_CASTLE_WHITE(board->flags))
         {
-            board->canQueensideCastle_w = 0;
-            board->canKingsideCastle_w = 0;
+            BAN_QUEENCASTLE_W(board->flags);
+            BAN_KINGCASTLE_W(board->flags);
         }
     }
 
@@ -1322,13 +1318,9 @@ int moveFromString(bitboard* board, char* str)
         capturedSquare = board->moveStackTop->endSquare;
     }
 
-    int castlingMask = 0;
-    if(board->canKingsideCastle_w) castlingMask|=1;
-    if(board->canQueensideCastle_w) castlingMask|=2;
-    if(board->canKingsideCastle_b) castlingMask|=4;
-    if(board->canQueensideCastle_b) castlingMask|=8;
+    int boardFlagMask = board->flags;
 
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, castlingMask));
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, boardFlagMask));
 }
 
 int moveFromStruct(bitboard* board, move* m)
@@ -1395,14 +1387,14 @@ int moveFromStruct(bitboard* board, move* m)
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
     {
-        if(board->in_check_w) board->in_check_w = 0;
-        if(isPinned(board, m->startSquare, board->kingSquare_b, BLACK)) board->in_check_b = 1;
+        if(INCHECK_W(board->flags)) UNCHECK_W(board->flags);
+        if(isPinned(board, m->startSquare, board->kingSquare_b, BLACK)) CHECK_B(board->flags);
         board->turn=BLACK;
     }
     else
     {
-        if(board->in_check_b) board->in_check_b = 0;
-        if(isPinned(board, m->startSquare, board->kingSquare_w, WHITE)) board->in_check_w = 1;
+        if(INCHECK_B(board->flags)) UNCHECK_B(board->flags);
+        if(isPinned(board, m->startSquare, board->kingSquare_w, WHITE)) CHECK_W(board->flags);
         board->turn=WHITE;
     }
 
@@ -1421,7 +1413,7 @@ int moveFromStruct(bitboard* board, move* m)
         {
             if(board->turn == WHITE)
             {
-                if(board->in_check_w)
+                if(INCHECK_W(board->flags))
                 {
                     //White has been checkmated
                     board->victor = BLACK;
@@ -1434,7 +1426,7 @@ int moveFromStruct(bitboard* board, move* m)
             }
             else
             {
-                if(board->in_check_b)
+                if(INCHECK_B(board->flags))
                 {
                     //Black has been checkmated
                     board->victor = WHITE;
@@ -1529,10 +1521,7 @@ move* unmove(bitboard *board)
         }
     }
     
-    board->canKingsideCastle_w = m->previousCastleRights&1;
-    board->canQueensideCastle_w = (m->previousCastleRights&2)>>1;
-    board->canKingsideCastle_b = (m->previousCastleRights&4)>>2;
-    board->canQueensideCastle_b = (m->previousCastleRights&8)>>3;
+    board->flags = m->flags;
 
     if(board->turn == WHITE) board->turn = BLACK;
     else if (board->turn==BLACK) board->turn = WHITE;

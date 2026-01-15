@@ -4,10 +4,10 @@
 #include "structs.h"
 #define MUTATION_CHANCE 0.1
 #define LEARNING_RATE 0.1
+#define MUTATION_CHANCE_64 0.0015625
 #define MAX_WEIGHT 25
 #define MIN_WEIGHT 0.25
-
-extern double pi_2;
+#define pi_2 6.283185307179586
 
 /**
  * Steepest Ascent Hill Climbing

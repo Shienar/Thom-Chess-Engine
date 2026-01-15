@@ -24,9 +24,12 @@ double evaluate(bitboard* board, engine* w);
 double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth);
 
 /**
+ * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
+ * 
  * Depth = "Depth remaining" = Maxdepth - ply (distance from root)
+ * Call with depth == maxdepth;
  */
-double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex, clock_t timeLimit);
+double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit);
 
 /**
  * Iterative deepening function.

@@ -63,6 +63,10 @@ double evaluate(bitboard* board, engine* w)
 
 double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth)
 {
+    if(board->victor == WHITE) return DBL_MAX;
+    if(board->victor == BLACK) return DBL_MIN;
+    if(board->victor == (WHITE|BLACK)) return 0;
+
     double best = transposition_table_evaluate(board, engine);
 
     if(depth == 0 || best >= beta) return best;
@@ -94,44 +98,63 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta, int d
     return best;
 }
 
+//For qsort_s
+int sortMoves(void* c, const void* a, const void* b)
+{
+    move* move_a = *(move**)a;
+    move* move_b = *(move**)b;
+
+    if(c)
+    {
+        move* best_move = (move*)c;
+        if(move_a->startSquare == best_move->startSquare && move_a->endSquare == best_move->endSquare) return -1;
+        else if(move_b->startSquare == best_move->startSquare && move_b->endSquare == best_move->endSquare) return 1;
+    }
+    
+    return 0;
+}
+
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int depth, int pvIndex, clock_t timeLimit)
+double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
 {
+    if(board->victor == WHITE) return DBL_MAX;
+    if(board->victor == BLACK) return DBL_MIN;
+    if(board->victor == (WHITE|BLACK)) return 0;
+
     if(depth == 0 || clock() > timeLimit) return quiesce(board, engine, alpha, beta, 3);
-
-    move* principalMove = &engine->pvTable[pvIndex];
+    
+    memset(&engine->pvTable[pvIndex], 0, sizeof(move));
+    
     double score = 0;
-
-    //Is there an initialized principalmove?
-    if(principalMove->startSquare != 0 || principalMove->endSquare != 0)
-    {
-        //Check the principal move.
-        if(!moveFromStruct(board, principalMove))
-        {
-            score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
-            unmove(board);
-
-            if(score >= beta) return beta;
-            else if(score > alpha) 
-            {
-                alpha = score;
-                copyNMoves(&engine->pvTable[pvIndex + 1], &engine->pvTable[pvIndex + depth], depth - 1);
-            }
-        }
-    }
 
     move** moveList = generateMoveList(board, 0);
     if(moveList)
     {
         int index = 0;
+        while(moveList[index]) index++;
+
+        //Sort movelist with qsort_s. Pass the expected best move at this depth as the context.
+        move* context = NULL;
+        if(pv) context = &pv[maxDepth - depth];
+
+        qsort_s(moveList, index, sizeof(move*), sortMoves, context);
+        
+        index = 0;
         while(moveList[index])
         {
             if(!moveFromStruct(board, moveList[index]))
             {
-                score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
-                //Re-search PV node
-                if (score > alpha && beta - alpha > 0) score = -principalVariationSearch(board, engine, -alpha, -beta, depth - 1, pvIndex + depth, timeLimit);
+                if(index == 0)
+                {
+                    score = -principalVariationSearch(board, engine, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                }
+                else
+                {
+                    score = -principalVariationSearch(board, engine, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                    //Re-search PV node
+                    if (score > alpha && beta - alpha > 0) score = -principalVariationSearch(board, engine, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                }
                 
                 unmove(board);
 
@@ -159,6 +182,7 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     destroy_hashTable(engine->transpositionTable);
     engine->transpositionTable = create_hashTable();
     engine->pvTable = CALLOC(0.5*maxDepth*(maxDepth + 1), sizeof(move));
+    move* tempPVTable = NULL;
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
 
@@ -166,9 +190,18 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     {
         if(clock() > endTime) break;
 
-        principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, 0, endTime);
+        principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
+
+        if(tempPVTable)
+        {
+            FREE(tempPVTable);
+            tempPVTable = NULL;
+        }
+        tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+        copyNMoves(tempPVTable, engine->pvTable, currentDepth);
     }
 
+    if(tempPVTable) FREE(tempPVTable);
     destroy_hashTable(engine->transpositionTable);
     engine->transpositionTable = NULL;
 

@@ -91,15 +91,8 @@ bitboard* create_board()
     board->kingSquare_b = 60;
     board->kingSquare_w  = 4;
 
-    //Castling
-    board->canQueensideCastle_b = 1;
-    board->canKingsideCastle_b = 1;
-    board->canQueensideCastle_w = 1;
-    board->canKingsideCastle_w = 1;
-
-    //Check
-    board->in_check_w = 0;
-    board->in_check_b = 0;
+    //Castling Rights & Check
+    board->flags = 0xF;
 
     //Turn
     board->turn = WHITE;
@@ -155,15 +148,8 @@ void copy_board(bitboard* dest, bitboard* source)
     dest->kingSquare_b = source->kingSquare_b;
     dest->kingSquare_w  = source->kingSquare_w;
 
-    //Castling
-    dest->canQueensideCastle_b = source->canQueensideCastle_b;
-    dest->canKingsideCastle_b = source->canKingsideCastle_b;
-    dest->canQueensideCastle_w = source->canQueensideCastle_w;
-    dest->canKingsideCastle_w = source->canKingsideCastle_w;
-
-    //Check
-    dest->in_check_w = source->in_check_w;
-    dest->in_check_b = source->in_check_b;
+    //Castling Rights & Check
+    dest->flags = source->flags;
 
     //Turn
     dest->turn = source->turn;
@@ -603,12 +589,12 @@ void values_print(bitboard* board)
     printf("BISHOP: %016llx %016llx\n", board->bishop_w, board->bishop_b);
     printf("QUEEN: %016llx %016llx\n", board->queen_w, board->queen_b);
     printf("KING: %016llx %016llx\n\t(%d) (%d)\n", board->king_w, board->king_b, board->kingSquare_w, board->kingSquare_b);
-    printf("Can white kingside castle: %d\n", board->canKingsideCastle_w);
-    printf("Can white queenside castle: %d\n", board->canQueensideCastle_w);
-    printf("Can black kingside castle: %d\n", board->canKingsideCastle_b);
-    printf("Can black queenside castle: %d\n", board->canQueensideCastle_b);
-    printf("White in check: %d\n", board->in_check_w);
-    printf("Black in check: %d\n", board->in_check_b);
+    printf("Can white kingside castle: %d\n", KINGSIDE_CASTLE_WHITE(board->flags));
+    printf("Can white queenside castle: %d\n", QUEENSIDE_CASTLE_WHITE(board->flags));
+    printf("Can black kingside castle: %d\n", KINGSIDE_CASTLE_BLACK(board->flags));
+    printf("Can black queenside castle: %d\n", QUEENSIDE_CASTLE_BLACK(board->flags));
+    printf("White in check: %d\n", INCHECK_W(board->flags));
+    printf("Black in check: %d\n", INCHECK_B(board->flags));
 }
 
 
@@ -664,7 +650,7 @@ move* moves_pop(bitboard* board)
     return tempMove;
 }
 
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights)
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int flags)
 {
     move* m = CALLOC(1, sizeof(move));
     if(!m) return NULL;
@@ -675,7 +661,7 @@ move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int c
     m->piece = piece;
     m->capturedPiece = capturedPiece;
     m->capturedPieceSquare = capturedPieceSquare;
-    m->previousCastleRights = castleRights;
+    m->flags = flags;
     m->nextMove = NULL;
     return m;
 }
