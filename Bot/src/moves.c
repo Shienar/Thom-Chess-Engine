@@ -5,6 +5,12 @@
 
 move** generateMoveList(bitboard* board, int capturesOnly)
 {
+    if(board->victor) 
+    {
+        DEBUG("Cannot generate moves for terminated game; Victor=%02x", board->victor)
+        return NULL;
+    }
+
     int size = 0;
     int capacity = 32;
     move** movesList = CALLOC(capacity, sizeof(move*));
@@ -132,7 +138,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
         }
         else if(ISKING(piece))
         {
-            moveMask = kingMoves(board, square, color);
+            moveMask = kingMoves(board, square, color, 0);
         }
         int currentSquare = 0;
 
@@ -535,6 +541,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         rookqueen = board->rook_b|board->queen_b;
         if(((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b))) return THREAT_TYPE_PAWN;
         if(knightMoves(board, square, squareColor)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
+        if(kingMoves(board, square, squareColor, 1)&(board->king_b)) return THREAT_TYPE_KING;
     }
     else if(ISBLACK(squareColor))
     {
@@ -542,6 +549,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         rookqueen = board->rook_w|board->queen_w;
         if(((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w))) return THREAT_TYPE_PAWN;
         if(knightMoves(board, square, squareColor)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
+        if(kingMoves(board, square, squareColor, 1)&(board->king_w)) return THREAT_TYPE_KING;
     }
     if(bishopMoves(board, square, squareColor)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
     if(rookMoves(board, square, squareColor)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
@@ -853,7 +861,7 @@ uint64_t queenMoves(bitboard* board, int square, int color)
     return rookMoves(board, square, color)|bishopMoves(board, square, color);
 }
 
-uint64_t kingMoves(bitboard* board, int square, int color)
+uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats)
 {
     uint64_t returnedValue = 0;
     int row = getRow(square);
@@ -874,15 +882,14 @@ uint64_t kingMoves(bitboard* board, int square, int color)
      *  7: endSquare = square - 8
      *  8: endSquare = square - 7
      */
-    
-    if(column - 1 >= 1 && row + 1 <= 8 && !isThreatened(board, square+7, color)) returnedValue|=(1ull<<(square+7));
-    if(row + 1 <= 8 && !isThreatened(board, square+8, color)) returnedValue|=(1ull<<(square+8));
-    if(column + 1 <= 8 && row + 1 <= 8 && !isThreatened(board, square+9, color)) returnedValue|=(1ull<<(square+9));
-    if(column - 1 >= 1 && !isThreatened(board, square-1, color)) returnedValue|=(1ull<<(square-1));
-    if(column + 1 <= 8 && !isThreatened(board, square+1, color)) returnedValue|=(1ull<<(square+1));
-    if(column - 1 >= 1 && row - 1 >= 1 && !isThreatened(board, square-9, color)) returnedValue|=(1ull<<(square-9));
-    if(row - 1 >= 1 && !isThreatened(board, square-8, color)) returnedValue|=(1ull<<(square-8));
-    if(column + 1 <= 8 && row - 1 >= 1 && !isThreatened(board, square-7, color)) returnedValue|=(1ull<<(square-7));
+    if(column - 1 >= 1 && row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+7, color))) returnedValue|=(1ull<<(square+7));
+    if(row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+8, color))) returnedValue|=(1ull<<(square+8));
+    if(column + 1 <= 8 && row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+9, color))) returnedValue|=(1ull<<(square+9));
+    if(column - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-1, color))) returnedValue|=(1ull<<(square-1));
+    if(column + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+1, color))) returnedValue|=(1ull<<(square+1));
+    if(column - 1 >= 1 && row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-9, color))) returnedValue|=(1ull<<(square-9));
+    if(row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-8, color))) returnedValue|=(1ull<<(square-8));
+    if(column + 1 <= 8 && row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-7, color))) returnedValue|=(1ull<<(square-7));
 
     if(ISWHITE(color))
     {
@@ -946,7 +953,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Diagonal Capture
 
         //Check for en passant.
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && 
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16 &&
             ((ISWHITE(color) && (board->moveStackTop->endSquare - endSquare == -8)) ||
             (ISBLACK(color) && (board->moveStackTop->endSquare - endSquare == 8))))
         {
@@ -957,6 +964,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 getSquareName(board->kingSquare_w, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->endSquare, pawnSquareName);
+                board_print(board, 0, 1);
                 DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
                 return -1;
             }
@@ -1327,7 +1335,12 @@ int moveFromStruct(bitboard* board, move* m)
 {   
     if(!m) return -1;
     
-    if(ISBLACK(m->piece) && board->turn == WHITE)
+    if(board->victor)
+    {
+        DEBUG("Cannot move from terminal gamestate; Victor=%02x", board->victor)
+        return -1;
+    }
+    else if(ISBLACK(m->piece) && board->turn == WHITE)
     {
         DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare)
         return -1;
@@ -1344,6 +1357,7 @@ int moveFromStruct(bitboard* board, move* m)
     }
     else if(m->startSquare == m->endSquare)
     {
+        board_print(board, 0 , 1);
         DEBUG("Piece cannot move in place on square %d.", m->startSquare)
         return -1;
     }

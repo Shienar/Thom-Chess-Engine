@@ -97,17 +97,7 @@ typedef struct {
     double kingWeight;
 
     hashtable* transpositionTable;
-    move* pvTable;
+    move* pv;
 } engine;
-
-// Windows multithreading. TODO: Revisit this
-typedef struct {
-    HANDLE parentWaitSemaphore;
-    HANDLE threadCountSemaphore;
-    bitboard* board;
-    engine* engine;
-    int depth;
-    double* returnValue;
-} threadParam;
 
 #endif

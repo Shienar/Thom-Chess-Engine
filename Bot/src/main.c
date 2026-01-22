@@ -8,7 +8,8 @@
 
 /**
  * TODO List:
- *  - Resolve debug errors.
+ *  - PVS is freaking out on game draws.
+ *  - Store more information in the transposition tables.
  *  - Move sorting
  *      - PV move is currently prioritized.
  *      - Ordering for other moves.
@@ -25,7 +26,6 @@ int main(int argc, char** argv)
     int depth = 6;
     int onlyEngines = 0;
     int onlyHumans = 0;
-    int threadCount = 4;
     double maxTime = 3;
     int printHistory = 0;
     int shouldTrain = 0;
@@ -45,7 +45,6 @@ int main(int argc, char** argv)
             printf("--human\t\tHuman v human game\n");
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
-            printf("--threads\tChange the number of threads for min/max search, takes one integer parameter, max 8.\n");
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--train\t\tTrains the chess engine with hill climbing. The next two variables should be maxIterations ands tweaksPerIteration\n");
             printf("\n\n");
@@ -85,11 +84,6 @@ int main(int argc, char** argv)
         {
             onlyHumans = 0;
             onlyEngines = 1;
-        }
-        else if(strcmp(argv[i], "--threads") == 0)
-        {
-            threadCount = atoi(argv[++i]);
-            threadCount = min(threadCount, 8);
         }
         else if(strcmp(argv[i], "--time") == 0)
         {
@@ -189,7 +183,11 @@ int main(int argc, char** argv)
             getSquareName(m->startSquare, startSquareName);
             getSquareName(m->endSquare, endSquareName);
             getSquareName(m->capturedPieceSquare, capturedSquareName);
-            printf("\t[%02x->%02x]: %s->%s, Captured %d on %s\n", m->piece, m->promoteTo, startSquareName, endSquareName, m->capturedPiece, capturedSquareName);
+            printf("\t[%02x", m->piece);
+            if(m->promoteTo) printf("->%02x", m->promoteTo);
+            printf("]: %s->%s", startSquareName, endSquareName);
+            if(m->capturedPiece) printf(", Captured %d on %s\n", m->capturedPiece, capturedSquareName);
+            else printf("\n");
         }
         printf("\n");
     }

@@ -13,19 +13,19 @@ void initEnginePieceWeights(engine* w, int useExisting)
     
     for(int i = 0; i < 64; i++)
     {
-        w->pawnPieceWeights[i] = rand()%3;
-        w->rookPieceWeights[i] = rand()%5;
-        w->knightPieceWeights[i] = rand()%7;
-        w->bishopPieceWeights[i] = rand()%11;
-        w->queenPieceWeights[i] = rand()%13;
-        w->kingPieceWeights[i] = rand()%17;
+        w->pawnPieceWeights[i] = 1;
+        w->knightPieceWeights[i] = 3;
+        w->bishopPieceWeights[i] = 3;
+        w->rookPieceWeights[i] = 5;
+        w->queenPieceWeights[i] = 9;
+        w->kingPieceWeights[i] = 25;
     }
     
 
     w->pawnWeight = 1;
-    w->rookWeight = 5;
     w->knightWeight = 3;
     w->bishopWeight = 3;
+    w->rookWeight = 5;
     w->queenWeight = 9;
     w->kingWeight = 25;
 }
@@ -43,18 +43,18 @@ double evaluate(bitboard* board, engine* w)
         uint64_t mask = 1ull << i;
 
         if(board->pawn_b&mask) score_b+=(w->pawnWeight*w->pawnPieceWeights[i]);
-        if(board->knight_b&mask) score_b+=(w->knightWeight*w->knightPieceWeights[i]);
-        if(board->bishop_b&mask) score_b+=(w->bishopWeight*w->bishopPieceWeights[i]);
-        if(board->rook_b&mask) score_b+=(w->rookWeight*w->rookPieceWeights[i]);
-        if(board->queen_b&mask) score_b+=(w->queenWeight*w->queenPieceWeights[i]);
-        if(board->king_b&mask) score_b+=(w->kingWeight*w->kingPieceWeights[i]);
+        else if(board->knight_b&mask) score_b+=(w->knightWeight*w->knightPieceWeights[i]);
+        else if(board->bishop_b&mask) score_b+=(w->bishopWeight*w->bishopPieceWeights[i]);
+        else if(board->rook_b&mask) score_b+=(w->rookWeight*w->rookPieceWeights[i]);
+        else if(board->queen_b&mask) score_b+=(w->queenWeight*w->queenPieceWeights[i]);
+        else if(board->king_b&mask) score_b+=(w->kingWeight*w->kingPieceWeights[i]);
 
-        if(board->pawn_w&mask) score_w+=(w->pawnWeight*w->pawnPieceWeights[i]);
-        if(board->knight_w&mask) score_w+=(w->knightWeight*w->knightPieceWeights[i]);
-        if(board->bishop_w&mask) score_w+=(w->bishopWeight*w->bishopPieceWeights[i]);
-        if(board->rook_w&mask) score_w+=(w->rookWeight*w->rookPieceWeights[i]);
-        if(board->queen_w&mask) score_w+=(w->queenWeight*w->queenPieceWeights[i]);
-        if(board->king_w&mask) score_w+=(w->kingWeight*w->kingPieceWeights[i]);
+        else if(board->pawn_w&mask) score_w+=(w->pawnWeight*w->pawnPieceWeights[i]);
+        else if(board->knight_w&mask) score_w+=(w->knightWeight*w->knightPieceWeights[i]);
+        else if(board->bishop_w&mask) score_w+=(w->bishopWeight*w->bishopPieceWeights[i]);
+        else if(board->rook_w&mask) score_w+=(w->rookWeight*w->rookPieceWeights[i]);
+        else if(board->queen_w&mask) score_w+=(w->queenWeight*w->queenPieceWeights[i]);
+        else if(board->king_w&mask) score_w+=(w->kingWeight*w->kingPieceWeights[i]);
 
     }
 
@@ -65,7 +65,10 @@ double quiesce(bitboard* board, engine* engine, double alpha, double beta, int d
 {
     if(board->victor == WHITE) return DBL_MAX;
     if(board->victor == BLACK) return DBL_MIN;
-    if(board->victor == (WHITE|BLACK)) return 0;
+    if(board->victor == (WHITE|BLACK)) 
+    {
+        return 0;
+    }
 
     double best = transposition_table_evaluate(board, engine);
 
@@ -118,13 +121,10 @@ void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = 
 
 double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
 {
-    if(board->victor == WHITE) return DBL_MAX;
-    if(board->victor == BLACK) return DBL_MIN;
-    if(board->victor == (WHITE|BLACK)) return 0;
+    if(depth == 0 || clock() > timeLimit || board->victor) return quiesce(board, engine, alpha, beta, 3);
 
-    if(depth == 0 || clock() > timeLimit) return quiesce(board, engine, alpha, beta, 3);
-    
-    memset(&engine->pvTable[pvIndex], 0, sizeof(move));
+    //Clear the PV line.
+    memset(&pv[pvIndex], 0, sizeof(move));
     
     double score = 0;
 
@@ -163,11 +163,11 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
                     freeMoveList(moveList);
                     return beta;
                 }
-                else if(score > alpha) 
+                else if(score >= alpha) 
                 {
                     alpha = score;
-                    engine->pvTable[pvIndex] = *moveList[index];
-                    copyNMoves(&engine->pvTable[pvIndex + 1], &engine->pvTable[pvIndex + depth], depth - 1);
+                    pv[pvIndex] = *moveList[index];
+                    copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
                 }
             }
             index++;
@@ -181,7 +181,7 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
 {
     destroy_hashTable(engine->transpositionTable);
     engine->transpositionTable = create_hashTable();
-    engine->pvTable = CALLOC(0.5*maxDepth*(maxDepth + 1), sizeof(move));
+    engine->pv = CALLOC(maxDepth, sizeof(move));
     move* tempPVTable = NULL;
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
@@ -190,15 +190,14 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     {
         if(clock() > endTime) break;
 
+        tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+        copyNMoves(tempPVTable, engine->pv, currentDepth);
+
         principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
 
-        if(tempPVTable)
-        {
-            FREE(tempPVTable);
-            tempPVTable = NULL;
-        }
-        tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
-        copyNMoves(tempPVTable, engine->pvTable, currentDepth);
+        copyNMoves(engine->pv, tempPVTable, currentDepth);
+        FREE(tempPVTable);
+        tempPVTable = NULL;
     }
 
     if(tempPVTable) FREE(tempPVTable);
@@ -206,8 +205,18 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     engine->transpositionTable = NULL;
 
     move* bestMove = CALLOC(1, sizeof(move));
-    memcpy(bestMove, &engine->pvTable[0], sizeof(move));
-    FREE(engine->pvTable);
-    engine->pvTable = NULL;
+    memcpy(bestMove, &engine->pv[0], sizeof(move));
+
+    if(bestMove->startSquare == bestMove->endSquare && bestMove->startSquare == 0)
+    {
+        DEBUG("Engine returned empty move.");
+        if(printDebugMessages)
+        {
+            for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, engine->pv[i].startSquare, engine->pv[i].endSquare);
+        }
+    }
+
+    FREE(engine->pv);
+    engine->pv = NULL;
     return bestMove;
 }

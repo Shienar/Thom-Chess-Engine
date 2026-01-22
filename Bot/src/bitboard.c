@@ -677,7 +677,15 @@ void recursivePrint(move* m)
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
 
-        printf("%s%s ", startSquareName, endSquareName);
+        printf("%s%s", startSquareName, endSquareName);
+        if(m->promoteTo)
+        {
+            if(ISKNIGHT(m->promoteTo)) printf("n");
+            else if(ISBISHOP(m->promoteTo)) printf("b");
+            else if(ISROOK(m->promoteTo)) printf("r");
+            else if(ISQUEEN(m->promoteTo)) printf("q");
+        }
+        printf(" ");
     }
 }
 

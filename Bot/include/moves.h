@@ -21,6 +21,7 @@
 #define THREAT_TYPE_KNIGHT 2
 #define THREAT_TYPE_BISHOPQUEEN 3
 #define THREAT_TYPE_ROOKQUEEN 4
+#define THREAT_TYPE_KING 5
 
 //Legal moves.
 //Lists are null-terminated.
@@ -37,7 +38,7 @@ uint64_t bishopMoves(bitboard* board, int square, int color);
 uint64_t knightMoves(bitboard* board, int square, int color);
 uint64_t rookMoves(bitboard* board, int square, int color);
 uint64_t queenMoves(bitboard* board, int square, int color);
-uint64_t kingMoves(bitboard* board, int square, int color);
+uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats);
 
 //Returns 0 on success, -1 on fail.
 int movePawn(bitboard *board, int startSquare, int endSquare, int color, int promoteTo);
