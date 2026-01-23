@@ -22,6 +22,8 @@ typedef struct move {
     int promoteTo;
     int capturedPiece;
     int capturedPieceSquare; //Not always the same as endsquare because of en passant
+
+    int previousMovesSinceLastChange;
     
     //Flags from the previous board state.
     int flags; 
@@ -74,6 +76,9 @@ typedef struct bitboard {
 
     //Checkmate
     int victor;
+
+    //50 move rule
+    int movesSinceLastChange;
 
     //History
     move* moveStackTop;

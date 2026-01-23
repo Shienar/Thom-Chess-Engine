@@ -95,21 +95,21 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
                 {
                     //Promotion
-                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare, boardFlagMask);
+                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare, boardFlagMask);
+                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare, boardFlagMask);
+                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare, boardFlagMask);
+                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                 }
                 else
                 {
-                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare, boardFlagMask);
+                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                 }
             }
@@ -147,7 +147,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
             if(moveMask&1  && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
-                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, boardFlagMask);
+                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
                 size++;
             }
             moveMask = moveMask >> 1;
@@ -1328,7 +1328,7 @@ int moveFromString(bitboard* board, char* str)
 
     int boardFlagMask = board->flags;
 
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, boardFlagMask));
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, boardFlagMask, board->movesSinceLastChange));
 }
 
 int moveFromStruct(bitboard* board, move* m)
@@ -1395,8 +1395,12 @@ int moveFromStruct(bitboard* board, move* m)
         DEBUG("Failed to move piece from struct.")
         return -1;
     }
-
     moves_push(board, m);
+    
+    //50 move rule counting
+    if(ISPAWN(m->piece) || m->capturedPiece) board->movesSinceLastChange = 0;
+    else board->movesSinceLastChange++;
+
 
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
@@ -1419,45 +1423,78 @@ int moveFromStruct(bitboard* board, move* m)
     {
         board->victor = WHITE|BLACK;
     }
-    else
+    else if(board->movesSinceLastChange >= 50) board->victor = WHITE|BLACK;
+    else if((board->king_b|board->king_w) == board->pieces_all) board->victor = WHITE|BLACK; //King v King drawn endgame
+    else if(!(potentialMoveList = generateMoveList(board, 0)))
     {
-        //Calculate checkmate/stalemate
-        move** moveList = generateMoveList(board, 0);
-        if(!moveList)
+        //No potential moves - Calculate checkmate/stalemate
+        if(board->turn == WHITE)
         {
-            if(board->turn == WHITE)
+            if(INCHECK_W(board->flags))
             {
-                if(INCHECK_W(board->flags))
-                {
-                    //White has been checkmated
-                    board->victor = BLACK;
-                }
-                else
-                {
-                    //White has been stalemated
-                    board->victor = BLACK|WHITE;
-                }
+                //White has been checkmated
+                board->victor = BLACK;
             }
             else
             {
-                if(INCHECK_B(board->flags))
-                {
-                    //Black has been checkmated
-                    board->victor = WHITE;
-                }
-                else
-                {
-                    //Black has been stalemated
-                    board->victor = BLACK|WHITE;
-                }
+                //White has been stalemated
+                board->victor = BLACK|WHITE;
             }
         }
         else
         {
-            freeMoveList(moveList);
+            if(INCHECK_B(board->flags))
+            {
+                //Black has been checkmated
+                board->victor = WHITE;
+            }
+            else
+            {
+                //Black has been stalemated
+                board->victor = BLACK|WHITE;
+            }
         }
     }
-    
+    else
+    {
+        //Freeing the movelist allocation from the previous conditional.
+        freeMoveList(potentialMoveList);
+
+        /* Other Drawn Endgames */
+
+        //King + Minor Piece vs King
+        if(board->pieces_b == board->king_b && board->pawn_w == 0 && board->rook_w == 0 && board->queen_w == 0)
+        {
+            uint64_t mask = 1;
+            int count = 0;
+            for(int i = 0; i < 63; i++)
+            {
+                if((board->bishop_w|board->knight_w)&mask) count++;
+
+                mask = mask<<1;
+            }
+            if(count == 1) board->victor = WHITE|BLACK;
+        }
+        else if(board->pieces_w == board->king_w && board->pawn_b == 0 && board->rook_b == 0 && board->queen_b == 0)
+        {
+            uint64_t mask = 1;
+            int count = 0;
+            for(int i = 0; i < 63; i++)
+            {
+                if((board->bishop_b|board->knight_b)&mask) count++;
+
+                mask = mask<<1;
+            }
+            if(count == 1) board->victor = WHITE|BLACK;
+        }
+        //King + Bishops vs King + Bishops (Same color bishops)
+        else if(board->pieces_all == (board->king_w|board->bishop_w|board->king_b|board->bishop_b) && 
+                ((board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&LIGHT_SQUARES) ||
+                 (board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&DARK_SQUARES))) 
+        {
+            board->victor = WHITE|BLACK;
+        }
+    }
     
     return 0;
 }
@@ -1536,6 +1573,7 @@ move* unmove(bitboard *board)
     }
     
     board->flags = m->flags;
+    board->movesSinceLastChange = m->previousMovesSinceLastChange;
 
     if(board->turn == WHITE) board->turn = BLACK;
     else if (board->turn==BLACK) board->turn = WHITE;

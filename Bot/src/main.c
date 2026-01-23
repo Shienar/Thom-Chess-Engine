@@ -8,7 +8,7 @@
 
 /**
  * TODO List:
- *  - PVS is freaking out on game draws.
+ *  - PVS is freaking out on game ends.
  *  - Store more information in the transposition tables.
  *  - Move sorting
  *      - PV move is currently prioritized.

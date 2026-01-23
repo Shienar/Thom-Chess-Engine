@@ -100,6 +100,9 @@ bitboard* create_board()
     //Checkmate
     board->victor = 0;
 
+    //50 move rule
+    board->movesSinceLastChange = 0;
+
     //History
     board->moveStackTop = NULL;
     board->ht = create_hashTable();
@@ -650,7 +653,7 @@ move* moves_pop(bitboard* board)
     return tempMove;
 }
 
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int flags)
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int flags, int prevFiftyMoveCount)
 {
     move* m = CALLOC(1, sizeof(move));
     if(!m) return NULL;
@@ -663,6 +666,7 @@ move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int c
     m->capturedPieceSquare = capturedPieceSquare;
     m->flags = flags;
     m->nextMove = NULL;
+    m->previousMovesSinceLastChange = prevFiftyMoveCount;
     return m;
 }
 

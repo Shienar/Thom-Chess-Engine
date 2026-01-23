@@ -32,8 +32,16 @@ void initEnginePieceWeights(engine* w, int useExisting)
 
 double evaluate(bitboard* board, engine* w)
 {
-    if(board->victor == WHITE) return DBL_MAX;
-    if(board->victor == BLACK) return DBL_MIN;
+    if(board->victor == WHITE) 
+    {
+        if(board->turn == WHITE) return DBL_MAX;
+        else return DBL_MIN;
+    }
+    if(board->victor == BLACK) 
+    {
+        if(board->turn == BLACK) return DBL_MAX;
+        else return DBL_MIN;
+    }
     if(board->victor == (WHITE|BLACK)) return 0;
 
     double score_w, score_b = 0;
@@ -58,7 +66,9 @@ double evaluate(bitboard* board, engine* w)
 
     }
 
-    return score_w - score_b;
+    //Evaluate in response to whoever's turn it is.
+    if(ISWHITE(board->turn)) return score_w - score_b;
+    else return score_b - score_w;
 }
 
 double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth)

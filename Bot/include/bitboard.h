@@ -49,10 +49,13 @@
 #define UNCHECK_W(flag) (flag&=(~16))
 #define UNCHECK_B(flag) (flag&=(~32))
 
-#define REMOVE = 0x100
+#define REMOVE = 0x1000
 #define SHOULDREMOVE(piece) (piece&REMOVE == REMOVE)
 
 #define columnNames "abcdefgh"
+
+#define DARK_SQUARES 0xAA55AA55AA55AA55 
+#define LIGHT_SQUARES 0x55AA55AA55AA55AA
 
 int getColumn(int square);
 int getRow(int square);
@@ -75,7 +78,7 @@ void bitmask_print(uint64_t mask, char fill);
 
 int moves_push(bitboard* board, move* m);
 move* moves_pop(bitboard* board);
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights);
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights, int prevFiftyMoveCount);
 
 void dumpMoves(bitboard* board);
 #endif
