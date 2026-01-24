@@ -1419,10 +1419,7 @@ int moveFromStruct(bitboard* board, move* m)
     //3-fold repetition check
     char key[65];
     hashKey(board, key);
-    if(increment_table_value(board->ht, key, 1) >= 3)
-    {
-        board->victor = WHITE|BLACK;
-    }
+    if(increment_table_value(board->ht, key, 1) >= 3) board->victor = WHITE|BLACK;
     else if(board->movesSinceLastChange >= 50) board->victor = WHITE|BLACK;
     else if((board->king_b|board->king_w) == board->pieces_all) board->victor = WHITE|BLACK; //King v King drawn endgame
     else if(!(potentialMoveList = generateMoveList(board, 0)))

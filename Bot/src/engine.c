@@ -13,7 +13,8 @@ void initEnginePieceWeights(engine* w, int useExisting)
     
     for(int i = 0; i < 64; i++)
     {
-        w->pawnPieceWeights[i] = 1;
+        if(i > 7 && i < 56) w->pawnPieceWeights[i] = 1;
+        else w->pawnPieceWeights[i] = 0;
         w->knightPieceWeights[i] = 3;
         w->bishopPieceWeights[i] = 3;
         w->rookPieceWeights[i] = 5;
@@ -35,14 +36,14 @@ double evaluate(bitboard* board, engine* w)
     if(board->victor == WHITE) 
     {
         if(board->turn == WHITE) return DBL_MAX;
-        else return DBL_MIN;
+        else return -DBL_MAX;
     }
     if(board->victor == BLACK) 
     {
         if(board->turn == BLACK) return DBL_MAX;
-        else return DBL_MIN;
+        else return -DBL_MAX;
     }
-    if(board->victor == (WHITE|BLACK)) return 0;
+    if(board->victor == (WHITE|BLACK)) return CONTEMPT_FACTOR;
 
     double score_w, score_b = 0;
 
@@ -73,12 +74,18 @@ double evaluate(bitboard* board, engine* w)
 
 double quiesce(bitboard* board, engine* engine, double alpha, double beta, int depth)
 {
-    if(board->victor == WHITE) return DBL_MAX;
-    if(board->victor == BLACK) return DBL_MIN;
-    if(board->victor == (WHITE|BLACK)) 
+    
+    if(board->victor == WHITE) 
     {
-        return 0;
+        if(board->turn == WHITE) return DBL_MAX;
+        else return -DBL_MAX;
     }
+    if(board->victor == BLACK) 
+    {
+        if(board->turn == BLACK) return DBL_MAX;
+        else return -DBL_MAX;
+    }
+    if(board->victor == (WHITE|BLACK)) return CONTEMPT_FACTOR;
 
     double best = transposition_table_evaluate(board, engine);
 
@@ -132,9 +139,6 @@ void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = 
 double principalVariationSearch(bitboard* board, engine* engine, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
 {
     if(depth == 0 || clock() > timeLimit || board->victor) return quiesce(board, engine, alpha, beta, 3);
-
-    //Clear the PV line.
-    memset(&pv[pvIndex], 0, sizeof(move));
     
     double score = 0;
 
@@ -163,7 +167,7 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
                 {
                     score = -principalVariationSearch(board, engine, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
                     //Re-search PV node
-                    if (score > alpha && beta - alpha > 0) score = -principalVariationSearch(board, engine, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                    if (score > alpha && score < beta) score = -principalVariationSearch(board, engine, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
                 }
                 
                 unmove(board);
@@ -173,7 +177,7 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
                     freeMoveList(moveList);
                     return beta;
                 }
-                else if(score >= alpha) 
+                else if(score > alpha) 
                 {
                     alpha = score;
                     pv[pvIndex] = *moveList[index];
@@ -203,7 +207,9 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
         tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, engine->pv, currentDepth);
 
-        principalVariationSearch(board, engine, DBL_MIN, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
+        //DBL_MIN is the smallest POSITIVE double. -DBL_MAX must be used instead.
+        //I'm angry at how long this slipped past me.
+        principalVariationSearch(board, engine, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
 
         copyNMoves(engine->pv, tempPVTable, currentDepth);
         FREE(tempPVTable);

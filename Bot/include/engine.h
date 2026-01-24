@@ -4,6 +4,9 @@
 #include "structs.h"
 #include <time.h>
 
+//The evaluation score given to draws.
+#define CONTEMPT_FACTOR -0.25
+
 /**
  * Initializes piece weights.
  * Set useExisting to 1 to read weights from file (TODO).

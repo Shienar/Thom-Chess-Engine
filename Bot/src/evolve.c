@@ -65,7 +65,7 @@ engine* createTweakedCopy(engine* original_weight)
         w->queenPieceWeights[i] = original_weight->queenPieceWeights[i];
         w->kingPieceWeights[i] = original_weight->kingPieceWeights[i];
 
-        if((float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
+        if(i > 7 && i < 56 && (float)rand()/(float)RAND_MAX < MUTATION_CHANCE_64) 
         {
             do { newValue = w->pawnPieceWeights[i]+generateRandomNumber(); }while(!(newValue > MIN_WEIGHT && newValue < MAX_WEIGHT));
             w->pawnPieceWeights[i] = newValue;
@@ -152,7 +152,6 @@ int play_engine_game(engine* whiteWeights, engine* blackWeights, int maxDepth, i
         if(board->turn == WHITE) bestMove = calculateBestMove(board, whiteWeights, maxDepth, maxTime);
         else bestMove = calculateBestMove(board, blackWeights, maxDepth, maxTime);
         moveFromStruct(board, bestMove);
-        board_print(board, 0, 1);
     }
     
     int returnValue = 0;

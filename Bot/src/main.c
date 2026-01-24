@@ -8,7 +8,8 @@
 
 /**
  * TODO List:
- *  - PVS is freaking out on game ends.
+ *  - Draws are getting declared early.
+ *  - A black bishop on a6 got suggested a move to capture a black pawn on b5.
  *  - Store more information in the transposition tables.
  *  - Move sorting
  *      - PV move is currently prioritized.
@@ -172,6 +173,7 @@ int main(int argc, char** argv)
         }
     }
     
+    /*
     if(printHistory)
     {
         char startSquareName[3] = {'\0'};
@@ -191,6 +193,7 @@ int main(int argc, char** argv)
         }
         printf("\n");
     }
+    */
 
     destroy_board(board);
 
