@@ -172,28 +172,6 @@ int main(int argc, char** argv)
             break;
         }
     }
-    
-    /*
-    if(printHistory)
-    {
-        char startSquareName[3] = {'\0'};
-        char endSquareName[3] = {'\0'};
-        char capturedSquareName[3] = {'\0'};
-        printf("Recent Moves:\n");
-        for(move* m = board->moveStackTop; m != NULL; m= m->nextMove)
-        {
-            getSquareName(m->startSquare, startSquareName);
-            getSquareName(m->endSquare, endSquareName);
-            getSquareName(m->capturedPieceSquare, capturedSquareName);
-            printf("\t[%02x", m->piece);
-            if(m->promoteTo) printf("->%02x", m->promoteTo);
-            printf("]: %s->%s", startSquareName, endSquareName);
-            if(m->capturedPiece) printf(", Captured %d on %s\n", m->capturedPiece, capturedSquareName);
-            else printf("\n");
-        }
-        printf("\n");
-    }
-    */
 
     destroy_board(board);
 

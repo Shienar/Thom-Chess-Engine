@@ -2,18 +2,7 @@
 #define ENGINESTRUCTS
 
 #include <stdint.h>
-#include <windows.h>
-
-typedef struct table_entry {
-    char* key;
-    double count;
-} table_entry;
-
-typedef struct hashtable {
-    table_entry* array;
-    size_t capacity;
-    size_t size;
-} hashtable;
+#include <time.h>
 
 typedef struct move {
     int startSquare;
@@ -29,6 +18,32 @@ typedef struct move {
     int flags; 
     struct move* nextMove;
 } move;
+
+typedef struct table_entry_pos {
+    char* key;
+    int count;
+} table_entry_pos;
+
+typedef struct hashtable_pos {
+    table_entry_pos* array;
+    size_t capacity;
+    size_t size;
+} hashtable_pos;
+
+typedef struct table_entry_tt {
+    char* key;
+    clock_t age;
+    double evaluation;
+    int evaluationDepth;
+    int nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
+    move bestMove;
+} table_entry_tt;
+
+typedef struct hashtable_tt {
+    table_entry_tt* array;
+    size_t capacity;
+    size_t size;
+} hashtable_tt;
 
 //a1 = 0, h1 = 7
 //a2 = 8, h2 = 15
@@ -82,7 +97,7 @@ typedef struct bitboard {
 
     //History
     move* moveStackTop;
-    struct hashtable* ht;
+    hashtable_pos* ht;
 } bitboard;
 
 
@@ -101,7 +116,7 @@ typedef struct {
     double queenWeight;
     double kingWeight;
 
-    hashtable* transpositionTable;
+    hashtable_tt* transpositionTable;
     move* pv;
 } engine;
 

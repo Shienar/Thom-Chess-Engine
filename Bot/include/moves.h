@@ -2,7 +2,7 @@
 #define MOVES
 
 #include "structs.h"
-#include "hashtable.h"
+#include "repetitiontable.h"
 
 //Questioned piece is this direction from selected king.
 //Assume a1 is bottomleft

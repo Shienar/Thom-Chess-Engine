@@ -105,14 +105,14 @@ bitboard* create_board()
 
     //History
     board->moveStackTop = NULL;
-    board->ht = create_hashTable();
+    board->ht = create_hashTable_pos();
 
     return board;
 }
 
 void destroy_board(bitboard* board)
 {
-    destroy_hashTable(board->ht);
+    destroy_hashTable_pos(board->ht);
     while(board->moveStackTop)
     {
         move* tempMove = board->moveStackTop;
@@ -192,8 +192,8 @@ void copy_board(bitboard* dest, bitboard* source)
         dest->moveStackTop = NULL;
     }
     
-    destroy_hashTable(dest->ht); 
-    dest->ht = copy_hashTable(source->ht);
+    destroy_hashTable_pos(dest->ht); 
+    dest->ht = copy_hashTable_pos(source->ht);
 }
 
 int findPieceOnSquare(bitboard* board, int square)

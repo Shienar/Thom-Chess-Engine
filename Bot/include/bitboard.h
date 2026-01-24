@@ -3,7 +3,7 @@
 #define BITBOARD_H
 
 #include "structs.h"
-#include "hashtable.h"
+#include "repetitiontable.h"
 
 #define WHITE 0x10
 #define BLACK 0x20

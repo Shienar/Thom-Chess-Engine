@@ -2,6 +2,7 @@
 #define DEBUGGER
 
 #include "structs.h"
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 

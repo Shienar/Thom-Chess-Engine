@@ -193,8 +193,8 @@ double principalVariationSearch(bitboard* board, engine* engine, double alpha, d
 
 move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTimeSeconds)
 {
-    destroy_hashTable(engine->transpositionTable);
-    engine->transpositionTable = create_hashTable();
+    destroy_hashTable_tt(engine->transpositionTable);
+    engine->transpositionTable = create_hashTable_tt();
     engine->pv = CALLOC(maxDepth, sizeof(move));
     move* tempPVTable = NULL;
 
@@ -217,7 +217,7 @@ move* calculateBestMove(bitboard* board, engine* engine, int maxDepth, int maxTi
     }
 
     if(tempPVTable) FREE(tempPVTable);
-    destroy_hashTable(engine->transpositionTable);
+    destroy_hashTable_tt(engine->transpositionTable);
     engine->transpositionTable = NULL;
 
     move* bestMove = CALLOC(1, sizeof(move));
