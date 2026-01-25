@@ -8,6 +8,15 @@
 #define WHITE 0x10
 #define BLACK 0x20
 
+#define DRAW 0x30
+#define STALEMATED_WHITE 0x40
+#define STALEMATED_BLACK 0x80
+#define THREEFOLD 0x100
+#define FIFTYMOVERULE 0x200
+#define INSUFFICENT_MATERIAL 0x400
+
+#define ISDRAW(victor) ((victor&DRAW) == DRAW)
+
 #define ISWHITE(piece) ((piece&WHITE) == WHITE)
 #define ISBLACK(piece) ((piece&BLACK) == BLACK)
 

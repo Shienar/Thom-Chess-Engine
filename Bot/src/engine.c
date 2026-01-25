@@ -165,6 +165,8 @@ double evaluate(bitboard* board)
 {
     if(board->victor == WHITE) 
     {
+        if(board->turn == WHITE) printf("Found a win for white on white's turn.\n");
+        else printf("Found a win for white on blacks turn\n");
         if(board->turn == WHITE) return DBL_MAX;
         else return -DBL_MAX;
     }
@@ -173,7 +175,7 @@ double evaluate(bitboard* board)
         if(board->turn == BLACK) return DBL_MAX;
         else return -DBL_MAX;
     }
-    if(board->victor == (WHITE|BLACK)) return CONTEMPT_FACTOR;
+    if(ISDRAW(board->victor)) return CONTEMPT_FACTOR;
 
     int score_w_middlegame, score_b_middlegame, score_w_endgame, score_b_endgame, gamePhase = 0;
 
@@ -232,7 +234,7 @@ double quiesce(bitboard* board, hashtable_tt* tt, double alpha, double beta, int
         if(board->turn == BLACK) return DBL_MAX;
         else return -DBL_MAX;
     }
-    if(board->victor == (WHITE|BLACK)) return CONTEMPT_FACTOR;
+    if(ISDRAW(board->victor)) return CONTEMPT_FACTOR;
 
     double best = transposition_table_evaluate(board, tt);
 

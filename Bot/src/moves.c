@@ -1419,37 +1419,21 @@ int moveFromStruct(bitboard* board, move* m)
     //3-fold repetition check
     char key[HASHKEY_STRING_LENGTH];
     hashKey(board, key);
-    if(increment_table_value(board->ht, key, 1) >= 3) board->victor = WHITE|BLACK;
-    else if(board->movesSinceLastChange >= 50) board->victor = WHITE|BLACK;
-    else if((board->king_b|board->king_w) == board->pieces_all) board->victor = WHITE|BLACK; //King v King drawn endgame
+    if(increment_table_value(board->ht, key, 1) >= 3) board->victor = DRAW|THREEFOLD;
+    else if(board->movesSinceLastChange >= 50) board->victor = DRAW|FIFTYMOVERULE;
+    else if((board->king_b|board->king_w) == board->pieces_all) board->victor = DRAW|INSUFFICENT_MATERIAL; //King v King drawn INSUFFICENT_MATERIAL
     else if(!(potentialMoveList = generateMoveList(board, 0)))
     {
         //No potential moves - Calculate checkmate/stalemate
         if(board->turn == WHITE)
         {
-            if(INCHECK_W(board->flags))
-            {
-                //White has been checkmated
-                board->victor = BLACK;
-            }
-            else
-            {
-                //White has been stalemated
-                board->victor = BLACK|WHITE;
-            }
+            if(INCHECK_W(board->flags)) board->victor = BLACK;
+            else board->victor = DRAW|STALEMATED_WHITE;
         }
         else
         {
-            if(INCHECK_B(board->flags))
-            {
-                //Black has been checkmated
-                board->victor = WHITE;
-            }
-            else
-            {
-                //Black has been stalemated
-                board->victor = BLACK|WHITE;
-            }
+            if(INCHECK_B(board->flags)) board->victor = WHITE;
+            else board->victor = DRAW|STALEMATED_BLACK;
         }
     }
     else
@@ -1457,7 +1441,7 @@ int moveFromStruct(bitboard* board, move* m)
         //Freeing the movelist allocation from the previous conditional.
         freeMoveList(potentialMoveList);
 
-        /* Other Drawn Endgames */
+        /* Other Drawn INSUFFICENT_MATERIALs */
 
         //King + Minor Piece vs King
         if(board->pieces_b == board->king_b && board->pawn_w == 0 && board->rook_w == 0 && board->queen_w == 0)
@@ -1470,7 +1454,7 @@ int moveFromStruct(bitboard* board, move* m)
 
                 mask = mask<<1;
             }
-            if(count == 1) board->victor = WHITE|BLACK;
+            if(count == 1) board->victor = DRAW|INSUFFICENT_MATERIAL;
         }
         else if(board->pieces_w == board->king_w && board->pawn_b == 0 && board->rook_b == 0 && board->queen_b == 0)
         {
@@ -1482,14 +1466,14 @@ int moveFromStruct(bitboard* board, move* m)
 
                 mask = mask<<1;
             }
-            if(count == 1) board->victor = WHITE|BLACK;
+            if(count == 1) board->victor = DRAW|INSUFFICENT_MATERIAL;
         }
         //King + Bishops vs King + Bishops (Same color bishops)
         else if(board->pieces_all == (board->king_w|board->bishop_w|board->king_b|board->bishop_b) && 
                 ((board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&LIGHT_SQUARES) ||
                  (board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&DARK_SQUARES))) 
         {
-            board->victor = WHITE|BLACK;
+            board->victor = DRAW|INSUFFICENT_MATERIAL;
         }
     }
     

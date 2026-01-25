@@ -10,6 +10,7 @@
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
  * TODO List:
+ *  - System to indicate draw type.
  *  - Store more information in the transposition tables.
  *  - Move sorting
  *         - PV move is currently prioritized.
@@ -167,9 +168,14 @@ int main(int argc, char** argv)
             printf("Black wins!\n\n");
             break;
         }
-        else if (board->victor == (WHITE|BLACK))
+        else if (ISDRAW(board->victor))
         {
-            printf("Draw!\n\n");
+            printf("Draw!");
+            if(board->victor&STALEMATED_WHITE) printf(" (White stalemated)\n\n");
+            else if(board->victor&STALEMATED_BLACK) printf(" (Black stalemated)\n\n");
+            else if(board->victor&THREEFOLD) printf(" (Threefold Repetition)\n\n");
+            else if(board->victor&FIFTYMOVERULE) printf(" (50-move rule)\n\n");
+            else if(board->victor&INSUFFICENT_MATERIAL) printf(" (Insufficient Material)\n\n");
             break;
         }
     }
