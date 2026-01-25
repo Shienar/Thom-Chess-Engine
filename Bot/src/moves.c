@@ -1417,7 +1417,7 @@ int moveFromStruct(bitboard* board, move* m)
     }
 
     //3-fold repetition check
-    char key[65];
+    char key[HASHKEY_STRING_LENGTH];
     hashKey(board, key);
     if(increment_table_value(board->ht, key, 1) >= 3) board->victor = WHITE|BLACK;
     else if(board->movesSinceLastChange >= 50) board->victor = WHITE|BLACK;
@@ -1504,7 +1504,7 @@ move* unmove(bitboard *board)
         return NULL;
     }
 
-    char key[65];
+    char key[HASHKEY_STRING_LENGTH];
     hashKey(board, key);
     decrement_table_value(board->ht, key);
     move* m = moves_pop(board);

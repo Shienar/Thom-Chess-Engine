@@ -8,6 +8,7 @@
 
 #define FNV_OFFSET_BASIS 14695981039346656037ull
 #define FNV_PRIME 1099511628211ull
+#define HASHKEY_STRING_LENGTH 65
 
 /**
  * Fowler–Noll–Vo hash function

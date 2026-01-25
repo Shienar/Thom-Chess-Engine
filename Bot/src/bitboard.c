@@ -1,6 +1,7 @@
 #include "../include/structs.h"
 #include "../include/debug.h"
 #include "../include/bitboard.h"
+#include "../include/moves.h"
 #include <string.h>
 #include <math.h>
 
@@ -58,6 +59,151 @@ void getSquareName(int square, char* target)
 int getSquareNumber(char* squareName)
 {
     return ((squareName[0] - 97) + 8*(squareName[1] - '0' - 1));
+}
+
+bitboard* create_board_from_fen(int lineNumber)
+{
+    FILE* inputFile = fopen("import/FEN.txt", "r");
+    if(!inputFile)
+    {
+        DEBUG("Failed to open file \"import/FEN.txt\"");
+        return NULL;
+    }
+    
+
+    int currentLine = 1;
+    char FEN[100] = {'\0'};
+    while(fgets(FEN, 100, inputFile))
+    {
+        if(currentLine == lineNumber) break;
+        currentLine++;
+    }
+    
+    if(FEN[0] == '\0')
+    {
+        DEBUG("Failed to read from file \"import/FEN.txt\"");
+        return NULL;
+    }
+
+    char fullBoardString[80] = {'\0'};
+    char* boardStrings[8] = {NULL};
+    char activeColor = '-';
+    char castlingAvailability[5] = {'\0'};
+    char enPassantTargetSquare[3] = {'\0'};
+    int halfMoveClock, fullMoveCount = 0;
+    sscanf(FEN, "%s %c %s %s %d %d\n", 
+        fullBoardString, 
+        &activeColor,
+        castlingAvailability,
+        enPassantTargetSquare,
+        &halfMoveClock,
+        &fullMoveCount);
+
+    char* curBoardString = strtok(fullBoardString, "/");
+    int curIndex = 7;
+    while(curBoardString && curIndex >= 0)
+    {
+        boardStrings[curIndex--] = curBoardString;
+        curBoardString = strtok(NULL, "/"); 
+    }
+
+    bitboard* board = CALLOC(1, sizeof(bitboard));
+
+    for(int row = 0; row < 8; row++)
+    {
+        if(boardStrings[row][0] != '8')
+        {
+            int columnOffset = 0;
+            int index = 0;
+            char currentChar;
+            while((currentChar = boardStrings[row][index++]) != '\0' && columnOffset < 8)
+            {
+                //ASCII values for digits 0-9 (48 to 57 in decimal)
+                if(currentChar >= '0'  && currentChar <= '9')
+                {
+                    columnOffset+= currentChar - '0';
+                }
+                else
+                {
+                    uint64_t currentSquareMask = (1ull<<(columnOffset + 8*row));
+                    if(currentChar == 'K')
+                    {
+                        board->king_w|=currentSquareMask;
+                        board->kingSquare_w = columnOffset + 8*row;
+                    }
+                    else if(currentChar == 'k')
+                    {
+                        board->king_b|=currentSquareMask;
+                        board->kingSquare_b = columnOffset + 8*row;
+                    }
+                    else if(currentChar == 'Q') board->queen_w|=currentSquareMask;
+                    else if(currentChar == 'q') board->queen_b|=currentSquareMask;
+                    else if(currentChar == 'R') board->rook_w|=currentSquareMask;
+                    else if(currentChar == 'r') board->rook_b|=currentSquareMask;
+                    else if(currentChar == 'N') board->knight_w|=currentSquareMask;
+                    else if(currentChar == 'n') board->knight_b|=currentSquareMask;
+                    else if(currentChar == 'B') board->bishop_w|=currentSquareMask;
+                    else if(currentChar == 'b') board->bishop_b|=currentSquareMask;
+                    else if(currentChar == 'P') board->pawn_w|=currentSquareMask;
+                    else if(currentChar == 'p') board->pawn_b|=currentSquareMask;
+                    columnOffset++;
+                }
+            }
+        }
+    }
+    board->pieces_w = board->king_w|board->queen_w|board->rook_w|board->knight_w|board->bishop_w|board->pawn_w;
+    board->pieces_b = board->king_b|board->queen_b|board->rook_b|board->knight_b|board->bishop_b|board->pawn_b;
+    board->pieces_all = board->pieces_b|board->pieces_w;
+
+    //Castling Rights
+    if(castlingAvailability[0] != '-')
+    {
+        for(int i = 0; i < 4; i++)
+        {
+            if(castlingAvailability[i] == 'K') board->flags|=1;
+            else if(castlingAvailability[i] == 'Q') board->flags|=2;
+            else if(castlingAvailability[i] == 'k') board->flags|=4;
+            else if(castlingAvailability[i] == 'q') board->flags|=8;
+            else break;
+        }
+    }
+
+    //Check
+    if(isThreatened(board, board->kingSquare_w, WHITE)) board->flags|=16;
+    else if(isThreatened(board, board->kingSquare_b, BLACK)) board->flags|=32;
+
+    //Turn
+    if(activeColor == 'w') board->turn = WHITE;
+    else board->turn = BLACK;
+
+    //50 move rule
+    board->movesSinceLastChange = halfMoveClock;
+
+    //History can't get imported this way. Start from scratch.
+    board->moveStackTop = NULL;
+    
+    //We can add the last move if it is required for en passant, though.
+    if(enPassantTargetSquare[0] != '-')
+    {
+        int endSquare = getSquareNumber(enPassantTargetSquare);
+        int startSquare;
+        int piece = PAWN;
+        if(board->turn == WHITE) 
+        {
+            piece|=BLACK;
+            startSquare = endSquare - 16;
+        }
+        else 
+        {
+            piece|=WHITE;
+            startSquare = endSquare + 16;
+        }
+        moves_push(board, createMove(startSquare, endSquare, 0, piece, 0, 0, board->flags, halfMoveClock - 1));
+    }
+
+    board->ht = create_hashTable_pos();
+
+    return board;
 }
 
 //Resets the board to an opening position

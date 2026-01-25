@@ -100,24 +100,4 @@ typedef struct bitboard {
     hashtable_pos* ht;
 } bitboard;
 
-
-typedef struct {
-    double pawnPieceWeights[64];
-    double knightPieceWeights[64];
-    double bishopPieceWeights[64];
-    double rookPieceWeights[64];
-    double queenPieceWeights[64];
-    double kingPieceWeights[64];
-
-    double pawnWeight;
-    double knightWeight;
-    double bishopWeight;
-    double rookWeight;
-    double queenWeight;
-    double kingWeight;
-
-    hashtable_tt* transpositionTable;
-    move* pv;
-} engine;
-
 #endif

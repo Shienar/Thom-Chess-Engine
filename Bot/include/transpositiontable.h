@@ -24,6 +24,6 @@ void destroy_hashTable_tt(hashtable_tt* ht);
  * OR
  * returns saved evaluation
  */
-double transposition_table_evaluate(struct bitboard* board, engine* engine);
+double transposition_table_evaluate(struct bitboard* board, hashtable_tt* tt);
 
 #endif

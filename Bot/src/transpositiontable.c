@@ -75,8 +75,8 @@ hashtable_tt* copy_hashTable_tt(hashtable_tt* src)
             memcpy(&newTable->array[i], &src->array[i], sizeof(table_entry_tt));
 
             //Create different address pointer
-            newTable->array[i].key = CALLOC(65, sizeof(char));
-            strncpy(newTable->array[i].key, src->array[i].key, 65);
+            newTable->array[i].key = CALLOC(HASHKEY_STRING_LENGTH, sizeof(char));
+            strncpy(newTable->array[i].key, src->array[i].key, HASHKEY_STRING_LENGTH);
         }
     }
 
@@ -101,31 +101,31 @@ void destroy_hashTable_tt(hashtable_tt* ht)
     FREE(ht);
 }
 
-double transposition_table_evaluate(bitboard* board, engine* engine)
+double transposition_table_evaluate(bitboard* board, hashtable_tt* tt)
 {
-    if(!engine || !board) return 0;
+    if(!board) return 0;
 
-    if(engine->transpositionTable == NULL) 
+    if(!tt) 
     {
-        engine->transpositionTable = create_hashTable_tt();
+        tt = create_hashTable_tt();
     }
 
-    char key[65];
+    char key[HASHKEY_STRING_LENGTH];
     hashKey(board, key);
     uint64_t hashCode = getHashCode(key);
-    size_t index = hashCode%engine->transpositionTable->capacity;
+    size_t index = hashCode%tt->capacity;
 
-    while(engine->transpositionTable->array[index].key != NULL)
+    while(tt->array[index].key != NULL)
     {
-        if(strcmp(engine->transpositionTable->array[index].key, key) == 0)
+        if(strcmp(tt->array[index].key, key) == 0)
         {
-            return engine->transpositionTable->array[index].evaluation;
+            return tt->array[index].evaluation;
         }
 
         index++;
-        if(index >= engine->transpositionTable->capacity) index=0;
+        if(index >= tt->capacity) index=0;
     }
 
-    engine->transpositionTable->array[index].evaluation = evaluate(board, engine);
-    return engine->transpositionTable->array[index].evaluation;
+    tt->array[index].evaluation = evaluate(board);
+    return tt->array[index].evaluation;
 }

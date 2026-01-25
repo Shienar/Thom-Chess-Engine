@@ -1,20 +1,29 @@
 #include "../include/moves.h"
 #include "../include/debug.h"
-#include "../include/evolve.h"
 #include "../include/bitboard.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
 
 /**
+ * GOALS:
+ *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
+ * 
  * TODO List:
- *  - Draws are getting declared early.
- *  - A black bishop on a6 got suggested a move to capture a black pawn on b5.
  *  - Store more information in the transposition tables.
  *  - Move sorting
- *      - PV move is currently prioritized.
- *      - Ordering for other moves.
+ *         - PV move is currently prioritized.
+ *         - Ordering for other moves.
  *  - Quiescent search optimizations.
+ * 
+ * 
+ * Bugs:
+ *  - Draws are getting declared early.
+ *  - A black bishop on a6 got suggested a move to capture a black pawn on b5.
+ *  - An empty move got returned on timeout.
+ *  - The engine can't mate.
+ * 
+ * 
  */
 
 int main(int argc, char** argv)
@@ -29,9 +38,7 @@ int main(int argc, char** argv)
     int onlyHumans = 0;
     double maxTime = 3;
     int printHistory = 0;
-    int shouldTrain = 0;
-    int maxTrainingIterations = 10;
-    int tweaksPerIteration = 3;
+    int fenLineNumber = -1;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
@@ -47,7 +54,7 @@ int main(int argc, char** argv)
             printf("--history\tPrint's recent moves\n");
             printf("--engine\t\tEngine v Engine game\n");
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
-            printf("--train\t\tTrains the chess engine with hill climbing. The next two variables should be maxIterations ands tweaksPerIteration\n");
+            printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
             printf("\n\n");
             exit(0);
         }
@@ -91,33 +98,27 @@ int main(int argc, char** argv)
             i++;
             maxTime = atof(argv[i]);
         }
-        else if(strcmp(argv[i], "--train") == 0)
+        else if(strcmp(argv[i], "--fen") == 0)
         {
-            shouldTrain = 1;
-            maxTrainingIterations = atoi(argv[++i]);;
-            tweaksPerIteration = atoi(argv[++i]);;
+            i++;
+            fenLineNumber = atoi(argv[i]);
         }
     }
     
     srand(time(NULL));
 
-    if(shouldTrain)
+    bitboard* board;
+    if(fenLineNumber > 0)
     {
-        printf("Starting Training.\n");
-        engine* trainableEngine = CALLOC(1, sizeof(engine));
-        initEnginePieceWeights(trainableEngine, 1);
-
-        hill_climb(trainableEngine, maxTrainingIterations, tweaksPerIteration, depth, maxTime);
-
-        printf("Training Complete.\n");
-        dump_allocations();
-        exit(0);
+        board = create_board_from_fen(fenLineNumber);
+        if(!board) board = create_board();
+    }
+    else
+    {
+        board = create_board();
     }
 
-    bitboard* board = create_board();
-
-    engine opponentEngine = {0};
-    initEnginePieceWeights(&opponentEngine, 1);
+    init_tables();
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -150,7 +151,7 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move* bestMove = calculateBestMove(board, &opponentEngine, depth, maxTime);
+                move* bestMove = calculateBestMove(board, depth, maxTime);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose, printHistory);

@@ -74,8 +74,8 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
         if(src->array[i].key != NULL)
         {
             newTable->array[i].count = src->array[i].count;
-            newTable->array[i].key = CALLOC(65, sizeof(char));
-            strncpy(newTable->array[i].key, src->array[i].key, 65);
+            newTable->array[i].key = CALLOC(HASHKEY_STRING_LENGTH, sizeof(char));
+            strncpy(newTable->array[i].key, src->array[i].key, HASHKEY_STRING_LENGTH);
         }
     }
 
@@ -119,9 +119,9 @@ double increment_table_value(hashtable_pos* ht, const char* key, double amount)
         if(index >= ht->capacity) index=0;
     }
 
-    ht->array[index].key = CALLOC(65, sizeof(char));
+    ht->array[index].key = CALLOC(HASHKEY_STRING_LENGTH, sizeof(char));
     if(ht->array[index].key == NULL) return DBL_MIN;
-    strncpy(ht->array[index].key, key, 65);
+    strncpy(ht->array[index].key, key, HASHKEY_STRING_LENGTH);
     ht->array[index].count = amount;
     ht->size++;
 
