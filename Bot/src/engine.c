@@ -223,16 +223,16 @@ double evaluate(bitboard* board)
 
 double quiesce(bitboard* board, hashtable_tt* tt, double alpha, double beta, int depth)
 {
-    
+    //Beta pruning happens too early if I use +- DBL_MAX for mates.
     if(board->victor == WHITE) 
     {
-        if(board->turn == WHITE) return DBL_MAX;
-        else return -DBL_MAX;
+        if(board->turn == WHITE) return INT64_MAX;
+        else return INT64_MIN;
     }
     if(board->victor == BLACK) 
     {
-        if(board->turn == BLACK) return DBL_MAX;
-        else return -DBL_MAX;
+        if(board->turn == BLACK) return INT64_MAX;
+        else return INT64_MIN;
     }
     if(ISDRAW(board->victor)) return CONTEMPT_FACTOR;
 

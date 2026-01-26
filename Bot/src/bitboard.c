@@ -84,6 +84,16 @@ bitboard* create_board_from_fen(int lineNumber)
         DEBUG("Failed to read from file \"import/FEN.txt\"");
         return NULL;
     }
+    else if(FEN[0] == ';')
+    {
+        DEBUG("Target FEN line is a comment.")
+        return NULL;
+    }
+    else if(FEN[0] == ' ' || FEN[0] == '\n')
+    {
+        DEBUG("Target FEN line is whitespace.")
+        return NULL;
+    }
 
     char fullBoardString[80] = {'\0'};
     char* boardStrings[8] = {NULL};

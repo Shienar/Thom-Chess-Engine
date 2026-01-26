@@ -10,7 +10,6 @@
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
  * TODO List:
- *  - System to indicate draw type.
  *  - Store more information in the transposition tables.
  *  - Move sorting
  *         - PV move is currently prioritized.
@@ -19,11 +18,6 @@
  * 
  * 
  * Bugs:
- *  - Draws are getting declared early.
- *  - A black bishop on a6 got suggested a move to capture a black pawn on b5.
- *  - An empty move got returned on timeout.
- *  - The engine can't mate.
- * 
  * 
  */
 
@@ -112,7 +106,11 @@ int main(int argc, char** argv)
     if(fenLineNumber > 0)
     {
         board = create_board_from_fen(fenLineNumber);
-        if(!board) board = create_board();
+        if(!board)
+        {
+            dump_allocations();
+            exit(1);
+        }
     }
     else
     {
