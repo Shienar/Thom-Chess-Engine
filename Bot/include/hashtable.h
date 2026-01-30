@@ -3,12 +3,12 @@
 
 #include "structs.h"
 #include "engine.h"
+#include <stdint.h>
 
 #define STARTING_CAPACITY 32
 
 #define FNV_OFFSET_BASIS 14695981039346656037ull
 #define FNV_PRIME 1099511628211ull
-#define HASHKEY_STRING_LENGTH 65
 
 /**
  * Fowler–Noll–Vo hash function
@@ -19,6 +19,6 @@ uint64_t getHashCode(const char* key);
 /**
  * Converts a bitboard to a hash key.
  */
-void hashKey(struct bitboard* board, char* target);
+void hashKey(bitboard* board, char* target);
 
 #endif

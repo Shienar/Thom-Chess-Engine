@@ -165,8 +165,6 @@ double evaluate(bitboard* board)
 {
     if(board->victor == WHITE) 
     {
-        if(board->turn == WHITE) printf("Found a win for white on white's turn.\n");
-        else printf("Found a win for white on blacks turn\n");
         if(board->turn == WHITE) return DBL_MAX;
         else return -DBL_MAX;
     }
@@ -175,7 +173,19 @@ double evaluate(bitboard* board)
         if(board->turn == BLACK) return DBL_MAX;
         else return -DBL_MAX;
     }
-    if(ISDRAW(board->victor)) return CONTEMPT_FACTOR;
+    if(ISDRAW(board->victor)) 
+    {
+        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
+        int scale;
+        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
+        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
+        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
+
+        if(board->victor&STALEMATED_WHITE || board->victor&STALEMATED_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
+        if(board->victor&THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
+        if(board->victor&FIFTYMOVERULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
+        if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+    }
 
     int score_w_middlegame, score_b_middlegame, score_w_endgame, score_b_endgame, gamePhase = 0;
 
@@ -221,9 +231,8 @@ double evaluate(bitboard* board)
 }
 /* End of PeSTO*/
 
-double quiesce(bitboard* board, hashtable_tt* tt, double alpha, double beta, int depth)
+double quiesce(bitboard* board, double alpha, double beta, int depth)
 {
-    //Beta pruning happens too early if I use +- DBL_MAX for mates.
     if(board->victor == WHITE) 
     {
         if(board->turn == WHITE) return INT64_MAX;
@@ -234,9 +243,21 @@ double quiesce(bitboard* board, hashtable_tt* tt, double alpha, double beta, int
         if(board->turn == BLACK) return INT64_MAX;
         else return INT64_MIN;
     }
-    if(ISDRAW(board->victor)) return CONTEMPT_FACTOR;
+    if(ISDRAW(board->victor)) 
+    {
+        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
+        int scale;
+        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
+        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
+        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
 
-    double best = transposition_table_evaluate(board, tt);
+        if(board->victor&STALEMATED_WHITE || board->victor&STALEMATED_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
+        if(board->victor&THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
+        if(board->victor&FIFTYMOVERULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
+        if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+    }
+
+    double best = 0; //transposition_table_evaluate(board, transpositionTable);
 
     if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
@@ -250,7 +271,7 @@ double quiesce(bitboard* board, hashtable_tt* tt, double alpha, double beta, int
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                double score = -quiesce(board, tt, alpha, beta, depth - 1);
+                double score = -quiesce(board, alpha, beta, depth - 1);
                 unmove(board);
                 if(score >= beta)
                 {
@@ -285,9 +306,32 @@ int sortMoves(void* c, const void* a, const void* b)
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-double principalVariationSearch(bitboard* board, hashtable_tt* tt, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
 {
-    if(depth == 0 || clock() > timeLimit || board->victor) return quiesce(board, tt, alpha, beta, 3);
+    //Transposition table
+    table_entry_tt* old_tt_entry = NULL;
+    if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
+        old_tt_entry->evaluationDepth >= depth &&
+            (old_tt_entry->nodeType == NODE_TYPE_PV ||
+            (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
+            (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
+    {
+        return old_tt_entry->evaluation;
+    }
+
+    table_entry_tt new_tt_entry = {
+        .age = clock(),
+        .evaluationDepth = depth,
+    };
+    hashKey(board, new_tt_entry.key);
+
+    if(depth == 0 || clock() > timeLimit || board->victor) 
+    {
+        new_tt_entry.nodeType = NODE_TYPE_PV; // Exact evaluation.
+        new_tt_entry.evaluation = evaluate(board);
+        transposition_table_set(transpositionTable, new_tt_entry);
+        return new_tt_entry.evaluation;
+    }
     
     double score = 0;
 
@@ -310,24 +354,30 @@ double principalVariationSearch(bitboard* board, hashtable_tt* tt, double alpha,
             {
                 if(index == 0)
                 {
-                    score = -principalVariationSearch(board, tt, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                    score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
                 }
                 else
                 {
-                    score = -principalVariationSearch(board, tt, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                    score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
                     //Re-search PV node
-                    if (score > alpha && score < beta) score = -principalVariationSearch(board, tt, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
+                    if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
                 }
                 
                 unmove(board);
 
                 if(score >= beta)
                 {
+                    new_tt_entry.nodeType = NODE_TYPE_CUT; // Lowerbound evaluation.
+                    new_tt_entry.evaluation = score;
+                    transposition_table_set(transpositionTable, new_tt_entry);
                     freeMoveList(moveList);
                     return beta;
                 }
                 else if(score > alpha) 
                 {
+                    new_tt_entry.nodeType = NODE_TYPE_ALL; // Upperbound evaluation.
+                    new_tt_entry.evaluation = score;
+                    transposition_table_set(transpositionTable, new_tt_entry);
                     alpha = score;
                     pv[pvIndex] = *moveList[index];
                     copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
@@ -342,7 +392,6 @@ double principalVariationSearch(bitboard* board, hashtable_tt* tt, double alpha,
 
 move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 {
-    hashtable_tt* transpositionTable = create_hashTable_tt();
     move* principalVariation = CALLOC(maxDepth, sizeof(move));
     move* tempPVTable = NULL;
 
@@ -356,7 +405,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
         //DBL_MIN is the smallest POSITIVE double. -DBL_MAX must be used instead.
-        principalVariationSearch(board, transpositionTable, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
+        principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
 
         copyNMoves(principalVariation, tempPVTable, currentDepth);
         FREE(tempPVTable);
@@ -364,8 +413,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     }
 
     if(tempPVTable) FREE(tempPVTable);
-    destroy_hashTable_tt(transpositionTable);
-    transpositionTable = NULL;
 
     move* bestMove = CALLOC(1, sizeof(move));
     memcpy(bestMove, &principalVariation[0], sizeof(move));

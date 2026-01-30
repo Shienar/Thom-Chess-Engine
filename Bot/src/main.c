@@ -1,6 +1,7 @@
 #include "../include/moves.h"
 #include "../include/debug.h"
 #include "../include/bitboard.h"
+#include "../include/transpositiontable.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -10,14 +11,17 @@
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
  * TODO List:
- *  - Store more information in the transposition tables.
+ *  - Use best move from transposition table. 
+ *      - Replaces PV table?
  *  - Move sorting
  *         - PV move is currently prioritized.
  *         - Ordering for other moves.
- *  - Quiescent search optimizations.
+ *  - Reintroduce quiescent search.
+ *      - Requires more optimizations.
  * 
+ * BUGS:
+ *  - Random nonsensical en-passant based moves are getting suggested and rejected by the engine.
  * 
- * Bugs:
  * 
  */
 
@@ -118,6 +122,7 @@ int main(int argc, char** argv)
     }
 
     init_tables();
+    transpositionTable = create_hashTable_tt();
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -173,11 +178,12 @@ int main(int argc, char** argv)
             else if(board->victor&STALEMATED_BLACK) printf(" (Black stalemated)\n\n");
             else if(board->victor&THREEFOLD) printf(" (Threefold Repetition)\n\n");
             else if(board->victor&FIFTYMOVERULE) printf(" (50-move rule)\n\n");
-            else if(board->victor&INSUFFICENT_MATERIAL) printf(" (Insufficient Material)\n\n");
+            else if(board->victor&INSUFFICIENT_MATERIAL) printf(" (Insufficient Material)\n\n");
             break;
         }
     }
 
+    destroy_hashTable_tt(transpositionTable);
     destroy_board(board);
 
     dump_allocations();

@@ -188,6 +188,7 @@ bitboard* create_board_from_fen(int lineNumber)
 
     //50 move rule
     board->movesSinceLastChange = halfMoveClock;
+    board->halfMoveCount = fullMoveCount * 2;
 
     //History can't get imported this way. Start from scratch.
     board->moveStackTop = NULL;
@@ -201,12 +202,14 @@ bitboard* create_board_from_fen(int lineNumber)
         if(board->turn == WHITE) 
         {
             piece|=BLACK;
-            startSquare = endSquare - 16;
+            endSquare = endSquare - 8;
+            startSquare = endSquare + 16;
         }
         else 
         {
             piece|=WHITE;
-            startSquare = endSquare + 16;
+            endSquare = endSquare + 8;
+            startSquare = endSquare - 16;
         }
         moves_push(board, createMove(startSquare, endSquare, 0, piece, 0, 0, board->flags, halfMoveClock - 1));
     }
@@ -262,6 +265,9 @@ bitboard* create_board()
     //History
     board->moveStackTop = NULL;
     board->ht = create_hashTable_pos();
+
+    //Other
+    board->halfMoveCount = 0;
 
     return board;
 }

@@ -17,13 +17,13 @@ void ht_resize_pos(hashtable_pos* ht, int shouldShrink)
 
     for(size_t i = 0; i < ht->capacity; i++)
     {
-        if(ht->array[i].key != NULL) 
+        if(ht->array[i].count != 0) 
         {
             uint64_t hashCode = getHashCode(ht->array[i].key);
             size_t index = hashCode%newCapacity;
 
             //Linear insertion
-            while(newArray[index].key != NULL)
+            while(newArray[index].count != 0)
             {
                 index++;
                 if(index >= newCapacity) index=0;
@@ -71,10 +71,9 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
 
     for(size_t i = 0; i < newTable->capacity; i++)
     {
-        if(src->array[i].key != NULL)
+        if(src->array[i].count != 0)
         {
             newTable->array[i].count = src->array[i].count;
-            newTable->array[i].key = CALLOC(HASHKEY_STRING_LENGTH, sizeof(char));
             strncpy(newTable->array[i].key, src->array[i].key, HASHKEY_STRING_LENGTH);
         }
     }
@@ -84,20 +83,8 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
 
 void destroy_hashTable_pos(hashtable_pos* ht)
 {
-    if(!ht) return;
-    if(ht->array)
-    {
-        for(size_t i = 0; i < ht->capacity; i++)
-        {
-            if(ht->array[i].key != NULL) 
-            {
-                FREE(ht->array[i].key);
-                ht->array[i].key = NULL;
-            }
-        }
-    }
-    FREE(ht->array);
-    FREE(ht);
+    if(!ht) FREE(ht);
+    if(ht->array) FREE(ht->array);
 }
 
 double increment_table_value(hashtable_pos* ht, const char* key, double amount)
@@ -107,7 +94,7 @@ double increment_table_value(hashtable_pos* ht, const char* key, double amount)
     uint64_t hashCode = getHashCode(key);
     size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].key != NULL && ht->array[index].count != DBL_MIN)
+    while(ht->array[index].count != 0 && ht->array[index].count != DBL_MIN)
     {
         if(strcmp(ht->array[index].key, key) == 0)
         {
@@ -119,8 +106,6 @@ double increment_table_value(hashtable_pos* ht, const char* key, double amount)
         if(index >= ht->capacity) index=0;
     }
 
-    ht->array[index].key = CALLOC(HASHKEY_STRING_LENGTH, sizeof(char));
-    if(ht->array[index].key == NULL) return DBL_MIN;
     strncpy(ht->array[index].key, key, HASHKEY_STRING_LENGTH);
     ht->array[index].count = amount;
     ht->size++;
@@ -140,7 +125,7 @@ double decrement_table_value(hashtable_pos* ht, const char* key)
     uint64_t hashCode = getHashCode(key);
     size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].key != NULL && ht->array[index].count != DBL_MIN)
+    while(ht->array[index].count != 0 && ht->array[index].count != DBL_MIN)
     {
         if(strcmp(ht->array[index].key, key) == 0) 
         {
@@ -148,8 +133,6 @@ double decrement_table_value(hashtable_pos* ht, const char* key)
             double returnedCount = ht->array[index].count;
             if(ht->array[index].count <= 0)
             {
-                FREE(ht->array[index].key);
-                ht->array[index].key = NULL;
                 ht->array[index].count = DBL_MIN; //Tombstone
                 ht->size--;
             }

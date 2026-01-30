@@ -957,8 +957,9 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
             ((ISWHITE(color) && (board->moveStackTop->endSquare - endSquare == -8)) ||
             (ISBLACK(color) && (board->moveStackTop->endSquare - endSquare == 8))))
         {
+            int pinType = 0;
             //Check if target pawn is pinned to turn's king.
-            if(ISWHITE(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE))
+            if(ISWHITE(color) && (pinType = isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE)) && pinType != PIN_TYPE_ABOVE)
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_w, kingSquareName);
@@ -968,7 +969,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
                 return -1;
             }
-            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK))
+            else if(ISBLACK(color) && (pinType =  isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK)) && pinType != PIN_TYPE_BELOW)
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_b, kingSquareName);
@@ -1386,6 +1387,7 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
+        board_print(board, 0, 1);
         DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
         return -1;
     }
@@ -1400,6 +1402,7 @@ int moveFromStruct(bitboard* board, move* m)
     //50 move rule counting
     if(ISPAWN(m->piece) || m->capturedPiece) board->movesSinceLastChange = 0;
     else board->movesSinceLastChange++;
+    board->halfMoveCount++;
 
 
     //Calculate discovered checks and change turn.
@@ -1420,8 +1423,8 @@ int moveFromStruct(bitboard* board, move* m)
     char key[HASHKEY_STRING_LENGTH];
     hashKey(board, key);
     if(increment_table_value(board->ht, key, 1) >= 3) board->victor = DRAW|THREEFOLD;
-    else if(board->movesSinceLastChange >= 50) board->victor = DRAW|FIFTYMOVERULE;
-    else if((board->king_b|board->king_w) == board->pieces_all) board->victor = DRAW|INSUFFICENT_MATERIAL; //King v King drawn INSUFFICENT_MATERIAL
+    else if(board->movesSinceLastChange >= 100) board->victor = DRAW|FIFTYMOVERULE; //Variable stores half-moves
+    else if((board->king_b|board->king_w) == board->pieces_all) board->victor = DRAW|INSUFFICIENT_MATERIAL; //King v King drawn INSUFFICIENT_MATERIAL
     else if(!(potentialMoveList = generateMoveList(board, 0)))
     {
         //No potential moves - Calculate checkmate/stalemate
@@ -1441,7 +1444,7 @@ int moveFromStruct(bitboard* board, move* m)
         //Freeing the movelist allocation from the previous conditional.
         freeMoveList(potentialMoveList);
 
-        /* Other Drawn INSUFFICENT_MATERIALs */
+        /* Other Drawn INSUFFICIENT_MATERIALs */
 
         //King + Minor Piece vs King
         if(board->pieces_b == board->king_b && board->pawn_w == 0 && board->rook_w == 0 && board->queen_w == 0)
@@ -1454,7 +1457,7 @@ int moveFromStruct(bitboard* board, move* m)
 
                 mask = mask<<1;
             }
-            if(count == 1) board->victor = DRAW|INSUFFICENT_MATERIAL;
+            if(count == 1) board->victor = DRAW|INSUFFICIENT_MATERIAL;
         }
         else if(board->pieces_w == board->king_w && board->pawn_b == 0 && board->rook_b == 0 && board->queen_b == 0)
         {
@@ -1466,14 +1469,14 @@ int moveFromStruct(bitboard* board, move* m)
 
                 mask = mask<<1;
             }
-            if(count == 1) board->victor = DRAW|INSUFFICENT_MATERIAL;
+            if(count == 1) board->victor = DRAW|INSUFFICIENT_MATERIAL;
         }
         //King + Bishops vs King + Bishops (Same color bishops)
         else if(board->pieces_all == (board->king_w|board->bishop_w|board->king_b|board->bishop_b) && 
                 ((board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&LIGHT_SQUARES) ||
                  (board->bishop_b|board->bishop_w) == ((board->bishop_b|board->bishop_w)&DARK_SQUARES))) 
         {
-            board->victor = DRAW|INSUFFICENT_MATERIAL;
+            board->victor = DRAW|INSUFFICIENT_MATERIAL;
         }
     }
     
@@ -1560,6 +1563,7 @@ move* unmove(bitboard *board)
     else if (board->turn==BLACK) board->turn = WHITE;
     
     board->victor = 0;
+    board->halfMoveCount--;
 
     return m;
 }
