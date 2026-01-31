@@ -257,7 +257,16 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
         if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
     }
 
-    double best = 0; //transposition_table_evaluate(board, transpositionTable);
+    double best;
+    table_entry_tt* entry = transposition_table_get(board, transpositionTable);
+    if(entry &&
+        (entry->nodeType == NODE_TYPE_PV ||
+        (entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) ||
+        (entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta))) 
+    {
+        best = entry->evaluation;
+    }
+    else best = evaluate(board);
 
     if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
@@ -278,16 +287,12 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
                     freeMoveList(captureMoves);
                     return score;
                 }
-                else if(score > best) best = score;
-                else if(score > alpha) alpha = score;
+                if(score > best) best = score;
+                if(score > alpha) alpha = score;
             }
             index++;
         }
         freeMoveList(captureMoves);
-    }
-    else
-    {
-        best = evaluate(board);
     }
     return best;
 }
