@@ -1420,9 +1420,7 @@ int moveFromStruct(bitboard* board, move* m)
     }
 
     //3-fold repetition check
-    char key[HASHKEY_STRING_LENGTH];
-    hashKey(board, key);
-    if(increment_table_value(board->ht, key, 1) >= 3) board->victor = DRAW|THREEFOLD;
+    if(increment_table_value(board->ht, board) >= 3) board->victor = DRAW|THREEFOLD;
     else if(board->movesSinceLastChange >= 100) board->victor = DRAW|FIFTYMOVERULE; //Variable stores half-moves
     else if((board->king_b|board->king_w) == board->pieces_all) board->victor = DRAW|INSUFFICIENT_MATERIAL; //King v King drawn INSUFFICIENT_MATERIAL
     else if(!(potentialMoveList = generateMoveList(board, 0)))
@@ -1491,9 +1489,7 @@ move* unmove(bitboard *board)
         return NULL;
     }
 
-    char key[HASHKEY_STRING_LENGTH];
-    hashKey(board, key);
-    decrement_table_value(board->ht, key);
+    decrement_table_value(board->ht, board);
     move* m = moves_pop(board);
     if(!m)
     {

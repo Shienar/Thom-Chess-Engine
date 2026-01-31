@@ -33,14 +33,13 @@ table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
 {
     if(!board || !tt) return NULL;
 
-    char key[HASHKEY_STRING_LENGTH];
-    hashKey(board, key);
-    size_t index = getHashCode(key)%tt->capacity;
+    uint64_t hashCode = getHashCode(board);
+    size_t index = hashCode%tt->capacity;
     size_t startIndex = index;
 
-    while(tt->array[index].age != 0)
+    while(tt->array[index].hashCode != 0)
     {
-        if(strcmp(tt->array[index].key, key) == 0)
+        if(tt->array[index].hashCode == hashCode)
         {
             return &tt->array[index];
         }
@@ -49,7 +48,7 @@ table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
         if(index >= tt->capacity) index=0;
         if(index == startIndex) break;
     }
-
+    
     return NULL;
 }
 
@@ -62,12 +61,12 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
         return;
      }
 
-    size_t index = getHashCode(entry.key)%tt->capacity;
+    size_t index = entry.hashCode%tt->capacity;
     size_t startIndex = index;
 
-    while(tt->array[index].age != 0)
+    while(tt->array[index].hashCode != 0)
     {
-        if(strcmp(tt->array[index].key, entry.key) == 0)
+        if(tt->array[index].hashCode == entry.hashCode)
         {
             //Update
             tt->array[index] = entry;
@@ -91,7 +90,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
         clock_t oldestTime = LONG_MAX;
         for(size_t i = 0; i < tt->capacity; i++)
         {
-            if(tt->array[i].age != 0 && tt->array[i].age < oldestTime) 
+            if(tt->array[i].hashCode != 0 && tt->array[i].age < oldestTime) 
             {
                 index = i;
                 oldestTime = tt->array[i].age;

@@ -271,7 +271,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                double score = -quiesce(board, alpha, beta, depth - 1);
+                double score = -quiesce(board, -beta, -alpha, depth - 1);
                 unmove(board);
                 if(score >= beta)
                 {
@@ -284,6 +284,10 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
             index++;
         }
         freeMoveList(captureMoves);
+    }
+    else
+    {
+        best = evaluate(board);
     }
     return best;
 }
@@ -322,13 +326,13 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     table_entry_tt new_tt_entry = {
         .age = clock(),
         .evaluationDepth = depth,
+        .hashCode = getHashCode(board)
     };
-    hashKey(board, new_tt_entry.key);
 
     if(depth == 0 || clock() > timeLimit || board->victor) 
     {
         new_tt_entry.nodeType = NODE_TYPE_PV; // Exact evaluation.
-        new_tt_entry.evaluation = evaluate(board);
+        new_tt_entry.evaluation = quiesce(board, alpha, beta, 3);
         transposition_table_set(transpositionTable, new_tt_entry);
         return new_tt_entry.evaluation;
     }
@@ -404,9 +408,10 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
-        //DBL_MIN is the smallest POSITIVE double. -DBL_MAX must be used instead.
-        principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
-
+        //Always fully evaluate at depth 1.
+        if(currentDepth == 1) principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, LONG_MAX);
+        else principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
+        
         copyNMoves(principalVariation, tempPVTable, currentDepth);
         FREE(tempPVTable);
         tempPVTable = NULL;

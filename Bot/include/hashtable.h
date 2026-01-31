@@ -5,20 +5,24 @@
 #include "engine.h"
 #include <stdint.h>
 
-#define STARTING_CAPACITY 32
-
-#define FNV_OFFSET_BASIS 14695981039346656037ull
-#define FNV_PRIME 1099511628211ull
+#define STARTING_CAPACITY 1024
 
 /**
- * Fowler–Noll–Vo hash function
- * https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
+ * 0-5 = white
+ * 6-11 = black
+ * Index = define piece value - 1 
  */
-uint64_t getHashCode(const char* key);
+extern uint64_t zobrist_pieceSquareValues[64][12];
 
-/**
- * Converts a bitboard to a hash key.
- */
-void hashKey(bitboard* board, char* target);
+extern uint64_t zobrist_blackToMove;
+extern uint64_t zobrist_whiteToMove;
+extern uint64_t zobrist_castle_wk;
+extern uint64_t zobrist_castle_wq;
+extern uint64_t zobrist_castle_bk;
+extern uint64_t zobrist_castle_bq;
+extern uint64_t zobrist_enPassantFile[8];
+
+void generateZobristRandoms();
+uint64_t getHashCode(bitboard* board);
 
 #endif

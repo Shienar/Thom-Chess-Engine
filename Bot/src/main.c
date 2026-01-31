@@ -11,16 +11,13 @@
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
  * TODO List:
- *  - Use best move from transposition table. 
- *      - Replaces PV table?
  *  - Move sorting
  *         - PV move is currently prioritized.
  *         - Ordering for other moves.
- *  - Reintroduce quiescent search.
- *      - Requires more optimizations.
  * 
  * BUGS:
  *  - Random nonsensical en-passant based moves are getting suggested and rejected by the engine.
+ *  - Threefold repetition draws get declared early.
  * 
  * 
  */
@@ -122,6 +119,7 @@ int main(int argc, char** argv)
     }
 
     init_tables();
+    generateZobristRandoms();
     transpositionTable = create_hashTable_tt();
 
     char buffer[6] = {'\0'};

@@ -19,8 +19,7 @@ void ht_resize_pos(hashtable_pos* ht, int shouldShrink)
     {
         if(ht->array[i].count != 0) 
         {
-            uint64_t hashCode = getHashCode(ht->array[i].key);
-            size_t index = hashCode%newCapacity;
+            size_t index = ht->array[i].hashCode%newCapacity;
 
             //Linear insertion
             while(newArray[index].count != 0)
@@ -74,7 +73,7 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
         if(src->array[i].count != 0)
         {
             newTable->array[i].count = src->array[i].count;
-            strncpy(newTable->array[i].key, src->array[i].key, HASHKEY_STRING_LENGTH);
+            newTable->array[i].hashCode = src->array[i].hashCode;
         }
     }
 
@@ -87,18 +86,18 @@ void destroy_hashTable_pos(hashtable_pos* ht)
     if(ht->array) FREE(ht->array);
 }
 
-double increment_table_value(hashtable_pos* ht, const char* key, double amount)
+int increment_table_value(hashtable_pos* ht, bitboard* board)
 {
-    if(!ht) return DBL_MIN;
+    if(!ht) return INT32_MIN;
 
-    uint64_t hashCode = getHashCode(key);
+    uint64_t hashCode = getHashCode(board);
     size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].count != 0 && ht->array[index].count != DBL_MIN)
+    while(ht->array[index].count != 0 && ht->array[index].count != INT32_MIN)
     {
-        if(strcmp(ht->array[index].key, key) == 0)
+        if(ht->array[index].hashCode == hashCode)
         {
-            ht->array[index].count += amount;
+            ht->array[index].count++;
             return ht->array[index].count;
         }
 
@@ -106,8 +105,8 @@ double increment_table_value(hashtable_pos* ht, const char* key, double amount)
         if(index >= ht->capacity) index=0;
     }
 
-    strncpy(ht->array[index].key, key, HASHKEY_STRING_LENGTH);
-    ht->array[index].count = amount;
+    ht->array[index].hashCode = hashCode;
+    ht->array[index].count = 1;
     ht->size++;
 
     if(ht->size >= ht->capacity/2)
@@ -119,25 +118,25 @@ double increment_table_value(hashtable_pos* ht, const char* key, double amount)
     return ht->array[index].count;
 }
 
-double decrement_table_value(hashtable_pos* ht, const char* key)
+int decrement_table_value(hashtable_pos* ht, bitboard* board)
 {
-    if(!ht) return DBL_MIN;
-    uint64_t hashCode = getHashCode(key);
+    if(!ht) return INT32_MIN;
+    uint64_t hashCode = getHashCode(board);
     size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].count != 0 && ht->array[index].count != DBL_MIN)
+    while(ht->array[index].count != 0 && ht->array[index].count != INT32_MIN)
     {
-        if(strcmp(ht->array[index].key, key) == 0) 
+        if(ht->array[index].hashCode == hashCode) 
         {
             ht->array[index].count--;
-            double returnedCount = ht->array[index].count;
+            int returnedCount = ht->array[index].count;
             if(ht->array[index].count <= 0)
             {
-                ht->array[index].count = DBL_MIN; //Tombstone
+                ht->array[index].count = INT32_MIN; //Tombstone
                 ht->size--;
             }
 
-            if(ht->size < ht->capacity/4)
+            if(ht->capacity > STARTING_CAPACITY && ht->size < ht->capacity/4)
             {
                 //Shrink
                 ht_resize_pos(ht, 1);
@@ -149,5 +148,5 @@ double decrement_table_value(hashtable_pos* ht, const char* key)
         index++;
         if(index >= ht->capacity) index=0;
     }
-    return DBL_MIN;
+    return INT32_MIN;
 }

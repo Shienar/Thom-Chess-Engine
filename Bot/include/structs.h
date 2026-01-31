@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include <time.h>
 
-#define HASHKEY_STRING_LENGTH 65
-
 typedef struct move {
     int startSquare;
     int endSquare;
@@ -22,7 +20,7 @@ typedef struct move {
 } move;
 
 typedef struct table_entry_pos {
-    char key[HASHKEY_STRING_LENGTH];
+    uint64_t hashCode;
     int count;
 } table_entry_pos;
 
@@ -33,7 +31,7 @@ typedef struct hashtable_pos {
 } hashtable_pos;
 
 typedef struct table_entry_tt {
-    char key[HASHKEY_STRING_LENGTH];
+    uint64_t hashCode;
     clock_t age;
     double evaluation;
     int evaluationDepth;

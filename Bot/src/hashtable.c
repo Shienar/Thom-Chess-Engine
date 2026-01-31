@@ -3,41 +3,84 @@
 #include "../include/debug.h"
 #include <string.h>
 
-uint64_t getHashCode(const char* key)
-{
-    if(!key)  return 0;
+uint64_t zobrist_pieceSquareValues[64][12];
+uint64_t zobrist_blackToMove;
+uint64_t zobrist_whiteToMove;
+uint64_t zobrist_castle_wk;
+uint64_t zobrist_castle_wq;
+uint64_t zobrist_castle_bk;
+uint64_t zobrist_castle_bq;
+uint64_t zobrist_enPassantFile[8];
 
-    uint64_t hashCode = FNV_OFFSET_BASIS;
-    for(int i = 0; i < 64; i++)
-    {
-        hashCode *= FNV_PRIME;
-        hashCode ^= (uint64_t)(unsigned char)(key[i]);
-    }
-    return hashCode;
+uint64_t sixty_four_bit_rand()
+{
+    uint64_t returnValue = 0;
+    returnValue|= (uint64_t) rand();
+    returnValue|= ((uint64_t) rand())<<16;
+    returnValue|= ((uint64_t) rand())<<32;
+    returnValue|= ((uint64_t) rand())<<48;
+    return returnValue;
 }
 
-void hashKey(bitboard* board, char* key)
+void generateZobristRandoms()
 {
-    if(!board) return;
-
-    memset(key, 'e', 64);
-    key[64] = '\0';
-
-    uint64_t mask = 1;
-    for(int currentSquare = 0; currentSquare < 64; currentSquare++)
+    for(int i = 0; i < 12; i++)
     {
-        if(board->pawn_w&mask) key[currentSquare] = 'p';
-        else if(board->pawn_b&mask) key[currentSquare] = 'P';
-        else if(board->rook_w&mask) key[currentSquare] = 'r';
-        else if(board->rook_b&mask) key[currentSquare] = 'R';
-        else if(board->knight_w&mask) key[currentSquare] = 'n';
-        else if(board->knight_b&mask) key[currentSquare] = 'N';
-        else if(board->bishop_w&mask) key[currentSquare] = 'b';
-        else if(board->bishop_b&mask) key[currentSquare] = 'B';
-        else if(board->queen_w&mask) key[currentSquare] = 'q';
-        else if(board->queen_b&mask) key[currentSquare] = 'Q';
-        else if(board->king_w&mask) key[currentSquare] = 'k';
-        else if(board->king_b&mask) key[currentSquare] = 'K';
-        mask = mask<<1;
+        for(int j = 0; j < 64; j++)
+        {
+            zobrist_pieceSquareValues[j][i] = sixty_four_bit_rand();
+        }
     }
+
+    zobrist_blackToMove = sixty_four_bit_rand();
+    zobrist_whiteToMove = sixty_four_bit_rand();
+    zobrist_castle_bk = sixty_four_bit_rand();
+    zobrist_castle_wk = sixty_four_bit_rand();
+    zobrist_castle_bq = sixty_four_bit_rand();
+    zobrist_castle_wq = sixty_four_bit_rand();
+
+    for(int i = 0; i < 8; i++)
+    {
+        zobrist_enPassantFile[i] = sixty_four_bit_rand();
+    }
+}
+
+uint64_t getHashCode(bitboard* board)
+{
+    if(!board)  return 0;
+
+    uint64_t returnValue = 0;
+
+    int piece, index;
+    for(int i = 0; i < 64; i++)
+    {
+        piece = findPieceOnSquare(board, i);
+        if(piece)
+        {
+            if(ISWHITE(piece)) index = 0;
+            else index = 6;
+
+            index += (piece&0xF) - 1;
+
+            returnValue^=zobrist_pieceSquareValues[i][index];
+        }
+    }
+
+    if(board->flags&1) returnValue^=zobrist_castle_wk;
+    if(board->flags&2) returnValue^=zobrist_castle_wq;
+    if(board->flags&4) returnValue^=zobrist_castle_bk;
+    if(board->flags&8) returnValue^=zobrist_castle_bq;
+
+    if(ISWHITE(board->turn)) returnValue^=zobrist_whiteToMove;
+    else returnValue^=zobrist_blackToMove;
+
+    move* m = board->moveStackTop;
+    if(m && ISPAWN(m->piece) &&
+        ((ISWHITE(m->piece) && m->endSquare - m->startSquare == 16) ||
+        (ISBLACK(m->piece) && m->startSquare - m->endSquare == 16)))
+    {
+        returnValue^=zobrist_enPassantFile[getColumn(m->endSquare) - 1];
+    }
+
+    return returnValue;
 }
