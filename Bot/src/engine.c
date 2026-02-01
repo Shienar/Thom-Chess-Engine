@@ -232,6 +232,26 @@ double evaluate(bitboard* board)
 }
 /* End of PeSTO*/
 
+//For qsort_s
+int sortMoves(void* c, const void* a, const void* b)
+{
+    move* move_a = *(move**)a;
+    move* move_b = *(move**)b;
+
+    if(c)
+    {
+        move* best_move = (move*)c;
+        if(move_a->startSquare == best_move->startSquare && move_a->endSquare == best_move->endSquare) return -1;
+        else if(move_b->startSquare == best_move->startSquare && move_b->endSquare == best_move->endSquare) return 1;
+    }
+
+    if(move_a->capturedPiece && move_b->capturedPiece) return ((move_b->capturedPiece&0xF) - (move_b->piece&0xF)) - ((move_a->capturedPiece&0xF) - (move_a->piece&0xF));
+    else if(move_a->capturedPiece) return -1;
+    else if(move_b->capturedPiece) return 1;
+    else return move_b->piece - move_a->piece;
+    
+}
+
 double quiesce(bitboard* board, double alpha, double beta, int depth)
 {
     if(board->victor == WHITE) 
@@ -275,7 +295,12 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
     move** captureMoves = generateMoveList(board, 1);
     if(captureMoves != NULL)
     {
+        //Sorting
         int index = 0;
+        while(captureMoves[index]) index++;
+        qsort_s(captureMoves, index, sizeof(move*), sortMoves, NULL);
+
+        index = 0;
         while(captureMoves[index])
         {
             move* currentMove = captureMoves[index];
@@ -296,22 +321,6 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
         freeMoveList(captureMoves);
     }
     return best;
-}
-
-//For qsort_s
-int sortMoves(void* c, const void* a, const void* b)
-{
-    move* move_a = *(move**)a;
-    move* move_b = *(move**)b;
-
-    if(c)
-    {
-        move* best_move = (move*)c;
-        if(move_a->startSquare == best_move->startSquare && move_a->endSquare == best_move->endSquare) return -1;
-        else if(move_b->startSquare == best_move->startSquare && move_b->endSquare == best_move->endSquare) return 1;
-    }
-    
-    return 0;
 }
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}

@@ -11,11 +11,8 @@
  * GOALS:
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
- * TODO List:
- *  - Move sorting
- *         - PV move is currently prioritized.
- *         - Ordering for other moves.
- * 
+ * TODO:
+ *  - Endgame tablebase (Probe Syzygy)     
  */
 
 int main(int argc, char** argv)

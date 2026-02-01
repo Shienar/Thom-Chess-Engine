@@ -125,10 +125,6 @@ move* getBookMove(bitboard* board)
         if(randomValue < tempWeight->weight || !tempMove->nextMove)
         {
             returnedMove = tempMove;
-            char sq1[3];
-            char sq2[3];
-            getSquareName(returnedMove->startSquare, sq1);
-            getSquareName(returnedMove->endSquare, sq2);
             break;
         }
         else randomValue-= tempWeight->weight;
