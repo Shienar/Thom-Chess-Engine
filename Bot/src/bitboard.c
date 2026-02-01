@@ -215,7 +215,7 @@ bitboard* create_board_from_fen(int lineNumber)
     }
 
     board->ht = create_hashTable_pos();
-
+    increment_table_value(board->ht, board);
     return board;
 }
 
@@ -268,6 +268,7 @@ bitboard* create_board()
 
     //Other
     board->halfMoveCount = 0;
+    increment_table_value(board->ht, board);
 
     return board;
 }

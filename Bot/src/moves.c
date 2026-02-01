@@ -915,13 +915,41 @@ uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats)
     if(row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-8, color))) returnedValue|=(1ull<<(square-8));
     if(column + 1 <= 8 && row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-7, color))) returnedValue|=(1ull<<(square-7));
 
+
+
     if(ISWHITE(color))
     {
         returnedValue^=(returnedValue&board->pieces_w);
+
+        //Castling
+        if(!ignoreThreats)
+        {
+            uint64_t betweenMask = 0x60; //Squares 5 and 6 between king on 4 and rook on 7
+
+            //White kingside
+            if((board->flags&1) && !(board->flags&16) && !(board->pieces_all&betweenMask) && !isThreatened(board, square+1, color) && !isThreatened(board, square+2, color)) returnedValue|=0x40;
+
+            betweenMask = 0xE; //Square 1 and 2 and 3 between rook on 0 and king on 4
+            //White queenside
+            if((board->flags&2) && !(board->flags&16) && !(board->pieces_all&betweenMask) && !isThreatened(board, square-1, color) && !isThreatened(board, square-2, color)) returnedValue|=0x4;
+        }
     }
     else
     {
         returnedValue^=(returnedValue&board->pieces_b);
+
+        //Castling
+        if(!ignoreThreats)
+        {
+            uint64_t betweenMask = 0x6000000000000000; //Squares 61 and 62 between king on 60 and rook on 63
+
+            //Black kingside
+            if((board->flags&4) && !(board->flags&32) && !(board->pieces_all&betweenMask) && !isThreatened(board, square+1, color) && !isThreatened(board, square+2, color)) returnedValue|=0x4000000000000000;
+
+            betweenMask = 0x0E00000000000000; //Square 57 and 58 and 59 between rook on 56 and king on 60
+            //Black queenside
+            if((board->flags&8) && !(board->flags&32) && !(board->pieces_all&betweenMask) && !isThreatened(board, square-1, color) && !isThreatened(board, square-2, color)) returnedValue|=0x0400000000000000;
+        }
     }
     
     return returnedValue;
@@ -1266,6 +1294,18 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
     board_clear_square(board, startSquare, (color|KING));
     board_set(board, endSquare, (color|KING));
 
+    //Castling
+    if(startSquare - endSquare == 2)
+    {
+        board_clear_square(board, startSquare - 4, (color|ROOK));
+        board_set(board, endSquare + 1, (color|ROOK));
+    }
+    else if(startSquare - endSquare == -2)
+    {
+        board_clear_square(board, startSquare + 3, (color|ROOK));
+        board_set(board, endSquare - 1, (color|ROOK));
+    }
+
     return 0;
 }
 
@@ -1412,6 +1452,7 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
+        board_print(board, 0, 1);
         DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
         return -1;
     }

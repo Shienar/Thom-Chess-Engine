@@ -20,12 +20,12 @@
 #define ISWHITE(piece) ((piece&WHITE) == WHITE)
 #define ISBLACK(piece) ((piece&BLACK) == BLACK)
 
-#define PAWN 0x01
-#define KNIGHT 0x02
-#define BISHOP 0x03
-#define ROOK 0x04
-#define QUEEN 0x05
-#define KING 0x06
+#define PAWN 0x1
+#define KNIGHT 0x2
+#define BISHOP 0x3
+#define ROOK 0x4
+#define QUEEN 0x5
+#define KING 0x6
 
 #define ISPAWN(piece) ((piece&0xF) == PAWN)
 #define ISKNIGHT(piece) ((piece&0xF) == KNIGHT)

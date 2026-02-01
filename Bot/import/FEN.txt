@@ -1,6 +1,2 @@
-; Legal king move from e7->d6 ruled illegal at depth 4
-rnbq1bnr/1pppk1pp/8/P3pp2/7P/8/P1PPPPPR/RNBQKBN1 w Q - 0 5
-
-; Forced en passant for white.
-; Unmove isn't working correctly.
-7k/8/5p2/2RPp3/2RKN3/2RRN3/8/8 w - e6 0 1
+; Polyglot hashcode testing.
+rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1

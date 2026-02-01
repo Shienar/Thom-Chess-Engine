@@ -9,7 +9,8 @@ polyglot_book_entry *entries = NULL;
 
 void loadBook()
 {
-    FILE* input = fopen("import/Human.bin", "rb");
+    printf("Loading opening book...\n");
+    FILE* input = fopen("import/komodo.bin", "rb");
 
     if(!input)
     {
@@ -35,11 +36,12 @@ void loadBook()
 
     size_t readItems = fread(entries, sizeof(polyglot_book_entry), entryCount, input);
 
-    if(readItems != entryCount) DEBUG("%lld/%lld entries read.", entryCount, readItems)
+    printf("%lld/%lld entries imported.", entryCount, readItems);
 }
 
 void unloadBook()
 {
+    printf("Unloading book...\n");
     if(entries)
     {
         FREE(entries);
@@ -85,8 +87,8 @@ move* getBookMove(bitboard* board)
             
             move* tempMove = CALLOC(1, sizeof(move));
             weight_node* tempWeight = CALLOC(1, sizeof(weight_node));
-            tempWeight->weight = entry->weight;
-            totalWeight+= entry->weight;
+            tempWeight->weight = _byteswap_ushort(entry->weight);
+            totalWeight+= tempWeight->weight;
 
             tempMove->promoteTo = promoteTo;
             tempMove->startSquare = startSquare;
@@ -123,6 +125,10 @@ move* getBookMove(bitboard* board)
         if(randomValue < tempWeight->weight || !tempMove->nextMove)
         {
             returnedMove = tempMove;
+            char sq1[3];
+            char sq2[3];
+            getSquareName(returnedMove->startSquare, sq1);
+            getSquareName(returnedMove->endSquare, sq2);
             break;
         }
         else randomValue-= tempWeight->weight;
@@ -139,10 +145,10 @@ move* getBookMove(bitboard* board)
         FREE(prevWeight);
 
         prevMove = tempMove;
-        tempMove = tempMove->nextMove;
+        if(tempMove) tempMove = tempMove->nextMove;
 
         prevWeight = tempWeight;
-        tempWeight = tempWeight->next;
+        if(tempWeight) tempWeight = tempWeight->next;
     }
 
     returnedMove->nextMove = NULL;

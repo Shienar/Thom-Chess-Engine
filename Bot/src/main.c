@@ -16,8 +16,6 @@
  *         - PV move is currently prioritized.
  *         - Ordering for other moves.
  * 
- * BUGS:
- *  - Book moves aren't recognized.
  */
 
 int main(int argc, char** argv)
@@ -99,8 +97,7 @@ int main(int argc, char** argv)
         }
     }
     
-    //Zobrist hash's will be consistent across different program executions.
-    srand(9);
+    srand(time(NULL));
 
     bitboard* board;
     if(fenLineNumber > 0)

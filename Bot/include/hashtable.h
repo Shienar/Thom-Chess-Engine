@@ -15,7 +15,6 @@
  */
 extern const uint64_t zobrist_keys[781];
 
-void generateZobristRandoms();
 uint64_t getHashCode(bitboard* board);
 
 #endif

@@ -227,7 +227,8 @@ uint64_t getHashCode(bitboard* board)
     for(int i = 0; i < 64; i++)
     {
         piece = findPieceOnSquare(board, i);
-        if(piece)  returnValue^=zobrist_keys[64 * ((2 * (piece&0xF)) + ISWHITE(piece)) * (getRow(i) - 1) + (getColumn(i) - 1)];
+
+        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(i) - 1)) + (getColumn(i) - 1)];
     }
 
     if(board->flags&1) returnValue^=zobrist_keys[768];
@@ -237,11 +238,18 @@ uint64_t getHashCode(bitboard* board)
 
 
     move* m = board->moveStackTop;
-    if(m && ISPAWN(m->piece) &&
-        ((ISWHITE(m->piece) && m->endSquare - m->startSquare == 16) ||
-        (ISBLACK(m->piece) && m->startSquare - m->endSquare == 16)))
+    if(m && ISPAWN(m->piece) && abs(m->startSquare - m->endSquare) == 16)
     {
-        returnValue^=zobrist_keys[772 + getColumn(m->endSquare) - 1];
+        //Additional check that there is a pawn that  can make the capture.
+        uint64_t borderingPawnMask = 0;
+        if(getColumn(m->endSquare) > 1) borderingPawnMask|=(1ull<<(m->endSquare - 1));
+        if(getColumn(m->endSquare) < 8) borderingPawnMask|=(1ull<<(m->endSquare + 1));
+
+        if((ISWHITE(m->piece) && (borderingPawnMask&board->pawn_b)) ||
+            (ISBLACK(m->piece) && (borderingPawnMask&board->pawn_w)))
+            {
+                returnValue^=zobrist_keys[772 + getColumn(m->endSquare) - 1];
+            }
     }
 
     if(ISWHITE(board->turn)) returnValue^=zobrist_keys[780];
