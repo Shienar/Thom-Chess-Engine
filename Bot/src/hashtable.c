@@ -227,7 +227,7 @@ uint64_t getHashCode(bitboard* board)
     for(int i = 0; i < 64; i++)
     {
         piece = findPieceOnSquare(board, i);
-        if(piece)  returnValue^=zobrist_keys[(2 * piece&0xF) + ISWHITE(piece)];
+        if(piece)  returnValue^=zobrist_keys[64 * ((2 * (piece&0xF)) + ISWHITE(piece)) * (getRow(i) - 1) + (getColumn(i) - 1)];
     }
 
     if(board->flags&1) returnValue^=zobrist_keys[768];

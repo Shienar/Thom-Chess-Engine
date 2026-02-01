@@ -17,11 +17,6 @@
  *         - Ordering for other moves.
  * 
  * BUGS:
- *  - Threefold repetition draws get declared early.
- *      - Cannot find value to decrement
- *      - The board at the start of unmove() is different / missing a piece compared to what it was from increment.
- *      - En passant moves aren't getting unmade correctly.
- *          - Not getting generated with correct information?
  *  - Book moves aren't recognized.
  */
 
