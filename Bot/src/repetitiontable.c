@@ -17,7 +17,7 @@ void ht_resize_pos(hashtable_pos* ht, int shouldShrink)
 
     for(size_t i = 0; i < ht->capacity; i++)
     {
-        if(ht->array[i].count != 0) 
+        if(ht->array[i].hashCode != 0) 
         {
             size_t index = ht->array[i].hashCode%newCapacity;
 
@@ -88,7 +88,11 @@ void destroy_hashTable_pos(hashtable_pos* ht)
 
 int increment_table_value(hashtable_pos* ht, bitboard* board)
 {
-    if(!ht) return INT32_MIN;
+    if(!ht) 
+    {
+        DEBUG("Cannot increment from null hash table.")
+        return INT32_MIN;
+    }
 
     uint64_t hashCode = getHashCode(board);
     size_t index = hashCode%ht->capacity;
@@ -124,7 +128,7 @@ int decrement_table_value(hashtable_pos* ht, bitboard* board)
     uint64_t hashCode = getHashCode(board);
     size_t index = hashCode%ht->capacity;
 
-    while(ht->array[index].count != 0 && ht->array[index].count != INT32_MIN)
+    while(ht->array[index].count != 0)
     {
         if(ht->array[index].hashCode == hashCode) 
         {
@@ -133,6 +137,7 @@ int decrement_table_value(hashtable_pos* ht, bitboard* board)
             if(ht->array[index].count <= 0)
             {
                 ht->array[index].count = INT32_MIN; //Tombstone
+                ht->array[index].hashCode = 0; //Tombstone
                 ht->size--;
             }
 
@@ -148,5 +153,8 @@ int decrement_table_value(hashtable_pos* ht, bitboard* board)
         index++;
         if(index >= ht->capacity) index=0;
     }
+    
+    DEBUG("Could not locate a value to decrement at hashCode 0x%016llx.", hashCode)
+
     return INT32_MIN;
 }

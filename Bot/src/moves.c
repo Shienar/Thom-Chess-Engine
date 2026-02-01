@@ -92,24 +92,42 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
             if(moveMask&1 && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
+                int targetSquare = currentSquare;
+
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
                 {
                     //Promotion
-                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                 }
                 else
                 {
-                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                    //En passant
+                    if(!targetPiece && (abs(square - currentSquare) == 7 || abs(square - currentSquare) == 9))
+                    {
+                        targetPiece = PAWN;
+                        if(ISWHITE(color)) 
+                        {
+                            targetPiece|=BLACK;
+                            targetSquare-=8;
+                        }
+                        else
+                        {
+                            targetPiece|=WHITE;
+                            targetSquare+=8;
+                        }
+                    }
+
+                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
                     size++;
                 }
             }
@@ -578,7 +596,10 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
 
         //En passant
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && abs(square - board->moveStackTop->endSquare) == 1 && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
+            abs(square - board->moveStackTop->endSquare) == 1 &&  //Bordering columns
+            (square/8 == board->moveStackTop->endSquare/8) && //On same row
+            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
         {
             returnValue|=(1ull<<(board->moveStackTop->endSquare + 8));
         }
@@ -601,7 +622,10 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
         
         //En passant
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && abs(square - board->moveStackTop->endSquare) == 1 && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
+            abs(square - board->moveStackTop->endSquare) == 1 &&  //Bordering columns
+            (square/8 == board->moveStackTop->endSquare/8) && //On same row
+            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
         {
             returnValue|=(1ull<<(board->moveStackTop->endSquare - 8));
         }
@@ -953,7 +977,10 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Diagonal Capture
 
         //Check for en passant.
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16 &&
+        if(board->moveStackTop && 
+            ISPAWN(board->moveStackTop->piece) && 
+            (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && 
+            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16 &&
             ((ISWHITE(color) && (board->moveStackTop->endSquare - endSquare == -8)) ||
             (ISBLACK(color) && (board->moveStackTop->endSquare - endSquare == 8))))
         {
@@ -965,7 +992,6 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 getSquareName(board->kingSquare_w, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->endSquare, pawnSquareName);
-                board_print(board, 0, 1);
                 DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
                 return -1;
             }
@@ -1358,7 +1384,6 @@ int moveFromStruct(bitboard* board, move* m)
     }
     else if(m->startSquare == m->endSquare)
     {
-        board_print(board, 0 , 1);
         DEBUG("Piece cannot move in place on square %d.", m->startSquare)
         return -1;
     }
@@ -1387,7 +1412,6 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
-        board_print(board, 0, 1);
         DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
         return -1;
     }
@@ -1488,6 +1512,7 @@ move* unmove(bitboard *board)
         DEBUG("Cannot undo a move from a NULL board.")
         return NULL;
     }
+
 
     decrement_table_value(board->ht, board);
     move* m = moves_pop(board);

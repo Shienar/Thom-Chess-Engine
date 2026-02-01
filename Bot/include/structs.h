@@ -103,4 +103,11 @@ typedef struct bitboard {
     int halfMoveCount;
 } bitboard;
 
+typedef struct polyglot_book_entry {
+    uint64_t hashKey;
+    uint16_t move;
+    uint16_t weight;
+    uint32_t learn;
+} polyglot_book_entry;
+
 #endif

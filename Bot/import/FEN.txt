@@ -1,9 +1,6 @@
-; King v King + Queen Endgame
-7k/1Q6/6K1/8/8/8/8/8 w KQkq e4 0 1
+; Legal king move from e7->d6 ruled illegal at depth 4
+rnbq1bnr/1pppk1pp/8/P3pp2/7P/8/P1PPPPPR/RNBQKBN1 w Q - 0 5
 
-; Scholar's Mate
-; e2e4 e7e5 d1h5 d7d6 f1c4 a7a6
-rnbqkbnr/1pp2ppp/p2p4/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 1
-
-; Forced mate in 1 for white
-3Q4/8/8/8/8/8/pp3PPP/1k1q2K1 w - - 0 1
+; Forced en passant for white.
+; Unmove isn't working correctly.
+7k/8/5p2/2RPp3/2RKN3/2RRN3/8/8 w - e6 0 1

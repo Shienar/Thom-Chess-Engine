@@ -2,6 +2,7 @@
 #include "../include/moves.h"
 #include "../include/bitboard.h"
 #include "../include/debug.h"
+#include "../include/book.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>
@@ -337,7 +338,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     if(depth == 0 || clock() > timeLimit || board->victor) 
     {
         new_tt_entry.nodeType = NODE_TYPE_PV; // Exact evaluation.
-        new_tt_entry.evaluation = quiesce(board, alpha, beta, 3);
+        new_tt_entry.evaluation = quiesce(board, alpha, beta, 10);
         transposition_table_set(transpositionTable, new_tt_entry);
         return new_tt_entry.evaluation;
     }
@@ -401,6 +402,14 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
 
 move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 {
+    //Book moves
+    if(entries ) 
+    {
+        move* bookMove = NULL;
+        if((bookMove = getBookMove(board))) return bookMove;
+        else unloadBook();
+    }
+
     move* principalVariation = CALLOC(maxDepth, sizeof(move));
     move* tempPVTable = NULL;
 

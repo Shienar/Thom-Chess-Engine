@@ -2,6 +2,7 @@
 #include "../include/debug.h"
 #include "../include/bitboard.h"
 #include "../include/transpositiontable.h"
+#include "../include/book.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -16,10 +17,12 @@
  *         - Ordering for other moves.
  * 
  * BUGS:
- *  - Random nonsensical en-passant based moves are getting suggested and rejected by the engine.
  *  - Threefold repetition draws get declared early.
- * 
- * 
+ *      - Cannot find value to decrement
+ *      - The board at the start of unmove() is different / missing a piece compared to what it was from increment.
+ *      - En passant moves aren't getting unmade correctly.
+ *          - Not getting generated with correct information?
+ *  - Book moves aren't recognized.
  */
 
 int main(int argc, char** argv)
@@ -101,7 +104,8 @@ int main(int argc, char** argv)
         }
     }
     
-    srand(time(NULL));
+    //Zobrist hash's will be consistent across different program executions.
+    srand(9);
 
     bitboard* board;
     if(fenLineNumber > 0)
@@ -119,7 +123,7 @@ int main(int argc, char** argv)
     }
 
     init_tables();
-    generateZobristRandoms();
+    loadBook();
     transpositionTable = create_hashTable_tt();
 
     char buffer[6] = {'\0'};
@@ -183,6 +187,5 @@ int main(int argc, char** argv)
 
     destroy_hashTable_tt(transpositionTable);
     destroy_board(board);
-
     dump_allocations();
 }
