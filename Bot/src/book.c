@@ -15,6 +15,7 @@ void loadBook()
     if(!input)
     {
         DEBUG("Failed to read book file.")
+        fclose(input);
         return;
     }
 
@@ -25,6 +26,7 @@ void loadBook()
     if(!entryCount)
     {
         DEBUG("Opening book is empty.")
+        fclose(input);
         return;
     }
 
@@ -36,12 +38,13 @@ void loadBook()
 
     size_t readItems = fread(entries, sizeof(polyglot_book_entry), entryCount, input);
 
-    printf("%lld/%lld entries imported.", entryCount, readItems);
+    printf("%lld/%lld entries imported.\n", entryCount, readItems);
+    fclose(input);
 }
 
 void unloadBook()
 {
-    printf("Unloading book...\n");
+    //printf("Unloading book...\n");
     if(entries)
     {
         FREE(entries);

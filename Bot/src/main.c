@@ -3,6 +3,7 @@
 #include "../include/bitboard.h"
 #include "../include/transpositiontable.h"
 #include "../include/book.h"
+#include "../include/neuralnet.h"
 #include <stdio.h>
 #include <string.h>
 #include <windows.h>
@@ -12,11 +13,15 @@
  *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
  * 
  * TODO:
- *  - Endgame tablebase (Probe Syzygy)     
+ *  - Neural nets
+ *      - Investigate using registers in C for SIMD.
+ *  - Endgame tablebase (Probe Syzygy)
  */
 
 int main(int argc, char** argv)
 {
+    load_network();
+    exit(1);
     /**
      * Arguments
      */

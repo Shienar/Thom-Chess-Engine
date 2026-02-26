@@ -3,6 +3,7 @@
 #include "../include/bitboard.h"
 #include "../include/debug.h"
 #include "../include/book.h"
+#include "../include/neuralnet.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>

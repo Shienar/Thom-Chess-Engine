@@ -26,9 +26,6 @@
  * NOTE: This is a placeholder and will be replaced later.
  */
 
-#define FLIP(square) ((square)^56)
-#define OTHER(color) ((color)^(WHITE|BLACK))
-
 void init_tables();
 
 /**

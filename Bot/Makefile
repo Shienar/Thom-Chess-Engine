@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g -std=c99
+CFLAGS = -Wall -g -std=c99 -mssse3
 OBJFILES = src/*.c
 TARGET = ChessBot
 
