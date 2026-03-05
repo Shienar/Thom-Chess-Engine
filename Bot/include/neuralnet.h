@@ -59,12 +59,13 @@ void save_playingWeights();
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes);
 
 //Clipped ReLU [0, 1] is used throughout
-int CReLU(int16_t val, int16_t min, int16_t max);
+float CReLU_Float(float val, float min, float max);
+int8_t CReLU_Int(int8_t val, int8_t min, int8_t max);
 
 /**
  * Uses SIMD to calculate and populate outputValues.
  */
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float* weights, float* biasWeights,  int applyCReLU);
-void calculateLayer_IntBytes(float* inputValues, float* outputValues, int numInputs, int numOutputs, float* weights, float* biasWeights,  int applyCReLU);
+void calculateLayer_IntBytes(uint8_t* inputValues, uint8_t* outputValues, int numInputs, int numOutputs, uint8_t* weights, uint8_t* biasWeights,  int applyCReLU);
 
 #endif
