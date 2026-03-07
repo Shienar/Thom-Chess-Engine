@@ -61,16 +61,29 @@ int getSquareNumber(char* squareName)
     return ((squareName[0] - 97) + 8*(squareName[1] - '0' - 1));
 }
 
-bitboard* create_board_from_fen(int lineNumber)
+bitboard* create_board_from_fen(const char* fileName, int lineNumber)
 {
-    FILE* inputFile = fopen("import/FEN.txt", "r");
+    bitboard* board = CALLOC(1, sizeof(bitboard));
+    load_fen_to_board(board, fileName, lineNumber);
+    return board;
+}
+
+void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
+{
+    if(!board)
+    {
+        DEBUG("Passed NULL board");
+        return;
+    }
+
+    FILE* inputFile = fopen(fileName, "r");
     if(!inputFile)
     {
-        DEBUG("Failed to open file \"import/FEN.txt\"");
-        return NULL;
+        DEBUG("Failed to open file %s", fileName);
+        board->victor = -1;
+        return;
     }
     
-
     int currentLine = 1;
     char FEN[100] = {'\0'};
     while(fgets(FEN, 100, inputFile))
@@ -78,21 +91,25 @@ bitboard* create_board_from_fen(int lineNumber)
         if(currentLine == lineNumber) break;
         currentLine++;
     }
+    fclose(inputFile);
     
     if(FEN[0] == '\0')
     {
         DEBUG("Failed to read from file \"import/FEN.txt\"");
-        return NULL;
+        board->victor = -1;
+        return;
     }
     else if(FEN[0] == ';')
     {
         DEBUG("Target FEN line is a comment.")
-        return NULL;
+        board->victor = -1;
+        return;
     }
     else if(FEN[0] == ' ' || FEN[0] == '\n')
     {
         DEBUG("Target FEN line is whitespace.")
-        return NULL;
+        board->victor = -1;
+        return;
     }
 
     char fullBoardString[80] = {'\0'};
@@ -117,7 +134,18 @@ bitboard* create_board_from_fen(int lineNumber)
         curBoardString = strtok(NULL, "/"); 
     }
 
-    bitboard* board = CALLOC(1, sizeof(bitboard));
+    board->pawn_w = 0;
+    board->knight_w = 0;
+    board->bishop_w = 0;
+    board->rook_w = 0;
+    board->queen_w = 0;
+    board->king_w = 0;
+    board->pawn_b = 0;
+    board->knight_b = 0;
+    board->bishop_b = 0;
+    board->rook_b = 0;
+    board->queen_b = 0;
+    board->king_b = 0;
 
     for(int row = 0; row < 8; row++)
     {
@@ -165,6 +193,7 @@ bitboard* create_board_from_fen(int lineNumber)
     board->pieces_b = board->king_b|board->queen_b|board->rook_b|board->knight_b|board->bishop_b|board->pawn_b;
     board->pieces_all = board->pieces_b|board->pieces_w;
 
+    board->flags = 0;
     //Castling Rights
     if(castlingAvailability[0] != '-')
     {
@@ -214,9 +243,9 @@ bitboard* create_board_from_fen(int lineNumber)
         moves_push(board, createMove(startSquare, endSquare, 0, piece, 0, 0, board->flags, halfMoveClock - 1));
     }
 
+    if(board->ht) destroy_hashTable_pos(board->ht);
     board->ht = create_hashTable_pos();
     increment_table_value(board->ht, board);
-    return board;
 }
 
 //Resets the board to an opening position

@@ -103,7 +103,7 @@ int main(int argc, char** argv)
     bitboard* board;
     if(fenLineNumber > 0)
     {
-        board = create_board_from_fen(fenLineNumber);
+        board = create_board_from_fen("import/FEN.txt", fenLineNumber);
         if(!board)
         {
             dump_allocations();

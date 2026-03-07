@@ -74,7 +74,8 @@ int getSquareNumber(char* squareName);
 int findPieceOnSquare(bitboard* board, int square);
 
 bitboard* create_board();
-bitboard* create_board_from_fen(int lineNumber);
+bitboard* create_board_from_fen(const char* fileName, int lineNumber);
+void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);
 void destroy_board(bitboard* board);
 void copy_board(bitboard* dest, bitboard* source);
 

@@ -535,3 +535,66 @@ float forwardPropagate_Int()
 
     return outputNode;
 }
+
+void shuffle(int* arr, int count)
+{
+    for(int i = count-1; i > 0; i--)
+    {
+        int j = rand()%i;
+        int temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+}
+
+void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError)
+{
+    int fileNameSuffixes[NUMBER_OF_TRAINING_FILES] = {0};
+    for(int i = 0; i < NUMBER_OF_TRAINING_FILES; i++)
+    {
+        fileNameSuffixes[i] = i;
+    }
+
+    int totalIterations = 0;
+
+    double sumSquaredError = 0.0;
+    float expectedOutput = 0.0;
+    float output = 0.0;
+    char fileName_FEN[30] = {'\0'};
+    char fileName_EVAL[30] = {'\0'};
+
+    bitboard* board = create_board();
+    do{
+        sumSquaredError = 0.0;
+        shuffle(fileNameSuffixes, NUMBER_OF_TRAINING_FILES);
+
+        for(int fileIndex = 0; fileIndex < NUMBER_OF_TRAINING_FILES; fileIndex++)
+        {
+            sprintf(fileName_FEN, "../train/NNUE_FEN_%d.txt", fileNameSuffixes[fileIndex]);
+            sprintf(fileName_EVAL, "../train/NNUE_EVAL_%d.txt", fileNameSuffixes[fileIndex]);
+
+            FILE* evalFile = fopen(fileName_EVAL, "r");
+            char evaluation[32] = {'0'};
+
+            for(int lineNumber = 0; lineNumber < POSITIONS_PER_FILE; lineNumber++)
+            {
+                load_fen_to_board(board, fileName_FEN, lineNumber);
+                loadInputAccumulator(board, TRAINING_NNUE);
+                output = forwardPropagate_Float();
+
+                fgets(evaluation, 32, evalFile);
+                sscanf(evaluation, "%f", &expectedOutput);
+
+                sumSquaredError+= pow((double) (output - expectedOutput), 2.0);
+            }
+
+            fclose(evalFile);
+        }
+
+        totalIterations++;
+        if(totalIterations%saveEveryNIterations == 0) save_trainingWeights();
+
+    } while(sumSquaredError < maxAllowedError && totalIterations < maxIterations);
+
+    save_trainingWeights();
+}

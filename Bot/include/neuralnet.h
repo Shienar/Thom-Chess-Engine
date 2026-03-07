@@ -14,8 +14,9 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
-//1 bias node with value 1 as an extra input at each layer, with its own set of weights feeding into the next.
-#define BIAS_WEIGHTS 1
+#define LEARNING_RATE 0.1
+#define POSITIONS_PER_FILE 100000
+#define NUMBER_OF_TRAINING_FILES 1000
 
 /**
  * Weights
@@ -102,5 +103,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 
 float forwardPropagate_Float();
 float forwardPropagate_Int();
+
+void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError);
 
 #endif
