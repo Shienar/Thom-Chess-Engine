@@ -14,7 +14,6 @@
  * 
  * TODO:
  *  - Neural nets
- *      - Investigate using registers in C for SIMD.
  *  - Endgame tablebase (Probe Syzygy)
  */
 

@@ -1,11 +1,10 @@
 #include "../include/neuralnet.h"
 #include "../include/debug.h"
+#include "../include/bitboard.h"
 #include <math.h>
 #include <float.h>
 #include <immintrin.h>
 
-uint64_t inputNodes[1280] = {0};
-float accumulator[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
 network_weights_training* trainingNNUE = NULL;
 network_weights_playing* playerNNUE = NULL;
 
@@ -16,7 +15,7 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
         DEBUG("Passed null arguments to iterator.")
         return;
     }
-    for(int i = 0; i < INPUT_BITS; i++)
+    for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
@@ -74,9 +73,10 @@ void load_trainingWeights()
     {
         DEBUG("Failed to load neural network from file.\n");
 
-        float standardDeviation = sqrt(2/INPUT_BITS);
+        float standardDeviation = sqrt(2/HALF_INPUT_BITS);
         iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, &standardDeviation);
-
+        memset(&trainingNNUE->inputNodes, 0, sizeof(trainingNNUE->inputNodes));
+        memset(&trainingNNUE->accumulator, 0,  sizeof(trainingNNUE->accumulator));
     }
 }
 
@@ -108,6 +108,8 @@ void load_playingWeights()
     {
         load_trainingWeights();
         quantizeWeights(trainingNNUE, playerNNUE);
+        memset(&playerNNUE->inputNodes, 0, sizeof(playerNNUE->inputNodes));
+        memset(&playerNNUE->accumulator, 0,  sizeof(playerNNUE->accumulator));
 
         FREE(trainingNNUE);
         trainingNNUE = NULL;
@@ -145,7 +147,7 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     iterateTrainingWeights(findAbsMax, inputFloats, &maxValue);
     
     float scalingFactor = maxValue / 127;
-    for(int i = 0; i < INPUT_BITS; i++)
+    for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
@@ -178,17 +180,17 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
 }
 
-float CReLU_Float(float val, float min, float max)
+float SCReLU_Float(float val, float min, float max)
 {
-    if(val <= min) return min;
-    if(val >= max) return max;
-    return val;
+    if(val <= min) return min*min;
+    if(val >= max) return max*max;
+    return val*val;
 }
-int8_t CReLU_Int(int8_t val, int8_t min, int8_t max)
+int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max)
 {
-    if(val <= min) return min;
-    if(val >= max) return max;
-    return val;
+    if(val <= min) return min*min;
+    if(val >= max) return max*max;
+    return val*val;
 }
 
 //__m256 stored 8 32-bit floats (ps = packed single-precision)
@@ -251,7 +253,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
         intermediate1 = _mm256_hadd_ps(intermediate1, intermediate1);
         outputValues[outputIndex] += _mm_cvtss_f32(_mm_add_ss(_mm256_extractf128_ps(intermediate1, 1), _mm256_castps256_ps128(intermediate1)));
 
-        if(applyCReLU) outputValues[outputIndex] = CReLU_Float(outputValues[outputIndex], 0, outputValues[outputIndex]);
+        if(applyCReLU) outputValues[outputIndex] = SCReLU_Float(outputValues[outputIndex], 0, 1);
     }
 }
 
@@ -332,6 +334,204 @@ void calculateLayer_IntBytes(uint8_t* inputValues, uint8_t* outputValues, int nu
         
         outputValues[outputIndex] = totalSum;
 
-        if(applyCReLU) outputValues[outputIndex] = CReLU_Int(outputValues[outputIndex], 0, outputValues[outputIndex]);
+        if(applyCReLU) outputValues[outputIndex] = SCReLU_Int(outputValues[outputIndex], 0, 1);
     }
+}
+
+void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloats, int8_t* inputLayerBytes)
+{
+    if(!inputLayerCompact)
+    {
+        DEBUG("Cannot extract null input layer.")
+        return;
+    }
+    else if(!inputLayerFloats)
+    {
+        for(int i = 0; i < INPUT_BITS; i++)
+        {
+            if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerFloats[i] = 1.0;
+            else inputLayerFloats[0] = 0.0;
+        }
+    }
+    else if(!inputLayerBytes)
+    {
+        for(int i = 0; i < INPUT_BITS; i++)
+        {
+            if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerBytes[i] = 1;
+            else inputLayerBytes[0] = 0;
+        }
+    }
+    else
+    {
+        DEBUG("No provided destination for extraction.")
+    }
+}
+
+void loadInputAccumulator(bitboard* board, int networkType)
+{
+    if(!board)
+    {
+        DEBUG("Cannot load null board into accumulator.")
+        return;
+    }
+    else if(networkType == TRAINING_NNUE && !trainingNNUE)
+    {
+        DEBUG("Cannot load null training weights.")
+        return;
+    }
+    else if(networkType == PLAYER_NNUE && !playerNNUE)
+    {
+        DEBUG("Cannot load null playing weights.")
+        return;
+    }
+
+    
+    uint64_t* inputs = NULL;
+    if(networkType == TRAINING_NNUE) inputs = &trainingNNUE->inputNodes;
+    else inputs = &playerNNUE->inputNodes;
+    memset(inputs, 0, 1280*sizeof(uint64_t));
+
+    int baseIndex_w = 10*board->kingSquare_w;
+    int baseIndex_b = 640 + 10*board->kingSquare_b;
+
+    inputs[baseIndex_w + 0] = board->pawn_w;
+    inputs[baseIndex_w + 1] = board->knight_w;
+    inputs[baseIndex_w + 2] = board->bishop_w;
+    inputs[baseIndex_w + 3] = board->rook_w;
+    inputs[baseIndex_w + 4] = board->queen_w;
+    inputs[baseIndex_w + 5] = board->pawn_b;
+    inputs[baseIndex_w + 6] = board->knight_b;
+    inputs[baseIndex_w + 7] = board->bishop_b;
+    inputs[baseIndex_w + 8] = board->rook_b;
+    inputs[baseIndex_w + 9] = board->queen_b;
+
+    inputs[baseIndex_b + 0] = board->pawn_b;
+    inputs[baseIndex_b + 1] = board->knight_b;
+    inputs[baseIndex_b + 2] = board->bishop_b;
+    inputs[baseIndex_b + 3] = board->rook_b;
+    inputs[baseIndex_b + 4] = board->queen_b;
+    inputs[baseIndex_b + 5] = board->pawn_w;
+    inputs[baseIndex_b + 6] = board->knight_w;
+    inputs[baseIndex_b + 7] = board->bishop_w;
+    inputs[baseIndex_b + 8] = board->rook_w;
+    inputs[baseIndex_b + 9] = board->queen_w;
+
+    if(networkType == TRAINING_NNUE)
+    {
+        float inputArray[81920];
+        extractInputLayerToArray(inputs, inputArray, NULL);
+
+        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+        calculateLayer_Floats(&inputArray[40960], trainingNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+    }
+    else
+    {
+        int8_t inputArray[81920];
+        extractInputLayerToArray(inputs, NULL, inputArray);
+
+        calculateLayer_IntBytes(inputArray, trainingNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(&inputArray[40960], trainingNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+    }
+}
+
+void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int shouldUndoMove)
+{
+    if(!lastMove)
+    {
+        DEBUG("Cannot load null move.")
+        return;
+    }
+
+    if(ISKING(lastMove->piece))
+    {
+        loadInputAccumulator(board, networkType);
+    }
+    else
+    {
+        //Update input nodes.
+        uint64_t xorMask = (1ull<<lastMove->startSquare)|(1ull<<lastMove->endSquare);
+
+        int pieceOffset = lastMove->piece;
+        int kingSquare = 0;
+        if(ISBLACK(pieceOffset)) 
+        {
+            pieceOffset = (lastMove->piece&0xF) + 4;
+            kingSquare = board->kingSquare_b;
+        }
+        else 
+        {
+            pieceOffset = (lastMove->piece&0xF) - 1;
+            kingSquare = board->kingSquare_w;
+        }
+
+        int inputNodeIndex = (640 * ISBLACK(lastMove->piece)) + (10 * kingSquare) + pieceOffset;
+
+        if(networkType == TRAINING_NNUE) trainingNNUE->inputNodes[inputNodeIndex]^=xorMask;
+        else playerNNUE->inputNodes[inputNodeIndex]^=xorMask;
+
+        //Doesn't care about 40,960 offset for black inputs.
+        int baseIndex = (640 * kingSquare) + (64 * pieceOffset);
+        int fromSquareIndex, toSquareIndex;
+        if(shouldUndoMove)
+        {
+            fromSquareIndex = lastMove->endSquare;
+            toSquareIndex = lastMove->startSquare;
+        }
+        else
+        {
+            fromSquareIndex = lastMove->startSquare;
+            toSquareIndex = lastMove->endSquare;
+        }
+
+        if(networkType == TRAINING_NNUE)
+        {
+            float* accumulator;
+            if(ISBLACK(lastMove->piece)) accumulator = trainingNNUE->accumulator[1];
+            else accumulator = trainingNNUE->accumulator[0];
+
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+            {
+                accumulator[i] = accumulator[i] + trainingNNUE->weights1[toSquareIndex][i] -  trainingNNUE->weights1[fromSquareIndex][i];
+            }
+        }
+        else
+        {
+            float* accumulator;
+            if(ISBLACK(lastMove->piece)) accumulator = playerNNUE->accumulator[1];
+            else accumulator = playerNNUE->accumulator[0];
+
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+            {
+                accumulator[i] = accumulator[i] + playerNNUE->weights1[toSquareIndex][i] -  playerNNUE->weights1[fromSquareIndex][i];
+            }
+        }
+    }
+}
+
+
+float forwardPropagate_Float()
+{
+    //Assume accumulator has already been updated.
+    float h2[SECOND_HIDDEN_LAYER_NODES] = {0.0};
+    float h3[THIRD_HIDDEN_LAYER_NODES] = {0.0};
+    float outputNode = 0.0;
+
+    calculateLayer_Floats(trainingNNUE->accumulator, h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 1);
+    calculateLayer_Floats(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
+    calculateLayer_Floats(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
+
+    return outputNode;
+}
+float forwardPropagate_Int()
+{
+    //Assume accumulator has already been updated.
+    int8_t h2[SECOND_HIDDEN_LAYER_NODES] = {0};
+    int8_t h3[THIRD_HIDDEN_LAYER_NODES] = {0};
+    int8_t outputNode = 0;
+
+    calculateLayer_IntBytes(playerNNUE->accumulator, h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 1);
+    calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);
+    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, playerNNUE->weights4, &playerNNUE->weights4_bias, 1);
+
+    return outputNode;
 }
