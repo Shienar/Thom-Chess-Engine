@@ -73,7 +73,7 @@ void load_trainingWeights()
     {
         DEBUG("Failed to load neural network from file.\n");
 
-        float standardDeviation = sqrt(2/HALF_INPUT_BITS);
+        float standardDeviation = 0.01;
         iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, &standardDeviation);
         memset(&trainingNNUE->inputNodes, 0, sizeof(trainingNNUE->inputNodes));
         memset(&trainingNNUE->accumulator, 0,  sizeof(trainingNNUE->accumulator));
@@ -109,13 +109,15 @@ void load_playingWeights()
     }
     else
     {
-        load_trainingWeights();
-        quantizeWeights(trainingNNUE, playerNNUE);
-        memset(&playerNNUE->inputNodes, 0, sizeof(playerNNUE->inputNodes));
-        memset(&playerNNUE->accumulator, 0,  sizeof(playerNNUE->accumulator));
+        if(trainingNNUE) quantizeWeights(trainingNNUE, playerNNUE);
+        else
+        {
+            load_trainingWeights();
+            quantizeWeights(trainingNNUE, playerNNUE);
 
-        FREE(trainingNNUE);
-        trainingNNUE = NULL;
+            FREE(trainingNNUE);
+            trainingNNUE = NULL;
+        }
     }
 }
 
@@ -140,9 +142,14 @@ void findAbsMax(float* comparedValue, float* max)
 
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes)
 {
-    if(!inputFloats || !outputBytes) 
+    if(!inputFloats) 
     {
-        DEBUG("Cannot quantize with null pointers.")
+        DEBUG("Cannot quantize null input.")
+        return;
+    }
+    else if(!outputBytes)
+    {
+        DEBUG("Cannot quantize to null output.")
         return;
     }
 
@@ -181,6 +188,10 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
         outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / scalingFactor);
     }
     outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
+
+    
+    memset(&outputBytes->inputNodes, 0, sizeof(outputBytes->inputNodes));
+    memset(&outputBytes->accumulator, 0, sizeof(outputBytes->accumulator));
 }
 
 float SCReLU_Float(float val, float min, float max)
@@ -353,20 +364,20 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloa
         DEBUG("Cannot extract null input layer.")
         return;
     }
-    else if(!inputLayerFloats)
+    else if(inputLayerFloats)
     {
         for(int i = 0; i < INPUT_BITS; i++)
         {
             if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerFloats[i] = 1.0;
-            else inputLayerFloats[0] = 0.0;
+            else inputLayerFloats[i] = 0.0;
         }
     }
-    else if(!inputLayerBytes)
+    else if(inputLayerBytes)
     {
         for(int i = 0; i < INPUT_BITS; i++)
         {
             if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerBytes[i] = 1;
-            else inputLayerBytes[0] = 0;
+            else inputLayerBytes[i] = 0;
         }
     }
     else
@@ -529,7 +540,7 @@ float forwardPropagate_Float()
     }
 
     calculateLayer_Floats(trainingNNUE->h2, trainingNNUE->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
-    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
+    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 0);
 
     return trainingNNUE->outputNode;
 }
@@ -550,7 +561,7 @@ float forwardPropagate_Int()
     }
 
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);
-    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, &playerNNUE->weights4_bias, 1);
+    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, &playerNNUE->weights4_bias, 0);
 
     return outputNode;
 }
@@ -588,13 +599,13 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
 
         for(int fileIndex = 0; fileIndex < NUMBER_OF_TRAINING_FILES; fileIndex++)
         {
-            sprintf(fileName_FEN, "../train/NNUE_FEN_%d.txt", fileNameSuffixes[fileIndex]);
-            sprintf(fileName_EVAL, "../train/NNUE_EVAL_%d.txt", fileNameSuffixes[fileIndex]);
+            sprintf(fileName_FEN, "./train/NNUE_FEN_%d.txt", fileNameSuffixes[fileIndex]);
+            sprintf(fileName_EVAL, "./train/NNUE_EVAL_%d.txt", fileNameSuffixes[fileIndex]);
 
             FILE* evalFile = fopen(fileName_EVAL, "r");
-            char evaluation[32] = {'0'};
+            char evaluation[32] = {'\0'};
 
-            for(int lineNumber = 0; lineNumber < POSITIONS_PER_FILE; lineNumber++)
+            for(int lineNumber = 1; lineNumber <= POSITIONS_PER_FILE; lineNumber++)
             {
                 load_fen_to_board(board, fileName_FEN, lineNumber);
                 loadInputAccumulator(board, TRAINING_NNUE);
@@ -639,24 +650,24 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                 //Apply Edge Weight Deltas
                 for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
                 {
-                    trainingNNUE->weights4[i]-= LEARNING_RATE * delta4 * trainingNNUE->h3[i];
+                    trainingNNUE->weights4[i]+= LEARNING_RATE * delta4 * trainingNNUE->h3[i];
                 }
-                trainingNNUE->weights4_bias-= LEARNING_RATE * delta4;
+                trainingNNUE->weights4_bias+= LEARNING_RATE * delta4;
 
                 for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
                 {
-                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]-= LEARNING_RATE * delta3[j] * trainingNNUE->h2[i];
+                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]+= LEARNING_RATE * delta3[j] * trainingNNUE->h2[i];
                 }
-                for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3_bias[j]-= LEARNING_RATE * delta3[j];
+                for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3_bias[j]+= LEARNING_RATE * delta3[j];
                 
                 for (int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++) 
                 {
                     for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
                     {
-                        trainingNNUE->weights2[i][j] -= LEARNING_RATE * delta2[j] * trainingNNUE->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                        trainingNNUE->weights2[i][j] += LEARNING_RATE * delta2[j] * trainingNNUE->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
                     }
                 }
-                for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights2_bias[j] -= LEARNING_RATE * delta2[j];
+                for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights2_bias[j] += LEARNING_RATE * delta2[j];
                 
                 for (int i = 0; i < 640; i++) 
                 {
@@ -670,7 +681,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                             {
                                 for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
                                 {
-                                    trainingNNUE->weights1[(64 * i) + square][j]-= delta1[0][j];
+                                    trainingNNUE->weights1[(64 * i) + square][j]+= delta1[0][j];
                                 }
 
                             }
@@ -684,7 +695,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                             {
                                 for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
                                 {
-                                    trainingNNUE->weights1[(64 * i) + square][j]-= delta1[1][j];
+                                    trainingNNUE->weights1[(64 * i) + square][j]+= delta1[1][j];
                                 }
 
                             }
@@ -692,7 +703,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                     }
 
                 }
-                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] -= LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
+                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] += LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
             }
 
             fclose(evalFile);
@@ -700,11 +711,12 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
 
 
         totalIterations++;
-        if(totalIterations%saveEveryNIterations == 0) save_trainingWeights();
+        if(saveEveryNIterations && totalIterations%saveEveryNIterations == 0) save_trainingWeights();
         
+        //todo - Delete the information after the |
         printf("\rIteration %d error = %e", totalIterations, sumSquaredError);
 
-    } while(sumSquaredError < maxAllowedError && totalIterations < maxIterations);
+    } while(sumSquaredError > maxAllowedError && totalIterations < maxIterations);
 
     save_trainingWeights();
 }

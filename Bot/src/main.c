@@ -107,8 +107,16 @@ int main(int argc, char** argv)
     if(shouldTrain)
     {
         load_trainingWeights();
-        backpropagate(10, 100, 0.001);
+        backpropagate(0, 1000, 1e-9);
         save_trainingWeights();
+
+        load_playingWeights();
+        quantizeWeights(trainingNNUE, playerNNUE);
+        save_playingWeights();
+
+        FREE(trainingNNUE);
+        FREE(playerNNUE);
+
         exit(0);
     }
 
