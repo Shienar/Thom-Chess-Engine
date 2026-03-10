@@ -77,6 +77,9 @@ void load_trainingWeights()
         iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, &standardDeviation);
         memset(&trainingNNUE->inputNodes, 0, sizeof(trainingNNUE->inputNodes));
         memset(&trainingNNUE->accumulator, 0,  sizeof(trainingNNUE->accumulator));
+        memset(&trainingNNUE->h2, 0,  sizeof(trainingNNUE->h2));
+        memset(&trainingNNUE->h3, 0,  sizeof(trainingNNUE->h3));
+        memset(&trainingNNUE->outputNode, 0,  sizeof(trainingNNUE->outputNode));
     }
 }
 
@@ -185,6 +188,10 @@ float SCReLU_Float(float val, float min, float max)
     if(val <= min) return min*min;
     if(val >= max) return max*max;
     return val*val;
+}
+float SCReLU_derivative(float val, float min, float max)
+{
+    return (val <= min || val >= max)?(0.0):(2*val);
 }
 int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max)
 {
@@ -512,15 +519,11 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 float forwardPropagate_Float()
 {
     //Assume accumulator has already been updated.
-    float h2[SECOND_HIDDEN_LAYER_NODES] = {0.0};
-    float h3[THIRD_HIDDEN_LAYER_NODES] = {0.0};
-    float outputNode = 0.0;
+    calculateLayer_Floats(trainingNNUE->accumulator, trainingNNUE->h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 1);
+    calculateLayer_Floats(trainingNNUE->h2, trainingNNUE->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
+    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
 
-    calculateLayer_Floats(trainingNNUE->accumulator, h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 1);
-    calculateLayer_Floats(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
-    calculateLayer_Floats(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
-
-    return outputNode;
+    return trainingNNUE->outputNode;
 }
 float forwardPropagate_Int()
 {
@@ -559,7 +562,6 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
 
     double sumSquaredError = 0.0;
     float expectedOutput = 0.0;
-    float output = 0.0;
     char fileName_FEN[30] = {'\0'};
     char fileName_EVAL[30] = {'\0'};
 
@@ -580,19 +582,111 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             {
                 load_fen_to_board(board, fileName_FEN, lineNumber);
                 loadInputAccumulator(board, TRAINING_NNUE);
-                output = forwardPropagate_Float();
+                forwardPropagate_Float();
 
                 fgets(evaluation, 32, evalFile);
                 sscanf(evaluation, "%f", &expectedOutput);
 
-                sumSquaredError+= pow((double) (output - expectedOutput), 2.0);
+                sumSquaredError+= pow((double) (trainingNNUE->outputNode - expectedOutput), 2.0);
+
+                //Calculate Edge Weight Deltas
+                float delta4 = (expectedOutput - trainingNNUE->outputNode);
+
+                float delta3[THIRD_HIDDEN_LAYER_NODES] = {0};
+                for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
+                {
+                    delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_derivative(trainingNNUE->h3[i], 0, 1);
+                }
+                
+                float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
+                for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+                {
+                    float sum = 0.0f;
+                    for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) sum+= delta3[j] * trainingNNUE->weights3[i][j];
+                    
+                    delta2[i] = sum * SCReLU_derivative(trainingNNUE->h2[i], 0, 1);
+                }
+
+                float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
+                for (int side = 0; side < 2; side++) 
+                {
+                    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
+                    {
+                        float sum = 0.0f;
+                        int offset = side * ACCUMULATOR_NODES_PER_SIDE;
+                        for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) sum += delta2[j] * trainingNNUE->weights2[offset + i][j];
+                        
+                        delta1[side][i] = sum * SCReLU_derivative(trainingNNUE->accumulator[side][i], 0, 1);
+                    }
+                }
+
+                //Apply Edge Weight Deltas
+                for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
+                {
+                    trainingNNUE->weights4[i]-= LEARNING_RATE * delta4 * trainingNNUE->h3[i];
+                }
+                trainingNNUE->weights4_bias-= LEARNING_RATE * delta4;
+
+                for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+                {
+                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]-= LEARNING_RATE * delta3[j] * trainingNNUE->h2[i];
+                }
+                for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3_bias[j]-= LEARNING_RATE * delta3[j];
+                
+                for (int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++) 
+                {
+                    for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
+                    {
+                        trainingNNUE->weights2[i][j] -= LEARNING_RATE * delta2[j] * trainingNNUE->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                    }
+                }
+                for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights2_bias[j] -= LEARNING_RATE * delta2[j];
+                
+                for (int i = 0; i < 640; i++) 
+                {
+                    uint64_t inputBitboard_White = trainingNNUE->inputNodes[i];
+                    uint64_t inputBitboard_Black = trainingNNUE->inputNodes[640 + i];
+                    if(inputBitboard_White != 0) //Don't update the edge weights if they didn't contribute.
+                    {
+                        for(int square = 0; square < 64; square++)
+                        {
+                            if(inputBitboard_White&(1ull<<square))
+                            {
+                                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+                                {
+                                    trainingNNUE->weights1[(64 * i) + square][j]-= delta1[0][j];
+                                }
+
+                            }
+                        }
+                    }
+                    if(inputBitboard_Black != 0) //Don't update the edge weights if they didn't contribute.
+                    {
+                        for(int square = 0; square < 64; square++)
+                        {
+                            if(inputBitboard_Black&(1ull<<square))
+                            {
+                                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+                                {
+                                    trainingNNUE->weights1[(64 * i) + square][j]-= delta1[1][j];
+                                }
+
+                            }
+                        }
+                    }
+
+                }
+                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] -= LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
             }
 
             fclose(evalFile);
         }
 
+
         totalIterations++;
         if(totalIterations%saveEveryNIterations == 0) save_trainingWeights();
+        
+        printf("\rIteration %d error = %e", totalIterations, sumSquaredError);
 
     } while(sumSquaredError < maxAllowedError && totalIterations < maxIterations);
 
