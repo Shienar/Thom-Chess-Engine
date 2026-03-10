@@ -278,16 +278,16 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         //All layer lengths are divisible by 32 so no overflow.
         for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=32)
         {
-            __m256i inputBatch1 = _mm256_loadu_epi8(&inputValues[inputIndex]);
-            __m256i inputBatch2 = _mm256_loadu_epi8(&inputValues[inputIndex + 8]);
-            __m256i inputBatch3 = _mm256_loadu_epi8(&inputValues[inputIndex + 16]);
-            __m256i inputBatch4 = _mm256_loadu_epi8(&inputValues[inputIndex + 24]);
+            __m256i inputBatch1 = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex]);
+            __m256i inputBatch2 = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex + 8]);
+            __m256i inputBatch3 = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex + 16]);
+            __m256i inputBatch4 = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex + 24]);
 
             //Weights are an array of float w[INPUT NODES][OUTPUTS NODES]
-            __m256i weightsBatch1 = _mm256_loadu_epi8(&weights[inputIndex][outputIndex]);
-            __m256i weightsBatch2 = _mm256_loadu_epi8(&weights[inputIndex + 8][outputIndex]);
-            __m256i weightsBatch3 = _mm256_loadu_epi8(&weights[inputIndex + 16][outputIndex]);
-            __m256i weightsBatch4 = _mm256_loadu_epi8(&weights[inputIndex + 24][outputIndex]);
+            __m256i weightsBatch1 = _mm256_loadu_si256((__m256i const*) &weights[inputIndex][outputIndex]);
+            __m256i weightsBatch2 = _mm256_loadu_si256((__m256i const*) &weights[inputIndex + 8][outputIndex]);
+            __m256i weightsBatch3 = _mm256_loadu_si256((__m256i const*) &weights[inputIndex + 16][outputIndex]);
+            __m256i weightsBatch4 = _mm256_loadu_si256((__m256i const*) &weights[inputIndex + 24][outputIndex]);
 
             //Multiply inputs by weights.
             //Outputs 16-bit results. Neighboring values get summed.

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -g -std=c99 -march=native -mavx512vl -mavx512bw
+CFLAGS = -Wall -g -std=c99 -march=native
 OBJFILES = src/*.c
 TARGET = ChessBot
 
