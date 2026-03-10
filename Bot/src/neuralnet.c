@@ -201,7 +201,7 @@ int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max)
 }
 
 //__m256 stored 8 32-bit floats (ps = packed single-precision)
-void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float** weights, float* biasWeights,  int applyCReLU)
+void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU)
 {
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex++)
     {
@@ -220,6 +220,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
             __m256 inputBatch4 = _mm256_loadu_ps(&inputValues[inputIndex + 24]);
 
             //Weights are an array of float w[INPUT NODES][OUTPUTS NODES]
+            //Passed as a single pointer to array head. inputIndex = row; outputIndex = column;
             __m256 weightsBatch1 = _mm256_loadu_ps(&weights[inputIndex][outputIndex]);
             __m256 weightsBatch2 = _mm256_loadu_ps(&weights[inputIndex + 8][outputIndex]);
             __m256 weightsBatch3 = _mm256_loadu_ps(&weights[inputIndex + 16][outputIndex]);
@@ -265,7 +266,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
 }
 
 //__m256i stores 32 8-bit ints (epi8 = extended packed 8-bit integer (signed))
-void calculateLayer_IntBytes(uint8_t* inputValues, uint8_t* outputValues, int numInputs, int numOutputs, uint8_t** weights, uint8_t* biasWeights,  int applyCReLU)
+void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU)
 {
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex++)
     {
@@ -394,8 +395,8 @@ void loadInputAccumulator(bitboard* board, int networkType)
 
     
     uint64_t* inputs = NULL;
-    if(networkType == TRAINING_NNUE) inputs = &trainingNNUE->inputNodes;
-    else inputs = &playerNNUE->inputNodes;
+    if(networkType == TRAINING_NNUE) inputs = trainingNNUE->inputNodes;
+    else inputs = playerNNUE->inputNodes;
     memset(inputs, 0, 1280*sizeof(uint64_t));
 
     int baseIndex_w = 10*board->kingSquare_w;
@@ -436,8 +437,8 @@ void loadInputAccumulator(bitboard* board, int networkType)
         int8_t inputArray[81920];
         extractInputLayerToArray(inputs, NULL, inputArray);
 
-        calculateLayer_IntBytes(inputArray, trainingNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
-        calculateLayer_IntBytes(&inputArray[40960], trainingNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, playerNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(&inputArray[40960], playerNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, playerNNUE->weights1_bias, 0);
     }
 }
 
@@ -477,7 +478,6 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
         else playerNNUE->inputNodes[inputNodeIndex]^=xorMask;
 
         //Doesn't care about 40,960 offset for black inputs.
-        int baseIndex = (640 * kingSquare) + (64 * pieceOffset);
         int fromSquareIndex, toSquareIndex;
         if(shouldUndoMove)
         {
@@ -503,7 +503,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
         }
         else
         {
-            float* accumulator;
+            int8_t* accumulator;
             if(ISBLACK(lastMove->piece)) accumulator = playerNNUE->accumulator[1];
             else accumulator = playerNNUE->accumulator[0];
 
@@ -519,9 +519,17 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 float forwardPropagate_Float()
 {
     //Assume accumulator has already been updated.
-    calculateLayer_Floats(trainingNNUE->accumulator, trainingNNUE->h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 1);
+    float tempH2[2][SECOND_HIDDEN_LAYER_NODES];
+    calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 0);
+    calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], trainingNNUE->weights2_bias, 0);
+
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    {
+        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i], 0, 1);
+    }
+
     calculateLayer_Floats(trainingNNUE->h2, trainingNNUE->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
-    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
+    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 1);
 
     return trainingNNUE->outputNode;
 }
@@ -532,9 +540,17 @@ float forwardPropagate_Int()
     int8_t h3[THIRD_HIDDEN_LAYER_NODES] = {0};
     int8_t outputNode = 0;
 
-    calculateLayer_IntBytes(playerNNUE->accumulator, h2, 2*ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 1);
+    int8_t tempH2[2][SECOND_HIDDEN_LAYER_NODES];
+    calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
+    calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
+
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    {
+        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i], 0, 1);
+    }
+
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);
-    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, playerNNUE->weights4, &playerNNUE->weights4_bias, 1);
+    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, &playerNNUE->weights4_bias, 1);
 
     return outputNode;
 }

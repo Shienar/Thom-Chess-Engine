@@ -15,8 +15,8 @@
 #define OUTPUT_LAYER_NODES 1
 
 #define LEARNING_RATE 0.1
-#define POSITIONS_PER_FILE 100000
-#define NUMBER_OF_TRAINING_FILES 1000
+#define POSITIONS_PER_FILE 1 //100000
+#define NUMBER_OF_TRAINING_FILES 1 //1000
 
 /**
  * Weights
@@ -92,8 +92,8 @@ int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max);
 /**
  * Uses SIMD to calculate and populate outputValues.
  */
-void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float** weights, float* biasWeights,  int applyCReLU);
-void calculateLayer_IntBytes(uint8_t* inputValues, uint8_t* outputValues, int numInputs, int numOutputs, uint8_t** weights, uint8_t* biasWeights,  int applyCReLU);
+void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU);
+void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU);
 
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.

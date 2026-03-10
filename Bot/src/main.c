@@ -19,8 +19,6 @@
 
 int main(int argc, char** argv)
 {
-    load_network();
-    exit(1);
     /**
      * Arguments
      */
@@ -32,22 +30,24 @@ int main(int argc, char** argv)
     double maxTime = 3;
     int printHistory = 0;
     int fenLineNumber = -1;
+    int shouldTrain = 0;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
         {
             printf("\n\n");
             printf("--help\t\tPrints out this message\n");
-            printf("-v\t\tVerbose board information\n");
-            printf("--black\t\tPlay as black\n");
-            printf("--depth\t\tChange the depth, takes one integer parameter\n");
             printf("--debug\t\tEnable debug messages\n");
             printf("--leaks\t\tTrack memory leaks. Heavily reduces performance\n");
-            printf("--human\t\tHuman v human game\n");
+            printf("-v\t\tVerbose board information\n");
             printf("--history\tPrint's recent moves\n");
+            printf("--black\t\tPlay as black\n");
+            printf("--human\t\tHuman v human game\n");
             printf("--engine\t\tEngine v Engine game\n");
+            printf("--depth\t\tChange the depth, takes one integer parameter\n");
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
+            printf("--train\t\tTrains the neural network.\n");
             printf("\n\n");
             exit(0);
         }
@@ -96,9 +96,21 @@ int main(int argc, char** argv)
             i++;
             fenLineNumber = atoi(argv[i]);
         }
+        else if(strcmp(argv[i], "--train") == 0)
+        {
+            shouldTrain = 1;
+        }
     }
     
     srand(time(NULL));
+
+    if(shouldTrain)
+    {
+        load_trainingWeights();
+        backpropagate(10, 100, 0.001);
+        save_trainingWeights();
+        exit(0);
+    }
 
     bitboard* board;
     if(fenLineNumber > 0)
