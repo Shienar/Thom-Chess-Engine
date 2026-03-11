@@ -13,20 +13,10 @@
 #define MIDDLEGAME_START_HALFMOVES 20 
 #define MIDDLEGAME_END_HALFMOVES 60 
 
-
 #define CONTEMPT_FACTOR_STALEMATE -0.25
 #define CONTEMPT_FACTOR_THREEFOLD -1
 #define CONTEMPT_FACTOR_FIFTYMOVERULE -0.25
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -0.25
-
-
-/**
- * PeSTO Evaluation
- * Source: https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function#References
- * NOTE: This is a placeholder and will be replaced later.
- */
-
-void init_tables();
 
 /**
  * Evaluates a position based on piece/square weights.

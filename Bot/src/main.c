@@ -9,11 +9,10 @@
 #include <windows.h>
 
 /**
- * GOALS:
- *  - PeSTO's Evaluation function is a placeholder that should eventually be replaced with a NNUE.
- * 
  * TODO:
- *  - Neural nets
+ *  - Memory leaks
+ *  - Engine v Engine game on depth 3 is crashing. Only when being run without GDB.
+ *  - Neural network training.
  *  - Endgame tablebase (Probe Syzygy)
  */
 
@@ -31,6 +30,7 @@ int main(int argc, char** argv)
     int printHistory = 0;
     int fenLineNumber = -1;
     int shouldTrain = 0;
+    int useBook = 1;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
@@ -47,6 +47,7 @@ int main(int argc, char** argv)
             printf("--depth\t\tChange the depth, takes one integer parameter\n");
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
+            printf("--nobook\t\tPrevents loading an opening book\n");
             printf("--train\t\tTrains the neural network.\n");
             printf("\n\n");
             exit(0);
@@ -100,6 +101,10 @@ int main(int argc, char** argv)
         {
             shouldTrain = 1;
         }
+        else if(strcmp(argv[i], "--nobook") == 0)
+        {
+            useBook = 0;
+        }
     }
     
     srand(time(NULL));
@@ -130,14 +135,13 @@ int main(int argc, char** argv)
             exit(1);
         }
     }
-    else
-    {
-        board = create_board();
-    }
-
-    init_tables();
-    loadBook();
+    else board = create_board();
+    
+    if(useBook) loadBook();
     transpositionTable = create_hashTable_tt();
+    
+    load_playingWeights();
+    loadInputAccumulator(board, PLAYER_NNUE);
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -198,6 +202,7 @@ int main(int argc, char** argv)
         }
     }
 
+    FREE(playerNNUE);
     destroy_hashTable_tt(transpositionTable);
     destroy_board(board);
     dump_allocations();

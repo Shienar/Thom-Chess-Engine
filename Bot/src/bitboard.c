@@ -384,7 +384,7 @@ void copy_board(bitboard* dest, bitboard* source)
         dest->moveStackTop = NULL;
     }
     
-    destroy_hashTable_pos(dest->ht); 
+    destroy_hashTable_pos(dest->ht);
     dest->ht = copy_hashTable_pos(source->ht);
 }
 

@@ -544,7 +544,7 @@ float forwardPropagate_Float()
 
     return trainingNNUE->outputNode;
 }
-float forwardPropagate_Int()
+int8_t forwardPropagate_Int()
 {
     //Assume accumulator has already been updated.
     int8_t h2[SECOND_HIDDEN_LAYER_NODES] = {0};

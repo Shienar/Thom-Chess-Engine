@@ -82,8 +82,9 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
 
 void destroy_hashTable_pos(hashtable_pos* ht)
 {
-    if(!ht) FREE(ht);
+    if(!ht) return;
     if(ht->array) FREE(ht->array);
+    FREE(ht);
 }
 
 int increment_table_value(hashtable_pos* ht, bitboard* board)

@@ -24,8 +24,9 @@ hashtable_tt* create_hashTable_tt()
 
 void destroy_hashTable_tt(hashtable_tt* ht)
 {
-    if(!ht) FREE(ht);
+    if(!ht) return;
     if(ht->array) FREE(ht->array);
+    FREE(ht);
     
 }
 
