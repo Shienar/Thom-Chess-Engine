@@ -11,8 +11,7 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
-#define NUMBER_OF_TRAINING_FILES 1 //todo remove & rewrite backprop
-#define POSITIONS_PER_FILE 1 //todo remove & rewrite backprop
+#define NUMBER_OF_BLOCKS 1000 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
 /**

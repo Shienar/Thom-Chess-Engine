@@ -584,7 +584,7 @@ int8_t forwardPropagate_Int()
     return outputNode;
 }
 
-void shuffle(int* arr, int count)
+void shuffle(long* arr, int count)
 {
     for(int i = count-1; i > 0; i--)
     {
@@ -597,10 +597,18 @@ void shuffle(int* arr, int count)
 
 void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError)
 {
-    int fileNameSuffixes[NUMBER_OF_TRAINING_FILES] = {0};
-    for(int i = 0; i < NUMBER_OF_TRAINING_FILES; i++)
+    FILE* trainingData = fopen("./import/trainingData.bin", "rb");
+    
+    fseek(trainingData, 0, SEEK_END);
+    int entryCount = ftell(trainingData)/sizeof(network_training_data);
+
+    rewind(trainingData);
+
+    long blockNumbers[NUMBER_OF_BLOCKS] = {0};
+    int entriesPerBlock = min(entryCount, (int) (entryCount / NUMBER_OF_BLOCKS));
+    for(int i = 0; i < NUMBER_OF_BLOCKS; i++)
     {
-        fileNameSuffixes[i] = i;
+        blockNumbers[i] = (long)entriesPerBlock*i*sizeof(network_training_data);
     }
 
     int totalIterations = 0;
@@ -609,30 +617,22 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
     double sumSquaredError = 0.0;
     int sameErrorXTimesInARow = 0;
     float expectedOutput = 0.0;
-    char fileName_FEN[30] = {'\0'};
-    char fileName_EVAL[30] = {'\0'};
 
-    bitboard* board = create_board();
+    network_training_data data = {0};
     do{
         sumSquaredError = 0.0;
-        shuffle(fileNameSuffixes, NUMBER_OF_TRAINING_FILES);
+        shuffle(blockNumbers, NUMBER_OF_BLOCKS);
 
-        for(int fileIndex = 0; fileIndex < NUMBER_OF_TRAINING_FILES; fileIndex++)
+        for(int blockIndex = 0; blockIndex < NUMBER_OF_BLOCKS; blockIndex++)
         {
-            sprintf(fileName_FEN, "./train/NNUE_FEN_%d.txt", fileNameSuffixes[fileIndex]);
-            sprintf(fileName_EVAL, "./train/NNUE_EVAL_%d.txt", fileNameSuffixes[fileIndex]);
+            fseek(trainingData, blockNumbers[blockIndex], SEEK_SET);
 
-            FILE* evalFile = fopen(fileName_EVAL, "r");
-            char evaluation[32] = {'\0'};
-
-            for(int lineNumber = 1; lineNumber <= POSITIONS_PER_FILE; lineNumber++)
+            for(int blockOffset = 0; blockOffset < entriesPerBlock; blockOffset++)
             {
-                load_fen_to_board(board, fileName_FEN, lineNumber);
-                loadInputAccumulator(board, TRAINING_NNUE);
+                fread(&data, sizeof(network_training_data), 1, trainingData);
+                loadInputAccumulator(&data.board, TRAINING_NNUE);
                 forwardPropagate_Float();
-
-                fgets(evaluation, 32, evalFile);
-                sscanf(evaluation, "%f", &expectedOutput);
+                expectedOutput = data.evaluation;
 
                 sumSquaredError+= pow((double) (trainingNNUE->outputNode - expectedOutput), 2.0);
 
@@ -725,8 +725,6 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                 }
                 for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] += LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
             }
-
-            fclose(evalFile);
         }
 
         totalIterations++;
@@ -802,6 +800,8 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
                     fwrite(&newData, sizeof(network_training_data), 1, output);
                     entryCount++;
                     printf("\rTraining Data entries: %d", entryCount);
+
+                    if(entryCount >= maxPositions) break;
                 }
 
                 error = moveFromStruct(board, bestMove);

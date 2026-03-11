@@ -10,10 +10,11 @@
 
 /**
  * TODO:
+ *  - Improve quantization function.
+ *      - Deal with outliers.
+ *      - Need to be able to dequantize before saving position evaluations to trainingData.bin
  *  - Improve speed of principal variation search.
  *  - Properly handle board->turn 's effect on the neural network value.
- *  - Improve quantization function.
- *  - Rewrite backpropagation algorithm to read from trainingData.bin
  *  - Endgame tablebase (Probe Syzygy)
  */
 
