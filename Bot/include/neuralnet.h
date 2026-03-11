@@ -4,9 +4,6 @@
 #include "structs.h"
 #include <stdint.h>
 
-#define FLIP(square) ((square)^56)
-#define OTHER(color) ((color)^(WHITE|BLACK))
-
 #define INPUT_BITS 81920
 #define HALF_INPUT_BITS 40960
 #define ACCUMULATOR_NODES_PER_SIDE 256
@@ -14,9 +11,9 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
+#define NUMBER_OF_TRAINING_FILES 1 //todo remove & rewrite backprop
+#define POSITIONS_PER_FILE 1 //todo remove & rewrite backprop
 #define LEARNING_RATE 0.1
-#define POSITIONS_PER_FILE 1 //100000
-#define NUMBER_OF_TRAINING_FILES 1 //1000
 
 /**
  * Weights
@@ -71,6 +68,11 @@ typedef struct network_weights_playing {
     int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
 } network_weights_playing;
 
+typedef struct network_training_data {
+    bitboard board;
+    float evaluation;
+} network_training_data;
+
 #define TRAINING_NNUE 1 //Floats
 #define PLAYER_NNUE 2 //Signed 8-bit ints
 extern network_weights_training* trainingNNUE;
@@ -112,4 +114,5 @@ int8_t forwardPropagate_Int();
 
 void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError);
 
+void generateTrainingData(int depth, int maxTime, int maxPositions);
 #endif

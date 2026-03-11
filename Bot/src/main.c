@@ -10,9 +10,10 @@
 
 /**
  * TODO:
- *  - Memory leaks
- *  - Engine v Engine game on depth 3 is crashing. Only when being run without GDB.
- *  - Neural network training.
+ *  - Improve speed of principal variation search.
+ *  - Properly handle board->turn 's effect on the neural network value.
+ *  - Improve quantization function.
+ *  - Rewrite backpropagation algorithm to read from trainingData.bin
  *  - Endgame tablebase (Probe Syzygy)
  */
 
@@ -30,6 +31,7 @@ int main(int argc, char** argv)
     int printHistory = 0;
     int fenLineNumber = -1;
     int shouldTrain = 0;
+    int shouldCreateTrainingData = 0;
     int useBook = 1;
     for(int i = 1; i < argc; i++)
     {
@@ -48,63 +50,24 @@ int main(int argc, char** argv)
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
             printf("--nobook\t\tPrevents loading an opening book\n");
-            printf("--train\t\tTrains the neural network.\n");
+            printf("--train\t\tTrains the neural network. Specify that maximum number of iterations\n");
+            printf("--generate\t\tCreates training data for the neural network. Specify the number of entries.\n");
             printf("\n\n");
             exit(0);
         }
-        else if(strcmp(argv[i], "-v") == 0)
-        {
-            verbose = 1;
-        }
-        else if(strcmp(argv[i], "--black") == 0)
-        {
-            player_color = BLACK;
-        }
-        else if(strcmp(argv[i], "--depth") == 0)
-        {
-            i++;
-            depth = atoi(argv[i]);
-        }
-        else if(strcmp(argv[i], "--debug") == 0)
-        {
-            enableDebugMessages();
-        }
-        else if(strcmp(argv[i], "--leaks") == 0)
-        {
-            enableLeakTracking();
-        }
-        else if(strcmp(argv[i], "--history") == 0)
-        {
-            printHistory = 1;
-        }
-        else if(strcmp(argv[i], "--human") == 0)
-        {
-            onlyHumans = 1;
-            onlyEngines = 0;
-        }
-        else if(strcmp(argv[i], "--engine") == 0)
-        {
-            onlyHumans = 0;
-            onlyEngines = 1;
-        }
-        else if(strcmp(argv[i], "--time") == 0)
-        {
-            i++;
-            maxTime = atof(argv[i]);
-        }
-        else if(strcmp(argv[i], "--fen") == 0)
-        {
-            i++;
-            fenLineNumber = atoi(argv[i]);
-        }
-        else if(strcmp(argv[i], "--train") == 0)
-        {
-            shouldTrain = 1;
-        }
-        else if(strcmp(argv[i], "--nobook") == 0)
-        {
-            useBook = 0;
-        }
+        else if(strcmp(argv[i], "-v") == 0) verbose = 1;
+        else if(strcmp(argv[i], "--black") == 0) player_color = BLACK;
+        else if(strcmp(argv[i], "--depth") == 0) { i++; depth = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--debug") == 0) enableDebugMessages();
+        else if(strcmp(argv[i], "--leaks") == 0) enableLeakTracking();
+        else if(strcmp(argv[i], "--history") == 0) printHistory = 1;
+        else if(strcmp(argv[i], "--human") == 0) { onlyHumans = 1; onlyEngines = 0; }
+        else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
+        else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atof(argv[i]); }
+        else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
     }
     
     srand(time(NULL));
@@ -112,7 +75,7 @@ int main(int argc, char** argv)
     if(shouldTrain)
     {
         load_trainingWeights();
-        backpropagate(0, 1000, 1e-9);
+        backpropagate(0, shouldTrain, 1e-6);
         save_trainingWeights();
 
         load_playingWeights();
@@ -122,6 +85,13 @@ int main(int argc, char** argv)
         FREE(trainingNNUE);
         FREE(playerNNUE);
 
+        dump_allocations();
+        exit(0);
+    }
+    if(shouldCreateTrainingData)
+    {
+        generateTrainingData(depth, maxTime, shouldCreateTrainingData);
+        dump_allocations();
         exit(0);
     }
 

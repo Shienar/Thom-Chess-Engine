@@ -1,6 +1,8 @@
 #include "../include/neuralnet.h"
 #include "../include/debug.h"
 #include "../include/bitboard.h"
+#include "../include/moves.h"
+#include "../include/engine.h"
 #include <math.h>
 #include <float.h>
 #include <immintrin.h>
@@ -140,6 +142,11 @@ void findAbsMax(float* comparedValue, float* max)
     if(fabsf(*comparedValue) > *max) *max = fabsf(*comparedValue);
 }
 
+void findSum(float* comparedValue, float* sum)
+{
+    *sum+=*comparedValue;
+}
+
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes)
 {
     if(!inputFloats) 
@@ -154,7 +161,15 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     }
 
     float maxValue = -FLT_MAX;
+    float meanValue = 0.0;
     iterateTrainingWeights(findAbsMax, inputFloats, &maxValue);
+    iterateTrainingWeights(findSum, inputFloats, &meanValue);
+    meanValue = meanValue / (HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE + 
+                            ACCUMULATOR_NODES_PER_SIDE +
+                            2 * ACCUMULATOR_NODES_PER_SIDE * SECOND_HIDDEN_LAYER_NODES +
+                            SECOND_HIDDEN_LAYER_NODES +
+                            SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES +
+                            2 * THIRD_HIDDEN_LAYER_NODES + 1);
     
     float scalingFactor = maxValue / 127;
     for(int i = 0; i < HALF_INPUT_BITS; i++)
@@ -189,7 +204,10 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     }
     outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
 
-    
+    printf("Quantized Weights:\n");
+    printf("\tScaling Factor: %f\n", scalingFactor);
+    printf("\tMean: %f\n", meanValue);
+    printf("\tMax: %f\n", maxValue);
     memset(&outputBytes->inputNodes, 0, sizeof(outputBytes->inputNodes));
     memset(&outputBytes->accumulator, 0, sizeof(outputBytes->accumulator));
 }
@@ -557,7 +575,7 @@ int8_t forwardPropagate_Int()
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i], 0, 1);
+        h2[i] = SCReLU_Int(tempH2[0][i] + tempH2[1][i], 0, 1);
     }
 
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);
@@ -587,7 +605,9 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
 
     int totalIterations = 0;
 
+    double prevSumSquaredError = 0.0;
     double sumSquaredError = 0.0;
+    int sameErrorXTimesInARow = 0;
     float expectedOutput = 0.0;
     char fileName_FEN[30] = {'\0'};
     char fileName_EVAL[30] = {'\0'};
@@ -709,14 +729,92 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             fclose(evalFile);
         }
 
-
         totalIterations++;
         if(saveEveryNIterations && totalIterations%saveEveryNIterations == 0) save_trainingWeights();
         
-        //todo - Delete the information after the |
         printf("\rIteration %d error = %e", totalIterations, sumSquaredError);
+
+        if(sumSquaredError == prevSumSquaredError) sameErrorXTimesInARow++;
+        else sameErrorXTimesInARow = 0;
+
+        if(sameErrorXTimesInARow > 5) break;
+        
+        prevSumSquaredError = sumSquaredError;
 
     } while(sumSquaredError > maxAllowedError && totalIterations < maxIterations);
 
     save_trainingWeights();
+    printf("\n");
+}
+
+void generateTrainingData(int depth, int maxTime, int maxPositions)
+{
+    FILE* output = fopen("./import/trainingData.bin", "ab+");
+
+    fseek(output, 0, SEEK_END);
+    int entryCount = ftell(output);
+    entryCount/=sizeof(network_training_data);
+    
+
+    int error = 0;
+    while(entryCount < maxPositions)
+    {
+        bitboard* board = create_board();
+        load_playingWeights();
+        loadInputAccumulator(board, PLAYER_NNUE);
+
+        transpositionTable = create_hashTable_tt();
+        while(1)
+        {
+            do
+            {
+                move* bestMove = calculateBestMove(board, depth, maxTime);
+                
+                //No one is in check and the best move isn't a capture.
+                if(bestMove->capturedPiece == 0 && (board->flags&0x30) == 0)
+                {
+                    network_training_data newData = {0};
+                    newData.board.pawn_w = board->pawn_w;
+                    newData.board.pawn_b = board->pawn_b;
+                    newData.board.knight_w = board->knight_w;
+                    newData.board.knight_b = board->knight_b;
+                    newData.board.bishop_w = board->bishop_w;
+                    newData.board.bishop_b = board->bishop_b;
+                    newData.board.rook_w = board->rook_w;
+                    newData.board.rook_b = board->rook_b;
+                    newData.board.queen_w = board->queen_w;
+                    newData.board.queen_b = board->queen_b;
+                    newData.board.king_w = board->king_w;
+                    newData.board.king_b = board->king_b;
+
+                    newData.board.pieces_all = board->pieces_all;
+                    newData.board.pieces_w = board->pieces_w;
+                    newData.board.pieces_b = board->pieces_b;
+                    
+                    newData.board.kingSquare_w = board->kingSquare_w;
+                    newData.board.kingSquare_b = board->kingSquare_b;
+
+                    newData.board.turn = board->turn;
+
+                    //The rest of the NewData.board's values are superflous.
+
+                    newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
+                    fwrite(&newData, sizeof(network_training_data), 1, output);
+                    entryCount++;
+                    printf("\rTraining Data entries: %d", entryCount);
+                }
+
+                error = moveFromStruct(board, bestMove);
+            }while(error != 0);
+            
+            if(board->victor) break;
+
+        }
+        destroy_hashTable_tt(transpositionTable);
+        transpositionTable = NULL;
+        destroy_board(board);
+    }
+
+    FREE(playerNNUE);
+    fclose(output);
 }

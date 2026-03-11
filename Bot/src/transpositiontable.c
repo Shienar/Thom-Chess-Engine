@@ -27,7 +27,6 @@ void destroy_hashTable_tt(hashtable_tt* ht)
     if(!ht) return;
     if(ht->array) FREE(ht->array);
     FREE(ht);
-    
 }
 
 table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
