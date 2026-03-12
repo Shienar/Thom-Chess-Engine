@@ -241,16 +241,48 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
 
-    for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
+    //Always fully evaluate at depth 1:
+    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, LONG_MAX);
+
+    for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
         if(clock() > endTime) break;
 
         tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
-        //Always fully evaluate at depth 1.
-        if(currentDepth == 1) principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, LONG_MAX);
-        else principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, endTime);
+        double aspiration_margin = 0.25;
+        double alpha = aspiration_expectedValue - aspiration_margin;
+        double beta = aspiration_expectedValue + aspiration_margin;
+
+        //Aspiration Window Loop
+        while(1)
+        {
+            if(clock() > endTime) break;
+            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, endTime);
+
+            if(score <= alpha)
+            {
+                alpha-= aspiration_margin;
+                aspiration_margin*=2;
+            }
+            else if(score >= beta)
+            {
+                beta+= aspiration_margin;
+                aspiration_margin*=2;
+            }
+            else
+            {
+                aspiration_expectedValue = score;
+                break;
+            }
+
+            if(aspiration_margin > 5.0)
+            {
+                alpha = -DBL_MAX;
+                beta = DBL_MAX;
+            }
+        }
         
         copyNMoves(principalVariation, tempPVTable, currentDepth);
         FREE(tempPVTable);

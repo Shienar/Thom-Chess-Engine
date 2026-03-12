@@ -10,9 +10,8 @@
 
 /**
  * TODO:
- *  - Multithreaded forward propagation. Assign threads to batches of output nodes.
- *  - Improve quantization function.
- *      - Deal with outliers if they arise again.
+ *  - Multithreaded engine search. 
+ *      - Lazy SMP
  *  - Endgame tablebase (Probe Syzygy)
  */
 

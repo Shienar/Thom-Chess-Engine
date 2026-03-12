@@ -18,6 +18,8 @@
 #define CONTEMPT_FACTOR_FIFTYMOVERULE -0.25
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -0.25
 
+#define THREAD_COUNT 8
+
 /**
  * Evaluates a position based on piece/square weights.
  * Returns white's score - black's score.

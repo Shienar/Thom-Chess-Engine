@@ -11,7 +11,6 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
-#define THREAD_COUNT 8
 #define NUMBER_OF_BLOCKS 50 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
