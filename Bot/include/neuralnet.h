@@ -11,6 +11,7 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
+#define THREAD_COUNT 8
 #define NUMBER_OF_BLOCKS 50 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
@@ -98,6 +99,8 @@ int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max);
  */
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU);
 void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU);
+
+void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloats, int8_t* inputLayerBytes);
 
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.

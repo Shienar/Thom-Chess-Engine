@@ -11,7 +11,6 @@
 /**
  * TODO:
  *  - Multithreaded forward propagation. Assign threads to batches of output nodes.
- *  - Stack of accumulators for easy unmoving? 
  *  - Improve quantization function.
  *      - Deal with outliers if they arise again.
  *  - Endgame tablebase (Probe Syzygy)
