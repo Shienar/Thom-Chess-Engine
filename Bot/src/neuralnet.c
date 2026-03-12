@@ -111,11 +111,16 @@ void load_playingWeights()
     }
     else
     {
-        if(trainingNNUE) quantizeWeights(trainingNNUE, playerNNUE);
+        if(trainingNNUE) 
+        {
+            quantizeWeights(trainingNNUE, playerNNUE);
+            save_trainingWeights();
+        }
         else
         {
             load_trainingWeights();
             quantizeWeights(trainingNNUE, playerNNUE);
+            save_trainingWeights();
 
             FREE(trainingNNUE);
             trainingNNUE = NULL;
@@ -171,41 +176,41 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
                             SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES +
                             2 * THIRD_HIDDEN_LAYER_NODES + 1);
     
-    float scalingFactor = maxValue / 127;
+    inputFloats->scalingFactor = maxValue / 127;
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            outputBytes->weights1[i][j] = (uint8_t) roundf(inputFloats->weights1[i][j] / scalingFactor);
+            outputBytes->weights1[i][j] = (uint8_t) roundf(inputFloats->weights1[i][j] / inputFloats->scalingFactor);
         }
     }
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (uint8_t) roundf(inputFloats->weights1_bias[i] / scalingFactor);
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (uint8_t) roundf(inputFloats->weights1_bias[i] / inputFloats->scalingFactor);
 
     for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
-            outputBytes->weights2[i][j] = (uint8_t) roundf(inputFloats->weights2[i][j] / scalingFactor);
+            outputBytes->weights2[i][j] = (uint8_t) roundf(inputFloats->weights2[i][j] / inputFloats->scalingFactor);
         }
     }
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputBytes->weights2_bias[i] = (uint8_t) roundf(inputFloats->weights2_bias[i] / scalingFactor);
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputBytes->weights2_bias[i] = (uint8_t) roundf(inputFloats->weights2_bias[i] / inputFloats->scalingFactor);
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
         {
-            outputBytes->weights3[i][j] = (uint8_t) roundf(inputFloats->weights3[i][j] / scalingFactor);
+            outputBytes->weights3[i][j] = (uint8_t) roundf(inputFloats->weights3[i][j] / inputFloats->scalingFactor);
         }
     }
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (uint8_t) roundf(inputFloats->weights3_bias[i] / scalingFactor);
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (uint8_t) roundf(inputFloats->weights3_bias[i] / inputFloats->scalingFactor);
     
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
-        outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / scalingFactor);
+        outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / inputFloats->scalingFactor);
     }
-    outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
+    outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / inputFloats->scalingFactor);
 
     printf("Quantized Weights:\n");
-    printf("\tScaling Factor: %f\n", scalingFactor);
+    printf("\tScaling Factor: %f\n", inputFloats->scalingFactor);
     printf("\tMean: %f\n", meanValue);
     printf("\tMax: %f\n", maxValue);
     memset(&outputBytes->inputNodes, 0, sizeof(outputBytes->inputNodes));
@@ -752,6 +757,12 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
     fseek(output, 0, SEEK_END);
     int entryCount = ftell(output);
     entryCount/=sizeof(network_training_data);
+
+    //Load scaling factor for dequantization.
+    load_trainingWeights();
+    float scalingFactor = trainingNNUE->scalingFactor;
+    FREE(trainingNNUE);
+    trainingNNUE = NULL;
     
 
     int error = 0;
@@ -794,21 +805,24 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
 
                     newData.board.turn = board->turn;
 
-                    //The rest of the NewData.board's values are superflous.
+                    newData.board.enPassantSquare = board->enPassantSquare;
 
-                    newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
+                    newData.board.flags = board->flags;
+
+                    newData.board.ht = NULL;
+                    newData.board.moveStackTop = NULL;
+                    newData.board.halfMoveCount = board->halfMoveCount;
+
+                    newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation * scalingFactor;
                     fwrite(&newData, sizeof(network_training_data), 1, output);
                     entryCount++;
                     printf("\rTraining Data entries: %d", entryCount);
-
-                    if(entryCount >= maxPositions) break;
                 }
 
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             
-            if(board->victor) break;
-
+            if(board->victor || entryCount >= maxPositions) break;
         }
         destroy_hashTable_tt(transpositionTable);
         transpositionTable = NULL;

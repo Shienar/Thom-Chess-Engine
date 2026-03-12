@@ -12,6 +12,7 @@ typedef struct move {
     int capturedPiece;
     int capturedPieceSquare; //Not always the same as endsquare because of en passant
 
+
     int previousMovesSinceLastChange;
     
     //Flags from the previous board state.
@@ -98,6 +99,10 @@ typedef struct bitboard {
     //History
     move* moveStackTop;
     hashtable_pos* ht;
+
+    //A pawn can capture to this square.
+    //[0,63] OR -1 if empty.
+    int enPassantSquare;
 
     //Other
     int halfMoveCount;

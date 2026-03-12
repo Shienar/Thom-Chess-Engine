@@ -23,6 +23,13 @@ void disableLeakTracking();
     printf("\n"); \
 }
 
+#define INFO(x, args...) if(printDebugMessages) \
+{ \
+    printf("INFO: ");  \
+    printf(x, ##args); \
+    printf("\n"); \
+}
+
 /*** Memory leak checker ***/
 typedef struct memoryBlock {
     void* addr;

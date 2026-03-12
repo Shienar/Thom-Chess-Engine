@@ -596,12 +596,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
 
         //En passant
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
-            abs(square - board->moveStackTop->endSquare) == 1 &&  //Bordering columns
-            (square/8 == board->moveStackTop->endSquare/8) && //On same row
-            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+        if(board->enPassantSquare != -1 && (board->enPassantSquare - square == 7 || board->enPassantSquare - square == 9))
         {
-            returnValue|=(1ull<<(board->moveStackTop->endSquare + 8));
+            returnValue|=(1ull<<(board->enPassantSquare));
         }
     }
     else
@@ -621,13 +618,10 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
             if(getRow(square) == 7 && !(board->pieces_all&(1ull<<(square-16)))) returnValue|=(1ull<<(square-16));
         }
         
-        //En passant
-        if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
-            abs(square - board->moveStackTop->endSquare) == 1 &&  //Bordering columns
-            (square/8 == board->moveStackTop->endSquare/8) && //On same row
-            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+         //En passant
+        if(board->enPassantSquare != -1 && (board->enPassantSquare - square == -7 || board->enPassantSquare - square == -9))
         {
-            returnValue|=(1ull<<(board->moveStackTop->endSquare - 8));
+            returnValue|=(1ull<<(board->enPassantSquare));
         }
     }
 
@@ -983,6 +977,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
 
     int difference = abs(startSquare - endSquare);
 
+    
     if(difference == 8 || difference == 16)
     {
         //1 or 2 moves forward
@@ -999,51 +994,54 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         {
             board_set(board, endSquare, (color|PAWN));
         }
+        
+        //Update en passant square if necessary.
+        if(difference == 16)
+        {
+            if(ISWHITE(color)) board->enPassantSquare = endSquare - 8;
+            else board->enPassantSquare = endSquare + 8;
+        }
     }
     else if(difference == 7 || difference == 9)
     {
         //Diagonal Capture
 
         //Check for en passant.
-        if(board->moveStackTop && 
-            ISPAWN(board->moveStackTop->piece) && 
-            (getColumn(endSquare) == getColumn(board->moveStackTop->endSquare)) && 
-            abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16 &&
-            ((ISWHITE(color) && (board->moveStackTop->endSquare - endSquare == -8)) ||
-            (ISBLACK(color) && (board->moveStackTop->endSquare - endSquare == 8))))
+        if(endSquare == board->enPassantSquare)
         {
             int pinType = 0;
             //Check if target pawn is pinned to turn's king.
-            if(ISWHITE(color) && (pinType = isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE)) && pinType != PIN_TYPE_ABOVE)
+            if(ISWHITE(color) && (pinType = isPinned(board, board->enPassantSquare - 8, board->kingSquare_w, WHITE)) && pinType != PIN_TYPE_ABOVE)
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_w, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->moveStackTop->endSquare, kingSquareName, board->kingSquare_w)
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->enPassantSquare - 8, kingSquareName, board->kingSquare_w)
                 return -1;
             }
-            else if(ISBLACK(color) && (pinType =  isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK)) && pinType != PIN_TYPE_BELOW)
+            else if(ISBLACK(color) && (pinType =  isPinned(board, board->enPassantSquare + 8, board->kingSquare_b, BLACK)) && pinType != PIN_TYPE_BELOW)
             {
                 char kingSquareName[3] = {0};
                 getSquareName(board->kingSquare_b, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->nextMove->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->moveStackTop->nextMove->endSquare, kingSquareName, board->kingSquare_b)
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->enPassantSquare + 8, kingSquareName, board->kingSquare_b)
                 return -1;
             }
 
             //Check if capturing other pawn reveals a discovered check.
-            if(ISWHITE(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_b, BLACK))
+            if(ISWHITE(color) && isPinned(board, board->enPassantSquare - 8, board->kingSquare_b, BLACK))
             {
                 CHECK_B(board->flags);
             }
-            else if(ISBLACK(color) && isPinned(board, board->moveStackTop->endSquare, board->kingSquare_w, WHITE))
+            else if(ISBLACK(color) && isPinned(board, board->enPassantSquare + 8, board->kingSquare_w, WHITE))
             {
                 CHECK_W(board->flags);
             }
 
-            board_clear_square(board, board->moveStackTop->endSquare, PAWN);
+            if(ISWHITE(color)) board_clear_square(board, 35, PAWN);
+            else board_clear_square(board, board->enPassantSquare + 8, PAWN);
         }
 
         //Set new board positions.
@@ -1382,15 +1380,26 @@ int moveFromString(bitboard* board, char* str)
             break;
     }
 
-    int capturedPiece = findPieceOnSquare(board, endSquare);
-    int capturedSquare = endSquare;
-    if(board->moveStackTop && ISPAWN(board->moveStackTop->piece) && 
-        abs(startSquare - board->moveStackTop->endSquare) == 1 && 
-        abs(board->moveStackTop->endSquare - board->moveStackTop->startSquare) == 16)
+    int capturedPiece;
+    int capturedSquare;
+    if(endSquare == board->enPassantSquare)
     {
         //en passant
-        capturedPiece = board->moveStackTop->piece;
-        capturedSquare = board->moveStackTop->endSquare;
+        if(ISWHITE(board->turn))
+        {
+            capturedPiece = PAWN|BLACK;
+            capturedSquare = board->enPassantSquare - 8;
+        }
+        else
+        {
+            capturedPiece = PAWN|WHITE;
+            capturedSquare = board->enPassantSquare + 8;
+        }
+    }
+    else
+    {
+        capturedPiece = findPieceOnSquare(board, endSquare);
+        capturedSquare = endSquare;
     }
 
     int boardFlagMask = board->flags;
@@ -1452,10 +1461,10 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
-        board_print(board, 0, 1);
         DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
         return -1;
     }
+
 
     if(movePiece(board, m->startSquare, m->endSquare, m->piece, m->promoteTo) != 0) 
     {
@@ -1464,6 +1473,8 @@ int moveFromStruct(bitboard* board, move* m)
     }
     moves_push(board, m);
     
+    if(!(ISPAWN(m->piece) && abs(m->startSquare - m->endSquare) == 16)) board->enPassantSquare = -1;
+
     //50 move rule counting
     if(ISPAWN(m->piece) || m->capturedPiece) board->movesSinceLastChange = 0;
     else board->movesSinceLastChange++;
@@ -1626,6 +1637,10 @@ move* unmove(bitboard *board)
     
     board->victor = 0;
     board->halfMoveCount--;
+
+    //En passant
+    if(m->capturedPieceSquare && m->capturedPieceSquare != m->endSquare) board->enPassantSquare = m->endSquare;
+    else board->enPassantSquare = -1;
 
     return m;
 }

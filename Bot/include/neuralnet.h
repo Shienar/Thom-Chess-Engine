@@ -11,7 +11,7 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
-#define NUMBER_OF_BLOCKS 1000 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
+#define NUMBER_OF_BLOCKS 50 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
 /**
@@ -52,6 +52,9 @@ typedef struct network_weights_training {
     float h2[SECOND_HIDDEN_LAYER_NODES];
     float h3[THIRD_HIDDEN_LAYER_NODES];
     float outputNode;
+
+    //Saved for dequantization. TODO
+    float scalingFactor;
 } network_weights_training;
 typedef struct network_weights_playing {
     int8_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];

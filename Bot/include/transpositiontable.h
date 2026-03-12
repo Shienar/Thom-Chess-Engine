@@ -3,7 +3,7 @@
 
 #include "hashtable.h"
 
-#define MAX_TABLE_SIZE 65536
+#define MAX_TABLE_SIZE 262144
 #define NODE_TYPE_PV 1
 #define NODE_TYPE_ALL 2
 #define NODE_TYPE_CUT 3

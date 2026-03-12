@@ -10,10 +10,10 @@
 
 /**
  * TODO:
+ *  - Disappearing a8 rook on a knight move in a human v engine game, depth 3
  *  - Improve quantization function.
- *      - Deal with outliers.
- *      - Need to be able to dequantize before saving position evaluations to trainingData.bin
- *  - Improve speed of principal variation search.
+ *      - Deal with outliers if they arise again.
+ *  - Multithreaded forward propagation. Assign threads to batches of output nodes.
  *  - Properly handle board->turn 's effect on the neural network value.
  *  - Endgame tablebase (Probe Syzygy)
  */
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
             printf("--nobook\t\tPrevents loading an opening book\n");
+            printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
             printf("--train\t\tTrains the neural network. Specify that maximum number of iterations\n");
             printf("--generate\t\tCreates training data for the neural network. Specify the number of entries.\n");
             printf("\n\n");
@@ -69,6 +70,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
+        else if(strcmp(argv[i], "--init") == 0) { load_playingWeights(); save_playingWeights(); exit(0);}
     }
     
     srand(time(NULL));

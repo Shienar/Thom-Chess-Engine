@@ -222,26 +222,7 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
     //History can't get imported this way. Start from scratch.
     board->moveStackTop = NULL;
     
-    //We can add the last move if it is required for en passant, though.
-    if(enPassantTargetSquare[0] != '-')
-    {
-        int endSquare = getSquareNumber(enPassantTargetSquare);
-        int startSquare;
-        int piece = PAWN;
-        if(board->turn == WHITE) 
-        {
-            piece|=BLACK;
-            endSquare = endSquare - 8;
-            startSquare = endSquare + 16;
-        }
-        else 
-        {
-            piece|=WHITE;
-            endSquare = endSquare + 8;
-            startSquare = endSquare - 16;
-        }
-        moves_push(board, createMove(startSquare, endSquare, 0, piece, 0, 0, board->flags, halfMoveClock - 1));
-    }
+    if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
 
     if(board->ht) destroy_hashTable_pos(board->ht);
     board->ht = create_hashTable_pos();
@@ -294,6 +275,8 @@ bitboard* create_board()
     //History
     board->moveStackTop = NULL;
     board->ht = create_hashTable_pos();
+
+    board->enPassantSquare = -1;
 
     //Other
     board->halfMoveCount = 0;
@@ -383,6 +366,8 @@ void copy_board(bitboard* dest, bitboard* source)
     {
         dest->moveStackTop = NULL;
     }
+
+    dest->enPassantSquare = source->enPassantSquare;
     
     destroy_hashTable_pos(dest->ht);
     dest->ht = copy_hashTable_pos(source->ht);

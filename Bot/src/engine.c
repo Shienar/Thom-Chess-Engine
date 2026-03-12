@@ -56,6 +56,8 @@ int sortMoves(void* c, const void* a, const void* b)
     if(move_a->capturedPiece && move_b->capturedPiece) return ((move_b->capturedPiece&0xF) - (move_b->piece&0xF)) - ((move_a->capturedPiece&0xF) - (move_a->piece&0xF));
     else if(move_a->capturedPiece) return -1;
     else if(move_b->capturedPiece) return 1;
+    else if(ISKING(move_a->piece)) return 1; 
+    else if(ISKING(move_b->piece)) return -1;
     else return move_b->piece - move_a->piece;
     
 }
