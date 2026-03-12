@@ -237,18 +237,21 @@ uint64_t getHashCode(bitboard* board)
     if(board->flags&8) returnValue^=zobrist_keys[771];
 
 
-    move* m = board->moveStackTop;
-    if(m && ISPAWN(m->piece) && abs(m->startSquare - m->endSquare) == 16)
+    if(board->enPassantSquare != -1)
     {
+        int endSquare;
+        if(ISWHITE(board->turn)) endSquare = board->enPassantSquare + 8;
+        else endSquare = board->enPassantSquare - 8;
+
         //Additional check that there is a pawn that  can make the capture.
         uint64_t borderingPawnMask = 0;
-        if(getColumn(m->endSquare) > 1) borderingPawnMask|=(1ull<<(m->endSquare - 1));
-        if(getColumn(m->endSquare) < 8) borderingPawnMask|=(1ull<<(m->endSquare + 1));
+        if(getColumn(endSquare) > 1) borderingPawnMask|=(1ull<<(endSquare - 1));
+        if(getColumn(endSquare) < 8) borderingPawnMask|=(1ull<<(endSquare + 1));
 
-        if((ISWHITE(m->piece) && (borderingPawnMask&board->pawn_b)) ||
-            (ISBLACK(m->piece) && (borderingPawnMask&board->pawn_w)))
+        if((ISWHITE(board->turn) && (borderingPawnMask&board->pawn_w)) ||
+            (ISBLACK(board->turn) && (borderingPawnMask&board->pawn_b)))
             {
-                returnValue^=zobrist_keys[772 + getColumn(m->endSquare) - 1];
+                returnValue^=zobrist_keys[772 + getColumn(endSquare) - 1];
             }
     }
 
