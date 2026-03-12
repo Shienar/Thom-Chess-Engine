@@ -10,11 +10,10 @@
 
 /**
  * TODO:
- *  - Disappearing a8 rook on a knight move in a human v engine game, depth 3
+ *  - Multithreaded forward propagation. Assign threads to batches of output nodes.
+ *  - Stack of accumulators for easy unmoving? 
  *  - Improve quantization function.
  *      - Deal with outliers if they arise again.
- *  - Multithreaded forward propagation. Assign threads to batches of output nodes.
- *  - Properly handle board->turn 's effect on the neural network value.
  *  - Endgame tablebase (Probe Syzygy)
  */
 

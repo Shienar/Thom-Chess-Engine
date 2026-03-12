@@ -37,7 +37,7 @@ double evaluate(bitboard* board)
         else return -DBL_MAX;
     }
 
-    return (double) forwardPropagate_Int();
+    return (double) forwardPropagate_Int(board->turn);
 }
 
 //For qsort_s

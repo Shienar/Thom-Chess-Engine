@@ -111,8 +111,8 @@ void loadInputAccumulator(bitboard* board, int networkType);
  */
 void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int shouldUndoMove);
 
-float forwardPropagate_Float();
-int8_t forwardPropagate_Int();
+float forwardPropagate_Float(int turn);
+int8_t forwardPropagate_Int(int turn);
 
 void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError);
 

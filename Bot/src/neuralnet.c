@@ -239,7 +239,9 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
 {
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex++)
     {
-        outputValues[outputIndex] = biasWeights[outputIndex];
+       if(biasWeights) outputValues[outputIndex] = biasWeights[outputIndex];
+       else outputValues[outputIndex] = 0.0;
+
         __m256 intermediate1 = _mm256_setzero_ps();
         __m256 intermediate2 = _mm256_setzero_ps();
         __m256 intermediate3 = _mm256_setzero_ps();
@@ -369,7 +371,8 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         sum128 = _mm_add_epi16(sum128, _mm_srli_si128(sum128, 4));
         sum128 = _mm_add_epi16(sum128, _mm_srli_si128(sum128, 2));
         int16_t totalSum = _mm_extract_epi16(sum128, 0);
-        totalSum+= biasWeights[outputIndex];
+
+        if(biasWeights) totalSum+= biasWeights[outputIndex];
 
         if(totalSum >= INT8_MAX) totalSum = INT8_MAX;
         else if(totalSum <= INT8_MIN) totalSum = INT8_MIN;
@@ -550,16 +553,29 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 }
 
 
-float forwardPropagate_Float()
+float forwardPropagate_Float(int turn)
 {
     //Assume accumulator has already been updated.
-    float tempH2[2][SECOND_HIDDEN_LAYER_NODES];
-    calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 0);
-    calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], trainingNNUE->weights2_bias, 0);
 
+    //accumulator[0] = white
+    //accumulator[1] = black
+    //trainingNNUE->weights2[0 to ACCUMULATOR_NODES_PER_SIDE] = current side to move
+    //trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE to 2* ACCUMULATOR_NODES_PER_SIDE -1] = opponent's side
+    float tempH2[2][SECOND_HIDDEN_LAYER_NODES];
+    if(ISWHITE(turn))
+    {
+        calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 0);
+        calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
+    }
+    else
+    {
+        calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], trainingNNUE->weights2_bias, 0);
+        calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, NULL, 0);
+    }
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i], 0, 1);
+        //The above step added the biases twice.
+        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i], 0, 1);
     }
 
     calculateLayer_Floats(trainingNNUE->h2, trainingNNUE->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
@@ -567,7 +583,7 @@ float forwardPropagate_Float()
 
     return trainingNNUE->outputNode;
 }
-int8_t forwardPropagate_Int()
+int8_t forwardPropagate_Int(int turn)
 {
     //Assume accumulator has already been updated.
     int8_t h2[SECOND_HIDDEN_LAYER_NODES] = {0};
@@ -575,11 +591,27 @@ int8_t forwardPropagate_Int()
     int8_t outputNode = 0;
 
     int8_t tempH2[2][SECOND_HIDDEN_LAYER_NODES];
-    calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
-    calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
+
+    //accumulator[0] = white
+    //accumulator[1] = black
+    //trainingNNUE->weights2[0 to ACCUMULATOR_NODES_PER_SIDE] = current side to move
+    //trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE to 2* ACCUMULATOR_NODES_PER_SIDE -1] = opponent's side
+    float tempH2[2][SECOND_HIDDEN_LAYER_NODES];
+    if(ISWHITE(turn))
+    {
+        calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
+    }
+    else
+    {
+        calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, NULL, 0);
+    }
+    
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
+        //The above step added the biases twice.
         h2[i] = SCReLU_Int(tempH2[0][i] + tempH2[1][i], 0, 1);
     }
 
@@ -636,7 +668,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             {
                 fread(&data, sizeof(network_training_data), 1, trainingData);
                 loadInputAccumulator(&data.board, TRAINING_NNUE);
-                forwardPropagate_Float();
+                forwardPropagate_Float(data.board.turn);
                 expectedOutput = data.evaluation;
 
                 sumSquaredError+= pow((double) (trainingNNUE->outputNode - expectedOutput), 2.0);
