@@ -28,18 +28,17 @@ double evaluate(bitboard* board)
     }
     else if(board->victor == WHITE) 
     {
-        if(board->turn == WHITE) return DBL_MAX;
-        else return -DBL_MAX;
+        if(board->turn == WHITE) return INT8_MAX + 2;
+        else return INT8_MIN - 1;
     }
     else if(board->victor == BLACK) 
     {
-        if(board->turn == BLACK) return DBL_MAX;
-        else return -DBL_MAX;
+        if(board->turn == BLACK) return INT8_MAX + 2;
+        else return -INT8_MIN - 1;
     }
 
     return (double) forwardPropagate_Int(board->turn);
 }
-
 //For qsort_s
 int sortMoves(void* c, const void* a, const void* b)
 {
@@ -58,7 +57,8 @@ int sortMoves(void* c, const void* a, const void* b)
     else if(move_b->capturedPiece) return 1;
     else if(ISKING(move_a->piece)) return 1; 
     else if(ISKING(move_b->piece)) return -1;
-    else return move_b->piece - move_a->piece;
+    //else return move_b->piece - move_a->piece;
+    else return rand()%2?-1:1; // A bit of randomness in the sorting to help out on multithreaded diversity.
     
 }
 
@@ -140,7 +140,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit)
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit)
 {
     //Transposition table
     table_entry_tt* old_tt_entry = NULL;
@@ -159,7 +159,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         .hashCode = getHashCode(board)
     };
 
-    if(depth == 0 || clock() > timeLimit || board->victor) 
+    if(depth == 0 || (timeLimit && clock() > *timeLimit) || board->victor) 
     {
         new_tt_entry.nodeType = NODE_TYPE_PV; // Exact evaluation.
         new_tt_entry.evaluation = quiesce(board, alpha, beta, 5);
@@ -215,8 +215,11 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                     new_tt_entry.evaluation = score;
                     transposition_table_set(transpositionTable, new_tt_entry);
                     alpha = score;
-                    pv[pvIndex] = *moveList[index];
-                    copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+                    if(pv) 
+                    {
+                        pv[pvIndex] = *moveList[index];
+                        copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+                    }
                 }
             }
             index++;
@@ -224,6 +227,26 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         freeMoveList(moveList);
     }
     return alpha;
+}
+
+typedef struct threadData {
+    double alpha;
+    double beta;
+    int depth;
+    bitboard* board;
+    clock_t* endTime;
+    move* pvTable;
+    double* score;
+} threadData;
+
+DWORD WINAPI helperThreadFunction(LPVOID lpParam)
+{
+    threadData* data = (threadData*)lpParam;
+    while(*data->endTime != 0)
+    {
+        principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime);
+    }
+    return 0;
 }
 
 move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
@@ -241,8 +264,23 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
 
+    HANDLE helperThreads[HELPER_THREAD_COUNT] = {0};
+    DWORD helperThreadID[HELPER_THREAD_COUNT] = {0};
+    threadData params[HELPER_THREAD_COUNT] = {0};
+
+    clock_t terminateFlags[HELPER_THREAD_COUNT] = {LONG_MAX}; //These are passed as end times for the thread searches. Cancel threads by setting values to 0.
+    double threadScores[HELPER_THREAD_COUNT] = {0};
+    bitboard threadBoards[HELPER_THREAD_COUNT] = {0};
+    for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+    {
+        params[i].pvTable = NULL;
+        params[i].board = &threadBoards[i];
+        params[i].score = &threadScores[i];
+        params[i].endTime = &terminateFlags[i];
+    }
+
     //Always fully evaluate at depth 1:
-    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, LONG_MAX);
+    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, NULL);
 
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
@@ -251,7 +289,19 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
-        double aspiration_margin = 0.25;
+        //Initialize helper threads
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++)
+        {
+            copy_board(params[i].board, board);
+            params[i].depth = currentDepth + (i%2);
+            *params[i].endTime = LONG_MAX;
+            params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+            copyNMoves(params[i].pvTable, principalVariation, currentDepth);
+
+            helperThreads[i] = CreateThread(NULL, 0, helperThreadFunction, &params[i], 0, &helperThreadID[i]);
+        }
+
+        double aspiration_margin = INITIAL_ASPIRATION_MARGIN;
         double alpha = aspiration_expectedValue - aspiration_margin;
         double beta = aspiration_expectedValue + aspiration_margin;
 
@@ -259,17 +309,17 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         while(1)
         {
             if(clock() > endTime) break;
-            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, endTime);
+            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime);
 
             if(score <= alpha)
             {
                 alpha-= aspiration_margin;
-                aspiration_margin*=2;
+                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
             }
             else if(score >= beta)
             {
                 beta+= aspiration_margin;
-                aspiration_margin*=2;
+                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
             }
             else
             {
@@ -277,16 +327,54 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
                 break;
             }
 
-            if(aspiration_margin > 5.0)
+            if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
             {
                 alpha = -DBL_MAX;
                 beta = DBL_MAX;
             }
         }
         
+        //Stop helper threads
+        memset(terminateFlags, 0, HELPER_THREAD_COUNT * sizeof(clock_t));
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+        {
+            WaitForSingleObject(helperThreads[i], INFINITE);
+            CloseHandle(helperThreads[i]);
+        }
+
+        //Move voting
+        double worstScore = aspiration_expectedValue;
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++)  worstScore = min(*params[i].score, worstScore);
+
+        int mainThreadVote = (aspiration_expectedValue - worstScore + 1) * currentDepth;
+        int totalVoteWeights = mainThreadVote;
+        int votes[HELPER_THREAD_COUNT] = {0.0};
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+        {
+            votes[i] = (*params[i].score - worstScore + 1) * params[i].depth;
+            totalVoteWeights+= votes[i];
+        }
+
+        totalVoteWeights = rand()%totalVoteWeights;
+        if(totalVoteWeights >= mainThreadVote)
+        {
+            int8_t threadIndex;
+            for(threadIndex = 0; threadIndex < HELPER_THREAD_COUNT - 1; threadIndex++)
+            {
+                if(totalVoteWeights < mainThreadVote) break;
+                else mainThreadVote += votes[threadIndex];
+            }
+            copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
+        }
+
         copyNMoves(principalVariation, tempPVTable, currentDepth);
         FREE(tempPVTable);
         tempPVTable = NULL;
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+        {
+            FREE(params[i].pvTable);
+            params[i].pvTable = NULL;
+        }
     }
 
     if(tempPVTable) FREE(tempPVTable);

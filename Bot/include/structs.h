@@ -38,6 +38,7 @@ typedef struct table_entry_tt {
     int evaluationDepth;
     int nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
     move bestMove;
+    uint8_t checkSum;
 } table_entry_tt;
 
 typedef struct hashtable_tt {

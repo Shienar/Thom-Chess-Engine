@@ -29,6 +29,14 @@ void destroy_hashTable_tt(hashtable_tt* ht)
     FREE(ht);
 }
 
+uint8_t generateChecksum(table_entry_tt* entry)
+{
+    const uint8_t* ptr = (const uint8_t*)entry;
+    uint8_t checksum = 0;
+    for(int i = 0; i < sizeof(entry) - 1; i++)  checksum^=ptr[i];
+    return checksum;
+}
+
 table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
 {
     if(!board || !tt) return NULL;
@@ -41,7 +49,8 @@ table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
     {
         if(tt->array[index].hashCode == hashCode)
         {
-            return &tt->array[index];
+            uint8_t checkSum = generateChecksum(&tt->array[index]);
+            if(tt->array[index].checkSum == checkSum) return &tt->array[index];
         }
 
         index++;
@@ -64,9 +73,11 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
     size_t index = entry.hashCode%tt->capacity;
     size_t startIndex = index;
 
+    (&entry)->checkSum = generateChecksum(&entry); 
+
     while(tt->array[index].hashCode != 0)
     {
-        if(tt->array[index].hashCode == entry.hashCode)
+        if(tt->array[index].hashCode == entry.hashCode && tt->array[index].checkSum == entry.checkSum)
         {
             //Update
             tt->array[index] = entry;
@@ -86,17 +97,9 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
     //Insert
     if(index == -1)
     {
-        //Find a replacement. (Oldest)
-        clock_t oldestTime = LONG_MAX;
-        for(size_t i = 0; i < tt->capacity; i++)
-        {
-            if(tt->array[i].hashCode != 0 && tt->array[i].age < oldestTime) 
-            {
-                index = i;
-                oldestTime = tt->array[i].age;
-            }
-        }
-        tt->array[index] = entry;
+        //Find a replacement. (Always replace)
+        //I don't want multiple threads fighting over the oldest spot.
+        tt->array[startIndex] = entry;
     }
     else
     {

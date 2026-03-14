@@ -526,3 +526,22 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
     FREE(playerNNUE);
     fclose(output);
 }
+
+void updateTrainingData(int depth, int maxTime)
+{
+    FILE* input = fopen("./import/trainingData.bin", "rb+");
+    
+    fseek(input, 0, SEEK_END);
+    int entryCount = ftell(input)/sizeof(network_training_data);
+    rewind(input);
+    
+    network_training_data data = {0};
+
+    for(int i = 0; i < entryCount; i++)
+    {
+        fread(&data, sizeof(network_training_data), 1, input);
+        data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL);
+        fwrite(&data, sizeof(network_training_data), 1, input);
+    }
+    fclose(input);
+}

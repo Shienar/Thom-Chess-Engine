@@ -89,7 +89,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
         int currentSquare = 0;
         while(moveMask)
         {
-            if(moveMask&1 && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
+            if(moveMask&1 && (!capturesOnly || (capturesOnly && opposingPieceMask&1) || board->enPassantSquare == currentSquare))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
                 int targetSquare = currentSquare;
@@ -1564,7 +1564,6 @@ move* unmove(bitboard *board)
         DEBUG("Cannot undo a move from a NULL board.")
         return NULL;
     }
-
 
     decrement_table_value(board->ht, board);
     move* m = moves_pop(board);

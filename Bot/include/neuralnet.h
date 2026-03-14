@@ -119,4 +119,5 @@ int8_t forwardPropagate_Int(int turn);
 void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError);
 
 void generateTrainingData(int depth, int maxTime, int maxPositions);
+void updateTrainingData(int depth, int maxTime);
 #endif

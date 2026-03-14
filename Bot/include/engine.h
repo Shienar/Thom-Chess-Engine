@@ -18,15 +18,18 @@
 #define CONTEMPT_FACTOR_FIFTYMOVERULE -0.25
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -0.25
 
-#define THREAD_COUNT 8
+#define HELPER_THREAD_COUNT 8
+
+//Score are in the range of [-128, 127]
+#define INITIAL_ASPIRATION_MARGIN 10.0
+#define MAXIMUM_ASPIRATION_MARGIN 40.0
+#define ASPIRATION_MARGIN_MULT_FACTOR 2.0
 
 /**
  * Evaluates a position based on piece/square weights.
  * Returns white's score - black's score.
  */
 double evaluate(bitboard* board);
-
-/* End of PeSTO */
 
 /**
  * Quiescence search function.
@@ -40,8 +43,10 @@ double quiesce(bitboard* board, double alpha, double beta, int depth);
  * 
  * Depth = "Depth remaining" = Maxdepth - ply (distance from root)
  * Call with depth == maxdepth;
+ * 
+ * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t timeLimit);
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit);
 
 /**
  * Iterative deepening function.

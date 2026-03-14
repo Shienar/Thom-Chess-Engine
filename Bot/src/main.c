@@ -6,12 +6,11 @@
 #include "../include/neuralnet.h"
 #include <stdio.h>
 #include <string.h>
-#include <windows.h>
 
 /**
  * TODO:
- *  - Multithreaded engine search. 
- *      - Lazy SMP
+ *  - PVS is very slow since the evaluation function is uninitialized and random.
+ *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
  */
 
@@ -30,6 +29,7 @@ int main(int argc, char** argv)
     int fenLineNumber = -1;
     int shouldTrain = 0;
     int shouldCreateTrainingData = 0;
+    int shouldUpdateTrainingData = 0;
     int useBook = 1;
     for(int i = 1; i < argc; i++)
     {
@@ -66,6 +66,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--updatedata") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
         else if(strcmp(argv[i], "--init") == 0) { load_playingWeights(); save_playingWeights(); exit(0);}
     }
@@ -88,10 +89,15 @@ int main(int argc, char** argv)
         dump_allocations();
         exit(0);
     }
-    if(shouldCreateTrainingData)
+    else if(shouldCreateTrainingData)
     {
         generateTrainingData(depth, maxTime, shouldCreateTrainingData);
         dump_allocations();
+        exit(0);
+    }
+    else if(shouldUpdateTrainingData)
+    {
+        updateTrainingData(depth, maxTime);
         exit(0);
     }
 
