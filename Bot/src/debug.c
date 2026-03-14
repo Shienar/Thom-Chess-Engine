@@ -11,12 +11,24 @@ void disableDebugMessages() {printDebugMessages = 0;}
 void enableLeakTracking() {
     trackLeaks = 1;
     leakListLock = CreateMutex(NULL, 0, NULL);
-    if(!leakListLock) DEBUG("Failed to created leak list lock.")
+    if(!leakListLock) DEBUG("Failed to created leak list lock.");
 }
 void disableLeakTracking() {
     trackLeaks = 0;
     CloseHandle(leakListLock);
     leakListLock = NULL;
+}
+
+void dbg_msg(const char* fileName, int lineNumber, const char* str, ...)
+{
+    if(!printDebugMessages) return;
+
+    va_list args;
+    va_start(args, str);
+    printf("ERROR: %s: %d -- ", fileName, lineNumber);
+    vprintf(str, args);
+    va_end(args);
+    printf("\n");
 }
 
 void* allocate_debug(size_t count, size_t size, const char* file, int line)

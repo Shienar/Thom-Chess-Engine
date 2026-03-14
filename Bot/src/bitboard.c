@@ -10,7 +10,7 @@ int getColumn(int square)
 {
     if(square < 0 || square > 63)
     {
-        DEBUG("Cannot get column of square %d - out of bounds [0, 63]", square)
+        DEBUG("Cannot get column of square %d - out of bounds [0, 63]", square);
         return 0;
     }
 
@@ -22,7 +22,7 @@ int getRow(int square)
 {
     if(square < 0 || square > 63)
     {
-        DEBUG("Cannot get row of square %d - out of bounds [0, 63]", square)
+        DEBUG("Cannot get row of square %d - out of bounds [0, 63]", square);
         return 0;
     } 
 
@@ -46,7 +46,7 @@ void getSquareName(int square, char* target)
 {
     if(square < 0 || square > 63)
     {
-        DEBUG("Square %d is out of bounds [0, 63]", square)
+        DEBUG("Square %d is out of bounds [0, 63]", square);
         return;
     } 
     //Output example: e4
@@ -101,13 +101,13 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
     }
     else if(FEN[0] == ';')
     {
-        DEBUG("Target FEN line is a comment.")
+        DEBUG("Target FEN line is a comment.");
         board->victor = -1;
         return;
     }
     else if(FEN[0] == ' ' || FEN[0] == '\n')
     {
-        DEBUG("Target FEN line is whitespace.")
+        DEBUG("Target FEN line is whitespace.");
         board->victor = -1;
         return;
     }
@@ -377,12 +377,12 @@ int findPieceOnSquare(bitboard* board, int square)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot find piece on square. Board is NULL")
+        DEBUG("Cannot find piece on square. Board is NULL");
         return 0;
     }
     else if(square < 0 || square > 63)
     {
-        DEBUG("Cannot check square %d - out of bounds [0, 63]", square)
+        DEBUG("Cannot check square %d - out of bounds [0, 63]", square);
         return 0;
     }
 
@@ -457,12 +457,12 @@ void board_clear_square(bitboard* board, int square, int pieceType)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot clear square. Board is NULL")
+        DEBUG("Cannot clear square. Board is NULL");
         return;
     }
     else if(square < 0 || square > 63)
     {
-        DEBUG("Cannot clear square %d - out of bounds [0, 63]", square)
+        DEBUG("Cannot clear square %d - out of bounds [0, 63]", square);
         return;
     } 
     
@@ -618,12 +618,12 @@ void board_set(bitboard* board, int square, int piece)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot set square. Board is NULL")
+        DEBUG("Cannot set square. Board is NULL");
         return;
     }
     else if(square < 0 || square > 63)
     {
-        DEBUG("Cannot set square %d - out of bounds [0, 63]", square)
+        DEBUG("Cannot set square %d - out of bounds [0, 63]", square);
         return;
     }
 
@@ -705,7 +705,7 @@ void board_print(bitboard* board, int printValues, int printHistory)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot print board. Board is NULL")
+        DEBUG("Cannot print board. Board is NULL");
         return;
     }
     
@@ -757,7 +757,7 @@ void values_print(bitboard* board)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot print board values. Board is NULL")
+        DEBUG("Cannot print board values. Board is NULL");
         return;
     }
 
@@ -799,7 +799,7 @@ int moves_push(bitboard* board, move* m)
 {
     if(!board || !m)
     {
-        DEBUG("Failed to push move")
+        DEBUG("Failed to push move");
         return -1;
     }
 
@@ -819,7 +819,7 @@ move* moves_pop(bitboard* board)
 {
     if(!board)
     {
-        DEBUG("Failed to pop move from null board")
+        DEBUG("Failed to pop move from null board");
         return NULL;
     }
 

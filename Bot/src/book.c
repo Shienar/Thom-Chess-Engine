@@ -14,7 +14,7 @@ void loadBook()
 
     if(!input)
     {
-        DEBUG("Failed to read book file.")
+        DEBUG("Failed to read book file.");
         fclose(input);
         return;
     }
@@ -25,7 +25,7 @@ void loadBook()
 
     if(!entryCount)
     {
-        DEBUG("Opening book is empty.")
+        DEBUG("Opening book is empty.");
         fclose(input);
         return;
     }

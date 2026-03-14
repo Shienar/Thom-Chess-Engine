@@ -14,7 +14,7 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
 {
     if(!func || !trainingWeights)
     {
-        DEBUG("Passed null arguments to iterator.")
+        DEBUG("Passed null arguments to iterator.");
         return;
     }
     for(int i = 0; i < HALF_INPUT_BITS; i++)
@@ -94,7 +94,7 @@ void save_trainingWeights()
     }
     else
     {
-        DEBUG("Failed to write neural network to file.")
+        DEBUG("Failed to write neural network to file.");
     }
     fclose(output);
 }
@@ -113,12 +113,12 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
 {
     if(!inputFloats) 
     {
-        DEBUG("Cannot quantize null input.")
+        DEBUG("Cannot quantize null input.");
         return;
     }
     else if(!outputBytes)
     {
-        DEBUG("Cannot quantize to null output.")
+        DEBUG("Cannot quantize to null output.");
         return;
     }
 
@@ -474,7 +474,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
                 move* bestMove = calculateBestMove(board, depth, maxTime);
                 
                 //No one is in check and the best move isn't a capture.
-                if(bestMove->capturedPiece == 0 && (board->flags&0x30) == 0)
+                if(bestMove->capturedPiece == 0 && (board->flags&0x30 && transposition_table_get(board, transpositionTable) != NULL) == 0)
                 {
                     network_training_data newData = {0};
                     newData.board.pawn_w = board->pawn_w;
@@ -506,7 +506,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
                     newData.board.ht = NULL;
                     newData.board.moveStackTop = NULL;
                     newData.board.halfMoveCount = board->halfMoveCount;
-
+                    
                     newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation * scalingFactor;
                     fwrite(&newData, sizeof(network_training_data), 1, output);
                     entryCount++;

@@ -48,7 +48,7 @@ void save_playingWeights()
     }
     else
     {
-        DEBUG("Failed to write neural network to file.")
+        DEBUG("Failed to write neural network to file.");
     }
     fclose(output);
 }

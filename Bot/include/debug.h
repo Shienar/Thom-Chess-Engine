@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 extern int printDebugMessages;
 extern int trackLeaks;
@@ -16,19 +17,9 @@ void disableDebugMessages();
 void enableLeakTracking();
 void disableLeakTracking();
 
-#define DEBUG(x, args...) if(printDebugMessages) \
-{ \
-    printf("ERROR: %s:%d -- ", __FILE__, __LINE__);  \
-    printf(x, ##args); \
-    printf("\n"); \
-}
+void dbg_msg(const char* fileName, int lineNumber, const char* str, ...);
 
-#define INFO(x, args...) if(printDebugMessages) \
-{ \
-    printf("INFO: ");  \
-    printf(x, ##args); \
-    printf("\n"); \
-}
+#define DEBUG(x, ...) dbg_msg(__FILE__, __LINE__, x, ##__VA_ARGS__)
 
 /*** Memory leak checker ***/
 typedef struct memoryBlock {

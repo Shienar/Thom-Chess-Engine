@@ -9,6 +9,7 @@
 
 /**
  * TODO:
+ *  - Various en passant errors. Could not locate a value to decrement, etc.
  *  - PVS is very slow since the evaluation function is uninitialized and random.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
@@ -24,7 +25,7 @@ int main(int argc, char** argv)
     int depth = 6;
     int onlyEngines = 0;
     int onlyHumans = 0;
-    double maxTime = 3;
+    int maxTime = 3;
     int printHistory = 0;
     int fenLineNumber = -1;
     int shouldTrain = 0;
@@ -62,7 +63,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--history") == 0) printHistory = 1;
         else if(strcmp(argv[i], "--human") == 0) { onlyHumans = 1; onlyEngines = 0; }
         else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
-        else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atof(argv[i]); }
+        else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atoi(argv[i]); }
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }

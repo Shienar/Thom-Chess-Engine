@@ -91,7 +91,7 @@ int increment_table_value(hashtable_pos* ht, bitboard* board)
 {
     if(!ht) 
     {
-        DEBUG("Cannot increment from null hash table.")
+        DEBUG("Cannot increment from null hash table.");
         return INT32_MIN;
     }
 
@@ -155,7 +155,7 @@ int decrement_table_value(hashtable_pos* ht, bitboard* board)
         if(index >= ht->capacity) index=0;
     }
     
-    DEBUG("Could not locate a value to decrement at hashCode 0x%016llx.", hashCode)
+    DEBUG("Could not locate a value to decrement at hashCode 0x%016llx.", hashCode);
 
     return INT32_MIN;
 }

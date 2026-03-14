@@ -66,7 +66,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
 {
      if(!tt)
      {
-        DEBUG("Transposition table is nil.")
+        DEBUG("Transposition table is nil.");
         return;
      }
 

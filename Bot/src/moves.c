@@ -7,7 +7,7 @@ move** generateMoveList(bitboard* board, int capturesOnly)
 {
     if(board->victor) 
     {
-        DEBUG("Cannot generate moves for terminated game; Victor=%02x", board->victor)
+        DEBUG("Cannot generate moves for terminated game; Victor=%02x", board->victor);
         return NULL;
     }
 
@@ -60,17 +60,17 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
 {
     if(piece == 0)
     {
-        DEBUG("Cannot generate piece moves on invalid piece type.")
+        DEBUG("Cannot generate piece moves on invalid piece type.");
         return NULL;
     }
     else if(square < 0 || square > 63)
     {
-        DEBUG("Cannot generate piece moves from invalid square.")
+        DEBUG("Cannot generate piece moves from invalid square.");
         return NULL;
     }
     else if(!ISWHITE(color) && !ISBLACK(color))
     {
-        DEBUG("Cannot generate piece moves from invalid color.")
+        DEBUG("Cannot generate piece moves from invalid color.");
         return NULL;
     }
     move** moveArray = CALLOC(40, sizeof(move*));
@@ -953,22 +953,22 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move pawn. Board is NULL")
+        DEBUG("Cannot move pawn. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("Pawn start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("Pawn start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("Pawn end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("Pawn end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for pawn move. (%02x)", color)
+        DEBUG("Invalid color for pawn move. (%02x)", color);
         return -1;
     }
 
@@ -1017,7 +1017,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 getSquareName(board->kingSquare_w, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->enPassantSquare - 8, kingSquareName, board->kingSquare_w)
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->enPassantSquare - 8, kingSquareName, board->kingSquare_w);
                 return -1;
             }
             else if(ISBLACK(color) && (pinType =  isPinned(board, board->enPassantSquare + 8, board->kingSquare_b, BLACK)) && pinType != PIN_TYPE_BELOW)
@@ -1026,7 +1026,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 getSquareName(board->kingSquare_b, kingSquareName);
                 char pawnSquareName[3] = {0};
                 getSquareName(board->moveStackTop->nextMove->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->enPassantSquare + 8, kingSquareName, board->kingSquare_b)
+                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->enPassantSquare + 8, kingSquareName, board->kingSquare_b);
                 return -1;
             }
 
@@ -1075,22 +1075,22 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move knight. Board is NULL")
+        DEBUG("Cannot move knight. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("Knight start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("Knight start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("Knight end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("Knight end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for knight move.")
+        DEBUG("Invalid color for knight move.");
         return -1;
     }
 
@@ -1115,22 +1115,22 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move bishop. Board is NULL")
+        DEBUG("Cannot move bishop. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("Bishop start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("Bishop start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("Bishop end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("Bishop end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for bishop move.")
+        DEBUG("Invalid color for bishop move.");
         return -1;
     }
 
@@ -1154,22 +1154,22 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move rook. Board is NULL")
+        DEBUG("Cannot move rook. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("Rook start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("Rook start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("Rook end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("Rook end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for rook move.")
+        DEBUG("Invalid color for rook move.");
         return -1;
     }
 
@@ -1210,22 +1210,22 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move queen. Board is NULL")
+        DEBUG("Cannot move queen. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("Queen start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("Queen start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("Queen end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("Queen end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for queen move.")
+        DEBUG("Invalid color for queen move.");
         return -1;
     }
 
@@ -1249,22 +1249,22 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
 {
     if(board == NULL)
     {
-        DEBUG("Cannot move king. Board is NULL")
+        DEBUG("Cannot move king. Board is NULL");
         return -1;
     }
     else if(startSquare < 0 || startSquare > 63)
     {
-        DEBUG("King start square %d - out of bounds [0, 63]", startSquare)
+        DEBUG("King start square %d - out of bounds [0, 63]", startSquare);
         return -1;
     } 
     else if(endSquare < 0 || endSquare > 63)
     {
-        DEBUG("King end square %d - out of bounds [0, 63]", endSquare)
+        DEBUG("King end square %d - out of bounds [0, 63]", endSquare);
         return -1;
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for king move.")
+        DEBUG("Invalid color for king move.");
         return -1;
     }
 
@@ -1336,7 +1336,7 @@ int movePiece(bitboard *board, int startSquare, int endSquare, int piece, int pr
     }
     else
     {
-        DEBUG("Attempted to move invalid piece type.")
+        DEBUG("Attempted to move invalid piece type.");
         return -1;
     }
 
@@ -1357,7 +1357,7 @@ int moveFromString(bitboard* board, char* str)
     int piece = findPieceOnSquare(board, startSquare);
     if(!piece)
     {
-        DEBUG("Could not find piece on start square.")
+        DEBUG("Could not find piece on start square.");
         return -1;
     }
 
@@ -1413,34 +1413,34 @@ int moveFromStruct(bitboard* board, move* m)
     
     if(board->victor)
     {
-        DEBUG("Cannot move from terminal gamestate; Victor=%02x", board->victor)
+        DEBUG("Cannot move from terminal gamestate; Victor=%02x", board->victor);
         return -1;
     }
     else if(ISBLACK(m->piece) && board->turn == WHITE)
     {
-        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare)
+        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare);
         return -1;
     }
     else if(ISWHITE(m->piece) && board->turn == BLACK)
     {
-        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m->startSquare, m->endSquare)
+        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m->startSquare, m->endSquare);
         return -1;
     }
     else if(m->startSquare < 0 || m->startSquare > 63 || m->endSquare < 0 || m->endSquare > 63)
     {
-        DEBUG("Piece cannot move out of bounds (%d -> %d).", m->startSquare, m->endSquare)
+        DEBUG("Piece cannot move out of bounds (%d -> %d).", m->startSquare, m->endSquare);
         return -1;
     }
     else if(m->startSquare == m->endSquare)
     {
-        DEBUG("Piece cannot move in place on square %d.", m->startSquare)
+        DEBUG("Piece cannot move in place on square %d.", m->startSquare);
         return -1;
     }
 
     move** potentialMoveList = generatePieceMoves(board, m->piece, m->startSquare, m->piece&0xF0, 0);
     if(potentialMoveList == NULL)
     {
-        DEBUG("Failed to generate potential moves.")
+        DEBUG("Failed to generate potential moves.");
         return -1;
     }
     int moveIndex = 0;
@@ -1461,14 +1461,14 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
-        DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName)
+        DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName);
         return -1;
     }
 
 
     if(movePiece(board, m->startSquare, m->endSquare, m->piece, m->promoteTo) != 0) 
     {
-        DEBUG("Failed to move piece from struct.")
+        DEBUG("Failed to move piece from struct.");
         return -1;
     }
     moves_push(board, m);
@@ -1561,7 +1561,7 @@ move* unmove(bitboard *board)
 {
     if(!board)
     {
-        DEBUG("Cannot undo a move from a NULL board.")
+        DEBUG("Cannot undo a move from a NULL board.");
         return NULL;
     }
 
@@ -1569,7 +1569,7 @@ move* unmove(bitboard *board)
     move* m = moves_pop(board);
     if(!m)
     {
-        DEBUG("No move history to undo.")
+        DEBUG("No move history to undo.");
         return NULL;
     }
 

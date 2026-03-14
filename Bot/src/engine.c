@@ -23,7 +23,7 @@ double evaluate(bitboard* board)
         if(board->victor&FIFTYMOVERULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
         if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
 
-        DEBUG("Unhandled draw condition.")
+        DEBUG("Unhandled draw condition.");
         return 0.0;
     }
     else if(board->victor == WHITE) 

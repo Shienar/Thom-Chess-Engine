@@ -10,7 +10,7 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloa
 {
     if(!inputLayerCompact)
     {
-        DEBUG("Cannot extract null input layer.")
+        DEBUG("Cannot extract null input layer.");
         return;
     }
     else if(inputLayerFloats)
@@ -31,7 +31,7 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloa
     }
     else
     {
-        DEBUG("No provided destination for extraction.")
+        DEBUG("No provided destination for extraction.");
     }
 }
 
@@ -39,17 +39,17 @@ void loadInputAccumulator(bitboard* board, int networkType)
 {
     if(!board)
     {
-        DEBUG("Cannot load null board into accumulator.")
+        DEBUG("Cannot load null board into accumulator.");
         return;
     }
     else if(networkType == TRAINING_NNUE && !trainingNNUE)
     {
-        DEBUG("Cannot load null training weights.")
+        DEBUG("Cannot load null training weights.");
         return;
     }
     else if(networkType == PLAYER_NNUE && !playerNNUE)
     {
-        DEBUG("Cannot load null playing weights.")
+        DEBUG("Cannot load null playing weights.");
         return;
     }
 
@@ -106,7 +106,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 {
     if(!lastMove)
     {
-        DEBUG("Cannot load null move.")
+        DEBUG("Cannot load null move.");
         return;
     }
 
