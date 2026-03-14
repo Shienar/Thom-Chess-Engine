@@ -89,7 +89,7 @@ void bitmask_print(uint64_t mask, char fill);
 
 int moves_push(bitboard* board, move* m);
 move* moves_pop(bitboard* board);
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int castleRights, int prevFiftyMoveCount);
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, bitboard* prevBoard);
 
 void dumpMoves(bitboard* board);
 #endif

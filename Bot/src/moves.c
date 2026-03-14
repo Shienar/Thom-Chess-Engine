@@ -75,7 +75,6 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
     }
     move** moveArray = CALLOC(40, sizeof(move*));
     if(!moveArray) return NULL;
-    int boardFlagMask = board->flags;
     int size = 0;
     uint64_t moveMask;
 
@@ -97,16 +96,16 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
                 if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
                 {
                     //Promotion
-                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, targetSquare, board);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, targetSquare, board);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, targetSquare, board);
                     size++;
                     
-                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, targetSquare, board);
                     size++;
                 }
                 else
@@ -126,7 +125,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
                         }
                     }
 
-                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, targetSquare, boardFlagMask, board->movesSinceLastChange);
+                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, targetSquare, board);
                     size++;
                 }
             }
@@ -164,7 +163,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
             if(moveMask&1  && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
             {
                 int targetPiece = findPieceOnSquare(board, currentSquare);
-                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, boardFlagMask, board->movesSinceLastChange);
+                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, board);
                 size++;
             }
             moveMask = moveMask >> 1;
@@ -595,7 +594,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
 
         //En passant
-        if(board->enPassantSquare != -1 && (board->enPassantSquare - square == 7 || board->enPassantSquare - square == 9))
+        if(board->enPassantSquare != -1 && 
+            (board->enPassantSquare - square == 7 || board->enPassantSquare - square == 9) && 
+            abs(getColumn(board->enPassantSquare) - getColumn(square)) == 1)
         {
             returnValue|=(1ull<<(board->enPassantSquare));
         }
@@ -618,7 +619,9 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
         }
         
          //En passant
-        if(board->enPassantSquare != -1 && (board->enPassantSquare - square == -7 || board->enPassantSquare - square == -9))
+        if(board->enPassantSquare != -1 && 
+            (board->enPassantSquare - square == -7 || board->enPassantSquare - square == -9) && 
+            abs(getColumn(board->enPassantSquare) - getColumn(square)) == 1)
         {
             returnValue|=(1ull<<(board->enPassantSquare));
         }
@@ -1039,8 +1042,8 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 CHECK_W(board->flags);
             }
 
-            if(ISWHITE(color)) board_clear_square(board, board->enPassantSquare - 8, PAWN);
-            else board_clear_square(board, board->enPassantSquare + 8, PAWN);
+            if(ISWHITE(color)) board_clear_square(board, board->enPassantSquare - 8, PAWN|BLACK);
+            else board_clear_square(board, board->enPassantSquare + 8, PAWN|WHITE);
         }
 
         //Set new board positions.
@@ -1401,9 +1404,7 @@ int moveFromString(bitboard* board, char* str)
         capturedSquare = endSquare;
     }
 
-    int boardFlagMask = board->flags;
-
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, boardFlagMask, board->movesSinceLastChange));
+    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, board));
 }
 
 int moveFromStruct(bitboard* board, move* m)
@@ -1580,8 +1581,8 @@ move* unmove(bitboard *board)
             //White queenside castle
             board_clear_square(board, 2, KING|WHITE);
             board_clear_square(board, 3, ROOK|WHITE);
-            board_set(board, ROOK|WHITE, 0);
-            board_set(board, KING|WHITE, 4);
+            board_set(board, 0, ROOK|WHITE);
+            board_set(board, 4, KING|WHITE);
             board->kingSquare_w = 4;
         }
         else if(m->endSquare == 6)
@@ -1589,8 +1590,8 @@ move* unmove(bitboard *board)
             //White kingside castle
             board_clear_square(board, 6, KING|WHITE);
             board_clear_square(board, 5, ROOK|WHITE);
-            board_set(board, ROOK|WHITE, 7);
-            board_set(board, KING|WHITE, 4);
+            board_set(board, 7, ROOK|WHITE);
+            board_set(board, 4, KING|WHITE);
             board->kingSquare_w = 4;
         }
         else if(m->endSquare == 58)
@@ -1598,8 +1599,8 @@ move* unmove(bitboard *board)
             //Black queenside castle
             board_clear_square(board, 58, KING|BLACK);
             board_clear_square(board, 59, ROOK|BLACK);
-            board_set(board, ROOK|BLACK, 56);
-            board_set(board, KING|BLACK, 60);
+            board_set(board, 56, ROOK|BLACK);
+            board_set(board, 60, KING|BLACK);
             board->kingSquare_b = 60;
         }
         else if(m->endSquare == 62)
@@ -1607,9 +1608,9 @@ move* unmove(bitboard *board)
             //Black kingside castle
             board_clear_square(board, 62, KING|BLACK);
             board_clear_square(board, 61, ROOK|BLACK);
-            board_set(board, ROOK|BLACK, 63);
-            board_set(board, KING|BLACK, 60);
-            board->kingSquare_b = 4;
+            board_set(board, 63, ROOK|BLACK);
+            board_set(board, 60, KING|BLACK);
+            board->kingSquare_b = 60;
         }
     }
     else
@@ -1629,6 +1630,7 @@ move* unmove(bitboard *board)
     
     board->flags = m->flags;
     board->movesSinceLastChange = m->previousMovesSinceLastChange;
+    board->enPassantSquare = m->prevEnPassantSquare;
 
     if(board->turn == WHITE) board->turn = BLACK;
     else if (board->turn==BLACK) board->turn = WHITE;
@@ -1636,9 +1638,6 @@ move* unmove(bitboard *board)
     board->victor = 0;
     board->halfMoveCount--;
 
-    //En passant
-    if(m->capturedPieceSquare && m->capturedPieceSquare != m->endSquare) board->enPassantSquare = m->endSquare;
-    else board->enPassantSquare = -1;
 
     return m;
 }

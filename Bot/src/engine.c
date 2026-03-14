@@ -242,9 +242,13 @@ typedef struct threadData {
 DWORD WINAPI helperThreadFunction(LPVOID lpParam)
 {
     threadData* data = (threadData*)lpParam;
+
+    //Always fully evaluate at depth 1:
+    *data->score = principalVariationSearch(data->board, -DBL_MAX, DBL_MAX, 1, 1, data->pvTable, 0, NULL);
+
     while(*data->endTime != 0)
     {
-        principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime);
+        *data->score = principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime);
     }
     return 0;
 }
@@ -364,6 +368,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
                 if(totalVoteWeights < mainThreadVote) break;
                 else mainThreadVote += votes[threadIndex];
             }
+
+            //Don't replace with an empty pv table.
             copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
         }
 

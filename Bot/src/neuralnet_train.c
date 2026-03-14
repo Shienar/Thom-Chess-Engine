@@ -474,7 +474,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
                 move* bestMove = calculateBestMove(board, depth, maxTime);
                 
                 //No one is in check and the best move isn't a capture.
-                if(bestMove->capturedPiece == 0 && (board->flags&0x30 && transposition_table_get(board, transpositionTable) != NULL) == 0)
+                if(error == 0 && bestMove->capturedPiece == 0 && (board->flags&0x30 && transposition_table_get(board, transpositionTable) != NULL) == 0)
                 {
                     network_training_data newData = {0};
                     newData.board.pawn_w = board->pawn_w;

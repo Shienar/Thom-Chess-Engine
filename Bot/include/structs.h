@@ -11,8 +11,8 @@ typedef struct move {
     int promoteTo;
     int capturedPiece;
     int capturedPieceSquare; //Not always the same as endsquare because of en passant
-
-
+    
+    int prevEnPassantSquare;
     int previousMovesSinceLastChange;
     
     //Flags from the previous board state.

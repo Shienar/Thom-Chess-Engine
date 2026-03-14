@@ -844,7 +844,7 @@ move* moves_pop(bitboard* board)
     return tempMove;
 }
 
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, int flags, int prevFiftyMoveCount)
+move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, bitboard* prevBoard)
 {
     move* m = CALLOC(1, sizeof(move));
     if(!m) return NULL;
@@ -855,9 +855,10 @@ move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int c
     m->piece = piece;
     m->capturedPiece = capturedPiece;
     m->capturedPieceSquare = capturedPieceSquare;
-    m->flags = flags;
+    m->flags = prevBoard->flags;
+    m->previousMovesSinceLastChange = prevBoard->movesSinceLastChange;
+    m->prevEnPassantSquare = prevBoard->enPassantSquare;
     m->nextMove = NULL;
-    m->previousMovesSinceLastChange = prevFiftyMoveCount;
     return m;
 }
 

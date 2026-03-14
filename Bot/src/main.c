@@ -9,9 +9,7 @@
 
 /**
  * TODO:
- *  - Board Errors (High priority)
- *      - Disappearing pieces
- *          - Pieces that attempt to move off of the eighth rank will sometimes disappear.
+ *  - Engine can now return an empty move.
  *  - PVS is very slow since the evaluation function is uninitialized and random.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
@@ -24,7 +22,7 @@ int main(int argc, char** argv)
      */
     int verbose = 0;
     int player_color = WHITE;
-    int depth = 6;
+    int depth = 4;
     int onlyEngines = 0;
     int onlyHumans = 0;
     int maxTime = 3;
