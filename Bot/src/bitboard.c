@@ -762,19 +762,33 @@ void values_print(bitboard* board)
     }
 
     printf("ALL: %016llx\n", board->pieces_all);
-    printf("WHITE/BLACK: %016llx %016llx\n", board->pieces_w, board->pieces_b);
-    printf("PAWN: %016llx %016llx\n", board->pawn_w, board->pawn_b);
-    printf("ROOK: %016llx %016llx\n", board->rook_w, board->rook_b);
-    printf("KNIGHT: %016llx %016llx\n", board->knight_w, board->knight_b);
-    printf("BISHOP: %016llx %016llx\n", board->bishop_w, board->bishop_b);
-    printf("QUEEN: %016llx %016llx\n", board->queen_w, board->queen_b);
-    printf("KING: %016llx %016llx\n\t(%d) (%d)\n", board->king_w, board->king_b, board->kingSquare_w, board->kingSquare_b);
-    printf("Can white kingside castle: %d\n", KINGSIDE_CASTLE_WHITE(board->flags));
-    printf("Can white queenside castle: %d\n", QUEENSIDE_CASTLE_WHITE(board->flags));
-    printf("Can black kingside castle: %d\n", KINGSIDE_CASTLE_BLACK(board->flags));
-    printf("Can black queenside castle: %d\n", QUEENSIDE_CASTLE_BLACK(board->flags));
-    printf("White in check: %d\n", INCHECK_W(board->flags));
-    printf("Black in check: %d\n", INCHECK_B(board->flags));
+    printf("WHITE/BLACK: %016llx | %016llx\n", board->pieces_w, board->pieces_b);
+    if(board->pawn_w || board->pawn_b) printf("PAWN: %016llx | %016llx\n", board->pawn_w, board->pawn_b);
+    if(board->knight_w || board->knight_b) printf("KNIGHT: %016llx | %016llx\n", board->knight_w, board->knight_b);
+    if(board->bishop_w || board->bishop_b) printf("BISHOP: %016llx | %016llx\n", board->bishop_w, board->bishop_b);
+    if(board->rook_w || board->rook_b) printf("ROOK: %016llx | %016llx\n", board->rook_w, board->rook_b);
+    if(board->queen_w || board->queen_b) printf("QUEEN: %016llx | %016llx\n", board->queen_w, board->queen_b);
+    printf("KING: %016llx | %016llx\n\t(%d) (%d)\n", board->king_w, board->king_b, board->kingSquare_w, board->kingSquare_b);
+
+    if(board->flags&0xF)
+    {
+        printf("Castling Rights: ");
+        if(KINGSIDE_CASTLE_WHITE(board->flags)) printf("K");
+        if(QUEENSIDE_CASTLE_WHITE(board->flags)) printf("Q");
+        if(KINGSIDE_CASTLE_BLACK(board->flags)) printf("k");
+        if(QUEENSIDE_CASTLE_BLACK(board->flags)) printf("q");
+        printf("\n");
+    }
+
+    if(board->flags&0x30)
+    {
+        printf("Check: ");
+        if(INCHECK_W(board->flags)) printf("W\n");
+        else printf("B\n");
+        printf("\n");
+    }
+
+    if(board->enPassantSquare != -1) printf("En passant square: %d\n", board->enPassantSquare);
 }
 
 

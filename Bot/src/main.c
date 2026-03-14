@@ -9,7 +9,9 @@
 
 /**
  * TODO:
- *  - Various en passant errors. Could not locate a value to decrement, etc.
+ *  - Board Errors (High priority)
+ *      - Disappearing pieces
+ *          - Pieces that attempt to move off of the eighth rank will sometimes disappear.
  *  - PVS is very slow since the evaluation function is uninitialized and random.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
@@ -114,7 +116,7 @@ int main(int argc, char** argv)
     }
     else board = create_board();
     
-    if(useBook) loadBook();
+    if(useBook && !onlyHumans) loadBook();
     transpositionTable = create_hashTable_tt();
     
     load_playingWeights();

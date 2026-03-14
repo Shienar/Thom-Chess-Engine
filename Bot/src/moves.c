@@ -111,8 +111,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
                 }
                 else
                 {
-                    //En passant
-                    if(!targetPiece && (abs(square - currentSquare) == 7 || abs(square - currentSquare) == 9))
+                    if(board->enPassantSquare == currentSquare)
                     {
                         targetPiece = PAWN;
                         if(ISWHITE(color)) 
@@ -1040,7 +1039,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
                 CHECK_W(board->flags);
             }
 
-            if(ISWHITE(color)) board_clear_square(board, 35, PAWN);
+            if(ISWHITE(color)) board_clear_square(board, board->enPassantSquare - 8, PAWN);
             else board_clear_square(board, board->enPassantSquare + 8, PAWN);
         }
 
