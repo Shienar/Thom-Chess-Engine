@@ -6,27 +6,33 @@
 #include <math.h>
 #include <float.h>
 
-void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloats, int8_t* inputLayerBytes)
+void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLayerCompact_b, float* inputLayerFloats, int8_t* inputLayerBytes)
 {
-    if(!inputLayerCompact)
+    if(!inputLayerCompact_w || !inputLayerCompact_b)
     {
         DEBUG("Cannot extract null input layer.");
         return;
     }
     else if(inputLayerFloats)
     {
-        for(int i = 0; i < INPUT_BITS; i++)
+        for(int i = 0; i < 640; i++)
         {
-            if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerFloats[i] = 1.0;
+            if((inputLayerCompact_w[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerFloats[i] = 1.0;
             else inputLayerFloats[i] = 0.0;
+
+            if((inputLayerCompact_b[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerFloats[640 + i] = 1.0;
+            else inputLayerFloats[640 + i] = 0.0;
         }
     }
     else if(inputLayerBytes)
     {
-        for(int i = 0; i < INPUT_BITS; i++)
+        for(int i = 0; i < 640; i++)
         {
-            if((inputLayerCompact[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerBytes[i] = 1;
+            if((inputLayerCompact_w[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerBytes[i] = 1;
             else inputLayerBytes[i] = 0;
+
+            if((inputLayerCompact_b[ (int) i / 64 ] >> ( i % 64 )) & 1) inputLayerBytes[640 + i] = 1;
+            else inputLayerBytes[640 + i] = 0;
         }
     }
     else
@@ -62,6 +68,15 @@ void loadInputAccumulator(bitboard* board, int networkType)
     int baseIndex_w = 10*board->kingSquare_w;
     int baseIndex_b = 640 + 10*board->kingSquare_b;
 
+/**
+ * To find the index given COLOR's KINGSQUARE and 
+ * PIECE's PIECE_SQUARE:
+ * 
+ * index = (40960 * ISBLACK(COLOR)) + (KINGSQUARE * 640) + 64 * PIECE + PIECE_SQUARE
+ */
+    int extendedBaseIndex_w = (board->kingSquare_w * 640);
+    int extendedBaseIndex_b =  40960 + (board->kingSquare_b * 640);
+
     inputs[baseIndex_w + 0] = board->pawn_w;
     inputs[baseIndex_w + 1] = board->knight_w;
     inputs[baseIndex_w + 2] = board->bishop_w;
@@ -86,19 +101,19 @@ void loadInputAccumulator(bitboard* board, int networkType)
 
     if(networkType == TRAINING_NNUE)
     {
-        float inputArray[81920];
-        extractInputLayerToArray(inputs, inputArray, NULL);
+        float inputArray[1280];
+        extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, NULL);
 
-        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
-        calculateLayer_Floats(&inputArray[40960], trainingNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, trainingNNUE->weights1_bias, 0);
+        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], &trainingNNUE->weights1_bias[extendedBaseIndex_w], 0);
+        calculateLayer_Floats(&inputArray[640], trainingNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], &trainingNNUE->weights1_bias[extendedBaseIndex_b], 0);
     }
     else
     {
-        int8_t inputArray[81920];
-        extractInputLayerToArray(inputs, NULL, inputArray);
+        int8_t inputArray[1280];
+        extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], NULL, inputArray);
 
-        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, playerNNUE->weights1_bias, 0);
-        calculateLayer_IntBytes(&inputArray[40960], playerNNUE->accumulator[1], HALF_INPUT_BITS, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, playerNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], &playerNNUE->weights1_bias[extendedBaseIndex_w], 0);
+        calculateLayer_IntBytes(&inputArray[640], playerNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], &playerNNUE->weights1_bias[extendedBaseIndex_b], 0);
     }
 }
 

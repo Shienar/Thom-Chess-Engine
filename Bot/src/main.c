@@ -9,10 +9,14 @@
 
 /**
  * TODO:
+ *  - The engine is very slow. It is only evaluating 100-700 positions per seconds on a single thread.
+ *      - Forward propagation is the chokepoint.
+ *      - Slows down significantly in king v king endgames.
+ *      - Accumulator stack is necessary.
  *  - Engine can now return an empty move.
  *      - Only occurs when a time limit is reached.
  *      - Issue with threads being cut off and voting on empty moves?
- *  - PVS is very slow since the evaluation function is uninitialized and random.
+ *          - No. Issue persists on single thread.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
  */
@@ -54,6 +58,8 @@ int main(int argc, char** argv)
             printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
             printf("--train\t\tTrains the neural network. Specify that maximum number of iterations\n");
             printf("--generate\t\tCreates training data for the neural network. Specify the number of entries.\n");
+            printf("--updatedata\t\tUpdates the existing training data to match the current engine.\n");
+            printf("--singlethread\t\tDisables helper threads.\n");
             printf("\n\n");
             exit(0);
         }
@@ -72,6 +78,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--updatedata") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
         else if(strcmp(argv[i], "--init") == 0) { load_playingWeights(); save_playingWeights(); exit(0);}
+        else if(strcmp(argv[i], "--singlethread") == 0) useHelperThreads = 0;
     }
     
     srand(time(NULL));

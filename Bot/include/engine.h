@@ -18,12 +18,16 @@
 #define CONTEMPT_FACTOR_FIFTYMOVERULE -0.25
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -0.25
 
+extern int useHelperThreads;
 #define HELPER_THREAD_COUNT 8
 
 //Score are in the range of [-128, 127]
 #define INITIAL_ASPIRATION_MARGIN 10.0
 #define MAXIMUM_ASPIRATION_MARGIN 40.0
 #define ASPIRATION_MARGIN_MULT_FACTOR 2.0
+
+//Comment out to disable.
+#define COUNT_NODES_VISITED 1
 
 /**
  * Evaluates a position based on piece/square weights.

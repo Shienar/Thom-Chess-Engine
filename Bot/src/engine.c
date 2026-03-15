@@ -8,8 +8,18 @@
 #include <float.h>
 #include <math.h>
 
+int useHelperThreads = 1;
+
+#ifdef COUNT_NODES_VISITED
+int nodesEvaluated = 0;
+#endif
+
 double evaluate(bitboard* board)
 {
+    #ifdef COUNT_NODES_VISITED 
+    nodesEvaluated++;
+    #endif
+
     if(ISDRAW(board->victor)) 
     {
         //Draws are less desirable in the early/middlegame and more desirable in the lategame.
@@ -255,6 +265,11 @@ DWORD WINAPI helperThreadFunction(LPVOID lpParam)
 
 move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 {
+    #ifdef COUNT_NODES_VISITED
+    nodesEvaluated = 0;
+    clock_t startTime = clock();
+    #endif
+
     //Book moves
     if(entries) 
     {
@@ -294,16 +309,20 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
         //Initialize helper threads
-        for(int i = 0; i < HELPER_THREAD_COUNT; i++)
+        if(useHelperThreads)
         {
-            copy_board(params[i].board, board);
-            params[i].depth = currentDepth + (i%2);
-            *params[i].endTime = LONG_MAX;
-            params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
-            copyNMoves(params[i].pvTable, principalVariation, currentDepth);
+            for(int i = 0; i < HELPER_THREAD_COUNT; i++)
+            {
+                copy_board(params[i].board, board);
+                params[i].depth = currentDepth + (i%2);
+                *params[i].endTime = LONG_MAX;
+                params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+                copyNMoves(params[i].pvTable, principalVariation, currentDepth);
 
-            helperThreads[i] = CreateThread(NULL, 0, helperThreadFunction, &params[i], 0, &helperThreadID[i]);
+                helperThreads[i] = CreateThread(NULL, 0, helperThreadFunction, &params[i], 0, &helperThreadID[i]);
+            }
         }
+        
 
         double aspiration_margin = INITIAL_ASPIRATION_MARGIN;
         double alpha = aspiration_expectedValue - aspiration_margin;
@@ -338,38 +357,47 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
             }
         }
         
-        //Stop helper threads
-        memset(terminateFlags, 0, HELPER_THREAD_COUNT * sizeof(clock_t));
-        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+        
+        if(useHelperThreads)
         {
-            WaitForSingleObject(helperThreads[i], INFINITE);
-            CloseHandle(helperThreads[i]);
-        }
-
-        //Move voting
-        double worstScore = aspiration_expectedValue;
-        for(int i = 0; i < HELPER_THREAD_COUNT; i++)  worstScore = min(*params[i].score, worstScore);
-
-        int mainThreadVote = (aspiration_expectedValue - worstScore + 1) * currentDepth;
-        int totalVoteWeights = mainThreadVote;
-        int votes[HELPER_THREAD_COUNT] = {0.0};
-        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
-        {
-            votes[i] = (*params[i].score - worstScore + 1) * params[i].depth;
-            totalVoteWeights+= votes[i];
-        }
-
-        totalVoteWeights = rand()%totalVoteWeights;
-        if(totalVoteWeights >= mainThreadVote)
-        {
-            int8_t threadIndex;
-            for(threadIndex = 0; threadIndex < HELPER_THREAD_COUNT - 1; threadIndex++)
+            //Stop helper threads
+            memset(terminateFlags, 0, HELPER_THREAD_COUNT * sizeof(clock_t));
+            for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
             {
-                if(totalVoteWeights < mainThreadVote) break;
-                else mainThreadVote += votes[threadIndex];
+                WaitForSingleObject(helperThreads[i], INFINITE);
+                CloseHandle(helperThreads[i]);
+            }
+        
+            //Move voting
+            double worstScore = aspiration_expectedValue;
+            for(int i = 0; i < HELPER_THREAD_COUNT; i++)  worstScore = min(*params[i].score, worstScore);
+
+            int mainThreadVote = (aspiration_expectedValue - worstScore + 1) * currentDepth;
+            int totalVoteWeights = mainThreadVote;
+            int votes[HELPER_THREAD_COUNT] = {0.0};
+            for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+            {
+                votes[i] = (*params[i].score - worstScore + 1) * params[i].depth;
+                totalVoteWeights+= votes[i];
             }
 
-            copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
+            totalVoteWeights = rand()%totalVoteWeights;
+            if(totalVoteWeights >= mainThreadVote)
+            {
+                int8_t threadIndex;
+                for(threadIndex = 0; threadIndex < HELPER_THREAD_COUNT - 1; threadIndex++)
+                {
+                    if(totalVoteWeights < mainThreadVote) break;
+                    else mainThreadVote += votes[threadIndex];
+                }
+
+                if(params[threadIndex].pvTable[0].startSquare != params[threadIndex].pvTable[0].endSquare)
+                {
+                    //Sanity check that a nonzero move was generated.
+                    copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
+                }
+                
+            }
         }
 
         copyNMoves(principalVariation, tempPVTable, currentDepth);
@@ -395,6 +423,13 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
             for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
         }
     }
+
+    #ifdef COUNT_NODES_VISITED 
+    if(nodesEvaluated) {
+        float duration = (float)(clock()-startTime)/1000.0;
+        printf("\nEvaluated %d nodes in %.2lf seconds at %.4f NPS\n", nodesEvaluated, duration, (float)nodesEvaluated/duration);
+    }
+    #endif
 
     FREE(principalVariation);
     principalVariation = NULL;

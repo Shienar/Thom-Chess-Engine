@@ -193,60 +193,23 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
        if(biasWeights) outputValues[outputIndex] = biasWeights[outputIndex];
        else outputValues[outputIndex] = 0.0;
 
-        __m256 intermediate1 = _mm256_setzero_ps();
-        __m256 intermediate2 = _mm256_setzero_ps();
-        __m256 intermediate3 = _mm256_setzero_ps();
-        __m256 intermediate4 = _mm256_setzero_ps();
+        __m256 output = _mm256_setzero_ps();
 
-        //All layer lengths are divisible by 32 so no overflow.
-        for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=32)
+        for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=8)
         {
-            __m256 inputBatch1 = _mm256_loadu_ps(&inputValues[inputIndex]);
-            __m256 inputBatch2 = _mm256_loadu_ps(&inputValues[inputIndex + 8]);
-            __m256 inputBatch3 = _mm256_loadu_ps(&inputValues[inputIndex + 16]);
-            __m256 inputBatch4 = _mm256_loadu_ps(&inputValues[inputIndex + 24]);
+            __m256 inputBatch = _mm256_loadu_ps(&inputValues[inputIndex]);
 
             //Weights are an array of float w[INPUT NODES][OUTPUTS NODES]
             //Passed as a single pointer to array head. inputIndex = row; outputIndex = column;
-            __m256 weightsBatch1 = _mm256_loadu_ps(&weights[inputIndex][outputIndex]);
-            __m256 weightsBatch2 = _mm256_loadu_ps(&weights[inputIndex + 8][outputIndex]);
-            __m256 weightsBatch3 = _mm256_loadu_ps(&weights[inputIndex + 16][outputIndex]);
-            __m256 weightsBatch4 = _mm256_loadu_ps(&weights[inputIndex + 24][outputIndex]);
+            __m256 weightsBatch = _mm256_loadu_ps(&weights[inputIndex][outputIndex]);
 
             //Multiply inputs by weights and add to intermediate.
-            intermediate1 = _mm256_fmadd_ps(inputBatch1, weightsBatch1, intermediate1);
-            intermediate2 = _mm256_fmadd_ps(inputBatch2, weightsBatch2, intermediate2);
-            intermediate3 = _mm256_fmadd_ps(inputBatch3, weightsBatch3, intermediate3);
-            intermediate4 = _mm256_fmadd_ps(inputBatch4, weightsBatch4, intermediate4);
+            output = _mm256_fmadd_ps(inputBatch, weightsBatch, output);
         }
 
-        //Add the four registers together. Sum stored in intermediate1.
-        intermediate1 = _mm256_add_ps(intermediate1, intermediate2);
-        intermediate3 = _mm256_add_ps(intermediate3, intermediate4);
-        intermediate1 = _mm256_add_ps(intermediate1, intermediate3);
-
-        /**
-         * Simplify the 256-bit register into a 32-bit sum.
-         * intermediate1 = [f0, f1, f2, f3| f4, f5, f6, f7]
-         * 
-         * Instruction 1: Horizontally add intermediate1 with itself.
-         *      sum256 = [(f0+f1), (f2+f3), (f0+f1), (f2+f3) | (f4+f5), (f6+f7), (f4+f5), (f6+f7)]
-         * Instruction 2: Horizontally add intermediate1 with itself again.
-         *      sum256 = [(f0+f1+f2+f3), (f0+f1+f2+f3), (f0+f1+f2+f3), (f0+f1+f2+f3) | (f4+f5+f6+f7), (f4+f5+f6+f7), (f4+f5+f6+f7), (f4+f5+f6+f7)]
-         *      - The lower 128 bits contain duplicate sums of the first 128 bits
-         *      - The upper 128 bits contain duplicate sums of the last 128 bits
-         * Instruction 3: Extract the upper 128 bits.
-         *      - _mm256_extractf128_ps(intermediate1, 1);
-         * Instruction 4: Cast the lower 128 bits into a 128 bit register.
-         *      - _mm256_castps256_ps128(intermediate1)
-         * Instrction 5: Add the first 32-bit floats of the two 128-bit registers together.
-         *      - _mm_add_ss()
-         * Instruction 6: Cast to a regular float datatype.
-         *      - _m_cvtss_f32()
-         */
-        intermediate1 = _mm256_hadd_ps(intermediate1, intermediate1);
-        intermediate1 = _mm256_hadd_ps(intermediate1, intermediate1);
-        outputValues[outputIndex] += _mm_cvtss_f32(_mm_add_ss(_mm256_extractf128_ps(intermediate1, 1), _mm256_castps256_ps128(intermediate1)));
+        output = _mm256_hadd_ps(output, output);
+        output = _mm256_hadd_ps(output, output);
+        outputValues[outputIndex] += _mm_cvtss_f32(_mm_add_ss(_mm256_extractf128_ps(output, 1), _mm256_castps256_ps128(output)));
 
         if(applyCReLU) outputValues[outputIndex] = SCReLU_Float(outputValues[outputIndex], 0, 1);
     }
@@ -458,8 +421,6 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
     FREE(trainingNNUE);
     trainingNNUE = NULL;
     
-
-    int error = 0;
     while(entryCount < maxPositions)
     {
         bitboard* board = create_board();
@@ -467,56 +428,60 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
         loadInputAccumulator(board, PLAYER_NNUE);
 
         transpositionTable = create_hashTable_tt();
+
+        //Avoid boring games.
+        int movesSinceLastInterestingMove = 0;
+
         while(1)
         {
-            do
-            {
-                move* bestMove = calculateBestMove(board, depth, maxTime);
-                
-                //No one is in check and the best move isn't a capture.
-                if(error == 0 && bestMove->capturedPiece == 0 && (board->flags&0x30 && transposition_table_get(board, transpositionTable) != NULL) == 0)
-                {
-                    network_training_data newData = {0};
-                    newData.board.pawn_w = board->pawn_w;
-                    newData.board.pawn_b = board->pawn_b;
-                    newData.board.knight_w = board->knight_w;
-                    newData.board.knight_b = board->knight_b;
-                    newData.board.bishop_w = board->bishop_w;
-                    newData.board.bishop_b = board->bishop_b;
-                    newData.board.rook_w = board->rook_w;
-                    newData.board.rook_b = board->rook_b;
-                    newData.board.queen_w = board->queen_w;
-                    newData.board.queen_b = board->queen_b;
-                    newData.board.king_w = board->king_w;
-                    newData.board.king_b = board->king_b;
-
-                    newData.board.pieces_all = board->pieces_all;
-                    newData.board.pieces_w = board->pieces_w;
-                    newData.board.pieces_b = board->pieces_b;
-                    
-                    newData.board.kingSquare_w = board->kingSquare_w;
-                    newData.board.kingSquare_b = board->kingSquare_b;
-
-                    newData.board.turn = board->turn;
-
-                    newData.board.enPassantSquare = board->enPassantSquare;
-
-                    newData.board.flags = board->flags;
-
-                    newData.board.ht = NULL;
-                    newData.board.moveStackTop = NULL;
-                    newData.board.halfMoveCount = board->halfMoveCount;
-                    
-                    newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation * scalingFactor;
-                    fwrite(&newData, sizeof(network_training_data), 1, output);
-                    entryCount++;
-                    printf("\rTraining Data entries: %d", entryCount);
-                }
-
-                error = moveFromStruct(board, bestMove);
-            }while(error != 0);
+            move* bestMove = calculateBestMove(board, depth, maxTime);
             
-            if(board->victor || entryCount >= maxPositions) break;
+            //No one is in check and the best move isn't a capture.
+            if(!bestMove->capturedPiece && !(board->flags&0x30) && transposition_table_get(board, transpositionTable))
+            {
+                movesSinceLastInterestingMove = 0;
+
+                network_training_data newData = {0};
+                newData.board.pawn_w = board->pawn_w;
+                newData.board.pawn_b = board->pawn_b;
+                newData.board.knight_w = board->knight_w;
+                newData.board.knight_b = board->knight_b;
+                newData.board.bishop_w = board->bishop_w;
+                newData.board.bishop_b = board->bishop_b;
+                newData.board.rook_w = board->rook_w;
+                newData.board.rook_b = board->rook_b;
+                newData.board.queen_w = board->queen_w;
+                newData.board.queen_b = board->queen_b;
+                newData.board.king_w = board->king_w;
+                newData.board.king_b = board->king_b;
+
+                newData.board.pieces_all = board->pieces_all;
+                newData.board.pieces_w = board->pieces_w;
+                newData.board.pieces_b = board->pieces_b;
+                
+                newData.board.kingSquare_w = board->kingSquare_w;
+                newData.board.kingSquare_b = board->kingSquare_b;
+
+                newData.board.turn = board->turn;
+
+                newData.board.enPassantSquare = board->enPassantSquare;
+
+                newData.board.flags = board->flags;
+
+                newData.board.ht = NULL;
+                newData.board.moveStackTop = NULL;
+                newData.board.halfMoveCount = board->halfMoveCount;
+                
+                newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation * scalingFactor;
+                fwrite(&newData, sizeof(network_training_data), 1, output);
+                entryCount++;
+                printf("\rTraining Data entries: %d", entryCount);
+
+                if(moveFromStruct(board, bestMove)) break;
+            }
+            else movesSinceLastInterestingMove++;
+
+            if(board->victor || movesSinceLastInterestingMove > 10 || entryCount >= maxPositions) break;;
         }
         destroy_hashTable_tt(transpositionTable);
         transpositionTable = NULL;

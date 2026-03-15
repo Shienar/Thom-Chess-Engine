@@ -99,7 +99,7 @@ int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max);
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU);
 void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU);
 
-void extractInputLayerToArray(uint64_t* inputLayerCompact, float* inputLayerFloats, int8_t* inputLayerBytes);
+void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLayerCompact_b, float* inputLayerFloats, int8_t* inputLayerBytes);
 
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
