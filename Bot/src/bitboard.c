@@ -711,8 +711,17 @@ void board_print(bitboard* board, int printValues, int printHistory)
     
     if(printValues) values_print(board);
 
+    int lastMoveStartSquare = -1;
+    int lastMoveEndSquare = -1;
+    if(board->moveStackTop)
+    {
+        lastMoveEndSquare = board->moveStackTop->endSquare;
+        lastMoveStartSquare = board->moveStackTop->startSquare;
+    }
+
+
     //8 rows x (8 columns + null terminator)
-    char boardArray[8][9] = {"--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0"};
+    char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
 
     piece_print(boardArray, board->pawn_w, 'p');
     piece_print(boardArray, board->pawn_b, 'P');
@@ -733,22 +742,42 @@ void board_print(bitboard* board, int printValues, int printHistory)
     piece_print(boardArray, board->king_b, 'K');
 
     printf("\n");
+    printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
     for(int row = 7; row >= 0; row--)
     {
+        printf(TEXT_BOLD "\t\t%d   ", row+1);
         for(int column = 0; column <= 7; column++)
         {
             if (boardArray[row][column] < 91 && boardArray[row][column] > 64)
             {
+                if(8 * row + column == lastMoveStartSquare) printf(TEXT_COLOR_SOURCE_BLACK_PIECE);
+                else if(8 * row + column == lastMoveEndSquare) printf(TEXT_COLOR_DESTINATION_BLACK_PIECE);
+                else
+                {
+                    if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
+                    else printf(TEXT_COLOR_DARK_SQUARE_BLACK_PIECE);
+                }
+                
+                
                 boardArray[row][column] = boardArray[row][column]+32;
-                printf("\033[31m%c\033[0m ", boardArray[row][column]);
+                printf("%c ", boardArray[row][column]);
             }
             else
             {
+                if(8 * row + column == lastMoveStartSquare) printf(TEXT_COLOR_SOURCE_WHITE_PIECE);
+                else if(8 * row + column == lastMoveEndSquare) printf(TEXT_COLOR_DESTINATION_WHITE_PIECE);
+                else
+                {
+                    if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
+                    else printf(TEXT_COLOR_DARK_SQUARE_WHITE_PIECE);
+                }
+
                 printf("%c ", boardArray[row][column]);
             }
         }
-        printf("\n");
+        printf(TEXT_NONE TEXT_BOLD"  |" TEXT_NONE "\n ");
     }
+    printf(TEXT_BOLD "\t\t|                     |\n \t\t%% - a b c d e f g h - %%\n" TEXT_NONE);
     if(printHistory) dumpMoves(board);
 }
 
@@ -794,18 +823,34 @@ void values_print(bitboard* board)
 
 void bitmask_print(uint64_t mask, char fill)
 {
-    char boardArray[8][9] = {"--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0", "--------\0"};
+    char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
     piece_print(boardArray, mask, fill);
     printf("\nMask: %016llx\n", mask);
+    printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
     for(int row = 7; row >= 0; row--)
     {
-        printf("\t");
+        printf(TEXT_BOLD "\t\t%d   ", row+1);
         for(int column = 0; column <= 7; column++)
         {
-            printf("%c ", boardArray[row][column]);
+            if (boardArray[row][column] < 91 && boardArray[row][column] > 64)
+            {
+                if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
+                else printf(TEXT_COLOR_DARK_SQUARE_BLACK_PIECE);
+                
+                boardArray[row][column] = boardArray[row][column]+32;
+                printf("%c ", boardArray[row][column]);
+            }
+            else
+            {
+                if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
+                else printf(TEXT_COLOR_DARK_SQUARE_WHITE_PIECE);
+
+                printf("%c ", boardArray[row][column]);
+            }
         }
-        printf("\n");
+        printf(TEXT_NONE TEXT_BOLD"  |" TEXT_NONE "\n ");
     }
+    printf(TEXT_BOLD "\t\t|                     |\n \t\t%% - a b c d e f g h - %%\n" TEXT_NONE);
 }
 
 

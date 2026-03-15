@@ -10,6 +10,8 @@
 /**
  * TODO:
  *  - Engine can now return an empty move.
+ *      - Only occurs when a time limit is reached.
+ *      - Issue with threads being cut off and voting on empty moves?
  *  - PVS is very slow since the evaluation function is uninitialized and random.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)

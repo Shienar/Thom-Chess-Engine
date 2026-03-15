@@ -369,7 +369,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
                 else mainThreadVote += votes[threadIndex];
             }
 
-            //Don't replace with an empty pv table.
             copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
         }
 
