@@ -26,8 +26,8 @@ extern int useHelperThreads;
 #define MAXIMUM_ASPIRATION_MARGIN 40.0
 #define ASPIRATION_MARGIN_MULT_FACTOR 2.0
 
-//Comment out to disable.
-#define COUNT_NODES_VISITED 1
+//Enables node tracking. Comment out to disable.
+//#define COUNT_NODES_VISITED 1
 
 /**
  * Evaluates a position based on piece/square weights.

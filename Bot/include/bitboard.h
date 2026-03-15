@@ -90,7 +90,7 @@ bitboard* create_board();
 bitboard* create_board_from_fen(const char* fileName, int lineNumber);
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);
 void destroy_board(bitboard* board);
-void copy_board(bitboard* dest, bitboard* source);
+void copy_board(bitboard* dest, bitboard* source, int copyHT);
 
 void board_clear_square(bitboard* board, int square, int pieceType);
 void board_set(bitboard* board, int square, int piece);

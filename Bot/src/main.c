@@ -9,14 +9,14 @@
 
 /**
  * TODO:
- *  - The engine is very slow. It is only evaluating 100-700 positions per seconds on a single thread.
- *      - Forward propagation is the chokepoint.
- *      - Slows down significantly in king v king endgames.
- *      - Accumulator stack is necessary.
+ *  - The engine is a bit slow.
+ *      - Accumulator refresh table.
+ *      - engine.c optimizations aren't working while the weights are untrained.
  *  - Engine can now return an empty move.
  *      - Only occurs when a time limit is reached.
  *      - Issue with threads being cut off and voting on empty moves?
  *          - No. Issue persists on single thread.
+ *  - Multithreaded --updatedata.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  *  - Endgame tablebase (Probe Syzygy)
  */
@@ -75,7 +75,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
-        else if(strcmp(argv[i], "--updatedata") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--updatedata") == 0) shouldUpdateTrainingData = 1;
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
         else if(strcmp(argv[i], "--init") == 0) { load_playingWeights(); save_playingWeights(); exit(0);}
         else if(strcmp(argv[i], "--singlethread") == 0) useHelperThreads = 0;
@@ -127,7 +127,7 @@ int main(int argc, char** argv)
     transpositionTable = create_hashTable_tt();
     
     load_playingWeights();
-    loadInputAccumulator(board, PLAYER_NNUE);
+    loadInputAccumulator(board);
 
     char buffer[6] = {'\0'};
     int error = 0;

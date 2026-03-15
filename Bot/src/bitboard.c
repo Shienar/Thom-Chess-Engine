@@ -297,7 +297,7 @@ void destroy_board(bitboard* board)
     FREE(board);
 }
 
-void copy_board(bitboard* dest, bitboard* source)
+void copy_board(bitboard* dest, bitboard* source, int copyHT)
 {
     if(!dest || !source) return;
 
@@ -369,8 +369,12 @@ void copy_board(bitboard* dest, bitboard* source)
 
     dest->enPassantSquare = source->enPassantSquare;
     
-    destroy_hashTable_pos(dest->ht);
-    dest->ht = copy_hashTable_pos(source->ht);
+    //Copying hash tables is expensive and isn't always necessary.
+    if(copyHT) 
+    {
+        destroy_hashTable_pos(dest->ht);
+        dest->ht = copy_hashTable_pos(source->ht);
+    }
 }
 
 int findPieceOnSquare(bitboard* board, int square)

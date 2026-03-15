@@ -55,6 +55,8 @@ hashtable_pos* create_hashTable_pos()
 
 hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
 {
+    if(!src) return NULL;
+    
     hashtable_pos* newTable = CALLOC(1, sizeof(hashtable_pos));
     if(!newTable) return NULL;
 

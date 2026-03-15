@@ -75,8 +75,6 @@ typedef struct network_training_data {
     float evaluation;
 } network_training_data;
 
-#define TRAINING_NNUE 1 //Floats
-#define PLAYER_NNUE 2 //Signed 8-bit ints
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;
 
@@ -104,14 +102,14 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLaye
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
  */
-void loadInputAccumulator(bitboard* board, int networkType);
+void loadInputAccumulator(bitboard* board);
 
 /**
  * Incremental update of input nodes and accumulator.
  * Call after making or unmaking a move with the move that was
  * pushed or popped off of the stack.
  */
-void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int shouldUndoMove);
+void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove);
 
 float forwardPropagate_Float(int turn);
 int8_t forwardPropagate_Int(int turn);

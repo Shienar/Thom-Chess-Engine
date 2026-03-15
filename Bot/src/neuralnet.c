@@ -41,27 +41,21 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLaye
     }
 }
 
-void loadInputAccumulator(bitboard* board, int networkType)
+void loadInputAccumulator(bitboard* board)
 {
     if(!board)
     {
         DEBUG("Cannot load null board into accumulator.");
         return;
     }
-    else if(networkType == TRAINING_NNUE && !trainingNNUE)
+    else if(!trainingNNUE && !playerNNUE)
     {
         DEBUG("Cannot load null training weights.");
         return;
     }
-    else if(networkType == PLAYER_NNUE && !playerNNUE)
-    {
-        DEBUG("Cannot load null playing weights.");
-        return;
-    }
 
-    
     uint64_t* inputs = NULL;
-    if(networkType == TRAINING_NNUE) inputs = trainingNNUE->inputNodes;
+    if(trainingNNUE) inputs = trainingNNUE->inputNodes;
     else inputs = playerNNUE->inputNodes;
     memset(inputs, 0, 1280*sizeof(uint64_t));
 
@@ -73,61 +67,68 @@ void loadInputAccumulator(bitboard* board, int networkType)
  * PIECE's PIECE_SQUARE:
  * 
  * index = (40960 * ISBLACK(COLOR)) + (KINGSQUARE * 640) + 64 * PIECE + PIECE_SQUARE
+ * 
+ * Black pieces are flipped to be viewed from white's perspective.
  */
     int extendedBaseIndex_w = (board->kingSquare_w * 640);
-    int extendedBaseIndex_b =  40960 + (board->kingSquare_b * 640);
+    int extendedBaseIndex_b = (board->kingSquare_b * 640);
 
     inputs[baseIndex_w + 0] = board->pawn_w;
     inputs[baseIndex_w + 1] = board->knight_w;
     inputs[baseIndex_w + 2] = board->bishop_w;
     inputs[baseIndex_w + 3] = board->rook_w;
     inputs[baseIndex_w + 4] = board->queen_w;
-    inputs[baseIndex_w + 5] = board->pawn_b;
-    inputs[baseIndex_w + 6] = board->knight_b;
-    inputs[baseIndex_w + 7] = board->bishop_b;
-    inputs[baseIndex_w + 8] = board->rook_b;
-    inputs[baseIndex_w + 9] = board->queen_b;
+    inputs[baseIndex_w + 5] = __builtin_bswap64(board->pawn_b);
+    inputs[baseIndex_w + 6] = __builtin_bswap64(board->knight_b);
+    inputs[baseIndex_w + 7] = __builtin_bswap64(board->bishop_b);
+    inputs[baseIndex_w + 8] = __builtin_bswap64(board->rook_b);
+    inputs[baseIndex_w + 9] = __builtin_bswap64(board->queen_b);
 
-    inputs[baseIndex_b + 0] = board->pawn_b;
-    inputs[baseIndex_b + 1] = board->knight_b;
-    inputs[baseIndex_b + 2] = board->bishop_b;
-    inputs[baseIndex_b + 3] = board->rook_b;
-    inputs[baseIndex_b + 4] = board->queen_b;
+    inputs[baseIndex_b + 0] = __builtin_bswap64(board->pawn_b);
+    inputs[baseIndex_b + 1] = __builtin_bswap64(board->knight_b);
+    inputs[baseIndex_b + 2] = __builtin_bswap64(board->bishop_b);
+    inputs[baseIndex_b + 3] = __builtin_bswap64(board->rook_b);
+    inputs[baseIndex_b + 4] = __builtin_bswap64(board->queen_b);
     inputs[baseIndex_b + 5] = board->pawn_w;
     inputs[baseIndex_b + 6] = board->knight_w;
     inputs[baseIndex_b + 7] = board->bishop_w;
     inputs[baseIndex_b + 8] = board->rook_w;
     inputs[baseIndex_b + 9] = board->queen_w;
 
-    if(networkType == TRAINING_NNUE)
+    if(trainingNNUE)
     {
         float inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, NULL);
 
-        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], &trainingNNUE->weights1_bias[extendedBaseIndex_w], 0);
-        calculateLayer_Floats(&inputArray[640], trainingNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], &trainingNNUE->weights1_bias[extendedBaseIndex_b], 0);
+        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 0);
+        calculateLayer_Floats(&inputArray[640], trainingNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 0);
     }
     else
     {
         int8_t inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], NULL, inputArray);
 
-        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], &playerNNUE->weights1_bias[extendedBaseIndex_w], 0);
-        calculateLayer_IntBytes(&inputArray[640], playerNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], &playerNNUE->weights1_bias[extendedBaseIndex_b], 0);
+        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(&inputArray[640], playerNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 0);
     }
 }
 
-void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int shouldUndoMove)
+void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove)
 {
     if(!lastMove)
     {
         DEBUG("Cannot load null move.");
         return;
     }
+    else if(!trainingNNUE && !playerNNUE)
+    {
+        DEBUG("Cannot load null training weights.");
+        return;
+    }
 
     if(ISKING(lastMove->piece))
     {
-        loadInputAccumulator(board, networkType);
+        loadInputAccumulator(board);
     }
     else
     {
@@ -149,7 +150,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
 
         int inputNodeIndex = (640 * ISBLACK(lastMove->piece)) + (10 * kingSquare) + pieceOffset;
 
-        if(networkType == TRAINING_NNUE) trainingNNUE->inputNodes[inputNodeIndex]^=xorMask;
+        if(trainingNNUE) trainingNNUE->inputNodes[inputNodeIndex]^=xorMask;
         else playerNNUE->inputNodes[inputNodeIndex]^=xorMask;
 
         //Doesn't care about 40,960 offset for black inputs.
@@ -165,7 +166,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int networkType, int
             toSquareIndex = lastMove->endSquare;
         }
 
-        if(networkType == TRAINING_NNUE)
+        if(trainingNNUE)
         {
             float* accumulator;
             if(ISBLACK(lastMove->piece)) accumulator = trainingNNUE->accumulator[1];

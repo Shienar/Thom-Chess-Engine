@@ -292,7 +292,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             for(int blockOffset = 0; blockOffset < entriesPerBlock; blockOffset++)
             {
                 fread(&data, sizeof(network_training_data), 1, trainingData);
-                loadInputAccumulator(&data.board, TRAINING_NNUE);
+                loadInputAccumulator(&data.board);
                 forwardPropagate_Float(data.board.turn);
                 expectedOutput = data.evaluation;
 
@@ -415,17 +415,12 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
     int entryCount = ftell(output);
     entryCount/=sizeof(network_training_data);
 
-    //Load scaling factor for dequantization.
     load_trainingWeights();
-    float scalingFactor = trainingNNUE->scalingFactor;
-    FREE(trainingNNUE);
-    trainingNNUE = NULL;
     
     while(entryCount < maxPositions)
     {
         bitboard* board = create_board();
-        load_playingWeights();
-        loadInputAccumulator(board, PLAYER_NNUE);
+        loadInputAccumulator(board);
 
         transpositionTable = create_hashTable_tt();
 
@@ -472,7 +467,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
                 newData.board.moveStackTop = NULL;
                 newData.board.halfMoveCount = board->halfMoveCount;
                 
-                newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation * scalingFactor;
+                newData.evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
                 fwrite(&newData, sizeof(network_training_data), 1, output);
                 entryCount++;
                 printf("\rTraining Data entries: %d", entryCount);
@@ -488,7 +483,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
         destroy_board(board);
     }
 
-    FREE(playerNNUE);
+    FREE(trainingNNUE);
     fclose(output);
 }
 
@@ -502,11 +497,24 @@ void updateTrainingData(int depth, int maxTime)
     
     network_training_data data = {0};
 
+    load_trainingWeights();
+
     for(int i = 0; i < entryCount; i++)
     {
         fread(&data, sizeof(network_training_data), 1, input);
+
+        loadInputAccumulator(&data.board);
+        transpositionTable = create_hashTable_tt();
+        data.board.ht = create_hashTable_pos();
+
         data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL);
+        
+        destroy_hashTable_pos(data.board.ht);
+        destroy_hashTable_tt(transpositionTable);
+
         fwrite(&data, sizeof(network_training_data), 1, input);
+
+        printf("\rUpdated entry %d/%d", i+1, entryCount);
     }
     fclose(input);
 }

@@ -177,7 +177,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
     int legalSize = 0;
     for(int i = 0; i < size; i++)
     {
-        copy_board(tempBoard, board);
+        copy_board(tempBoard, board, 0);
         //Check if move is legal.
         if(movePiece(tempBoard, moveArray[i]->startSquare, moveArray[i]->endSquare, moveArray[i]->piece, moveArray[i]->promoteTo) == 0)
         {

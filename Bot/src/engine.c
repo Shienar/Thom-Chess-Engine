@@ -12,6 +12,7 @@ int useHelperThreads = 1;
 
 #ifdef COUNT_NODES_VISITED
 int nodesEvaluated = 0;
+int nodesVisited = 0;
 #endif
 
 double evaluate(bitboard* board)
@@ -47,7 +48,8 @@ double evaluate(bitboard* board)
         else return -INT8_MIN - 1;
     }
 
-    return (double) forwardPropagate_Int(board->turn);
+    if(trainingNNUE) return (double) forwardPropagate_Float(board->turn);
+    else return (double) forwardPropagate_Int(board->turn);
 }
 //For qsort_s
 int sortMoves(void* c, const void* a, const void* b)
@@ -74,6 +76,10 @@ int sortMoves(void* c, const void* a, const void* b)
 
 double quiesce(bitboard* board, double alpha, double beta, int depth)
 {
+    #ifdef COUNT_NODES_VISITED 
+    nodesVisited++;
+    #endif
+
     if(board->victor == WHITE) 
     {
         if(board->turn == WHITE) return INT64_MAX;
@@ -126,12 +132,12 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, board->moveStackTop, PLAYER_NNUE, 0);
+                updateMoveAccumulator(board, board->moveStackTop, 0);
 
                 double score = -quiesce(board, -beta, -alpha, depth - 1);
 
                 move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, PLAYER_NNUE, 1);
+                updateMoveAccumulator(board, poppedMove, 1);
 
                 if(score >= beta)
                 {
@@ -152,6 +158,10 @@ void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = 
 
 double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit)
 {
+    #ifdef COUNT_NODES_VISITED 
+    nodesVisited++;
+    #endif
+
     //Transposition table
     table_entry_tt* old_tt_entry = NULL;
     if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
@@ -196,7 +206,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         {
             if(!moveFromStruct(board, moveList[index]))
             {
-                updateMoveAccumulator(board, board->moveStackTop, PLAYER_NNUE, 0);
+                updateMoveAccumulator(board, board->moveStackTop, 0);
                 if(index == 0)
                 {
                     score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
@@ -209,7 +219,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 }
                 
                 move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, PLAYER_NNUE, 1);
+                updateMoveAccumulator(board, poppedMove, 1);
                 
                 if(score >= beta)
                 {
@@ -267,6 +277,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 {
     #ifdef COUNT_NODES_VISITED
     nodesEvaluated = 0;
+    nodesVisited = 0;
     clock_t startTime = clock();
     #endif
 
@@ -313,7 +324,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         {
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
-                copy_board(params[i].board, board);
+                copy_board(params[i].board, board, 1);
                 params[i].depth = currentDepth + (i%2);
                 *params[i].endTime = LONG_MAX;
                 params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
@@ -400,7 +411,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
             }
         }
 
-        copyNMoves(principalVariation, tempPVTable, currentDepth);
+        //Sanity check that a nonzero move was generated.
+        if(tempPVTable[0].startSquare != tempPVTable[0].endSquare) copyNMoves(principalVariation, tempPVTable, currentDepth);
         FREE(tempPVTable);
         tempPVTable = NULL;
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
@@ -428,6 +440,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     if(nodesEvaluated) {
         float duration = (float)(clock()-startTime)/1000.0;
         printf("\nEvaluated %d nodes in %.2lf seconds at %.4f NPS\n", nodesEvaluated, duration, (float)nodesEvaluated/duration);
+        printf("Visited %d nodes in %.2lf seconds at %.4f NPS\n", nodesVisited, duration, (float)nodesVisited/duration);
     }
     #endif
 
