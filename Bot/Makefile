@@ -1,7 +1,13 @@
 CC = gcc
 CFLAGS = -Wall -g -std=c99 -march=native
-OBJFILES = src/*.c
 TARGET = ChessBot
+
+OBJFILES = src/*.c
+OBJFILES += src/analyze/*.c
+OBJFILES += src/board/*.c
+OBJFILES += src/hashtables/*.c
+OBJFILES += src/pyrrhic/tbprobe.c
+
 
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.

@@ -1,5 +1,5 @@
-#include "../include/transpositiontable.h"
-#include "../include/debug.h"
+#include "../../include/hashtables/transpositiontable.h"
+#include "../../include/debug.h"
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;

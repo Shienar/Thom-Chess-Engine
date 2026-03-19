@@ -1,8 +1,8 @@
-#include "../include/neuralnet.h"
-#include "../include/debug.h"
-#include "../include/bitboard.h"
-#include "../include/moves.h"
-#include "../include/engine.h"
+#include "../../include/analyze/neuralnet.h"
+#include "../../include/debug.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/board/moves.h"
+#include "../../include/analyze/engine.h"
 #include <math.h>
 #include <float.h>
 

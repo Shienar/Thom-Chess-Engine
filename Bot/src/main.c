@@ -1,9 +1,10 @@
-#include "../include/moves.h"
+#include "../include/board/moves.h"
 #include "../include/debug.h"
-#include "../include/bitboard.h"
-#include "../include/transpositiontable.h"
-#include "../include/book.h"
-#include "../include/neuralnet.h"
+#include "../include/board/bitboard.h"
+#include "../include/hashtables/transpositiontable.h"
+#include "../include/analyze/book.h"
+#include "../include/analyze/neuralnet.h"
+#include "../include/pyrrhic/tbprobe.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -18,7 +19,6 @@
  *          - No. Issue persists on single thread.
  *  - Multithreaded --updatedata.
  *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
- *  - Endgame tablebase (Probe Syzygy)
  */
 
 int main(int argc, char** argv)
@@ -122,7 +122,9 @@ int main(int argc, char** argv)
         }
     }
     else board = create_board();
-    
+
+    tb_init("./sygyzy/");
+
     if(useBook && !onlyHumans) loadBook();
     transpositionTable = create_hashTable_tt();
     
@@ -191,5 +193,6 @@ int main(int argc, char** argv)
     FREE(playerNNUE);
     destroy_hashTable_tt(transpositionTable);
     destroy_board(board);
+    tb_free();
     dump_allocations();
 }

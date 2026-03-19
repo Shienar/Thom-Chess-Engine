@@ -29,4 +29,7 @@ int increment_table_value(hashtable_pos* ht, bitboard* board);
  */
 int decrement_table_value(hashtable_pos* ht, bitboard* board);
 
+//Returns 0 if not in table.
+int get_pos_table_value(hashtable_pos* ht, bitboard* board);
+
 #endif

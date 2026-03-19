@@ -107,6 +107,7 @@ void free_debug(void* addr)
     }
 
     free(addr);
+    addr = NULL;
 }
 
 void dump_allocations()

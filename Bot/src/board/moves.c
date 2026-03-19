@@ -1,7 +1,7 @@
-#include "../include/bitboard.h"
-#include "../include/moves.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/board/moves.h" 
 #include <string.h>
-#include "../include/debug.h"
+#include "../../include/debug.h"
 
 move** generateMoveList(bitboard* board, int capturesOnly)
 {
@@ -14,33 +14,37 @@ move** generateMoveList(bitboard* board, int capturesOnly)
     int size = 0;
     int capacity = 32;
     move** movesList = CALLOC(capacity, sizeof(move*));
-    if(!movesList) return NULL;
-    for(int currentSquare = 0; currentSquare < 64; currentSquare++)
+    if(!movesList)
     {
-        if((board->turn == WHITE && board->pieces_w&(1ull<<currentSquare)) ||
-            (board->turn == BLACK && board->pieces_b&(1ull<<currentSquare)))
-        {
-            int piece = findPieceOnSquare(board, currentSquare);
-            move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece, capturesOnly);
-            int index = 0;
-            while(tempMoves[index] != NULL)
-            {
-                if(size >= capacity)
-                {
-                    capacity+=8;
-                    movesList = REALLOC(movesList, capacity*sizeof(move*));
-                    if(!movesList) return NULL;
-                }
-                movesList[size] = CALLOC(1, sizeof(move));
-                memcpy(movesList[size], tempMoves[index], sizeof(move));
-                size++;
-                index++;
+        DEBUG("Failed to generate movesList");
+        return NULL;
+    } 
+
+    uint64_t turnsBitBoard = (ISWHITE(board->turn))?board->pieces_w:board->pieces_b;
+    while(turnsBitBoard)
+    {
+        int currentSquare = __builtin_ctzll(turnsBitBoard);
+
+        int piece = findPieceOnSquare(board, currentSquare);
+        move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece, capturesOnly);
+        
+        int index = 0;
+        while (tempMoves[index] != NULL) {
+            if (size >= capacity) {
+                capacity += 8;
+                movesList = (move**)realloc(movesList, capacity * sizeof(move*));
+                if (!movesList) return NULL;
             }
-            freeMoveList(tempMoves);
+            movesList[size] = (move*)calloc(1, sizeof(move));
+            memcpy(movesList[size], tempMoves[index], sizeof(move));
+            size++;
+            index++;
         }
+        freeMoveList(tempMoves);
+
+        turnsBitBoard &= (turnsBitBoard - 1);
     }
-
-
+    
     //Game over, no moves available.
     //stalemate/checkmate gets decided elsewhere.
     if(size == 0) 
@@ -79,8 +83,17 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
     uint64_t moveMask;
 
     uint64_t opposingPieceMask;
-    if(ISWHITE(color)) opposingPieceMask = board->pieces_b;
-    else opposingPieceMask = board->pieces_w;
+    uint64_t allyPieceMask;
+    if(ISWHITE(color)) 
+    {
+        opposingPieceMask = board->pieces_b;
+        allyPieceMask = board->pieces_w;
+    }
+    else 
+    {
+        opposingPieceMask = board->pieces_w;
+        allyPieceMask = board->pieces_b;
+    }
 
     if(ISPAWN(piece))
     {
@@ -138,19 +151,19 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
     {
         if(ISKNIGHT(piece))
         {
-            moveMask = knightMoves(board, square, color);
+            moveMask = knightMoves(allyPieceMask, square);
         }
         else if(ISBISHOP(piece))
         {
-            moveMask = bishopMoves(board, square, color);
+            moveMask = bishopMoves(allyPieceMask, opposingPieceMask, square);
         }
         else if(ISROOK(piece))
         {
-            moveMask = rookMoves(board, square, color); 
+            moveMask = rookMoves(allyPieceMask, opposingPieceMask, square); 
         }
         else if(ISQUEEN(piece))
         {
-            moveMask = queenMoves(board, square, color);
+            moveMask = queenMoves(allyPieceMask, opposingPieceMask, square);
         }
         else if(ISKING(piece))
         {
@@ -213,8 +226,7 @@ void freeMoveList(move** moveList)
         moveList[index] = NULL;
         index++;
     }
-
-    if(moveList[index]) FREE(moveList[index]);
+    
     FREE(moveList);
     moveList = NULL;
 }
@@ -551,26 +563,54 @@ int isThreatened(bitboard* board, int square, int squareColor)
 {
     uint64_t bishopqueen;
     uint64_t rookqueen;
+    uint64_t enemyPieces;
+    uint64_t allyPieces;
     if(ISWHITE(squareColor))
     {
+        enemyPieces = board->pieces_b;
+        allyPieces = board->pieces_w;
         bishopqueen = board->bishop_b|board->queen_b;
         rookqueen = board->rook_b|board->queen_b;
         if(((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b))) return THREAT_TYPE_PAWN;
-        if(knightMoves(board, square, squareColor)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
+        if(knightMoves(0, square)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_b)) return THREAT_TYPE_KING;
     }
     else if(ISBLACK(squareColor))
     {
+        enemyPieces = board->pieces_w;
+        allyPieces = board->pieces_b;
         bishopqueen = board->bishop_w|board->queen_w;
         rookqueen = board->rook_w|board->queen_w;
         if(((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w))) return THREAT_TYPE_PAWN;
-        if(knightMoves(board, square, squareColor)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
+        if(knightMoves(0, square)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_w)) return THREAT_TYPE_KING;
     }
-    if(bishopMoves(board, square, squareColor)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
-    if(rookMoves(board, square, squareColor)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
+    if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
+    if(rookMoves(allyPieces, enemyPieces, square)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
 
     return THREAT_TYPE_NONE;
+}
+
+
+uint64_t pyrrhicPawnAttacks(int square, int color)
+{
+    uint64_t diagonalCaptureMask = 0;
+
+    //Convert color to pyrhhic system.
+    if(color == 1)
+    {
+        //White
+        if(getColumn(square) > 1) diagonalCaptureMask|=(1ull<<(square+7));
+        if(getColumn(square) < 8) diagonalCaptureMask|=(1ull<<(square+9));
+    }
+    else
+    {
+        //Black
+        if(getColumn(square) > 1) diagonalCaptureMask|=(1ull<<(square-9));
+        if(getColumn(square) < 8) diagonalCaptureMask|=(1ull<<(square-7));
+    }
+
+    return diagonalCaptureMask;
 }
 
 uint64_t pawnMoves(bitboard* board, int square, int color)
@@ -630,7 +670,7 @@ uint64_t pawnMoves(bitboard* board, int square, int color)
     return returnValue;
 }
 
-uint64_t knightMoves(bitboard* board, int square, int color)
+uint64_t knightMoves(uint64_t allyPieces, int square)
 {
     uint64_t returnedValue = 0;
     int row = getRow(square);
@@ -662,19 +702,12 @@ uint64_t knightMoves(bitboard* board, int square, int color)
     if(column - 1 >= 1 && row - 2 >= 1) returnedValue|=(1ull<<(square-17));
     if(column - 2 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-10));
 
-    if(ISWHITE(color))
-    {
-        returnedValue^=(returnedValue&board->pieces_w);
-    }
-    else
-    {
-        returnedValue^=(returnedValue&board->pieces_b);
-    }
-     
+    returnedValue&=(~allyPieces);
+
     return returnedValue;
 }
 
-uint64_t bishopMoves(bitboard* board, int square, int color)
+uint64_t bishopMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
     uint64_t potentialMoves = 0;
 
@@ -683,22 +716,13 @@ uint64_t bishopMoves(bitboard* board, int square, int color)
     while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) < getColumn(square) && getRow(questionedSquare) > getRow(square))
     {
         uint64_t questionedMask = (1ull<<questionedSquare);
-        if((ISWHITE(color) && (board->pieces_b&questionedMask)) || (ISBLACK(color) && (board->pieces_w&questionedMask)))
+        if(enemyPieces&questionedMask)
         {
-            //Opposite color target
             potentialMoves|=questionedMask;
             break;
         }
-        else if(board->pieces_all&questionedMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=questionedMask;
-        }
+        else if(allyPieces&questionedMask) break;
+        else potentialMoves|=questionedMask;
 
         questionedSquare+=7;
     }
@@ -708,22 +732,13 @@ uint64_t bishopMoves(bitboard* board, int square, int color)
     while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) > getColumn(square) && getRow(questionedSquare) > getRow(square))
     {
         uint64_t questionedMask = (1ull<<questionedSquare);
-        if((ISWHITE(color) && (board->pieces_b&questionedMask)) || (ISBLACK(color) && (board->pieces_w&questionedMask)))
+        if(enemyPieces&questionedMask)
         {
-            //Opposite color target
             potentialMoves|=questionedMask;
             break;
         }
-        else if(board->pieces_all&questionedMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=questionedMask;
-        }
+        else if(allyPieces&questionedMask) break;
+        else potentialMoves|=questionedMask;
 
         questionedSquare+=9;
     }
@@ -733,22 +748,13 @@ uint64_t bishopMoves(bitboard* board, int square, int color)
     while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) < getColumn(square) && getRow(questionedSquare) < getRow(square))
     {
         uint64_t questionedMask = (1ull<<questionedSquare);
-        if((ISWHITE(color) && (board->pieces_b&questionedMask)) || (ISBLACK(color) && (board->pieces_w&questionedMask)))
+        if(enemyPieces&questionedMask)
         {
-            //Opposite color target
             potentialMoves|=questionedMask;
             break;
         }
-        else if(board->pieces_all&questionedMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=questionedMask;
-        }
+        else if(allyPieces&questionedMask) break;
+        else potentialMoves|=questionedMask;
 
         questionedSquare-=9;
     }
@@ -758,22 +764,13 @@ uint64_t bishopMoves(bitboard* board, int square, int color)
     while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) > getColumn(square) && getRow(questionedSquare) < getRow(square))
     {
         uint64_t questionedMask = (1ull<<questionedSquare);
-        if((ISWHITE(color) && (board->pieces_b&questionedMask)) || (ISBLACK(color) && (board->pieces_w&questionedMask)))
+        if(enemyPieces&questionedMask)
         {
-            //Opposite color target
             potentialMoves|=questionedMask;
             break;
         }
-        else if(board->pieces_all&questionedMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=questionedMask;
-        }
+        else if(allyPieces&questionedMask) break;
+        else potentialMoves|=questionedMask; //Empty target
 
         questionedSquare-=7;
     }
@@ -781,104 +778,87 @@ uint64_t bishopMoves(bitboard* board, int square, int color)
     return potentialMoves;
 }
 
-uint64_t rookMoves(bitboard* board, int square, int color)
+uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
     uint64_t potentialMoves = 0;
     uint64_t tempMask = 0;
+
     //Above
     for(int column = getColumn(square) + 1; column <= 8; column++)
     {
         tempMask = (1ull<<(square + (column - getColumn(square))));
-        if((ISWHITE(color) && board->pieces_b&tempMask) || (ISBLACK(color) && board->pieces_w&tempMask))
+        if(enemyPieces&tempMask)
         {
-            //Opposite color target
             potentialMoves|=tempMask;
             break;
         }
-        else if(board->pieces_all&tempMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=tempMask;
-        }
+        else if(allyPieces&tempMask) break;
+        else potentialMoves|=tempMask;
     }
 
     //Below
     for(int column = getColumn(square) - 1; column >= 1; column--)
     {
         tempMask = (1ull<<(square + (column - getColumn(square))));
-        if((ISWHITE(color) && board->pieces_b&tempMask) || (ISBLACK(color) && board->pieces_w&tempMask))
+        if(enemyPieces&tempMask)
         {
-            //Opposite color target
             potentialMoves|=tempMask;
             break;
         }
-        else if(board->pieces_all&tempMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=tempMask;
-        }
+        else if(allyPieces&tempMask) break;
+        else potentialMoves|=tempMask;
     }
 
     //Right
     for(int row = getRow(square) + 1; row <= 8; row++)
     {
         tempMask = (1ull<<(square + 8*(row - getRow(square))));
-        if((ISWHITE(color) && board->pieces_b&tempMask) || (ISBLACK(color) && board->pieces_w&tempMask))
+        if(enemyPieces&tempMask)
         {
-            //Opposite color target
             potentialMoves|=tempMask;
             break;
         }
-        else if(board->pieces_all&tempMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=tempMask;
-        }
+        else if(allyPieces&tempMask) break;
+        else potentialMoves|=tempMask;
     }
 
     //Left
     for(int row = getRow(square) - 1; row >= 1; row--)
     {
         tempMask = (1ull<<(square + 8*(row - getRow(square))));
-        if((ISWHITE(color) && board->pieces_b&tempMask) || (ISBLACK(color) && board->pieces_w&tempMask))
+        if(enemyPieces&tempMask)
         {
-            //Opposite color target
             potentialMoves|=tempMask;
             break;
         }
-        else if(board->pieces_all&tempMask)
-        {
-            //Same color target
-            break;
-        }
-        else
-        {
-            //Empty target
-            potentialMoves|=tempMask;
-        }
+        else if(allyPieces&tempMask) break;
+        else potentialMoves|=tempMask;
     }
 
     return potentialMoves;
 }
 
-uint64_t queenMoves(bitboard* board, int square, int color)
+uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
-    return rookMoves(board, square, color)|bishopMoves(board, square, color);
+    return rookMoves(allyPieces, enemyPieces, square)|bishopMoves(allyPieces, enemyPieces, square);
+}
+
+uint64_t pyrrhicKingAttacks(int square)
+{
+    uint64_t returnedValue = 0;
+    int row = getRow(square);
+    int column = getColumn(square);
+
+    if(column - 1 >= 1 && row + 1 <= 8) returnedValue|=(1ull<<(square+7));
+    if(row + 1 <= 8) returnedValue|=(1ull<<(square+8));
+    if(column + 1 <= 8 && row + 1 <= 8) returnedValue|=(1ull<<(square+9));
+    if(column - 1 >= 1) returnedValue|=(1ull<<(square-1));
+    if(column + 1 <= 8) returnedValue|=(1ull<<(square+1));
+    if(column - 1 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-9));
+    if(row - 1 >= 1) returnedValue|=(1ull<<(square-8));
+    if(column + 1 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-7));
+
+    return returnedValue;
 }
 
 uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats)
@@ -1101,11 +1081,11 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
     board_set(board, endSquare, (color|KNIGHT));
 
     //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(knightMoves(board, endSquare, WHITE)))
+    if(ISWHITE(color) && board->king_b&(knightMoves(board->pieces_w, endSquare)))
     {
         CHECK_B(board->flags);
     }
-    else if(ISBLACK(color) && board->king_w&(knightMoves(board, endSquare, BLACK)))
+    else if(ISBLACK(color) && board->king_w&(knightMoves(board->pieces_b, endSquare)))
     {
         CHECK_W(board->flags);
     }
@@ -1140,11 +1120,11 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
     board_set(board, endSquare, (color|BISHOP));
 
     //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(bishopMoves(board, endSquare, WHITE)))
+    if(ISWHITE(color) && board->king_b&(bishopMoves(board->pieces_w, board->pieces_b, endSquare)))
     {
         CHECK_B(board->flags);
     }
-    else if(ISBLACK(color) && board->king_w&(bishopMoves(board, endSquare, BLACK)))
+    else if(ISBLACK(color) && board->king_w&(bishopMoves(board->pieces_b, board->pieces_w, endSquare)))
     {
         CHECK_W(board->flags);
     }
@@ -1189,7 +1169,7 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
             BAN_KINGCASTLE_W(board->flags);
         }
 
-        if(board->king_b&(rookMoves(board, endSquare, WHITE))) CHECK_B(board->flags);
+        if(board->king_b&(rookMoves(board->pieces_w, board->pieces_b, endSquare))) CHECK_B(board->flags);
     }
     else if(ISBLACK(color))
     {
@@ -1202,7 +1182,7 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
             BAN_KINGCASTLE_B(board->flags);
         }
 
-        if(board->king_w&(rookMoves(board, endSquare, BLACK))) CHECK_W(board->flags);
+        if(board->king_w&(rookMoves(board->pieces_b, board->pieces_w, endSquare))) CHECK_W(board->flags);
     }
     
     return 0;
@@ -1235,11 +1215,11 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
     board_set(board, endSquare, (color|QUEEN));
 
     //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(queenMoves(board, endSquare, WHITE)))
+    if(ISWHITE(color) && board->king_b&(queenMoves(board->pieces_w, board->pieces_b, endSquare)))
     {
         CHECK_B(board->flags);
     }
-    else if(ISBLACK(color) && board->king_w&(queenMoves(board, endSquare, BLACK)))
+    else if(ISBLACK(color) && board->king_w&(queenMoves(board->pieces_b, board->pieces_w, endSquare)))
     {
         CHECK_W(board->flags);
     }

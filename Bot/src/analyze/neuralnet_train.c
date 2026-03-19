@@ -1,8 +1,8 @@
-#include "../include/neuralnet.h"
-#include "../include/debug.h"
-#include "../include/bitboard.h"
-#include "../include/moves.h"
-#include "../include/engine.h"
+#include "../../include/analyze/neuralnet.h"
+#include "../../include/debug.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/board/moves.h"
+#include "../../include/analyze/engine.h"
 #include <math.h>
 #include <float.h>
 #include <immintrin.h>
@@ -355,35 +355,23 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                 {
                     uint64_t inputBitboard_White = trainingNNUE->inputNodes[i];
                     uint64_t inputBitboard_Black = trainingNNUE->inputNodes[640 + i];
-                    if(inputBitboard_White != 0) //Don't update the edge weights if they didn't contribute.
-                    {
-                        for(int square = 0; square < 64; square++)
-                        {
-                            if(inputBitboard_White&(1ull<<square))
-                            {
-                                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-                                {
-                                    trainingNNUE->weights1[(64 * i) + square][j]+= delta1[0][j];
-                                }
 
-                            }
-                        }
-                    }
-                    if(inputBitboard_Black != 0) //Don't update the edge weights if they didn't contribute.
-                    {
-                        for(int square = 0; square < 64; square++)
-                        {
-                            if(inputBitboard_Black&(1ull<<square))
-                            {
-                                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-                                {
-                                    trainingNNUE->weights1[(64 * i) + square][j]+= delta1[1][j];
-                                }
+                    while (inputBitboard_White) {
 
-                            }
-                        }
+                        int square = __builtin_ctzll(inputBitboard_White);
+
+                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1[(64 * i) + square][j] += delta1[0][j];
+
+                        inputBitboard_White &= (inputBitboard_White - 1);
                     }
 
+                    while (inputBitboard_Black) {
+                        int square = __builtin_ctzll(inputBitboard_Black);
+
+                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1[(64 * i) + square][j] += delta1[1][j];
+                        
+                        inputBitboard_Black &= (inputBitboard_Black - 1);
+                    }
                 }
                 for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] += LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
             }

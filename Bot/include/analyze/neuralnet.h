@@ -1,7 +1,7 @@
 #ifndef NEURALNETWORK
 #define NEURALNETWORK
 
-#include "structs.h"
+#include "../structs.h"
 #include <stdint.h>
 
 #define INPUT_BITS 81920

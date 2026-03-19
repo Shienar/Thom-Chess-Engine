@@ -1,9 +1,10 @@
-#include "../include/engine.h"
-#include "../include/moves.h"
-#include "../include/bitboard.h"
-#include "../include/debug.h"
-#include "../include/book.h"
-#include "../include/neuralnet.h"
+#include "../../include/analyze/engine.h"
+#include "../../include/board/moves.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/debug.h"
+#include "../../include/analyze/book.h"
+#include "../../include/analyze/neuralnet.h"
+#include "../../include/pyrrhic/tbprobe.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>
@@ -281,12 +282,52 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     clock_t startTime = clock();
     #endif
 
-    //Book moves
-    if(entries) 
+    if(entries) //Book moves
     {
         move* bookMove = NULL;
         if((bookMove = getBookMove(board))) return bookMove;
         else unloadBook();
+    }
+    else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.v
+    {
+        int ep = board->enPassantSquare;
+        if(ep == -1) ep = 0;
+
+        int color = PYRRHIC_WHITE;
+        if(ISBLACK(board->turn)) color = PYRRHIC_BLACK;
+
+        //tb_probe_root_dtz is supposed to be better, but it isn't returning valid moves.
+        //This will maintain the optimal win/draw/loss outcome, but it doesn't choose the
+        //longest avoidance of mate.
+        int result = tb_probe_root(board->pieces_w, board->pieces_b, 
+                                        board->king_b|board->king_w, board->queen_b|board->queen_w, 
+                                        board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
+                                        board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
+                                        (int) board->movesSinceLastChange/2, ep, color, NULL);
+        
+        if(!result) DEBUG("Failed to probe sygyzy.");
+        else
+        {
+            move* bestMove = CALLOC(1, sizeof(move));
+            bestMove->endSquare = TB_RESULT_TO(result);
+            bestMove->startSquare = TB_RESULT_FROM(result);
+            bestMove->flags = board->flags;
+            bestMove->prevEnPassantSquare = board->enPassantSquare;
+            bestMove->previousMovesSinceLastChange = board->movesSinceLastChange;
+            bestMove->piece = findPieceOnSquare(board, bestMove->startSquare);
+
+            if(TB_RESULT_IS_QPROMO(result)) bestMove->promoteTo = QUEEN;
+            else if(TB_RESULT_IS_RPROMO(result)) bestMove->promoteTo = ROOK;
+            else if(TB_RESULT_IS_BPROMO(result)) bestMove->promoteTo = BISHOP;
+            else if(TB_RESULT_IS_NPROMO(result)) bestMove->promoteTo = KNIGHT;
+
+            bestMove->capturedPiece = findPieceOnSquare(board, bestMove->endSquare);
+            if(bestMove->capturedPiece) bestMove->capturedPieceSquare = bestMove->endSquare;
+
+            bestMove->nextMove = NULL;
+
+            return bestMove;
+        }
     }
 
     move* principalVariation = CALLOC(maxDepth, sizeof(move));
@@ -430,10 +471,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     if(bestMove->startSquare == bestMove->endSquare && bestMove->startSquare == 0)
     {
         DEBUG("Engine returned empty move.");
-        if(printDebugMessages)
-        {
-            for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
-        }
+        //if(printDebugMessages) for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
     }
 
     #ifdef COUNT_NODES_VISITED 

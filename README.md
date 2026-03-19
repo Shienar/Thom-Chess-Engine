@@ -1,3 +1,8 @@
-Just a chess bot I wrote in my spare time for fun.
+CREDITS:
 
-Opening book binaries came from https://github.com/michaeldv/donna_opening_books/
+    Opening book binaries:
+        https://github.com/michaeldv/donna_opening_books/
+
+    Endgame Tablebase (Sygyzy):
+        https://github.com/syzygy1/tb
+        https://github.com/AndyGrant/Pyrrhic

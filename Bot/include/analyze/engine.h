@@ -1,8 +1,8 @@
 #ifndef ENGINE
 #define ENGINE
 
-#include "structs.h"
-#include "transpositiontable.h"
+#include "../structs.h"
+#include "../hashtables/transpositiontable.h"
 #include <time.h>
 
 //The evaluation score given to draws.

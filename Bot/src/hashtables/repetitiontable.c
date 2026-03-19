@@ -1,5 +1,5 @@
-#include "../include/repetitiontable.h"
-#include "../include/debug.h"
+#include "../../include/hashtables/repetitiontable.h"
+#include "../../include/debug.h"
 #include <float.h>
 #include <string.h>
 
@@ -160,4 +160,22 @@ int decrement_table_value(hashtable_pos* ht, bitboard* board)
     DEBUG("Could not locate a value to decrement at hashCode 0x%016llx.", hashCode);
 
     return INT32_MIN;
+}
+
+int get_pos_table_value(hashtable_pos* ht, bitboard* board)
+{
+    if(!ht) return 0;
+
+    uint64_t hashCode = getHashCode(board);
+    size_t index = hashCode%ht->capacity;
+
+    while(ht->array[index].count != 0)
+    {
+        if(ht->array[index].hashCode == hashCode) return ht->array[index].count;
+        
+        index++;
+        if(index >= ht->capacity) index=0;
+    }
+
+    return 0;
 }

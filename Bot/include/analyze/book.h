@@ -1,7 +1,7 @@
 #ifndef BOOK
 #define BOOK
 
-#include "structs.h"
+#include "../structs.h"
 
 extern uint64_t entryCount;
 extern polyglot_book_entry *entries;

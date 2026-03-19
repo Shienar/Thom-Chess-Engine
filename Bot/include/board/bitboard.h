@@ -2,8 +2,8 @@
 
 #define BITBOARD_H
 
-#include "structs.h"
-#include "repetitiontable.h"
+#include "../structs.h"
+#include "../hashtables/repetitiontable.h"
 
 #define WHITE 0x10
 #define BLACK 0x20

@@ -1,8 +1,8 @@
 #ifndef MOVES
 #define MOVES
 
-#include "structs.h"
-#include "repetitiontable.h"
+#include "../structs.h"
+#include "../hashtables/repetitiontable.h"
 
 //Questioned piece is this direction from selected king.
 //Assume a1 is bottomleft
@@ -33,11 +33,13 @@ int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColo
 int isThreatened(bitboard* board, int square, int squareColor);
 
 //Includes illegal moves (in regards to check)
+uint64_t pyrrhicPawnAttacks(int square, int color);
 uint64_t pawnMoves(bitboard* board, int square, int color);
-uint64_t bishopMoves(bitboard* board, int square, int color);
-uint64_t knightMoves(bitboard* board, int square, int color);
-uint64_t rookMoves(bitboard* board, int square, int color);
-uint64_t queenMoves(bitboard* board, int square, int color);
+uint64_t bishopMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t knightMoves(uint64_t allyPieces, int square);
+uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t pyrrhicKingAttacks(int square);
 uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats);
 
 //Returns 0 on success, -1 on fail.

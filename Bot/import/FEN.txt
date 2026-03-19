@@ -1,2 +1,5 @@
 ; Starting position.
 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+
+; 5 piece endgame.
+8/8/8/8/3K4/1Q6/8/4k2r w - - 0 1

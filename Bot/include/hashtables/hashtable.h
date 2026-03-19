@@ -1,8 +1,8 @@
 #ifndef HASHTABLE
 #define HASHTABLE
 
-#include "structs.h"
-#include "engine.h"
+#include "../structs.h"
+#include "../analyze/engine.h"
 #include <stdint.h>
 
 #define STARTING_CAPACITY 1024

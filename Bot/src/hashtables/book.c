@@ -1,7 +1,7 @@
-#include "../include/book.h"
-#include "../include/debug.h"
-#include "../include/bitboard.h"
-#include "../include/hashtable.h"
+#include "../../include/analyze/book.h"
+#include "../../include/debug.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/hashtables/hashtable.h"
 #include <stdint.h>
 
 uint64_t entryCount = 0;

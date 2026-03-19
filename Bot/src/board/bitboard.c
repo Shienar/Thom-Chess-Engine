@@ -1,7 +1,7 @@
-#include "../include/structs.h"
-#include "../include/debug.h"
-#include "../include/bitboard.h"
-#include "../include/moves.h"
+#include "../../include/structs.h"
+#include "../../include/debug.h"
+#include "../../include/board/bitboard.h"
+#include "../../include/board/moves.h"
 #include <string.h>
 #include <math.h>
 
@@ -696,12 +696,10 @@ void board_set(bitboard* board, int square, int piece)
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
 {
-    int square = 0;
-    while(square < 64)
-    {
-        if((piece&1) == 1) boardArray[getRow(square) - 1][getColumn(square) - 1] = printChar;
-        piece = piece>>1;
-        square++;
+    while (piece) {
+        int square = __builtin_ctzll(piece);
+        boardArray[getRow(square) - 1][getColumn(square) - 1] = printChar;
+        piece &= (piece - 1);
     }
 }
 
