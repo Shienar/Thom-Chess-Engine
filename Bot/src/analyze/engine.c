@@ -290,36 +290,50 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     }
     else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.v
     {
-        int ep = board->enPassantSquare;
+        uint32_t ep = board->enPassantSquare;
         if(ep == -1) ep = 0;
 
-        int color = PYRRHIC_WHITE;
-        if(ISBLACK(board->turn)) color = PYRRHIC_BLACK;
+        bool turn = PYRRHIC_WHITE;
+        if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
 
-        //tb_probe_root_dtz is supposed to be better, but it isn't returning valid moves.
-        //This will maintain the optimal win/draw/loss outcome, but it doesn't choose the
-        //longest avoidance of mate.
-        int result = tb_probe_root(board->pieces_w, board->pieces_b, 
+        int hasRepeated = get_pos_table_value(board->ht, board);
+
+        struct TbRootMoves moveResults = {0};
+
+        int result = tb_probe_root_dtz(board->pieces_w, board->pieces_b, 
                                         board->king_b|board->king_w, board->queen_b|board->queen_w, 
                                         board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
                                         board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
-                                        (int) board->movesSinceLastChange/2, ep, color, NULL);
+                                        (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
         
         if(!result) DEBUG("Failed to probe sygyzy.");
         else
         {
+            int bestScore = INT32_MIN;
+            int bestIndex = 0;
+            for(int i = 0; i < moveResults.size; i++)
+            {
+                if(moveResults.moves[i].tbRank > bestScore)
+                {
+                    bestScore = moveResults.moves[i].tbRank;
+                    bestIndex = i;
+                }
+                printf("[%d] %d - %d->%d\n", i, moveResults.moves[i].tbRank, PYRRHIC_MOVE_FROM(moveResults.moves[i].move), PYRRHIC_MOVE_TO(moveResults.moves[i].move));
+            }   
+            printf("Best index: [%d] %d - %d->%d\n", bestIndex, moveResults.moves[bestIndex].tbRank, PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move), PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move));
+
             move* bestMove = CALLOC(1, sizeof(move));
-            bestMove->endSquare = TB_RESULT_TO(result);
-            bestMove->startSquare = TB_RESULT_FROM(result);
+            bestMove->endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
+            bestMove->startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
             bestMove->flags = board->flags;
             bestMove->prevEnPassantSquare = board->enPassantSquare;
             bestMove->previousMovesSinceLastChange = board->movesSinceLastChange;
             bestMove->piece = findPieceOnSquare(board, bestMove->startSquare);
 
-            if(TB_RESULT_IS_QPROMO(result)) bestMove->promoteTo = QUEEN;
-            else if(TB_RESULT_IS_RPROMO(result)) bestMove->promoteTo = ROOK;
-            else if(TB_RESULT_IS_BPROMO(result)) bestMove->promoteTo = BISHOP;
-            else if(TB_RESULT_IS_NPROMO(result)) bestMove->promoteTo = KNIGHT;
+            if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = QUEEN;
+            else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = ROOK;
+            else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = BISHOP;
+            else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = KNIGHT;
 
             bestMove->capturedPiece = findPieceOnSquare(board, bestMove->endSquare);
             if(bestMove->capturedPiece) bestMove->capturedPieceSquare = bestMove->endSquare;

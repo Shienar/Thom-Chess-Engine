@@ -126,7 +126,7 @@ static size_t file_size(FD fd) {
   if (GetFileSizeEx(fd, &fileSize)==0) {
     return 0;
   }
-  return (size_t)fileSize.QuadPart;
+  return (size_t) fileSize.QuadPart;
 #else
   struct stat buf;
   if (fstat(fd,&buf)) {
@@ -1571,8 +1571,8 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
   }
 
   struct EncInfo *ei = first_ei(be, type);
-  int p[TB_PIECES];
-  size_t idx;
+  int p[TB_PIECES] = {0};
+  size_t idx = 0;
   int t = 0;
   uint8_t flags = 0; // initialize to fix GCC warning
 

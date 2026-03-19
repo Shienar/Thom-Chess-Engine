@@ -10,6 +10,7 @@
 
 /**
  * TODO:
+ *  - Sygyzy probing recommends suboptimal moves.
  *  - The engine is a bit slow.
  *      - Accumulator refresh table.
  *      - engine.c optimizations aren't working while the weights are untrained.

@@ -86,6 +86,10 @@ void getSquareName(int square, char* target);
 int getSquareNumber(char* squareName);
 int findPieceOnSquare(bitboard* board, int square);
 
+//Required by pyrrhic.
+//Return index of popped bit in range [0,63]
+int popLSB(uint64_t *bitboard);
+
 bitboard* create_board();
 bitboard* create_board_from_fen(const char* fileName, int lineNumber);
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);

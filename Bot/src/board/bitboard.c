@@ -61,6 +61,13 @@ int getSquareNumber(char* squareName)
     return ((squareName[0] - 97) + 8*(squareName[1] - '0' - 1));
 }
 
+int popLSB(uint64_t *bitboard)
+{
+    int LSB_Index = __builtin_ctzll(*bitboard);
+    *bitboard &= (*bitboard - 1);
+    return LSB_Index;
+}
+
 bitboard* create_board_from_fen(const char* fileName, int lineNumber)
 {
     bitboard* board = CALLOC(1, sizeof(bitboard));
@@ -223,6 +230,7 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
     board->moveStackTop = NULL;
     
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
+    else board->enPassantSquare = -1;
 
     if(board->ht) destroy_hashTable_pos(board->ht);
     board->ht = create_hashTable_pos();

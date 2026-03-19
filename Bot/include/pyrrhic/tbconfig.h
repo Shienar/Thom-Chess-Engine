@@ -43,7 +43,9 @@
 
 #define PYRRHIC_POPCOUNT(x)              (__builtin_popcountll(x))
 #define PYRRHIC_LSB(x)                   (__builtin_ctzll(x))
-#define PYRRHIC_POPLSB(x)                (*x &= (*x - 1))
+
+//Returns index of popped bit.
+#define PYRRHIC_POPLSB(x)                popLSB(x)
 
 #define PYRRHIC_PAWN_ATTACKS(sq, c)      (pyrrhicPawnAttacks(sq, c))
 #define PYRRHIC_KNIGHT_ATTACKS(sq)       (knightMoves(0, sq))
