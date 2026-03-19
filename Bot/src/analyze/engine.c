@@ -297,6 +297,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
 
         int hasRepeated = get_pos_table_value(board->ht, board);
+        if(hasRepeated > 1) hasRepeated = 1;
 
         struct TbRootMoves moveResults = {0};
 
@@ -318,10 +319,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
                     bestScore = moveResults.moves[i].tbRank;
                     bestIndex = i;
                 }
-                printf("[%d] %d - %d->%d\n", i, moveResults.moves[i].tbRank, PYRRHIC_MOVE_FROM(moveResults.moves[i].move), PYRRHIC_MOVE_TO(moveResults.moves[i].move));
             }   
-            printf("Best index: [%d] %d - %d->%d\n", bestIndex, moveResults.moves[bestIndex].tbRank, PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move), PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move));
-
+            
             move* bestMove = CALLOC(1, sizeof(move));
             bestMove->endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
             bestMove->startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);

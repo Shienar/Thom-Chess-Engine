@@ -7,7 +7,7 @@ move** generateMoveList(bitboard* board, int capturesOnly)
 {
     if(board->victor) 
     {
-        DEBUG("Cannot generate moves for terminated game; Victor=%02x", board->victor);
+        DEBUG("Cannot generate moves for terminated game; Victor=x%02x", board->victor);
         return NULL;
     }
 
@@ -571,7 +571,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         allyPieces = board->pieces_w;
         bishopqueen = board->bishop_b|board->queen_b;
         rookqueen = board->rook_b|board->queen_b;
-        if(((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b))) return THREAT_TYPE_PAWN;
+        if(square < 56 && (((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b)))) return THREAT_TYPE_PAWN;
         if(knightMoves(0, square)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_b)) return THREAT_TYPE_KING;
     }
@@ -581,7 +581,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         allyPieces = board->pieces_b;
         bishopqueen = board->bishop_w|board->queen_w;
         rookqueen = board->rook_w|board->queen_w;
-        if(((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w))) return THREAT_TYPE_PAWN;
+        if((square > 7 && ((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w)))) return THREAT_TYPE_PAWN;
         if(knightMoves(0, square)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_w)) return THREAT_TYPE_KING;
     }
@@ -950,7 +950,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
     } 
     else if(!ISBLACK(color) && !ISWHITE(color))
     {
-        DEBUG("Invalid color for pawn move. (%02x)", color);
+        DEBUG("Invalid color for pawn move. (x%02x)", color);
         return -1;
     }
 
@@ -1393,7 +1393,7 @@ int moveFromStruct(bitboard* board, move* m)
     
     if(board->victor)
     {
-        DEBUG("Cannot move from terminal gamestate; Victor=%02x", board->victor);
+        DEBUG("Cannot move from terminal gamestate; Victor=x%02x", board->victor);
         return -1;
     }
     else if(ISBLACK(m->piece) && board->turn == WHITE)
@@ -1441,7 +1441,7 @@ int moveFromStruct(bitboard* board, move* m)
         char endSquareName[3] = {'\0'};
         getSquareName(m->startSquare, startSquareName);
         getSquareName(m->endSquare, endSquareName);
-        DEBUG("Piece move is not legal. Legal moves=%d, [%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName);
+        DEBUG("Piece move is not legal. Legal moves=%d, [x%02x], %s->%s", moveIndex, m->piece, startSquareName, endSquareName);
         return -1;
     }
 
