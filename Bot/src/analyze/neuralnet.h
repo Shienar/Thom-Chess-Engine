@@ -14,6 +14,9 @@
 #define NUMBER_OF_BLOCKS 50 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
+#define FLIP_SQUARE(x) (x^56)
+#define FLIP_MASK(x) __builtin_bswap64(x)
+
 /**
  * Weights
  * 
@@ -44,16 +47,7 @@ typedef struct network_weights_training {
     float weights4[THIRD_HIDDEN_LAYER_NODES];
     float weights4_bias;
 
-    //Incrementally updates.
-    uint64_t inputNodes[1280];
-    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
-    
-    //Saved for use in backpropagation.
-    float h2[SECOND_HIDDEN_LAYER_NODES];
-    float h3[THIRD_HIDDEN_LAYER_NODES];
-    float outputNode;
-
-    //Saved for dequantization. TODO
+    //Saved for dequantization.
     float scalingFactor;
 } network_weights_training;
 typedef struct network_weights_playing {
@@ -65,10 +59,23 @@ typedef struct network_weights_playing {
     int8_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4_bias;
+} network_weights_playing;
 
+typedef struct accumulator_training {
+    //Incrementally updates.
+    uint64_t inputNodes[1280];
+    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
+    
+    //Saved for use in backpropagation.
+    float h2[SECOND_HIDDEN_LAYER_NODES];
+    float h3[THIRD_HIDDEN_LAYER_NODES];
+    float outputNode;
+} accumulator_training;
+
+typedef struct accumulator_playing {
     uint64_t inputNodes[1280];
     int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
-} network_weights_playing;
+} accumulator_playing;
 
 typedef struct network_training_data {
     bitboard board;
@@ -77,6 +84,8 @@ typedef struct network_training_data {
 
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;
+extern accumulator_training* trainingAccumulator;
+extern accumulator_playing* playerAccumulator;
 
 /* Binary  file storage. */
 void load_trainingWeights();
@@ -102,20 +111,20 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLaye
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
  */
-void loadInputAccumulator(bitboard* board);
+void loadInputAccumulator(bitboard* board, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
 
 /**
  * Incremental update of input nodes and accumulator.
  * Call after making or unmaking a move with the move that was
  * pushed or popped off of the stack.
  */
-void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove);
+void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
 
-float forwardPropagate_Float(int turn);
-int8_t forwardPropagate_Int(int turn);
+float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator);
+int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator);
 
-void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError);
+void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
 
-void generateTrainingData(int depth, int maxTime, int maxPositions);
+void generateTrainingData(int depth, int maxTime, int maxPositions, accumulator_training* floatAccumulator);
 void updateTrainingData(int depth, int maxTime);
 #endif

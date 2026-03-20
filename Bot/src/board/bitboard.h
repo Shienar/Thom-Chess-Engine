@@ -8,6 +8,8 @@
 #define WHITE 0x10
 #define BLACK 0x20
 
+#define FLIP_COLOR(x) (x^(WHITE|BLACK))
+
 #define DRAW 0x30
 #define STALEMATED_WHITE 0x40
 #define STALEMATED_BLACK 0x80

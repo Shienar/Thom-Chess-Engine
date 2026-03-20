@@ -20,7 +20,7 @@ move** generateMoveList(bitboard* board, int capturesOnly)
         return NULL;
     } 
 
-    uint64_t turnsBitBoard = (ISWHITE(board->turn))?board->pieces_w:board->pieces_b;
+    uint64_t turnsBitBoard = (ISWHITE(board->turn)) ? board->pieces_w : board->pieces_b;
     while(turnsBitBoard)
     {
         int currentSquare = __builtin_ctzll(turnsBitBoard);

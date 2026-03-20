@@ -41,26 +41,29 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLaye
     }
 }
 
-void loadInputAccumulator(bitboard* board)
+void loadInputAccumulator(bitboard* board, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
 {
     if(!board)
     {
         DEBUG("Cannot load null board into accumulator.");
         return;
     }
-    else if(!trainingNNUE && !playerNNUE)
+    else if(!byteAccumulator && !floatAccumulator)
     {
-        DEBUG("Cannot load null training weights.");
+        DEBUG("Cannot load null accumulator.");
         return;
     }
+    else if(byteAccumulator && !playerNNUE) load_playingWeights();
+    else if(floatAccumulator && !trainingNNUE) load_trainingWeights();
+    
 
     uint64_t* inputs = NULL;
-    if(trainingNNUE) inputs = trainingNNUE->inputNodes;
-    else inputs = playerNNUE->inputNodes;
+    if(byteAccumulator) inputs = byteAccumulator->inputNodes;
+    else inputs = floatAccumulator->inputNodes;
     memset(inputs, 0, 1280*sizeof(uint64_t));
 
     int baseIndex_w = 10*board->kingSquare_w;
-    int baseIndex_b = 640 + 10*board->kingSquare_b;
+    int baseIndex_b = 640 + 10*FLIP_SQUARE(board->kingSquare_b);
 
 /**
  * To find the index given COLOR's KINGSQUARE and 
@@ -71,122 +74,156 @@ void loadInputAccumulator(bitboard* board)
  * Black pieces are flipped to be viewed from white's perspective.
  */
     int extendedBaseIndex_w = (board->kingSquare_w * 640);
-    int extendedBaseIndex_b = (board->kingSquare_b * 640);
+    int extendedBaseIndex_b = (FLIP_SQUARE(board->kingSquare_b) * 640);
 
     inputs[baseIndex_w + 0] = board->pawn_w;
     inputs[baseIndex_w + 1] = board->knight_w;
     inputs[baseIndex_w + 2] = board->bishop_w;
     inputs[baseIndex_w + 3] = board->rook_w;
     inputs[baseIndex_w + 4] = board->queen_w;
-    inputs[baseIndex_w + 5] = __builtin_bswap64(board->pawn_b);
-    inputs[baseIndex_w + 6] = __builtin_bswap64(board->knight_b);
-    inputs[baseIndex_w + 7] = __builtin_bswap64(board->bishop_b);
-    inputs[baseIndex_w + 8] = __builtin_bswap64(board->rook_b);
-    inputs[baseIndex_w + 9] = __builtin_bswap64(board->queen_b);
+    inputs[baseIndex_w + 5] = board->pawn_b;
+    inputs[baseIndex_w + 6] = board->knight_b;
+    inputs[baseIndex_w + 7] = board->bishop_b;
+    inputs[baseIndex_w + 8] = board->rook_b;
+    inputs[baseIndex_w + 9] = board->queen_b;
 
-    inputs[baseIndex_b + 0] = __builtin_bswap64(board->pawn_b);
-    inputs[baseIndex_b + 1] = __builtin_bswap64(board->knight_b);
-    inputs[baseIndex_b + 2] = __builtin_bswap64(board->bishop_b);
-    inputs[baseIndex_b + 3] = __builtin_bswap64(board->rook_b);
-    inputs[baseIndex_b + 4] = __builtin_bswap64(board->queen_b);
-    inputs[baseIndex_b + 5] = board->pawn_w;
-    inputs[baseIndex_b + 6] = board->knight_w;
-    inputs[baseIndex_b + 7] = board->bishop_w;
-    inputs[baseIndex_b + 8] = board->rook_w;
-    inputs[baseIndex_b + 9] = board->queen_w;
+    inputs[baseIndex_b + 0] = FLIP_MASK(board->pawn_b);
+    inputs[baseIndex_b + 1] = FLIP_MASK(board->knight_b);
+    inputs[baseIndex_b + 2] = FLIP_MASK(board->bishop_b);
+    inputs[baseIndex_b + 3] = FLIP_MASK(board->rook_b);
+    inputs[baseIndex_b + 4] = FLIP_MASK(board->queen_b);
+    inputs[baseIndex_b + 5] = FLIP_MASK(board->pawn_w);
+    inputs[baseIndex_b + 6] = FLIP_MASK(board->knight_w);
+    inputs[baseIndex_b + 7] = FLIP_MASK(board->bishop_w);
+    inputs[baseIndex_b + 8] = FLIP_MASK(board->rook_w);
+    inputs[baseIndex_b + 9] = FLIP_MASK(board->queen_w);
 
-    if(trainingNNUE)
-    {
-        float inputArray[1280];
-        extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, NULL);
-
-        calculateLayer_Floats(inputArray, trainingNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 0);
-        calculateLayer_Floats(&inputArray[640], trainingNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 0);
-    }
-    else
+    if(byteAccumulator)
     {
         int8_t inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], NULL, inputArray);
 
-        calculateLayer_IntBytes(inputArray, playerNNUE->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 0);
-        calculateLayer_IntBytes(&inputArray[640], playerNNUE->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 0);
+        calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 0);
+    }
+    else
+    {
+        float inputArray[1280];
+        extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, NULL);
+
+        calculateLayer_Floats(inputArray, floatAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 0);
+        calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 0);
     }
 }
 
-void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove)
+void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
 {
     if(!lastMove)
     {
         DEBUG("Cannot load null move.");
         return;
     }
-    else if(!trainingNNUE && !playerNNUE)
+    else if(!byteAccumulator && !floatAccumulator)
     {
-        DEBUG("Cannot load null training weights.");
+        DEBUG("Cannot load null accumulator.");
         return;
     }
+    else if(byteAccumulator && !playerNNUE) load_playingWeights();
+    else if(floatAccumulator && !trainingNNUE) load_trainingWeights();
 
     if(ISKING(lastMove->piece))
     {
-        loadInputAccumulator(board);
+        loadInputAccumulator(board, byteAccumulator, floatAccumulator);
+        return;
     }
-    else
+
+    for(int i = 0; i < 2; i++)
     {
-        //Update input nodes.
-        uint64_t xorMask = (1ull<<lastMove->startSquare)|(1ull<<lastMove->endSquare);
-
-        int pieceOffset = lastMove->piece;
-        int kingSquare = 0;
-        if(ISBLACK(pieceOffset)) 
+        int ksq, fromSq, toSq, pieceOffset = 0;
+        if(i == 0)
         {
-            pieceOffset = (lastMove->piece&0xF) + 4;
-            kingSquare = board->kingSquare_b;
-        }
-        else 
-        {
-            pieceOffset = (lastMove->piece&0xF) - 1;
-            kingSquare = board->kingSquare_w;
-        }
-
-        int inputNodeIndex = (640 * ISBLACK(lastMove->piece)) + (10 * kingSquare) + pieceOffset;
-
-        if(trainingNNUE) trainingNNUE->inputNodes[inputNodeIndex]^=xorMask;
-        else playerNNUE->inputNodes[inputNodeIndex]^=xorMask;
-
-        //Doesn't care about 40,960 offset for black inputs.
-        int fromSquareIndex, toSquareIndex;
-        if(shouldUndoMove)
-        {
-            fromSquareIndex = lastMove->endSquare;
-            toSquareIndex = lastMove->startSquare;
+            ksq = board->kingSquare_w;
+            if(shouldUndoMove)
+            {
+                toSq = lastMove->startSquare;
+                fromSq = lastMove->endSquare;
+            }
+            else
+            {
+                fromSq = lastMove->startSquare;
+                toSq = lastMove->endSquare;
+            }
+            pieceOffset = lastMove->piece;
         }
         else
         {
-            fromSquareIndex = lastMove->startSquare;
-            toSquareIndex = lastMove->endSquare;
+            ksq = FLIP_SQUARE(board->kingSquare_b);
+            if(shouldUndoMove)
+            {
+                toSq = FLIP_SQUARE(lastMove->startSquare);
+                fromSq = FLIP_SQUARE(lastMove->endSquare);
+            }
+            else
+            {
+                fromSq = FLIP_SQUARE(lastMove->startSquare);
+                toSq = FLIP_SQUARE(lastMove->endSquare);
+            }
+            pieceOffset = FLIP_COLOR(lastMove->piece);
+        }
+        
+        pieceOffset = ISBLACK(pieceOffset) ? ((pieceOffset&0xF) + 4) : ((pieceOffset&0xF) - 1); 
+        
+        int inputNodeIndex = (640 * i) + (10 * ksq) + pieceOffset;
+        uint64_t xorMask = (1ull << fromSq) | (1ull << toSq);
+
+        if(byteAccumulator) byteAccumulator->inputNodes[inputNodeIndex]^=xorMask;
+        else floatAccumulator->inputNodes[inputNodeIndex]^=xorMask;
+
+        int fromIdx = (64 * ((10 * ksq) + pieceOffset)) + fromSq;
+        int toIdx   = (64 * ((10 * ksq) + pieceOffset)) + toSq;
+
+        int capIdx = -1;
+        if(lastMove->capturedPiece)
+        {
+            int capturedPieceOffset, capturedPieceSquare;
+            if(i == 0)
+            {
+                capturedPieceOffset = lastMove->capturedPiece;
+                capturedPieceSquare = lastMove->capturedPieceSquare;
+            }
+            else
+            {
+                capturedPieceOffset = FLIP_COLOR(lastMove->capturedPiece);
+                capturedPieceSquare = FLIP_SQUARE(lastMove->capturedPieceSquare);
+            }
+
+            capturedPieceOffset = ISBLACK(capturedPieceOffset) ? ((capturedPieceOffset&0xF) + 4) : ((capturedPieceOffset&0xF) - 1); 
+            int capturedInputNodeIndex = (640 * i) + (10 * ksq) + capturedPieceOffset;
+
+            if(byteAccumulator) byteAccumulator->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
+            else floatAccumulator->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
+
+            capIdx = (64 * ((10 * ksq) + capturedPieceOffset)) + capturedPieceSquare;
         }
 
-        if(trainingNNUE)
-        {
-            float* accumulator;
-            if(ISBLACK(lastMove->piece)) accumulator = trainingNNUE->accumulator[1];
-            else accumulator = trainingNNUE->accumulator[0];
+        int isCapture = shouldUndoMove ? 1 : -1;
 
-            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+        if(byteAccumulator)
+        {
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
             {
-                accumulator[i] = accumulator[i] + trainingNNUE->weights1[toSquareIndex][i] -  trainingNNUE->weights1[fromSquareIndex][i];
+                byteAccumulator->accumulator[i][j]+= playerNNUE->weights1[toIdx][j] - playerNNUE->weights1[fromIdx][j];
+                if(capIdx != -1) byteAccumulator->accumulator[i][j]+= (isCapture * playerNNUE->weights1[capIdx][j]);
             }
         }
         else
         {
-            int8_t* accumulator;
-            if(ISBLACK(lastMove->piece)) accumulator = playerNNUE->accumulator[1];
-            else accumulator = playerNNUE->accumulator[0];
-
-            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
             {
-                accumulator[i] = accumulator[i] + playerNNUE->weights1[toSquareIndex][i] -  playerNNUE->weights1[fromSquareIndex][i];
+                floatAccumulator->accumulator[i][j]+= trainingNNUE->weights1[toIdx][j] - trainingNNUE->weights1[fromIdx][j];
+                if(capIdx != -1) floatAccumulator->accumulator[i][j]+= (isCapture * trainingNNUE->weights1[capIdx][j]);
             }
         }
+        
     }
 }

@@ -9,6 +9,7 @@
 #include <windows.h>
 
 network_weights_playing* playerNNUE = NULL;
+accumulator_playing* playerAccumulator = NULL;
 
 void load_playingWeights()
 {
@@ -103,7 +104,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
     }
 }
 
-int8_t forwardPropagate_Int(int turn)
+int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator)
 {
     //Assume accumulator has already been updated.
     int8_t h2[SECOND_HIDDEN_LAYER_NODES] = {0};
@@ -118,13 +119,13 @@ int8_t forwardPropagate_Int(int turn)
     //trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE to 2* ACCUMULATOR_NODES_PER_SIDE -1] = opponent's side
     if(ISWHITE(turn))
     {
-        calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
-        calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
     }
     else
     {
-        calculateLayer_IntBytes(playerNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
-        calculateLayer_IntBytes(playerNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, NULL, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, NULL, 0);
     }
     
 

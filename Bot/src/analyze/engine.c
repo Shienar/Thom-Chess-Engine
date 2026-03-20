@@ -49,8 +49,8 @@ double evaluate(bitboard* board)
         else return -INT8_MIN - 1;
     }
 
-    if(trainingNNUE) return (double) forwardPropagate_Float(board->turn);
-    else return (double) forwardPropagate_Int(board->turn);
+    if(trainingNNUE) return (double) forwardPropagate_Float(board->turn, trainingAccumulator);
+    else return (double) forwardPropagate_Int(board->turn, playerAccumulator);
 }
 //For qsort_s
 int sortMoves(void* c, const void* a, const void* b)
@@ -71,7 +71,7 @@ int sortMoves(void* c, const void* a, const void* b)
     else if(ISKING(move_a->piece)) return 1; 
     else if(ISKING(move_b->piece)) return -1;
     //else return move_b->piece - move_a->piece;
-    else return rand()%2?-1:1; // A bit of randomness in the sorting to help out on multithreaded diversity.
+    else return rand()%2 ? -1 : 1; // A bit of randomness in the sorting to help out on multithreaded diversity.
     
 }
 
@@ -133,12 +133,12 @@ double quiesce(bitboard* board, double alpha, double beta, int depth)
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, board->moveStackTop, 0);
+                updateMoveAccumulator(board, board->moveStackTop, 0, playerAccumulator, trainingAccumulator);
 
                 double score = -quiesce(board, -beta, -alpha, depth - 1);
 
                 move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, 1);
+                updateMoveAccumulator(board, poppedMove, 1, playerAccumulator, trainingAccumulator);
 
                 if(score >= beta)
                 {
@@ -293,7 +293,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         {
             if(!moveFromStruct(board, moveList[index]))
             {
-                updateMoveAccumulator(board, board->moveStackTop, 0);
+                updateMoveAccumulator(board, board->moveStackTop, 0, playerAccumulator, trainingAccumulator);
                 if(index == 0)
                 {
                     score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit);
@@ -306,7 +306,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 }
                 
                 move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, 1);
+                updateMoveAccumulator(board, poppedMove, 1, playerAccumulator, trainingAccumulator);
                 
                 if(score >= beta)
                 {

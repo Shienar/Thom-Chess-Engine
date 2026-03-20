@@ -9,6 +9,7 @@
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
+accumulator_training* trainingAccumulator = NULL;
 
 void iterateTrainingWeights(void (*func)(float*, float*), network_weights_training* trainingWeights, float* context) 
 {
@@ -77,11 +78,6 @@ void load_trainingWeights()
 
         float standardDeviation = 0.01;
         iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, &standardDeviation);
-        memset(&trainingNNUE->inputNodes, 0, sizeof(trainingNNUE->inputNodes));
-        memset(&trainingNNUE->accumulator, 0,  sizeof(trainingNNUE->accumulator));
-        memset(&trainingNNUE->h2, 0,  sizeof(trainingNNUE->h2));
-        memset(&trainingNNUE->h3, 0,  sizeof(trainingNNUE->h3));
-        memset(&trainingNNUE->outputNode, 0,  sizeof(trainingNNUE->outputNode));
     }
 }
 
@@ -170,8 +166,6 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     printf("\tScaling Factor: %f\n", inputFloats->scalingFactor);
     printf("\tMean: %f\n", meanValue);
     printf("\tMax: %f\n", maxValue);
-    memset(&outputBytes->inputNodes, 0, sizeof(outputBytes->inputNodes));
-    memset(&outputBytes->accumulator, 0, sizeof(outputBytes->accumulator));
 }
 
 float SCReLU_Float(float val, float min, float max)
@@ -182,7 +176,7 @@ float SCReLU_Float(float val, float min, float max)
 }
 float SCReLU_derivative(float val, float min, float max)
 {
-    return (val <= min || val >= max)?(0.0):(2*val);
+    return (val <= min || val >= max) ? (0.0) : (2*val);
 }
 
 //__m256 stored 8 32-bit floats (ps = packed single-precision)
@@ -215,7 +209,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
     }
 }
 
-float forwardPropagate_Float(int turn)
+float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator)
 {
     //Assume accumulator has already been updated.
 
@@ -226,24 +220,24 @@ float forwardPropagate_Float(int turn)
     float tempH2[2][SECOND_HIDDEN_LAYER_NODES];
     if(ISWHITE(turn))
     {
-        calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 0);
-        calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
+        calculateLayer_Floats(floatAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, trainingNNUE->weights2_bias, 0);
+        calculateLayer_Floats(floatAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
     }
     else
     {
-        calculateLayer_Floats(trainingNNUE->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], trainingNNUE->weights2_bias, 0);
-        calculateLayer_Floats(trainingNNUE->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, NULL, 0);
+        calculateLayer_Floats(floatAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], trainingNNUE->weights2_bias, 0);
+        calculateLayer_Floats(floatAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, NULL, 0);
     }
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
         //The above step added the biases twice.
-        trainingNNUE->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i], 0, 1);
+        floatAccumulator->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i], 0, 1);
     }
 
-    calculateLayer_Floats(trainingNNUE->h2, trainingNNUE->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
-    calculateLayer_Floats(trainingNNUE->h3, &trainingNNUE->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 0);
+    calculateLayer_Floats(floatAccumulator->h2, floatAccumulator->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
+    calculateLayer_Floats(floatAccumulator->h3, &floatAccumulator->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 0);
 
-    return trainingNNUE->outputNode;
+    return floatAccumulator->outputNode;
 }
 
 void shuffle(long* arr, int count)
@@ -257,7 +251,7 @@ void shuffle(long* arr, int count)
     }
 }
 
-void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError)
+void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator)
 {
     FILE* trainingData = fopen("./import/trainingData.bin", "rb");
     
@@ -292,19 +286,19 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             for(int blockOffset = 0; blockOffset < entriesPerBlock; blockOffset++)
             {
                 fread(&data, sizeof(network_training_data), 1, trainingData);
-                loadInputAccumulator(&data.board);
-                forwardPropagate_Float(data.board.turn);
+                loadInputAccumulator(&data.board, NULL, floatAccumulator);
+                forwardPropagate_Float(data.board.turn, floatAccumulator);
                 expectedOutput = data.evaluation;
 
-                sumSquaredError+= pow((double) (trainingNNUE->outputNode - expectedOutput), 2.0);
+                sumSquaredError+= pow((double) (floatAccumulator->outputNode - expectedOutput), 2.0);
 
                 //Calculate Edge Weight Deltas
-                float delta4 = (expectedOutput - trainingNNUE->outputNode);
+                float delta4 = (expectedOutput - floatAccumulator->outputNode);
 
                 float delta3[THIRD_HIDDEN_LAYER_NODES] = {0};
                 for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
                 {
-                    delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_derivative(trainingNNUE->h3[i], 0, 1);
+                    delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_derivative(floatAccumulator->h3[i], 0, 1);
                 }
                 
                 float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
@@ -313,7 +307,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                     float sum = 0.0f;
                     for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) sum+= delta3[j] * trainingNNUE->weights3[i][j];
                     
-                    delta2[i] = sum * SCReLU_derivative(trainingNNUE->h2[i], 0, 1);
+                    delta2[i] = sum * SCReLU_derivative(floatAccumulator->h2[i], 0, 1);
                 }
 
                 float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
@@ -325,20 +319,20 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                         int offset = side * ACCUMULATOR_NODES_PER_SIDE;
                         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) sum += delta2[j] * trainingNNUE->weights2[offset + i][j];
                         
-                        delta1[side][i] = sum * SCReLU_derivative(trainingNNUE->accumulator[side][i], 0, 1);
+                        delta1[side][i] = sum * SCReLU_derivative(floatAccumulator->accumulator[side][i], 0, 1);
                     }
                 }
 
                 //Apply Edge Weight Deltas
                 for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
                 {
-                    trainingNNUE->weights4[i]+= LEARNING_RATE * delta4 * trainingNNUE->h3[i];
+                    trainingNNUE->weights4[i]+= LEARNING_RATE * delta4 * floatAccumulator->h3[i];
                 }
                 trainingNNUE->weights4_bias+= LEARNING_RATE * delta4;
 
                 for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
                 {
-                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]+= LEARNING_RATE * delta3[j] * trainingNNUE->h2[i];
+                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]+= LEARNING_RATE * delta3[j] * floatAccumulator->h2[i];
                 }
                 for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3_bias[j]+= LEARNING_RATE * delta3[j];
                 
@@ -346,15 +340,15 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                 {
                     for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
                     {
-                        trainingNNUE->weights2[i][j] += LEARNING_RATE * delta2[j] * trainingNNUE->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                        trainingNNUE->weights2[i][j] += LEARNING_RATE * delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
                     }
                 }
                 for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights2_bias[j] += LEARNING_RATE * delta2[j];
                 
                 for (int i = 0; i < 640; i++) 
                 {
-                    uint64_t inputBitboard_White = trainingNNUE->inputNodes[i];
-                    uint64_t inputBitboard_Black = trainingNNUE->inputNodes[640 + i];
+                    uint64_t inputBitboard_White = floatAccumulator->inputNodes[i];
+                    uint64_t inputBitboard_Black = floatAccumulator->inputNodes[640 + i];
 
                     while (inputBitboard_White) {
 
@@ -395,7 +389,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
     printf("\n");
 }
 
-void generateTrainingData(int depth, int maxTime, int maxPositions)
+void generateTrainingData(int depth, int maxTime, int maxPositions, accumulator_training* floatAccumulator)
 {
     FILE* output = fopen("./import/trainingData.bin", "ab+");
 
@@ -408,7 +402,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions)
     while(entryCount < maxPositions)
     {
         bitboard* board = create_board();
-        loadInputAccumulator(board);
+        loadInputAccumulator(board, NULL, floatAccumulator);
 
         transpositionTable = create_hashTable_tt();
 
@@ -491,7 +485,7 @@ void updateTrainingData(int depth, int maxTime)
     {
         fread(&data, sizeof(network_training_data), 1, input);
 
-        loadInputAccumulator(&data.board);
+        loadInputAccumulator(&data.board, NULL, trainingAccumulator);
         transpositionTable = create_hashTable_tt();
         data.board.ht = create_hashTable_pos();
 

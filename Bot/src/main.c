@@ -10,10 +10,12 @@
 
 /**
  * TODO:
+ *  - Multithreads on engine.c are sharing the same accumulator - not good.
+ *      - Create new accumulator struct that is seperate from the weight struct.
  *  - The engine is a bit slow.
- *      - Accumulator refresh table.
+ *      - Accumulator finny table.
+ *      - Pairwise multiplication of accumulator.
  *      - engine.c optimizations aren't working while the weights are untrained.
- *  - Multithreaded --updatedata.
  */
 
 int main(int argc, char** argv)
@@ -81,7 +83,8 @@ int main(int argc, char** argv)
     if(shouldTrain)
     {
         load_trainingWeights();
-        backpropagate(0, shouldTrain, 1e-6);
+        trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        backpropagate(0, shouldTrain, 1e-6, trainingAccumulator);
         save_trainingWeights();
 
         load_playingWeights();
@@ -96,7 +99,8 @@ int main(int argc, char** argv)
     }
     else if(shouldCreateTrainingData)
     {
-        generateTrainingData(depth, maxTime, shouldCreateTrainingData);
+        trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        generateTrainingData(depth, maxTime, shouldCreateTrainingData, trainingAccumulator);
         dump_allocations();
         exit(0);
     }
@@ -124,7 +128,8 @@ int main(int argc, char** argv)
     transpositionTable = create_hashTable_tt();
     
     load_playingWeights();
-    loadInputAccumulator(board);
+    playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+    loadInputAccumulator(board, playerAccumulator, NULL);
 
     char buffer[6] = {'\0'};
     int error = 0;
