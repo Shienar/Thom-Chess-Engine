@@ -171,7 +171,17 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
             (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
             (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
     {
-        return old_tt_entry->evaluation;
+        double score = old_tt_entry->evaluation;
+        if(score >= beta) return beta;
+        else if(score > alpha) 
+        {
+            if(pv && depth) 
+            {
+                pv[pvIndex] = old_tt_entry->bestMove;
+                copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+            }
+        }
+        return score;
     }
 
     //Sygyzy table probing.
@@ -184,14 +194,69 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
 
         int result = tb_probe_wdl(board->pieces_w, board->pieces_b, 
-                                        board->king_b|board->king_w, board->queen_b|board->queen_w, 
-                                        board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
-                                        board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
-                                        ep, turn);
+                                    board->king_b|board->king_w, board->queen_b|board->queen_w, 
+                                    board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
+                                    board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
+                                    ep, turn);
         
-        if(result == TB_LOSS) return -DBL_MAX;
-        else if(result == TB_BLESSED_LOSS || TB_DRAW || TB_CURSED_WIN) return CONTEMPT_FACTOR_FIFTYMOVERULE;
-        else if(result == TB_WIN) return DBL_MAX;
+        double score = 0.0;
+
+        if(result == TB_LOSS) score = -DBL_MAX;
+        else if(result == TB_BLESSED_LOSS || TB_DRAW || TB_CURSED_WIN) score = CONTEMPT_FACTOR_FIFTYMOVERULE;
+        else if(result == TB_WIN) score = DBL_MAX;
+
+        if(score >= beta) return beta;
+        else if(score > alpha) 
+        {
+            if(pv && depth && pv[0].endSquare == pv[0].startSquare) 
+            {
+                //If the pv table doesn't have an initialized move, 
+                //we need to give it one for the engine to return,
+                //which will require a deeper probe.
+
+                int hasRepeated = get_pos_table_value(board->ht, board);
+                if(hasRepeated > 1) hasRepeated = 1;
+
+                struct TbRootMoves moveResults = {0};
+
+                tb_probe_root_dtz(board->pieces_w, board->pieces_b, 
+                                                board->king_b|board->king_w, board->queen_b|board->queen_w, 
+                                                board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
+                                                board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
+                                                (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
+                                                
+                int bestScore = INT32_MIN;
+                int bestIndex = 0;
+                for(int i = 0; i < moveResults.size; i++)
+                {
+                    if(moveResults.moves[i].tbRank > bestScore)
+                    {
+                        bestScore = moveResults.moves[i].tbRank;
+                        bestIndex = i;
+                    }
+                }   
+
+                pv[pvIndex].endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
+                pv[pvIndex].startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
+                pv[pvIndex].flags = board->flags;
+                pv[pvIndex].prevEnPassantSquare = board->enPassantSquare;
+                pv[pvIndex].previousMovesSinceLastChange = board->movesSinceLastChange;
+                pv[pvIndex].piece = findPieceOnSquare(board, pv[pvIndex].startSquare);
+
+                if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = QUEEN;
+                else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = ROOK;
+                else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = BISHOP;
+                else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = KNIGHT;
+
+                pv[pvIndex].capturedPiece = findPieceOnSquare(board, pv[pvIndex].endSquare);
+                if(pv[pvIndex].capturedPiece) pv[pvIndex].capturedPieceSquare = pv[pvIndex].endSquare;
+
+                pv[pvIndex].nextMove = NULL;
+
+                copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+            }
+        }
+        return score;
         
     }
 
@@ -247,6 +312,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 {
                     new_tt_entry.nodeType = NODE_TYPE_CUT; // Lowerbound evaluation.
                     new_tt_entry.evaluation = score;
+                    new_tt_entry.bestMove = *moveList[index];
                     transposition_table_set(transpositionTable, new_tt_entry);
                     freeMoveList(moveList);
                     return beta;
@@ -255,6 +321,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 {
                     new_tt_entry.nodeType = NODE_TYPE_ALL; // Upperbound evaluation.
                     new_tt_entry.evaluation = score;
+                    new_tt_entry.bestMove = *moveList[index];
                     transposition_table_set(transpositionTable, new_tt_entry);
                     alpha = score;
                     if(pv) 

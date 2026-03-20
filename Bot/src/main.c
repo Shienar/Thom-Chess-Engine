@@ -10,16 +10,10 @@
 
 /**
  * TODO:
- *  - Sygyzy probing recommends suboptimal moves.
  *  - The engine is a bit slow.
  *      - Accumulator refresh table.
  *      - engine.c optimizations aren't working while the weights are untrained.
- *  - Engine can now return an empty move.
- *      - Only occurs when a time limit is reached.
- *      - Issue with threads being cut off and voting on empty moves?
- *          - No. Issue persists on single thread.
  *  - Multithreaded --updatedata.
- *  - Should different mating lines get evaluated differently depending on how fast/slow they are?
  */
 
 int main(int argc, char** argv)
