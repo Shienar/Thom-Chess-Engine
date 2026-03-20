@@ -174,6 +174,27 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         return old_tt_entry->evaluation;
     }
 
+    //Sygyzy table probing.
+    if(board->moveStackTop && board->moveStackTop->capturedPiece && __builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30))
+    {
+        uint32_t ep = board->enPassantSquare;
+        if(ep == -1) ep = 0;
+
+        bool turn = PYRRHIC_WHITE;
+        if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
+
+        int result = tb_probe_wdl(board->pieces_w, board->pieces_b, 
+                                        board->king_b|board->king_w, board->queen_b|board->queen_w, 
+                                        board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
+                                        board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
+                                        ep, turn);
+        
+        if(result == TB_LOSS) return DBL_MIN;
+        else if(result == TB_BLESSED_LOSS || TB_DRAW || TB_CURSED_WIN) return CONTEMPT_FACTOR_FIFTYMOVERULE;
+        else if(result == TB_WIN) return DBL_MAX;
+        
+    }
+
     table_entry_tt new_tt_entry = {
         .age = clock(),
         .evaluationDepth = depth,

@@ -1,5 +1,5 @@
 ; Starting position.
 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 
-; Black king can't move to a1
-1B6/7P/8/8/8/5K2/1kq5/8 b - - 0 76
+; Black winning 6-man piece endgame.
+2k5/8/2q4r/8/8/3K3P/2B2R2/8 w - - 0 1
