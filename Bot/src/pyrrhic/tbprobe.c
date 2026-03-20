@@ -36,7 +36,7 @@
     #include <stdatomic.h>
 #endif
 
-#include "../../include/pyrrhic/tbprobe.h"
+#include "tbprobe.h"
 
 #define TB_PIECES    (7)
 #define TB_HASHBITS  (TB_PIECES < 7 ?  11 : 12)
@@ -103,7 +103,7 @@ typedef HANDLE map_t;
 #define TB_MAX(a,b)     ((a) > (b) ? (a) : (b))
 #define TB_MIN(a,b)     ((a) < (b) ? (a) : (b))
 
-#include "../../include/pyrrhic/stdendian.h"
+#include "stdendian.h"
 
 #if _BYTE_ORDER == _BIG_ENDIAN
 static uint32_t from_le_u32(uint32_t x) { return bswap32(x); }

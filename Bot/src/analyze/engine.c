@@ -1,10 +1,10 @@
-#include "../../include/analyze/engine.h"
-#include "../../include/board/moves.h"
-#include "../../include/board/bitboard.h"
-#include "../../include/debug.h"
-#include "../../include/analyze/book.h"
-#include "../../include/analyze/neuralnet.h"
-#include "../../include/pyrrhic/tbprobe.h"
+#include "engine.h"
+#include "../board/moves.h"
+#include "../board/bitboard.h"
+#include "../debug.h"
+#include "book.h"
+#include "neuralnet.h"
+#include "../pyrrhic/tbprobe.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>

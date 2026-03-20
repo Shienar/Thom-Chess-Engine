@@ -1,0 +1,74 @@
+########## KBBNvK ##########
+
+White to move:
+
+158482 positions win in 1 ply.
+1915291 positions win in 2 ply.
+96146 positions win in 3 ply.
+2711535 positions win in 4 ply.
+346292 positions win in 5 ply.
+7502290 positions win in 6 ply.
+352712 positions win in 7 ply.
+10182134 positions win in 8 ply.
+235328 positions win in 9 ply.
+11223425 positions win in 10 ply.
+146269 positions win in 11 ply.
+8707560 positions win in 12 ply.
+108685 positions win in 13 ply.
+6270468 positions win in 14 ply.
+106026 positions win in 15 ply.
+6376982 positions win in 16 ply.
+111919 positions win in 17 ply.
+6985266 positions win in 18 ply.
+106781 positions win in 19 ply.
+5128422 positions win in 20 ply.
+51282 positions win in 21 ply.
+1741256 positions win in 22 ply.
+6025 positions win in 23 ply.
+124350 positions win in 24 ply.
+110 positions win in 25 ply.
+1325 positions win in 26 ply.
+
+70696361 positions are wins.
+11397 positions are draws.
+0 positions are losses.
+
+
+Black to move:
+
+
+0 positions are wins.
+4156693 positions are draws.
+98298947 positions are losses.
+
+43598 positions lose in 0 ply.
+290968 positions lose in 1 ply.
+31932 positions lose in 2 ply.
+759172 positions lose in 3 ply.
+107330 positions lose in 4 ply.
+2454955 positions lose in 5 ply.
+205122 positions lose in 6 ply.
+6345692 positions lose in 7 ply.
+372075 positions lose in 8 ply.
+12127446 positions lose in 9 ply.
+297202 positions lose in 10 ply.
+17111819 positions lose in 11 ply.
+254010 positions lose in 12 ply.
+15624340 positions lose in 13 ply.
+161711 positions lose in 14 ply.
+9054568 positions lose in 15 ply.
+127917 positions lose in 16 ply.
+8862050 positions lose in 17 ply.
+166142 positions lose in 18 ply.
+10993133 positions lose in 19 ply.
+180624 positions lose in 20 ply.
+9105679 positions lose in 21 ply.
+94503 positions lose in 22 ply.
+3254094 positions lose in 23 ply.
+12512 positions lose in 24 ply.
+256542 positions lose in 25 ply.
+304 positions lose in 26 ply.
+3507 positions lose in 27 ply.
+
+Longest win for white: 27 ply; 8/B7/8/8/8/8/8/NK1k2B1 b - -
+

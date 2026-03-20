@@ -1,7 +1,7 @@
-#include "../../include/structs.h"
-#include "../../include/debug.h"
-#include "../../include/board/bitboard.h"
-#include "../../include/board/moves.h"
+#include "../structs.h"
+#include "../debug.h"
+#include "../board/bitboard.h"
+#include "../board/moves.h"
 #include <string.h>
 #include <math.h>
 

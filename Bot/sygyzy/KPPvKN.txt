@@ -1,0 +1,76 @@
+########## KPPvKN ##########
+
+White to move:
+
+129057156 positions win in 1 ply.
+9623982 positions win in 3 ply.
+866674 positions win in 5 ply.
+358770 positions win in 7 ply.
+202794 positions win in 9 ply.
+96272 positions win in 11 ply.
+36668 positions win in 13 ply.
+9668 positions win in 15 ply.
+3750 positions win in 17 ply.
+1142 positions win in 19 ply.
+504 positions win in 21 ply.
+108 positions win in 23 ply.
+6 positions win in 25 ply.
+6 positions win in 27 ply.
+
+140257500 positions are wins.
+76534396 positions are draws.
+8624 positions are losses.
+
+384 positions lose in 0 ply.
+5670 positions lose in 1 ply.
+78 positions lose in 2 ply.
+280 positions lose in 3 ply.
+102 positions lose in 4 ply.
+604 positions lose in 5 ply.
+110 positions lose in 6 ply.
+560 positions lose in 7 ply.
+38 positions lose in 8 ply.
+598 positions lose in 9 ply.
+2 positions lose in 10 ply.
+108 positions lose in 11 ply.
+90 positions lose in 13 ply.
+
+Black to move:
+
+2298 positions win in 1 ply.
+23882 positions win in 2 ply.
+430 positions win in 3 ply.
+1764 positions win in 4 ply.
+534 positions win in 5 ply.
+2936 positions win in 6 ply.
+388 positions win in 7 ply.
+2844 positions win in 8 ply.
+96 positions win in 9 ply.
+1606 positions win in 10 ply.
+4 positions win in 11 ply.
+530 positions win in 12 ply.
+200 positions win in 14 ply.
+
+37512 positions are wins.
+131484424 positions are draws.
+79213048 positions are losses.
+
+1396 positions lose in 0 ply.
+692 positions lose in 1 ply.
+57600580 positions lose in 2 ply.
+19036346 positions lose in 4 ply.
+1434210 positions lose in 6 ply.
+558850 positions lose in 8 ply.
+332612 positions lose in 10 ply.
+162774 positions lose in 12 ply.
+61682 positions lose in 14 ply.
+15278 positions lose in 16 ply.
+6146 positions lose in 18 ply.
+1640 positions lose in 20 ply.
+684 positions lose in 22 ply.
+142 positions lose in 24 ply.
+16 positions lose in 26 ply.
+
+Longest win for white: 27 ply; 8/8/5P1k/1P6/8/8/8/2K1n3 w - -
+Longest win for black: 14 ply; K7/3n4/P7/Pk6/8/8/8/8 b - -
+

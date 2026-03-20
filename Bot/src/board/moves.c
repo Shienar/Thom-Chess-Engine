@@ -1,7 +1,7 @@
-#include "../../include/board/bitboard.h"
-#include "../../include/board/moves.h" 
+#include "../board/bitboard.h"
+#include "../board/moves.h" 
 #include <string.h>
-#include "../../include/debug.h"
+#include "../debug.h"
 
 move** generateMoveList(bitboard* board, int capturesOnly)
 {

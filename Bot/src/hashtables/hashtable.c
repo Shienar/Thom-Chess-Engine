@@ -1,6 +1,6 @@
-#include "../../include/hashtables/hashtable.h"
-#include "../../include/board/bitboard.h"
-#include "../../include/debug.h"
+#include "../hashtables/hashtable.h"
+#include "../board/bitboard.h"
+#include "../debug.h"
 #include <string.h>
 
 /**

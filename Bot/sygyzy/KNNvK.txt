@@ -1,0 +1,22 @@
+########## KNNvK ##########
+
+White to move:
+
+154 positions win in 1 ply.
+
+154 positions are wins.
+1437574 positions are draws.
+0 positions are losses.
+
+
+Black to move:
+
+
+0 positions are wins.
+1707858 positions are draws.
+30 positions are losses.
+
+30 positions lose in 0 ply.
+
+Longest win for white: 1 ply; 8/8/8/8/8/5N2/N7/1K1k4 w - -
+

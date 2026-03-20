@@ -1,4 +1,4 @@
-#include "../../include/pyrrhic/tbprobe.h"
+#include "../pyrrhic/tbprobe.h"
 
 
 /*

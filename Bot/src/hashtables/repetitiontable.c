@@ -1,5 +1,5 @@
-#include "../../include/hashtables/repetitiontable.h"
-#include "../../include/debug.h"
+#include "repetitiontable.h"
+#include "../debug.h"
 #include <float.h>
 #include <string.h>
 

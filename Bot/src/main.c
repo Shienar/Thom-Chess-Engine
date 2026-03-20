@@ -1,10 +1,10 @@
-#include "../include/board/moves.h"
-#include "../include/debug.h"
-#include "../include/board/bitboard.h"
-#include "../include/hashtables/transpositiontable.h"
-#include "../include/analyze/book.h"
-#include "../include/analyze/neuralnet.h"
-#include "../include/pyrrhic/tbprobe.h"
+#include "./board/moves.h"
+#include "./board/bitboard.h"
+#include "debug.h"
+#include "./hashtables/transpositiontable.h"
+#include "./analyze/book.h"
+#include "./analyze/neuralnet.h"
+#include "./pyrrhic/tbprobe.h"
 #include <stdio.h>
 #include <string.h>
 

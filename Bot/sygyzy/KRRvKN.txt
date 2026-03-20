@@ -1,0 +1,53 @@
+########## KRRvKN ##########
+
+White to move:
+
+31282094 positions win in 1 ply.
+656606 positions win in 2 ply.
+12665151 positions win in 3 ply.
+1108499 positions win in 4 ply.
+10105515 positions win in 5 ply.
+718500 positions win in 6 ply.
+5355086 positions win in 7 ply.
+230743 positions win in 8 ply.
+1233314 positions win in 9 ply.
+22390 positions win in 10 ply.
+64214 positions win in 11 ply.
+388 positions win in 12 ply.
+422 positions win in 13 ply.
+2 positions win in 14 ply.
+
+63442924 positions are wins.
+180140 positions are draws.
+90 positions are losses.
+
+90 positions lose in 0 ply.
+
+Black to move:
+
+368 positions win in 1 ply.
+
+368 positions are wins.
+14072226 positions are draws.
+79943086 positions are losses.
+
+767214 positions lose in 0 ply.
+370913 positions lose in 1 ply.
+17094228 positions lose in 2 ply.
+1169527 positions lose in 3 ply.
+10514915 positions lose in 4 ply.
+1971025 positions lose in 5 ply.
+19507741 positions lose in 6 ply.
+2068451 positions lose in 7 ply.
+18509365 positions lose in 8 ply.
+1059021 positions lose in 9 ply.
+6446026 positions lose in 10 ply.
+119551 positions lose in 11 ply.
+342423 positions lose in 12 ply.
+1326 positions lose in 13 ply.
+1348 positions lose in 14 ply.
+12 positions lose in 15 ply.
+
+Longest win for white: 15 ply; 8/8/8/8/8/3k4/2n5/1R1K1R2 b - -
+Longest win for black: 1 ply; 8/8/8/8/8/8/nR6/RK1k4 b - -
+
