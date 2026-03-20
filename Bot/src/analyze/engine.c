@@ -189,7 +189,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                                         board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
                                         ep, turn);
         
-        if(result == TB_LOSS) return DBL_MIN;
+        if(result == TB_LOSS) return -DBL_MAX;
         else if(result == TB_BLESSED_LOSS || TB_DRAW || TB_CURSED_WIN) return CONTEMPT_FACTOR_FIFTYMOVERULE;
         else if(result == TB_WIN) return DBL_MAX;
         
