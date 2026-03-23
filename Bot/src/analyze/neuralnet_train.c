@@ -489,7 +489,7 @@ void updateTrainingData(int depth, int maxTime)
         transpositionTable = create_hashTable_tt();
         data.board.ht = create_hashTable_pos();
 
-        data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL);
+        data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL, NULL, trainingAccumulator);
         
         destroy_hashTable_pos(data.board.ht);
         destroy_hashTable_tt(transpositionTable);

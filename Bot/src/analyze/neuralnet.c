@@ -118,12 +118,7 @@ void loadInputAccumulator(bitboard* board, accumulator_playing* byteAccumulator,
 
 void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
 {
-    if(!lastMove)
-    {
-        DEBUG("Cannot load null move.");
-        return;
-    }
-    else if(!byteAccumulator && !floatAccumulator)
+    if(!byteAccumulator && !floatAccumulator)
     {
         DEBUG("Cannot load null accumulator.");
         return;
@@ -131,7 +126,7 @@ void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, 
     else if(byteAccumulator && !playerNNUE) load_playingWeights();
     else if(floatAccumulator && !trainingNNUE) load_trainingWeights();
 
-    if(ISKING(lastMove->piece))
+    if(!lastMove || ISKING(lastMove->piece))
     {
         loadInputAccumulator(board, byteAccumulator, floatAccumulator);
         return;

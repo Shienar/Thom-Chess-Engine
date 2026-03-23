@@ -84,6 +84,8 @@ typedef struct network_training_data {
 
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;
+
+//Main thread accumulators
 extern accumulator_training* trainingAccumulator;
 extern accumulator_playing* playerAccumulator;
 

@@ -3,6 +3,7 @@
 
 #include "../structs.h"
 #include "../hashtables/transpositiontable.h"
+#include "neuralnet.h"
 #include <time.h>
 
 //The evaluation score given to draws.
@@ -32,15 +33,18 @@ extern int useHelperThreads;
 /**
  * Evaluates a position based on piece/square weights.
  * Returns white's score - black's score.
+ * 
+ * One of the accumulators will be used for forward propagation;
+ * the other should be NULL.
  */
-double evaluate(bitboard* board);
+double evaluate(bitboard* board, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
 
 /**
  * Quiescence search function.
  * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
  * position is reached. (Do extra searching for subsequent capture moves).
  */
-double quiesce(bitboard* board, double alpha, double beta, int depth);
+double quiesce(bitboard* board, double alpha, double beta, int depth, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
 
 /**
  * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
@@ -50,7 +54,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth);
  * 
  * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit);
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
 
 /**
  * Iterative deepening function.
