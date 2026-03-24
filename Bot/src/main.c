@@ -10,9 +10,6 @@
 
 /**
  * TODO:
- *  - The engine can return an empty move.
- *      - Transposition table can store empty moves on leaf nodes.
- *      - PVS returns early on transposition table without updating PV table.
  *  - The engine is a bit slow.
  *      - Accumulator finny table.
  *      - Pairwise multiplication of accumulator.

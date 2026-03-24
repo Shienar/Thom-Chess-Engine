@@ -4,8 +4,17 @@
 #include "hashtable.h"
 
 #define MAX_TABLE_SIZE 262144
-#define NODE_TYPE_PV 1
+
+//The searched node's evaluation falls in the range of (alpha, beta)
+//The saved score is exact for the given depth.
+#define NODE_TYPE_PV 1 
+
+//The score failed-low. Score <= alpha.
+//The saved score is an upper bound for the real score.
 #define NODE_TYPE_ALL 2
+
+//The score failed-high. Score >= beta.
+//The saved score is a lower bound for the real score.
 #define NODE_TYPE_CUT 3
 
 extern hashtable_tt* transpositionTable;

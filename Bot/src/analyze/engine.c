@@ -165,27 +165,6 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     nodesVisited++;
     #endif
 
-    //Transposition table
-    table_entry_tt* old_tt_entry = NULL;
-    if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
-        old_tt_entry->evaluationDepth >= depth &&
-            (old_tt_entry->nodeType == NODE_TYPE_PV ||
-            (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
-            (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
-    {
-        double score = old_tt_entry->evaluation;
-        if(score >= beta) return beta;
-        else if(score > alpha) 
-        {
-            if(pv && depth) 
-            {
-                if(old_tt_entry->bestMove.startSquare != old_tt_entry->bestMove.endSquare) pv[pvIndex] = old_tt_entry->bestMove;
-                copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
-            }
-        }
-        return score;
-    }
-
     //Sygyzy table probing.
     if(board->moveStackTop && board->moveStackTop->capturedPiece && __builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30))
     {
@@ -262,6 +241,21 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         
     }
 
+    //Transposition table
+    table_entry_tt* old_tt_entry = NULL;
+    if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
+        old_tt_entry->evaluationDepth >= depth &&
+            (old_tt_entry->nodeType == NODE_TYPE_PV ||
+            (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
+            (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
+    {
+        //Do not return if this is a pv node. 
+        //We need to populate the pv table.
+        //Pv nodes are searched with a full window
+        //Only do a transposition table cutoff if searched with a null window.
+        if(alpha == beta - 1) return old_tt_entry->evaluation;
+    }
+
     table_entry_tt new_tt_entry = {
         .age = clock(),
         .evaluationDepth = depth,
@@ -292,37 +286,42 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         qsort_s(moveList, index, sizeof(move*), sortMoves, context);
         
         index = 0;
+        double bestScore = -DBL_MAX;
         while(moveList[index])
         {
-            if(!moveFromStruct(board, moveList[index]))
+            if(moveFromStruct(board, moveList[index])) continue;
+
+            updateMoveAccumulator(board, board->moveStackTop, 0, byteAccumulator, floatAccumulator);
+            if(index == 0)
             {
-                updateMoveAccumulator(board, board->moveStackTop, 0, byteAccumulator, floatAccumulator);
-                if(index == 0)
+                score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+            }
+            else
+            {
+                score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+                //Re-search PV node
+                if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+            }
+            
+            move* poppedMove = unmove(board); //Gets freed with movelist.
+            updateMoveAccumulator(board, poppedMove, 1, byteAccumulator, floatAccumulator);
+            
+            if(score >= beta)
+            {
+                new_tt_entry.nodeType = NODE_TYPE_CUT;
+                new_tt_entry.evaluation = score;
+                new_tt_entry.bestMove = *moveList[index];
+                transposition_table_set(transpositionTable, new_tt_entry);
+                freeMoveList(moveList);
+                return beta;
+            }
+            else if(score > bestScore)
+            {
+                bestScore = score;
+
+                if(score > alpha)
                 {
-                    score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
-                }
-                else
-                {
-                    score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
-                    //Re-search PV node
-                    if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
-                }
-                
-                move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, 1, byteAccumulator, floatAccumulator);
-                
-                if(score >= beta)
-                {
-                    new_tt_entry.nodeType = NODE_TYPE_CUT; // Lowerbound evaluation.
-                    new_tt_entry.evaluation = score;
-                    new_tt_entry.bestMove = *moveList[index];
-                    transposition_table_set(transpositionTable, new_tt_entry);
-                    freeMoveList(moveList);
-                    return beta;
-                }
-                else if(score > alpha) 
-                {
-                    new_tt_entry.nodeType = NODE_TYPE_ALL; // Upperbound evaluation.
+                    new_tt_entry.nodeType = NODE_TYPE_PV;
                     new_tt_entry.evaluation = score;
                     new_tt_entry.bestMove = *moveList[index];
                     transposition_table_set(transpositionTable, new_tt_entry);
@@ -334,9 +333,18 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                     }
                 }
             }
+            
             index++;
         }
         freeMoveList(moveList);
+
+        if(bestScore <= alpha)
+        {
+            //Don't save a bestmove since we couldn't find one that fits in window.
+            new_tt_entry.nodeType = NODE_TYPE_ALL;
+            new_tt_entry.evaluation = bestScore;
+            transposition_table_set(transpositionTable, new_tt_entry);
+        }
     }
     return alpha;
 }
