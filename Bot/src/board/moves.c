@@ -560,7 +560,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         allyPieces = board->pieces_w;
         bishopqueen = board->bishop_b|board->queen_b;
         rookqueen = board->rook_b|board->queen_b;
-        if(square < 56 && (((1ull<<(square+7)&board->pawn_b) || (1ull<<(square+9)&board->pawn_b)))) return THREAT_TYPE_PAWN;
+        if(square < 48 && ( (getColumn(square) > 1 && (1ull<<(square+7)&board->pawn_b)) ||  (getColumn(square) < 8 && (1ull<<(square+9)&board->pawn_b)) ) ) return THREAT_TYPE_PAWN;
         if(knightMoves(0, square)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_b)) return THREAT_TYPE_KING;
     }
@@ -570,7 +570,7 @@ int isThreatened(bitboard* board, int square, int squareColor)
         allyPieces = board->pieces_b;
         bishopqueen = board->bishop_w|board->queen_w;
         rookqueen = board->rook_w|board->queen_w;
-        if((square > 7 && ((1ull<<(square-7)&board->pawn_w) || (1ull<<(square-9)&board->pawn_w)))) return THREAT_TYPE_PAWN;
+        if(square > 15 && ( (getColumn(square) > 1 && (1ull<<(square-7)&board->pawn_w)) || (getColumn(square) < 8 && (1ull<<(square-9)&board->pawn_w)) ) ) return THREAT_TYPE_PAWN;
         if(knightMoves(0, square)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
         if(kingMoves(board, square, squareColor, 1)&(board->king_w)) return THREAT_TYPE_KING;
     }

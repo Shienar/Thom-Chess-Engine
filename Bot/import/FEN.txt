@@ -1,5 +1,5 @@
 ; Starting position.
 rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
 
-; Black winning 6-man piece endgame.
-2k5/8/2q4r/8/8/3K3P/2B2R2/8 w - - 0 1
+; c3c2 shouldn't be mate.
+6kb/8/p2p4/P2P2p1/5p2/2p5/7p/K7 b - - 3 51
