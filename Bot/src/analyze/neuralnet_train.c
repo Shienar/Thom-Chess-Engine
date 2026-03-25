@@ -9,15 +9,11 @@
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
-accumulator_training* trainingAccumulator = NULL;
 
 void iterateTrainingWeights(void (*func)(float*, float*), network_weights_training* trainingWeights, float* context) 
 {
-    if(!func || !trainingWeights)
-    {
-        DEBUG("Passed null arguments to iterator.");
-        return;
-    }
+    assert(func && trainingWeights);
+
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
@@ -107,16 +103,8 @@ void findSum(float* comparedValue, float* sum)
 
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes)
 {
-    if(!inputFloats) 
-    {
-        DEBUG("Cannot quantize null input.");
-        return;
-    }
-    else if(!outputBytes)
-    {
-        DEBUG("Cannot quantize to null output.");
-        return;
-    }
+    assert(inputFloats);
+    assert(outputBytes);
 
     float maxValue = -FLT_MAX;
     float meanValue = 0.0;
@@ -286,7 +274,7 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
             for(int blockOffset = 0; blockOffset < entriesPerBlock; blockOffset++)
             {
                 fread(&data, sizeof(network_training_data), 1, trainingData);
-                loadInputAccumulator(&data.board, NULL, floatAccumulator);
+                loadInputAccumulator(&data.board, floatAccumulator, TRAINING, BLACK|WHITE);
                 forwardPropagate_Float(data.board.turn, floatAccumulator);
                 expectedOutput = data.evaluation;
 
@@ -402,7 +390,7 @@ void generateTrainingData(int depth, int maxTime, int maxPositions, accumulator_
     while(entryCount < maxPositions)
     {
         bitboard* board = create_board();
-        loadInputAccumulator(board, NULL, floatAccumulator);
+        loadInputAccumulator(board, floatAccumulator, TRAINING, BLACK|WHITE);
 
         transpositionTable = create_hashTable_tt();
 
@@ -485,11 +473,11 @@ void updateTrainingData(int depth, int maxTime)
     {
         fread(&data, sizeof(network_training_data), 1, input);
 
-        loadInputAccumulator(&data.board, NULL, trainingAccumulator);
+        loadInputAccumulator(&data.board, trainingAccumulator, TRAINING, BLACK|WHITE);
         transpositionTable = create_hashTable_tt();
         data.board.ht = create_hashTable_pos();
 
-        data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL, NULL, trainingAccumulator);
+        data.evaluation = principalVariationSearch(&data.board, -DBL_MAX, DBL_MAX, depth, depth, NULL, 0, NULL, trainingAccumulator, trainingRefreshTable, TRAINING);
         
         destroy_hashTable_pos(data.board.ht);
         destroy_hashTable_tt(transpositionTable);

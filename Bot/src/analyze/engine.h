@@ -37,14 +37,14 @@ extern int useHelperThreads;
  * One of the accumulators will be used for forward propagation;
  * the other should be NULL.
  */
-double evaluate(bitboard* board, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
+double evaluate(bitboard* board, void* accumulator, int accumulatorType);
 
 /**
  * Quiescence search function.
  * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
  * position is reached. (Do extra searching for subsequent capture moves).
  */
-double quiesce(bitboard* board, double alpha, double beta, int depth, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
+double quiesce(bitboard* board, double alpha, double beta, int depth, void* accumulator, void* accumulatorTable, int accumulatorType);
 
 /**
  * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
@@ -54,7 +54,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, accumulato
  * 
  * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator);
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, void* accumulator, void* accumulatorTable, int accumulatorType);
 
 /**
  * Iterative deepening function.

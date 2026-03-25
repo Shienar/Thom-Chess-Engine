@@ -47,7 +47,7 @@ void getSquareName(int square, char* target)
     if(square < 0 || square > 63)
     {
         DEBUG("Square %d is out of bounds [0, 63]", square);
-        return;
+        abort();
     } 
     //Output example: e4
     char squareName[3] = {'\0'};
@@ -77,11 +77,7 @@ bitboard* create_board_from_fen(const char* fileName, int lineNumber)
 
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
 {
-    if(!board)
-    {
-        DEBUG("Passed NULL board");
-        return;
-    }
+    assert(board);
 
     FILE* inputFile = fopen(fileName, "r");
     if(!inputFile)
@@ -307,7 +303,7 @@ void destroy_board(bitboard* board)
 
 void copy_board(bitboard* dest, bitboard* source, int copyHT)
 {
-    if(!dest || !source) return;
+    assert(dest && source);
 
     dest->pawn_w = source->pawn_w;
     dest->pawn_b = source->pawn_b;
@@ -387,12 +383,8 @@ void copy_board(bitboard* dest, bitboard* source, int copyHT)
 
 int findPieceOnSquare(bitboard* board, int square)
 {
-    if(board == NULL)
-    {
-        DEBUG("Cannot find piece on square. Board is NULL");
-        return 0;
-    }
-    else if(square < 0 || square > 63)
+    assert(board);
+    if(square < 0 || square > 63)
     {
         DEBUG("Cannot check square %d - out of bounds [0, 63]", square);
         return 0;
@@ -467,12 +459,8 @@ int findPieceOnSquare(bitboard* board, int square)
 //Will clear all colors if 2nd LSByte's value is out of range 1-2
 void board_clear_square(bitboard* board, int square, int pieceType)
 {
-    if(board == NULL)
-    {
-        DEBUG("Cannot clear square. Board is NULL");
-        return;
-    }
-    else if(square < 0 || square > 63)
+    assert(board);
+    if(square < 0 || square > 63)
     {
         DEBUG("Cannot clear square %d - out of bounds [0, 63]", square);
         return;
@@ -628,12 +616,8 @@ void board_clear_square(bitboard* board, int square, int pieceType)
 
 void board_set(bitboard* board, int square, int piece)
 {
-    if(board == NULL)
-    {
-        DEBUG("Cannot set square. Board is NULL");
-        return;
-    }
-    else if(square < 0 || square > 63)
+    assert(board);
+    if(square < 0 || square > 63)
     {
         DEBUG("Cannot set square %d - out of bounds [0, 63]", square);
         return;
@@ -713,11 +697,7 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
 
 void board_print(bitboard* board, int printValues, int printHistory)
 {
-    if(board == NULL)
-    {
-        DEBUG("Cannot print board. Board is NULL");
-        return;
-    }
+    assert(board);
     
     if(printValues) values_print(board);
 
@@ -794,11 +774,7 @@ void board_print(bitboard* board, int printValues, int printHistory)
 
 void values_print(bitboard* board)
 {
-    if(board == NULL)
-    {
-        DEBUG("Cannot print board values. Board is NULL");
-        return;
-    }
+    assert(board);
 
     printf("ALL: %016llx\n", board->pieces_all);
     printf("WHITE/BLACK: %016llx | %016llx\n", board->pieces_w, board->pieces_b);
@@ -866,11 +842,7 @@ void bitmask_print(uint64_t mask, char fill)
 
 int moves_push(bitboard* board, move* m)
 {
-    if(!board || !m)
-    {
-        DEBUG("Failed to push move");
-        return -1;
-    }
+    assert(board && m);
 
     if(!board->moveStackTop)
     {
@@ -886,11 +858,7 @@ int moves_push(bitboard* board, move* m)
 
 move* moves_pop(bitboard* board)
 {
-    if(!board)
-    {
-        DEBUG("Failed to pop move from null board");
-        return NULL;
-    }
+    assert(board);
 
     move* tempMove = board->moveStackTop;
     if(!tempMove) return NULL;

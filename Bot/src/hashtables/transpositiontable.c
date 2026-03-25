@@ -64,11 +64,7 @@ table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
 
 void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
 {
-     if(!tt)
-     {
-        DEBUG("Transposition table is nil.");
-        return;
-     }
+     assert(tt);
 
     size_t index = entry.hashCode%tt->capacity;
     size_t startIndex = index;

@@ -9,7 +9,6 @@
 #include <windows.h>
 
 network_weights_playing* playerNNUE = NULL;
-accumulator_playing* playerAccumulator = NULL;
 
 void load_playingWeights()
 {
@@ -131,7 +130,6 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator)
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        //The above step added the biases twice.
         h2[i] = SCReLU_Int(tempH2[0][i] + tempH2[1][i], 0, 1);
     }
 

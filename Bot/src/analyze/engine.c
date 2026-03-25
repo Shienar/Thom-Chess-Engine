@@ -15,11 +15,14 @@ int nodesEvaluated = 0;
 int nodesVisited = 0;
 #endif
 
-double evaluate(bitboard* board, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
+double evaluate(bitboard* board, void* accumulator, int accumulatorType)
 {
     #ifdef COUNT_NODES_VISITED 
     nodesEvaluated++;
     #endif
+    
+    assert(board);
+    assert(accumulator);
 
     if(ISDRAW(board->victor)) 
     {
@@ -48,10 +51,9 @@ double evaluate(bitboard* board, accumulator_playing* byteAccumulator, accumulat
         else return -INT8_MIN - 1;
     }
 
-    if(floatAccumulator) return (double) forwardPropagate_Float(board->turn, floatAccumulator);
-    else if(byteAccumulator) return (double) forwardPropagate_Int(board->turn, byteAccumulator);
+    if(accumulatorType == TRAINING) return (double) forwardPropagate_Float(board->turn, (accumulator_training*) accumulator);
+    else if(accumulatorType == PLAYING) return (double) forwardPropagate_Int(board->turn, (accumulator_playing*) accumulator);
     
-    DEBUG("Cannot evaluate without being passed an accumulator.");
     return 0;
 }
 //For qsort_s
@@ -77,7 +79,7 @@ int sortMoves(void* c, const void* a, const void* b)
     
 }
 
-double quiesce(bitboard* board, double alpha, double beta, int depth, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
+double quiesce(bitboard* board, double alpha, double beta, int depth, void* accumulator, void* accumulatorTable, int accumulatorType)
 {
     #ifdef COUNT_NODES_VISITED
     nodesVisited++;
@@ -116,7 +118,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, accumulato
     {
         best = entry->evaluation;
     }
-    else best = evaluate(board, byteAccumulator, floatAccumulator);
+    else best = evaluate(board, accumulator, accumulatorType);
 
     if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
@@ -135,12 +137,11 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, accumulato
             move* currentMove = captureMoves[index];
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, board->moveStackTop, 0, byteAccumulator, floatAccumulator);
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                double score = -quiesce(board, -beta, -alpha, depth - 1, accumulator, accumulatorTable, accumulatorType);
 
-                double score = -quiesce(board, -beta, -alpha, depth - 1, byteAccumulator, floatAccumulator);
-
-                move* poppedMove = unmove(board);
-                updateMoveAccumulator(board, poppedMove, 1, byteAccumulator, floatAccumulator);
+                unmove(board);
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
 
                 if(score >= beta)
                 {
@@ -159,14 +160,15 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, accumulato
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, accumulator_playing* byteAccumulator, accumulator_training* floatAccumulator)
+double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, void* accumulator, void* accumulatorTable, int accumulatorType)
 {
     #ifdef COUNT_NODES_VISITED 
     nodesVisited++;
     #endif
 
     //Sygyzy table probing.
-    if(board->moveStackTop && board->moveStackTop->capturedPiece && __builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30))
+    //Avoid spending time on this on leaf nodes.
+    if(depth > 0 && board->moveStackTop && board->moveStackTop->capturedPiece && __builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30))
     {
         uint32_t ep = board->enPassantSquare;
         if(ep == -1) ep = 0;
@@ -264,8 +266,8 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
 
     if(depth == 0 || (timeLimit && clock() > *timeLimit) || board->victor) 
     {
-        new_tt_entry.nodeType = NODE_TYPE_PV; // Exact evaluation.
-        new_tt_entry.evaluation = quiesce(board, alpha, beta, 5, byteAccumulator, floatAccumulator);
+        new_tt_entry.nodeType = NODE_TYPE_PV;
+        new_tt_entry.evaluation = quiesce(board, alpha, beta, 5, accumulator, accumulatorTable, accumulatorType);
         //We aren't saving a bestmnove.
         transposition_table_set(transpositionTable, new_tt_entry);
         return new_tt_entry.evaluation;
@@ -291,20 +293,20 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         {
             if(moveFromStruct(board, moveList[index])) continue;
 
-            updateMoveAccumulator(board, board->moveStackTop, 0, byteAccumulator, floatAccumulator);
+            updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
             if(index == 0)
             {
-                score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+                score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
             }
             else
             {
-                score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+                score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
                 //Re-search PV node
-                if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, byteAccumulator, floatAccumulator);
+                if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
             }
             
-            move* poppedMove = unmove(board); //Gets freed with movelist.
-            updateMoveAccumulator(board, poppedMove, 1, byteAccumulator, floatAccumulator);
+            unmove(board); //Gets freed with movelist.
+            updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
             
             if(score >= beta)
             {
@@ -357,23 +359,24 @@ typedef struct threadData {
     clock_t* endTime;
     move* pvTable;
     double* score;
-    accumulator_playing* thread_byteAccumulator;
-    accumulator_training* thread_floatAccumulator;
+    void* accumulator;
+    void* accumulatorTable;
+    int accumulatorType;
 } threadData;
 
 DWORD WINAPI helperThreadFunction(LPVOID lpParam)
 {
     threadData* data = (threadData*)lpParam;
-
-    loadInputAccumulator(data->board, data->thread_byteAccumulator, data->thread_floatAccumulator);
+                
+    updateAccumulatorFromTable(data->board, data->accumulator, data->accumulatorTable, data->accumulatorType);
 
     //Always fully evaluate at depth 1:
-    *data->score = principalVariationSearch(data->board, -DBL_MAX, DBL_MAX, 1, 1, data->pvTable, 0, NULL, data->thread_byteAccumulator, data->thread_floatAccumulator);
+    *data->score = principalVariationSearch(data->board, -DBL_MAX, DBL_MAX, 1, 1, data->pvTable, 0, NULL, data->accumulator, data->accumulatorTable, data->accumulatorType);
 
     while(*data->endTime != 0)
     {
-        loadInputAccumulator(data->board, data->thread_byteAccumulator, data->thread_floatAccumulator);
-        *data->score = principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime, data->thread_byteAccumulator, data->thread_floatAccumulator);
+        updateAccumulatorFromTable(data->board, data->accumulator, data->accumulatorTable, data->accumulatorType);
+        *data->score = principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime, data->accumulator, data->accumulatorTable, data->accumulatorType);
     }
     return 0;
 }
@@ -469,28 +472,49 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     accumulator_playing* threadByteAccumulators = NULL;
     accumulator_training* threadFloatAccumulators = NULL;
+    accumulator_playing_refreshTable* threadByteRefreshTables = NULL;
+    accumulator_training_refreshTable* threadFloatRefreshTables = NULL;
+    void* accumulator = NULL;
+    void* accumulatorTable = NULL;
+    int weightType = -1;
     if(playerNNUE)
     {
+        weightType = PLAYING;
+        accumulator = playerAccumulator;
+        if(!accumulator) accumulator = playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+        accumulatorTable = playingRefreshTable;
+        if(!accumulatorTable) accumulatorTable = playingRefreshTable = CALLOC(1, sizeof(accumulator_playing_refreshTable));
+        
         threadByteAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
+        threadByteRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing_refreshTable));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
-            params[i].thread_byteAccumulator = &threadByteAccumulators[i];
-            params[i].thread_floatAccumulator = NULL;
+            params[i].accumulatorTable = &threadByteRefreshTables[i];
+            params[i].accumulator = &threadByteAccumulators[i];
+            params[i].accumulatorType = PLAYING;
         }
     }
     else if(trainingNNUE)
     {
+        weightType = TRAINING;
+        accumulator = trainingAccumulator;
+        if(!accumulator) accumulator = trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        accumulatorTable = trainingRefreshTable;
+        if(!accumulatorTable) accumulatorTable = trainingRefreshTable = CALLOC(1, sizeof(accumulator_training_refreshTable));
+        
         threadFloatAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
+        threadFloatRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training_refreshTable));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
-            params[i].thread_byteAccumulator = NULL;
-            params[i].thread_floatAccumulator = &threadFloatAccumulators[i];
+            params[i].accumulatorTable = &threadFloatRefreshTables[i];
+            params[i].accumulator = &threadFloatAccumulators[i];
+            params[i].accumulatorType = TRAINING;
         }
     }
 
     //Always fully evaluate at depth 1:
-    loadInputAccumulator(board, playerAccumulator, trainingAccumulator);
-    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, NULL, playerAccumulator, trainingAccumulator);
+    updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
+    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, NULL, accumulator, accumulatorTable, weightType);
 
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
@@ -523,9 +547,9 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         while(1)
         {
             if(clock() > endTime) break;
-            
-            loadInputAccumulator(board, playerAccumulator, trainingAccumulator);
-            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, playerAccumulator, trainingAccumulator);
+
+            updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
+            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
 
             if(score <= alpha)
             {

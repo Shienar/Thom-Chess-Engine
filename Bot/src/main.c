@@ -10,10 +10,9 @@
 
 /**
  * TODO:
- *  - The engine is a bit slow.
- *      - Accumulator finny table.
- *      - Pairwise multiplication of accumulator.
- *      - engine.c optimizations aren't working while the weights are untrained.
+ * 
+ * - Intermediate network layer outputs should get stored as 16-bit ints to avoid overflow in the player NNUE.
+ * - Training!
  */
 
 int main(int argc, char** argv)
@@ -127,7 +126,7 @@ int main(int argc, char** argv)
     
     load_playingWeights();
     playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
-    loadInputAccumulator(board, playerAccumulator, NULL);
+    loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
 
     char buffer[6] = {'\0'};
     int error = 0;

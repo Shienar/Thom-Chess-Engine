@@ -11,7 +11,6 @@ void loadBook()
 {
     printf("Loading opening book...\n");
     FILE* input = fopen("import/komodo.bin", "rb");
-
     if(!input)
     {
         DEBUG("Failed to read book file.");

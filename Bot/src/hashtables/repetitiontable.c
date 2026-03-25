@@ -91,11 +91,7 @@ void destroy_hashTable_pos(hashtable_pos* ht)
 
 int increment_table_value(hashtable_pos* ht, bitboard* board)
 {
-    if(!ht) 
-    {
-        DEBUG("Cannot increment from null hash table.");
-        return INT32_MIN;
-    }
+    assert(ht && board);
 
     uint64_t hashCode = getHashCode(board);
     size_t index = hashCode%ht->capacity;

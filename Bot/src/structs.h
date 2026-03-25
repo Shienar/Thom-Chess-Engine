@@ -61,13 +61,14 @@ typedef struct bitboard {
     uint64_t bishop_w;
     uint64_t rook_w;
     uint64_t queen_w;
-    uint64_t king_w;
     
     uint64_t pawn_b;
     uint64_t knight_b;
     uint64_t bishop_b;
     uint64_t rook_b;
     uint64_t queen_b;
+
+    uint64_t king_w;
     uint64_t king_b;
 
     uint64_t pieces_w;
@@ -115,5 +116,101 @@ typedef struct polyglot_book_entry {
     uint16_t weight;
     uint32_t learn;
 } polyglot_book_entry;
+
+
+#define INPUT_BITS 81920
+#define HALF_INPUT_BITS 40960
+#define ACCUMULATOR_NODES_PER_SIDE 256
+#define SECOND_HIDDEN_LAYER_NODES 32
+#define THIRD_HIDDEN_LAYER_NODES 32
+#define OUTPUT_LAYER_NODES 1
+
+/**
+ * Weights
+ * 
+ * Each index in the inputNodes array is a bitboard.
+ * To find the bitboard of PIECE while COLOR's
+ * king is on SQUARE, use the following formula.
+ * 
+ * i = (640 * ISBLACK(COLOR)) + (10 * SQUARE) + PIECE
+ *  - PIECE
+ *      - Ally Pawn = 0
+ *      - Ally Knight = 1
+ *      - Ally Bishop = 2
+ *      - Ally Rook = 3
+ *      - Ally Queen = 4
+ *      - Enemy Pawn = 5
+ *      - Enemy Knight = 6
+ *      - Enemy Bishop = 7
+ *      - Enemy Rook = 8
+ *      - Enemy Queen = 9
+ */
+typedef struct network_weights_training {
+    float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    float weights2[2 * ACCUMULATOR_NODES_PER_SIDE][SECOND_HIDDEN_LAYER_NODES];
+    float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
+    float weights3[SECOND_HIDDEN_LAYER_NODES][THIRD_HIDDEN_LAYER_NODES];
+    float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
+    float weights4[THIRD_HIDDEN_LAYER_NODES];
+    float weights4_bias;
+
+    //Saved for dequantization.
+    float scalingFactor;
+} network_weights_training;
+typedef struct network_weights_playing {
+    int8_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    int8_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int8_t weights2[2 * ACCUMULATOR_NODES_PER_SIDE][SECOND_HIDDEN_LAYER_NODES];
+    int8_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
+    int8_t weights3[SECOND_HIDDEN_LAYER_NODES][THIRD_HIDDEN_LAYER_NODES];
+    int8_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
+    int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
+    int8_t weights4_bias;
+} network_weights_playing;
+
+typedef struct accumulator_training {
+    //Incrementally updates.
+    uint64_t inputNodes[1280];
+    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
+    
+    //Saved for use in backpropagation.
+    float h2[SECOND_HIDDEN_LAYER_NODES];
+    float h3[THIRD_HIDDEN_LAYER_NODES];
+    float outputNode;
+} accumulator_training;
+
+typedef struct accumulator_playing {
+    uint64_t inputNodes[1280];
+    int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
+} accumulator_playing;
+
+/**
+ * Each accumulator is truly two entries, one for each half
+ * of the accumulator.
+ * 
+ * boards[0] = white
+ * boards[1] = black
+ * 
+ * White accumulators:
+ *  - Input nodes 0-639
+ *  - accumulators[i].accumulator[0]
+ * Black accumulators:
+ *  - Input nodes 640-1279
+ *  - accumulators[i].accumulator[1]
+ */
+typedef struct accumulator_playing_refreshTable {
+    bitboard boards[2][64];
+    accumulator_playing accumulators[64];
+} accumulator_playing_refreshTable;
+typedef struct accumulator_training_refreshTable {
+    bitboard boards[2][64];
+    accumulator_training accumulators[64];
+} accumulator_training_refreshTable;
+
+typedef struct network_training_data {
+    bitboard board;
+    float evaluation;
+} network_training_data;
 
 #endif

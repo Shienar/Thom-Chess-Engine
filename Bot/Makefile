@@ -8,6 +8,11 @@ OBJFILES += src/board/*.c
 OBJFILES += src/hashtables/*.c
 OBJFILES += src/pyrrhic/tbprobe.c
 
+# No debug flag for assert() removals.
+# CFLAGS += -NDEBUG
+
+# Thread count
+CFLAGS+= -DHELPER_THREAD_COUNT=8
 
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
