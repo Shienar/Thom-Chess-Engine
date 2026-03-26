@@ -189,9 +189,11 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
             output = _mm256_fmadd_ps(inputBatch, weightsBatch, output);
         }
 
-        output = _mm256_hadd_ps(output, output);
-        output = _mm256_hadd_ps(output, output);
-        outputValues[outputIndex] += _mm_cvtss_f32(_mm_add_ss(_mm256_extractf128_ps(output, 1), _mm256_castps256_ps128(output)));
+        //Horizontal addition
+        __m128 output_128 = _mm_add_ps(_mm256_extractf128_ps(output, 1), _mm256_castps256_ps128(output));
+        output_128 = _mm_add_ps(output_128, _mm_movehl_ps(output_128, output_128));
+        output_128 = _mm_add_ss(output_128, _mm_shuffle_ps(output_128, output_128, _MM_SHUFFLE(0, 0, 0, 1)));
+        outputValues[outputIndex] += _mm_cvtss_f32(output_128);
 
         if(applyCReLU) outputValues[outputIndex] = SCReLU_Float(outputValues[outputIndex], 0, 1);
     }
@@ -273,12 +275,15 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
 
             for(int blockOffset = 0; blockOffset < entriesPerBlock; blockOffset++)
             {
+                printf("\r\tIndex %d/%d in Block %d/%d", blockOffset, entriesPerBlock, blockIndex, NUMBER_OF_BLOCKS);
+
                 fread(&data, sizeof(network_training_data), 1, trainingData);
                 loadInputAccumulator(&data.board, floatAccumulator, TRAINING, BLACK|WHITE);
                 forwardPropagate_Float(data.board.turn, floatAccumulator);
                 expectedOutput = data.evaluation;
 
-                sumSquaredError+= pow((double) (floatAccumulator->outputNode - expectedOutput), 2.0);
+                float error = floatAccumulator->outputNode - expectedOutput;
+                sumSquaredError+= (double) error * error;
 
                 //Calculate Edge Weight Deltas
                 float delta4 = (expectedOutput - floatAccumulator->outputNode);
@@ -292,46 +297,101 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                 float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
                 for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
                 {
-                    float sum = 0.0f;
-                    for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) sum+= delta3[j] * trainingNNUE->weights3[i][j];
+                    __m256 v_sum = _mm256_setzero_ps();
+                    for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+= 8) 
+                    {
+                        //sum+= delta3[j] * trainingNNUE->weights3[i][j];
+                        __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
+                        __m256 v_weights3 = _mm256_loadu_ps(&trainingNNUE->weights3[i][j]);
+                        v_sum = _mm256_fmadd_ps(v_delta3, v_weights3, v_sum);
+                        
+                    }
+
+                    //Horizontal add of sum.
+                    __m128 sum_128 = _mm_add_ps(_mm256_extractf128_ps(v_sum, 1), _mm256_castps256_ps128(v_sum));
+                    sum_128 = _mm_add_ps(sum_128, _mm_movehl_ps(sum_128, sum_128));
+                    sum_128 = _mm_add_ss(sum_128, _mm_shuffle_ps(sum_128, sum_128, _MM_SHUFFLE(0, 0, 0, 1)));
                     
-                    delta2[i] = sum * SCReLU_derivative(floatAccumulator->h2[i], 0, 1);
+                    delta2[i] = _mm_cvtss_f32(sum_128) * SCReLU_derivative(floatAccumulator->h2[i], 0, 1);
                 }
 
                 float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
                 for (int side = 0; side < 2; side++) 
                 {
-                    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
+                    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) 
                     {
-                        float sum = 0.0f;
                         int offset = side * ACCUMULATOR_NODES_PER_SIDE;
-                        for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) sum += delta2[j] * trainingNNUE->weights2[offset + i][j];
+
+                        __m256 v_sum = _mm256_setzero_ps();
+                        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+= 8) 
+                        {
+                            //sum += delta2[j] * trainingNNUE->weights2[offset + i][j];
+                            __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
+                            __m256 v_weights2 = _mm256_loadu_ps(&trainingNNUE->weights2[offset + i][j]);
+                            v_sum = _mm256_fmadd_ps(v_delta2, v_weights2, v_sum);
+                            
+                        }
+
+                        //Horizontal add of sum.
+                        __m128 sum_128 = _mm_add_ps(_mm256_extractf128_ps(v_sum, 1), _mm256_castps256_ps128(v_sum));
+                        sum_128 = _mm_add_ps(sum_128, _mm_movehl_ps(sum_128, sum_128));
+                        sum_128 = _mm_add_ss(sum_128, _mm_shuffle_ps(sum_128, sum_128, _MM_SHUFFLE(0, 0, 0, 1)));
                         
-                        delta1[side][i] = sum * SCReLU_derivative(floatAccumulator->accumulator[side][i], 0, 1);
+                        delta1[side][i]= _mm_cvtss_f32(sum_128) * SCReLU_derivative(floatAccumulator->accumulator[side][i], 0, 1);
                     }
                 }
 
                 //Apply Edge Weight Deltas
-                for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
+                __m256 v_learningRateMult = _mm256_set1_ps(LEARNING_RATE * delta4);
+                for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8) 
                 {
-                    trainingNNUE->weights4[i]+= LEARNING_RATE * delta4 * floatAccumulator->h3[i];
+                    //trainingNNUE->weights4[i]+= LEARNING_RATE * delta4 * floatAccumulator->h3[i];
+                    __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights4[i]);
+                    __m256 v_h3 = _mm256_loadu_ps(&floatAccumulator->h3[i]);
+                    _mm256_storeu_ps(&trainingNNUE->weights4[i], _mm256_fmadd_ps(v_learningRateMult, v_h3, v_weights));
+
                 }
                 trainingNNUE->weights4_bias+= LEARNING_RATE * delta4;
 
                 for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
                 {
-                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3[i][j]+= LEARNING_RATE * delta3[j] * floatAccumulator->h2[i];
+                    v_learningRateMult = _mm256_set1_ps(LEARNING_RATE * floatAccumulator->h2[i]);
+                    for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8) 
+                    {
+                        //trainingNNUE->weights3[i][j]+= LEARNING_RATE * delta3[j] * floatAccumulator->h2[i];
+                        __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights3[i][j]);
+                        __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
+                        _mm256_storeu_ps(&trainingNNUE->weights3[i][j], _mm256_fmadd_ps(v_learningRateMult, v_delta3, v_weights));
+                    }
                 }
-                for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights3_bias[j]+= LEARNING_RATE * delta3[j];
+                v_learningRateMult = _mm256_set1_ps(LEARNING_RATE);
+                for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8) 
+                {
+                    //trainingNNUE->weights3_bias[j]+= LEARNING_RATE * delta3[j];
+                    __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights3_bias[j]);
+                    __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
+                    _mm256_storeu_ps(&trainingNNUE->weights3_bias[j], _mm256_fmadd_ps(v_learningRateMult, v_delta3, v_weights));
+                }
                 
                 for (int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++) 
                 {
-                    for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
+                    v_learningRateMult = _mm256_set1_ps(LEARNING_RATE * floatAccumulator->accumulator[(int) i / ACCUMULATOR_NODES_PER_SIDE][i % ACCUMULATOR_NODES_PER_SIDE]);
+                    for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8) 
                     {
-                        trainingNNUE->weights2[i][j] += LEARNING_RATE * delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                        //trainingNNUE->weights2[i][j] += LEARNING_RATE * delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                        __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights2[i][j]);
+                        __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
+                        _mm256_storeu_ps(&trainingNNUE->weights2[i][j], _mm256_fmadd_ps(v_learningRateMult, v_delta2, v_weights));
                     }
                 }
-                for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) trainingNNUE->weights2_bias[j] += LEARNING_RATE * delta2[j];
+                v_learningRateMult = _mm256_set1_ps(LEARNING_RATE);
+                for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8) 
+                {
+                    //trainingNNUE->weights2_bias[j] += LEARNING_RATE * delta2[j];
+                    __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights2_bias[j]);
+                    __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
+                    _mm256_storeu_ps(&trainingNNUE->weights2_bias[j], _mm256_fmadd_ps(v_learningRateMult, v_delta2, v_weights));
+                }
                 
                 for (int i = 0; i < 640; i++) 
                 {
@@ -341,28 +401,50 @@ void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowed
                     while (inputBitboard_White) {
 
                         int square = __builtin_ctzll(inputBitboard_White);
+                        int idx = 64 * i + square;
 
-                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1[(64 * i) + square][j] += delta1[0][j];
+                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+= 8) 
+                        {
+                            //trainingNNUE->weights1[(64 * i) + square][j] += delta1[0][j];
+                            __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights1[idx][j]);
+                            __m256 v_delta1 = _mm256_loadu_ps(&delta1[0][j]);
+                            _mm256_storeu_ps(&trainingNNUE->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
+                        }
 
                         inputBitboard_White &= (inputBitboard_White - 1);
                     }
 
                     while (inputBitboard_Black) {
                         int square = __builtin_ctzll(inputBitboard_Black);
+                        int idx = 64 * i + square;
 
-                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1[(64 * i) + square][j] += delta1[1][j];
+                        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8) 
+                        {
+                            //trainingNNUE->weights1[(64 * i) + square][j] += delta1[1][j];
+                            __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights1[idx][j]);
+                            __m256 v_delta1 = _mm256_loadu_ps(&delta1[1][j]);
+                            _mm256_storeu_ps(&trainingNNUE->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
+                        }
                         
                         inputBitboard_Black &= (inputBitboard_Black - 1);
                     }
                 }
-                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) trainingNNUE->weights1_bias[j] += LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
+                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8) 
+                {
+                    //trainingNNUE->weights1_bias[j] += LEARNING_RATE * (delta1[0][j] + delta1[1][j]);
+                    __m256 v_weights = _mm256_loadu_ps(&trainingNNUE->weights1_bias[j]);
+                    __m256 v_delta1_0 = _mm256_loadu_ps(&delta1[0][j]);
+                    __m256 v_delta1_1 = _mm256_loadu_ps(&delta1[1][j]);
+                    __m256 v_delta1 = _mm256_add_ps(v_delta1_0, v_delta1_1);
+                    _mm256_storeu_ps(&trainingNNUE->weights2_bias[j], _mm256_fmadd_ps(v_learningRateMult, v_delta1, v_weights));
+                }
             }
         }
 
         totalIterations++;
         if(saveEveryNIterations && totalIterations%saveEveryNIterations == 0) save_trainingWeights();
         
-        printf("\rIteration %d error = %e", totalIterations, sumSquaredError);
+        printf("Iteration %d error = %e\n", totalIterations, sumSquaredError);
 
         if(sumSquaredError == prevSumSquaredError) sameErrorXTimesInARow++;
         else sameErrorXTimesInARow = 0;

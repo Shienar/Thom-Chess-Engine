@@ -5,7 +5,7 @@
 #include "accumulator.h"
 #include <stdint.h>
 
-#define NUMBER_OF_BLOCKS 50 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
+#define NUMBER_OF_BLOCKS 1000 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
 #define LEARNING_RATE 0.1
 
 #define FLIP_SQUARE(x) (x^56)

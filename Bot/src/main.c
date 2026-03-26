@@ -75,7 +75,7 @@ int main(int argc, char** argv)
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
         trainingRefreshTable = createTrainingRefreshTable();
-        backpropagate(0, shouldTrain, 1e-6, trainingAccumulator);
+        backpropagate(1, shouldTrain, 1e-6, trainingAccumulator);
         save_trainingWeights();
 
         load_playingWeights();

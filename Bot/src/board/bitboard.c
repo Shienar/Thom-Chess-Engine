@@ -75,45 +75,10 @@ bitboard* create_board_from_fen(const char* fileName, int lineNumber)
     return board;
 }
 
-void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
+void load_fen_string_to_board(bitboard* board, const char* fenString)
 {
     assert(board);
-
-    FILE* inputFile = fopen(fileName, "r");
-    if(!inputFile)
-    {
-        DEBUG("Failed to open file %s", fileName);
-        board->victor = -1;
-        return;
-    }
-    
-    int currentLine = 1;
-    char FEN[100] = {'\0'};
-    while(fgets(FEN, 100, inputFile))
-    {
-        if(currentLine == lineNumber) break;
-        currentLine++;
-    }
-    fclose(inputFile);
-    
-    if(FEN[0] == '\0')
-    {
-        DEBUG("Failed to read from file \"import/FEN.txt\"");
-        board->victor = -1;
-        return;
-    }
-    else if(FEN[0] == ';')
-    {
-        DEBUG("Target FEN line is a comment.");
-        board->victor = -1;
-        return;
-    }
-    else if(FEN[0] == ' ' || FEN[0] == '\n')
-    {
-        DEBUG("Target FEN line is whitespace.");
-        board->victor = -1;
-        return;
-    }
+    assert(fenString);
 
     char fullBoardString[80] = {'\0'};
     char* boardStrings[8] = {NULL};
@@ -121,7 +86,7 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
     char castlingAvailability[5] = {'\0'};
     char enPassantTargetSquare[3] = {'\0'};
     int halfMoveClock, fullMoveCount = 0;
-    sscanf(FEN, "%s %c %s %s %d %d\n", 
+    sscanf(fenString, "%s %c %s %s %d %d\n", 
         fullBoardString, 
         &activeColor,
         castlingAvailability,
@@ -231,6 +196,51 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
     if(board->ht) destroy_hashTable_pos(board->ht);
     board->ht = create_hashTable_pos();
     increment_table_value(board->ht, board);
+
+
+}
+
+void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
+{
+    assert(board);
+
+    FILE* inputFile = fopen(fileName, "r");
+    if(!inputFile)
+    {
+        DEBUG("Failed to open file %s", fileName);
+        board->victor = -1;
+        return;
+    }
+    
+    int currentLine = 1;
+    char FEN[100] = {'\0'};
+    while(fgets(FEN, 100, inputFile))
+    {
+        if(currentLine == lineNumber) break;
+        currentLine++;
+    }
+    fclose(inputFile);
+    
+    if(FEN[0] == '\0')
+    {
+        DEBUG("Failed to read from file \"import/FEN.txt\"");
+        board->victor = -1;
+        return;
+    }
+    else if(FEN[0] == ';')
+    {
+        DEBUG("Target FEN line is a comment.");
+        board->victor = -1;
+        return;
+    }
+    else if(FEN[0] == ' ' || FEN[0] == '\n')
+    {
+        DEBUG("Target FEN line is whitespace.");
+        board->victor = -1;
+        return;
+    }
+
+    load_fen_string_to_board(board, (const char*) FEN);
 }
 
 //Resets the board to an opening position
