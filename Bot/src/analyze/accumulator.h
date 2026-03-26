@@ -26,4 +26,9 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
 
 void updateAccumulatorFromTable(bitboard* currentBoard, void* accumulator, void* refreshTable, int accumulatorType);
 
+accumulator_playing_refreshTable* createPlayingRefreshTable();
+accumulator_training_refreshTable* createTrainingRefreshTable();
+
+void destroyRefreshTable(void* table, int accumulatorType);
+
 #endif

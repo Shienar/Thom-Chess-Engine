@@ -8,13 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/**
- * TODO:
- * 
- * - Intermediate network layer outputs should get stored as 16-bit ints to avoid overflow in the player NNUE.
- * - Training!
- */
-
 int main(int argc, char** argv)
 {
     /**
@@ -81,6 +74,7 @@ int main(int argc, char** argv)
     {
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        trainingRefreshTable = createTrainingRefreshTable();
         backpropagate(0, shouldTrain, 1e-6, trainingAccumulator);
         save_trainingWeights();
 
@@ -96,14 +90,20 @@ int main(int argc, char** argv)
     }
     else if(shouldCreateTrainingData)
     {
+        load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        trainingRefreshTable = createTrainingRefreshTable();
         generateTrainingData(depth, maxTime, shouldCreateTrainingData, trainingAccumulator);
         dump_allocations();
         exit(0);
     }
     else if(shouldUpdateTrainingData)
     {
+        load_trainingWeights();
+        trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        trainingRefreshTable = createTrainingRefreshTable();
         updateTrainingData(depth, maxTime);
+        dump_allocations();
         exit(0);
     }
 
@@ -188,6 +188,8 @@ int main(int argc, char** argv)
     }
 
     FREE(playerNNUE);
+    FREE(playerAccumulator);
+    destroyRefreshTable(playingRefreshTable, PLAYING);
     destroy_hashTable_tt(transpositionTable);
     destroy_board(board);
     tb_free();

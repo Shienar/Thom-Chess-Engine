@@ -291,47 +291,48 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         double bestScore = -DBL_MAX;
         while(moveList[index])
         {
-            if(moveFromStruct(board, moveList[index])) continue;
-
-            updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
-            if(index == 0)
+            if(!moveFromStruct(board, moveList[index]))
             {
-                score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
-            }
-            else
-            {
-                score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
-                //Re-search PV node
-                if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
-            }
-            
-            unmove(board); //Gets freed with movelist.
-            updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
-            
-            if(score >= beta)
-            {
-                new_tt_entry.nodeType = NODE_TYPE_CUT;
-                new_tt_entry.evaluation = score;
-                new_tt_entry.bestMove = *moveList[index];
-                transposition_table_set(transpositionTable, new_tt_entry);
-                freeMoveList(moveList);
-                return beta;
-            }
-            else if(score > bestScore)
-            {
-                bestScore = score;
-
-                if(score > alpha)
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                if(index == 0)
                 {
-                    new_tt_entry.nodeType = NODE_TYPE_PV;
+                    score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
+                }
+                else
+                {
+                    score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
+                    //Re-search PV node
+                    if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
+                }
+                
+                unmove(board); //Gets freed with movelist.
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                
+                if(score >= beta)
+                {
+                    new_tt_entry.nodeType = NODE_TYPE_CUT;
                     new_tt_entry.evaluation = score;
                     new_tt_entry.bestMove = *moveList[index];
                     transposition_table_set(transpositionTable, new_tt_entry);
-                    alpha = score;
-                    if(pv) 
+                    freeMoveList(moveList);
+                    return beta;
+                }
+                else if(score > bestScore)
+                {
+                    bestScore = score;
+
+                    if(score > alpha)
                     {
-                        pv[pvIndex] = *moveList[index];
-                        copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+                        new_tt_entry.nodeType = NODE_TYPE_PV;
+                        new_tt_entry.evaluation = score;
+                        new_tt_entry.bestMove = *moveList[index];
+                        transposition_table_set(transpositionTable, new_tt_entry);
+                        alpha = score;
+                        if(pv) 
+                        {
+                            pv[pvIndex] = *moveList[index];
+                            copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
+                        }
                     }
                 }
             }
@@ -472,8 +473,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     accumulator_playing* threadByteAccumulators = NULL;
     accumulator_training* threadFloatAccumulators = NULL;
-    accumulator_playing_refreshTable* threadByteRefreshTables = NULL;
-    accumulator_training_refreshTable* threadFloatRefreshTables = NULL;
+    accumulator_playing_refreshTable** threadByteRefreshTables = NULL;
+    accumulator_training_refreshTable** threadFloatRefreshTables = NULL;
     void* accumulator = NULL;
     void* accumulatorTable = NULL;
     int weightType = -1;
@@ -483,13 +484,14 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         accumulator = playerAccumulator;
         if(!accumulator) accumulator = playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
         accumulatorTable = playingRefreshTable;
-        if(!accumulatorTable) accumulatorTable = playingRefreshTable = CALLOC(1, sizeof(accumulator_playing_refreshTable));
+        if(!accumulatorTable) accumulatorTable = playingRefreshTable = createPlayingRefreshTable();
         
         threadByteAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
-        threadByteRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing_refreshTable));
+        threadByteRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing_refreshTable*));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
-            params[i].accumulatorTable = &threadByteRefreshTables[i];
+            threadByteRefreshTables[i] = createPlayingRefreshTable();
+            params[i].accumulatorTable = threadByteRefreshTables[i];
             params[i].accumulator = &threadByteAccumulators[i];
             params[i].accumulatorType = PLAYING;
         }
@@ -500,13 +502,14 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         accumulator = trainingAccumulator;
         if(!accumulator) accumulator = trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
         accumulatorTable = trainingRefreshTable;
-        if(!accumulatorTable) accumulatorTable = trainingRefreshTable = CALLOC(1, sizeof(accumulator_training_refreshTable));
+        if(!accumulatorTable) accumulatorTable = trainingRefreshTable = createTrainingRefreshTable();
         
-        threadFloatAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
-        threadFloatRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training_refreshTable));
+        threadFloatAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training));
+        threadFloatRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training_refreshTable*));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
-            params[i].accumulatorTable = &threadFloatRefreshTables[i];
+            threadFloatRefreshTables[i] = createTrainingRefreshTable();
+            params[i].accumulatorTable = threadFloatRefreshTables[i];
             params[i].accumulator = &threadFloatAccumulators[i];
             params[i].accumulatorType = TRAINING;
         }
@@ -630,6 +633,19 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     if(tempPVTable) FREE(tempPVTable);
 
+    if(playerNNUE)
+    {
+        FREE(threadByteAccumulators);
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++) destroyRefreshTable(threadByteRefreshTables[i], PLAYING);
+        FREE(threadByteRefreshTables);
+    }
+    else if(trainingNNUE)
+    {
+        FREE(threadFloatAccumulators);
+        for(int i = 0; i < HELPER_THREAD_COUNT; i++) destroyRefreshTable(threadFloatRefreshTables[i], TRAINING);
+        FREE(threadFloatRefreshTables);
+    }
+
     move* bestMove = CALLOC(1, sizeof(move));
     memcpy(bestMove, &principalVariation[0], sizeof(move));
 
@@ -649,10 +665,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     FREE(principalVariation);
     principalVariation = NULL;
-
-    
-    if(playerNNUE) FREE(threadByteAccumulators);
-    else if(trainingNNUE) FREE(threadFloatAccumulators);
 
     return bestMove;
 }

@@ -193,18 +193,16 @@ typedef struct accumulator_playing {
  * boards[1] = black
  * 
  * White accumulators:
- *  - Input nodes 0-639
  *  - accumulators[i].accumulator[0]
  * Black accumulators:
- *  - Input nodes 640-1279
  *  - accumulators[i].accumulator[1]
  */
 typedef struct accumulator_playing_refreshTable {
-    bitboard boards[2][64];
+    bitboard* boards[2][64];
     accumulator_playing accumulators[64];
 } accumulator_playing_refreshTable;
 typedef struct accumulator_training_refreshTable {
-    bitboard boards[2][64];
+    bitboard* boards[2][64];
     accumulator_training accumulators[64];
 } accumulator_training_refreshTable;
 

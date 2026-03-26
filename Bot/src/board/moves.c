@@ -195,6 +195,7 @@ move** generatePieceMoves(bitboard* board, int piece, int square, int color, int
         }
     }
     destroy_board(tempBoard);
+    moveArray[size + 1] = NULL;
     freeMoveList(moveArray);
 
     legalMoveArray = REALLOC(legalMoveArray, (legalSize+1)*sizeof(move));

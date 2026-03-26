@@ -68,7 +68,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         __m256i output = _mm256_setzero_si256(); //si256 = 256-bit signed integer.
 
         //All layer lengths are divisible by 32 so no overflow.
-        for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=8)
+        for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=32)
         {
             __m256i inputBatch = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex]);
 

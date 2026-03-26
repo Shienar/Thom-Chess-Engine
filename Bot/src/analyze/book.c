@@ -64,7 +64,7 @@ move* getBookMove(bitboard* board)
     move* moveHead = NULL;
     weight_node* weightHead  = NULL;
 
-    for(polyglot_book_entry* entry = entries; entry < &entries[entryCount + 1]; entry++)
+    for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
     {
         if(polyglotKey == _byteswap_uint64(entry->hashKey))
         {

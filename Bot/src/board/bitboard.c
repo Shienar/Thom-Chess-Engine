@@ -710,7 +710,7 @@ void board_print(bitboard* board, int printValues, int printHistory)
     }
 
 
-    //8 rows x (8 columns + null terminator)
+    //8 rows x (8 columns of spaces + null terminator)
     char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
 
     piece_print(boardArray, board->pawn_w, 'p');

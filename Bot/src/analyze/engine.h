@@ -20,7 +20,9 @@
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -0.25
 
 extern int useHelperThreads;
+#ifndef HELPER_THREAD_COUNT
 #define HELPER_THREAD_COUNT 8
+#endif
 
 //Score are in the range of [-128, 127]
 #define INITIAL_ASPIRATION_MARGIN 10.0

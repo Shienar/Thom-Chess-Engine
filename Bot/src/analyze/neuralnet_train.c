@@ -385,8 +385,6 @@ void generateTrainingData(int depth, int maxTime, int maxPositions, accumulator_
     int entryCount = ftell(output);
     entryCount/=sizeof(network_training_data);
 
-    load_trainingWeights();
-    
     while(entryCount < maxPositions)
     {
         bitboard* board = create_board();
