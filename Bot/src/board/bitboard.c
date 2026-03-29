@@ -68,6 +68,65 @@ int popLSB(uint64_t *bitboard)
     return LSB_Index;
 }
 
+void export_fen_to_board(bitboard* board, char* outputFenString)
+{
+    assert(board && outputFenString);
+
+    char rows[8][9] = {'\0'};
+
+    for(int row = 0; row < 8; row++)
+    {
+        for(int column = 0; column < 8; column++)
+        {
+            int columnIndex = 0;
+            for(columnIndex = 0; columnIndex < column; columnIndex++)
+            {
+                if(rows[row][columnIndex] == '\0') break;
+            }
+            
+            int piece = findPieceOnSquare(board, row*8 + column);
+            if(piece)
+            {
+                char pieceChar = 0;
+                if(ISPAWN(piece)) pieceChar = 'p';
+                else if(ISBISHOP(piece)) pieceChar = 'b';
+                else if(ISKNIGHT(piece)) pieceChar = 'n';
+                else if(ISROOK(piece)) pieceChar = 'r';
+                else if(ISQUEEN(piece)) pieceChar = 'q';
+                else if(ISKING(piece)) pieceChar = 'k';
+
+                if(ISWHITE(piece)) pieceChar+=26;
+                rows[row][columnIndex] = pieceChar;
+            }
+            else
+            {
+                if(columnIndex == 0) rows[row][columnIndex] = '1';
+                if(rows[row][columnIndex - 1] >= '0' && rows[row][columnIndex - 1] <= '7') rows[row][columnIndex]++;
+            }
+        }
+    }
+
+    char activeColor = (ISWHITE(board->turn)) ? 'w' : 'b';
+    
+    char castlingRights[5] = {'\0'};
+    int writeIndex = 0;
+    if(KINGSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'K'; writeIndex++;}
+    if(QUEENSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'Q'; writeIndex++;}
+    if(KINGSIDE_CASTLE_BLACK(board->flags)) { castlingRights[writeIndex] = 'k'; writeIndex++;}
+    if(QUEENSIDE_CASTLE_BLACK(board->flags)) castlingRights[writeIndex] = 'q';
+
+    char enPassantSquare[3] = {'\0'};
+    if(board->enPassantSquare == -1) enPassantSquare[0] = '-';
+    else getSquareName(board->enPassantSquare, enPassantSquare);
+
+    sprintf(outputFenString, "%s/%s/%s/%s/%s/%s/%s/%s %c %s %s %d %d", rows[7], rows[6], rows[5], rows[4], rows[3], rows[2], rows[1], rows[0],
+                                                            activeColor,
+                                                            castlingRights,
+                                                            enPassantSquare,
+                                                            board->movesSinceLastChange,
+                                                            (int)board->halfMoveCount/2);
+}
+
 bitboard* create_board_from_fen(const char* fileName, int lineNumber)
 {
     bitboard* board = CALLOC(1, sizeof(bitboard));

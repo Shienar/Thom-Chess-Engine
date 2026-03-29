@@ -5,8 +5,14 @@
 #include "accumulator.h"
 #include <stdint.h>
 
-#define NUMBER_OF_BLOCKS 1000 // Training data positions should be evenly divisible by this amount for simplicity. Excess data points get ignored.
-#define LEARNING_RATE 0.1
+#define RESILIENT_INCREASE_FACTOR 1.2
+#define RESILIENT_DECREASE_FACTOR 0.5
+#define INITIAL_UPDATE_VALUE 0.0125
+#define MAX_UPDATE_VALUE 50.0
+#define MIN_UPDATE_VALUE 1e-6
+
+#define POSITIONS_PER_FILE 10000
+#define FILE_COUNT 10000
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
@@ -36,8 +42,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
 float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator);
 int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator);
 
-void backpropagate(int saveEveryNIterations, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
+void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
 
-void generateTrainingData(int depth, int maxTime, int maxPositions, accumulator_training* floatAccumulator);
-void updateTrainingData(int depth, int maxTime);
+void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator);
 #endif

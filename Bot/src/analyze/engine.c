@@ -352,7 +352,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     return alpha;
 }
 
-typedef struct threadData {
+typedef struct searchThreadData {
     double alpha;
     double beta;
     int depth;
@@ -363,11 +363,11 @@ typedef struct threadData {
     void* accumulator;
     void* accumulatorTable;
     int accumulatorType;
-} threadData;
+} searchThreadData;
 
 DWORD WINAPI helperThreadFunction(LPVOID lpParam)
 {
-    threadData* data = (threadData*)lpParam;
+    searchThreadData* data = (searchThreadData*)lpParam;
                 
     updateAccumulatorFromTable(data->board, data->accumulator, data->accumulatorTable, data->accumulatorType);
 
@@ -458,7 +458,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     HANDLE helperThreads[HELPER_THREAD_COUNT] = {0};
     DWORD helperThreadID[HELPER_THREAD_COUNT] = {0};
-    threadData params[HELPER_THREAD_COUNT] = {0};
+    searchThreadData params[HELPER_THREAD_COUNT] = {0};
 
     clock_t terminateFlags[HELPER_THREAD_COUNT] = {LONG_MAX}; //These are passed as end times for the thread searches. Cancel threads by setting values to 0.
     double threadScores[HELPER_THREAD_COUNT] = {0};

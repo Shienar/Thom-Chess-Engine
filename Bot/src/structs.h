@@ -206,9 +206,4 @@ typedef struct accumulator_training_refreshTable {
     accumulator_training accumulators[64];
 } accumulator_training_refreshTable;
 
-typedef struct network_training_data {
-    bitboard board;
-    float evaluation;
-} network_training_data;
-
 #endif
