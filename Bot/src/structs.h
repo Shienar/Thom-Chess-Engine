@@ -79,6 +79,9 @@ typedef struct bitboard {
     int kingSquare_b;
     int kingSquare_w;
 
+    //Fast lookups of "What piece is on square X"
+    uint8_t pieceArr[64];
+
     /**
      * flags&1 == canKingsideCastle_w
      * flags&2 == canQueensideCastle_w 

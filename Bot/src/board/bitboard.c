@@ -68,7 +68,7 @@ int popLSB(uint64_t *bitboard)
     return LSB_Index;
 }
 
-void export_fen_to_board(bitboard* board, char* outputFenString)
+void export_fen_from_board(bitboard* board, char* outputFenString)
 {
     assert(board && outputFenString);
 
@@ -190,27 +190,70 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
                 }
                 else
                 {
-                    uint64_t currentSquareMask = (1ull<<(columnOffset + 8*row));
+                    int square = columnOffset + 8*row;
+                    uint64_t currentSquareMask = (1ull<<square);
                     if(currentChar == 'K')
                     {
                         board->king_w|=currentSquareMask;
-                        board->kingSquare_w = columnOffset + 8*row;
+                        board->kingSquare_w = square;
+                        board->pieceArr[square] = KING|WHITE;
                     }
                     else if(currentChar == 'k')
                     {
                         board->king_b|=currentSquareMask;
                         board->kingSquare_b = columnOffset + 8*row;
+                        board->pieceArr[square] = KING|BLACK;
                     }
-                    else if(currentChar == 'Q') board->queen_w|=currentSquareMask;
-                    else if(currentChar == 'q') board->queen_b|=currentSquareMask;
-                    else if(currentChar == 'R') board->rook_w|=currentSquareMask;
-                    else if(currentChar == 'r') board->rook_b|=currentSquareMask;
-                    else if(currentChar == 'N') board->knight_w|=currentSquareMask;
-                    else if(currentChar == 'n') board->knight_b|=currentSquareMask;
-                    else if(currentChar == 'B') board->bishop_w|=currentSquareMask;
-                    else if(currentChar == 'b') board->bishop_b|=currentSquareMask;
-                    else if(currentChar == 'P') board->pawn_w|=currentSquareMask;
-                    else if(currentChar == 'p') board->pawn_b|=currentSquareMask;
+                    else if(currentChar == 'Q') 
+                    {
+                        board->queen_w|=currentSquareMask;
+                        board->pieceArr[square] = QUEEN|WHITE;
+                    }
+                    else if(currentChar == 'q') 
+                    {
+                        board->queen_b|=currentSquareMask;
+                        board->pieceArr[square] = QUEEN|BLACK;
+                    }
+                    else if(currentChar == 'R') 
+                    {
+                        board->rook_w|=currentSquareMask;
+                        board->pieceArr[square] = ROOK|WHITE;
+                    }
+                    else if(currentChar == 'r') 
+                    {
+                        board->rook_b|=currentSquareMask;
+                        board->pieceArr[square] = ROOK|BLACK;
+                    }
+                    else if(currentChar == 'N') 
+                    {
+                        board->knight_w|=currentSquareMask;
+                        board->pieceArr[square] = KNIGHT|WHITE;
+                    }
+                    else if(currentChar == 'n') 
+                    {
+                        board->knight_b|=currentSquareMask;
+                        board->pieceArr[square] = KNIGHT|BLACK;
+                    }
+                    else if(currentChar == 'B') 
+                    {
+                        board->bishop_w|=currentSquareMask;
+                        board->pieceArr[square] = BISHOP|WHITE;
+                    }
+                    else if(currentChar == 'b') 
+                    {
+                        board->bishop_b|=currentSquareMask;
+                        board->pieceArr[square] = BISHOP|BLACK;
+                    }
+                    else if(currentChar == 'P') 
+                    {
+                        board->pawn_w|=currentSquareMask;
+                        board->pieceArr[square] = PAWN|WHITE;
+                    }
+                    else if(currentChar == 'p') 
+                    {
+                        board->pawn_b|=currentSquareMask;
+                        board->pieceArr[square] = PAWN|BLACK;
+                    }
                     columnOffset++;
                 }
             }
@@ -333,6 +376,20 @@ bitboard* create_board()
     board->kingSquare_b = 60;
     board->kingSquare_w  = 4;
 
+    board->pieceArr[0] = board->pieceArr[7] = WHITE|ROOK;
+    board->pieceArr[1] = board->pieceArr[6] = WHITE|KNIGHT;
+    board->pieceArr[2] = board->pieceArr[5] = WHITE|BISHOP;
+    board->pieceArr[3] = WHITE|QUEEN;
+    board->pieceArr[4] = WHITE|KING;
+    for(int i = 8; i < 16; i++) board->pieceArr[i] = WHITE|PAWN;
+    
+    board->pieceArr[56] = board->pieceArr[63] = BLACK|ROOK;
+    board->pieceArr[57] = board->pieceArr[62] = BLACK|KNIGHT;
+    board->pieceArr[58] = board->pieceArr[61] = BLACK|BISHOP;
+    board->pieceArr[59] = BLACK|QUEEN;
+    board->pieceArr[60] = BLACK|KING;
+    for(int i = 48; i < 56; i++) board->pieceArr[i] = BLACK|PAWN;
+
     //Castling Rights & Check
     board->flags = 0xF;
 
@@ -399,6 +456,11 @@ void copy_board(bitboard* dest, bitboard* source, int copyHT)
     dest->kingSquare_b = source->kingSquare_b;
     dest->kingSquare_w  = source->kingSquare_w;
 
+    for(int i = 0; i < 64; i++)
+    {
+        dest->pieceArr[i] = source->pieceArr[i];
+    }
+
     //Castling Rights & Check
     dest->flags = source->flags;
 
@@ -459,69 +521,7 @@ int findPieceOnSquare(bitboard* board, int square)
         return 0;
     }
 
-    int piece = 0;
-    uint64_t mask = (1ull<<square);
-
-    if((board->pieces_b&mask) == mask)
-    {
-        piece|=BLACK;
-
-        if((board->pawn_b&mask) == mask)
-        {
-            piece|=PAWN;
-        }
-        else if((board->knight_b&mask) == mask)
-        {
-            piece|=KNIGHT;
-        }
-        else if((board->bishop_b&mask) == mask)
-        {
-            piece|=BISHOP;
-        }
-        else if((board->rook_b&mask) == mask)
-        {
-            piece|=ROOK;
-        }
-        else if((board->queen_b&mask) == mask)
-        {
-            piece|=QUEEN;
-        }
-        else if((board->king_b&mask) == mask)
-        {
-            piece|=KING;
-        }
-    }
-    else if((board->pieces_w&mask) == mask)
-    {
-        piece|=WHITE;
-
-        if((board->pawn_w&mask) == mask)
-        {
-            piece|=PAWN;
-        }
-        else if((board->knight_w&mask) == mask)
-        {
-            piece|=KNIGHT;
-        }
-        else if((board->bishop_w&mask) == mask)
-        {
-            piece|=BISHOP;
-        }
-        else if((board->rook_w&mask) == mask)
-        {
-            piece|=ROOK;
-        }
-        else if((board->queen_w&mask) == mask)
-        {
-            piece|=QUEEN;
-        }
-        else if((board->king_w&mask) == mask)
-        {
-            piece|=KING;
-        }
-    }
-
-    return piece;
+    return board->pieceArr[square];
 }
 
 //Will clear all piece tpyes if Least Significant Byte's value is out of range 1-6
@@ -681,6 +681,7 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         board->pieces_b&=applyMask;
         board->pieces_all&=applyMask;
     }
+    board->pieceArr[square] = 0;
 }
 
 void board_set(bitboard* board, int square, int piece)
@@ -753,6 +754,9 @@ void board_set(bitboard* board, int square, int piece)
         board->pieces_b|=applyMask;
         board->pieces_all|=applyMask;
     }
+    else return;
+    
+    board->pieceArr[square] = piece;
 }
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar)

@@ -94,7 +94,7 @@ int popLSB(uint64_t *bitboard);
 
 bitboard* create_board();
 bitboard* create_board_from_fen(const char* fileName, int lineNumber);
-void export_fen_to_board(bitboard* board, char* outputFenString);
+void export_fen_from_board(bitboard* board, char* outputFenString);
 void load_fen_string_to_board(bitboard* board, const char* fenString);
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);
 void destroy_board(bitboard* board);

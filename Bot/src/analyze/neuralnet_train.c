@@ -659,7 +659,7 @@ void generateTrainingData(int depth, int maxTime, accumulator_training* floatAcc
                 movesSinceLastInterestingMove = 0;
 
                 char FEN[100] = {'\0'};
-                export_fen_to_board(board, FEN);
+                export_fen_from_board(board, FEN);
                 float evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
                 fprintf(output, "%s|%f\n", FEN, evaluation);
 
