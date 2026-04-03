@@ -341,7 +341,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         }
         freeMoveList(moveList);
 
-        if(bestScore <= alpha)
+        if(bestScore < alpha)
         {
             //Don't save a bestmove since we couldn't find one that fits in window.
             new_tt_entry.nodeType = NODE_TYPE_ALL;

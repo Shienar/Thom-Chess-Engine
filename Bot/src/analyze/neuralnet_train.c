@@ -455,17 +455,17 @@ void resilient_update(float* weight, float* update_value, float* current_grad, f
     if (change > 0) 
     {
         // Gradient direction is the same: speed up
-        *update_value = min(*update_value * RESILIENT_INCREASE_FACTOR, MIN_UPDATE_VALUE);
-        *weight -= copysignf(1.0f, *current_grad) * *update_value;
+        *update_value = min(*update_value * RESILIENT_INCREASE_FACTOR, MAX_UPDATE_VALUE);
+        *weight += copysignf(1.0f, *current_grad) * *update_value;
         *prev_grad = *current_grad;
     } 
     else if (change < 0) {
         // Overstepped the minimum: slow down and backtrack
-        *update_value = max(*update_value * RESILIENT_DECREASE_FACTOR, MAX_UPDATE_VALUE);
+        *update_value = max(*update_value * RESILIENT_DECREASE_FACTOR, MIN_UPDATE_VALUE);
         *prev_grad = 0;       
     } 
     else {
-        *weight -= copysignf(1.0f, *current_grad) * *update_value;
+        *weight += copysignf(1.0f, *current_grad) * *update_value;
         *prev_grad = *current_grad;
     }
 }
@@ -528,7 +528,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
     int* blockNumbers = CALLOC(FILE_COUNT, sizeof(int));
     for(int i = 0; i < FILE_COUNT; i++)
     {
-        blockNumbers[i] = i;
+        blockNumbers[i] = i + 1;
     }
 
     int totalIterations = 0;
@@ -541,7 +541,11 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
     network_weights_training* curBatch_gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
     network_weights_training* prevBatch_gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
     network_weights_training* weightUpdateValues = CALLOC(1, sizeof(network_weights_training));
-    memset(weightUpdateValues, INITIAL_UPDATE_VALUE, sizeof(network_weights_training));
+
+    float* ptr = (float*)weightUpdateValues;
+    for (size_t i = 0; i < sizeof(network_weights_training) / sizeof(float); i++) {
+        ptr[i] = INITIAL_UPDATE_VALUE;
+    }
 
     double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
     double totalSumSquaredError = 0.0; //accumulated value.
@@ -558,6 +562,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
 
     do{
         shuffle(blockNumbers, FILE_COUNT);
+        totalSumSquaredError = 0.0;
 
         for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
         {
@@ -601,14 +606,14 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
             }
             
             totalSumSquaredError+= sumSquaredError;
-            printf("\r\tAnalyzed block %d/%d; mean squared error = %e", blockIndex, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
+            printf("\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
             resilient_updateAll(weightUpdateValues, &curBatch_gradientSums[HELPER_THREAD_COUNT], &prevBatch_gradientSums[HELPER_THREAD_COUNT]);
             
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
         }
         totalIterations++;
         
-        printf("\rIteration %d error = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
+        printf("\nIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
 
 
         //Mean squared error.

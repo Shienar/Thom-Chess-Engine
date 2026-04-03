@@ -8,11 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/**
- * TODO:
- *  - Multithreaded RPROP
- */
-
 int main(int argc, char** argv)
 {
     /**
