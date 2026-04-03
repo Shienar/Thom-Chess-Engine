@@ -302,7 +302,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 {
                     score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
                     //Re-search PV node
-                    if (score > alpha && score < beta) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
+                    if (score > alpha && beta - alpha > 1) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
                 }
                 
                 unmove(board); //Gets freed with movelist.
@@ -542,40 +542,52 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         }
         
 
-        double aspiration_margin = INITIAL_ASPIRATION_MARGIN;
-        double alpha = aspiration_expectedValue - aspiration_margin;
-        double beta = aspiration_expectedValue + aspiration_margin;
 
         //Aspiration Window Loop
-        while(1)
+        //Avoid for lower depths.
+        if(currentDepth < 5)
         {
-            if(clock() > endTime) break;
-
             updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
-            double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
+            aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
+        }
+        else
+        {
 
-            if(score <= alpha)
+            double aspiration_margin = INITIAL_ASPIRATION_MARGIN;
+            double alpha = aspiration_expectedValue - aspiration_margin;
+            double beta = aspiration_expectedValue + aspiration_margin;
+            while(1)
             {
-                alpha-= aspiration_margin;
-                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
-            }
-            else if(score >= beta)
-            {
-                beta+= aspiration_margin;
-                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
-            }
-            else
-            {
-                aspiration_expectedValue = score;
-                break;
-            }
+                if(clock() > endTime) break;
 
-            if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
-            {
-                alpha = -DBL_MAX;
-                beta = DBL_MAX;
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
+                double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
+
+                if(score <= alpha)
+                {
+                    alpha-= aspiration_margin;
+                    aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
+                }
+                else if(score >= beta)
+                {
+                    beta+= aspiration_margin;
+                    aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
+                }
+                else
+                {
+                    aspiration_expectedValue = score;
+                    break;
+                }
+
+                if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
+                {
+                    alpha = -DBL_MAX;
+                    beta = DBL_MAX;
+                }
             }
         }
+
+        
         
         
         if(useHelperThreads)

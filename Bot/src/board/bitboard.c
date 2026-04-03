@@ -867,7 +867,7 @@ void values_print(bitboard* board)
     if(board->flags&0x30)
     {
         printf("Check: ");
-        if(INCHECK_W(board->flags)) printf("W\n");
+        if(IS_IN_CHECK_W(board->flags)) printf("W\n");
         else printf("B\n");
         printf("\n");
     }

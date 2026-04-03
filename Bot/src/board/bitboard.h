@@ -53,8 +53,8 @@
 #define BAN_KINGCASTLE_B(flag) (flag&=(~4))
 #define BAN_QUEENCASTLE_B(flag) (flag&=(~8))
 
-#define INCHECK_W(flag) ((flag&16)>>4)
-#define INCHECK_B(flag) ((flag&32)>>5)
+#define IS_IN_CHECK_W(flag) ((flag&16)>>4)
+#define IS_IN_CHECK_B(flag) ((flag&32)>>5)
 #define CHECK_W(flag) (flag|=16)
 #define CHECK_B(flag) (flag|=32)
 #define UNCHECK_W(flag) (flag&=(~16))

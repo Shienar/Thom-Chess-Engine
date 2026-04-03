@@ -773,7 +773,7 @@ uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
     uint64_t potentialMoves = 0;
     uint64_t tempMask = 0;
 
-    //Above
+    //Right
     for(int column = getColumn(square) + 1; column <= 8; column++)
     {
         tempMask = (1ull<<(square + (column - getColumn(square))));
@@ -786,7 +786,7 @@ uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
         else potentialMoves|=tempMask;
     }
 
-    //Below
+    //Left
     for(int column = getColumn(square) - 1; column >= 1; column--)
     {
         tempMask = (1ull<<(square + (column - getColumn(square))));
@@ -799,7 +799,7 @@ uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
         else potentialMoves|=tempMask;
     }
 
-    //Right
+    //Above
     for(int row = getRow(square) + 1; row <= 8; row++)
     {
         tempMask = (1ull<<(square + 8*(row - getRow(square))));
@@ -812,7 +812,7 @@ uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
         else potentialMoves|=tempMask;
     }
 
-    //Left
+    //Below
     for(int row = getRow(square) - 1; row >= 1; row--)
     {
         tempMask = (1ull<<(square + 8*(row - getRow(square))));
@@ -1408,13 +1408,13 @@ int moveFromStruct(bitboard* board, move* m)
     //Calculate discovered checks and change turn.
     if(board->turn == WHITE)
     {
-        if(INCHECK_W(board->flags)) UNCHECK_W(board->flags);
+        if(IS_IN_CHECK_W(board->flags)) UNCHECK_W(board->flags);
         if(isPinned(board, m->startSquare, board->kingSquare_b, BLACK)) CHECK_B(board->flags);
         board->turn=BLACK;
     }
     else
     {
-        if(INCHECK_B(board->flags)) UNCHECK_B(board->flags);
+        if(IS_IN_CHECK_B(board->flags)) UNCHECK_B(board->flags);
         if(isPinned(board, m->startSquare, board->kingSquare_w, WHITE)) CHECK_W(board->flags);
         board->turn=WHITE;
     }
@@ -1428,12 +1428,12 @@ int moveFromStruct(bitboard* board, move* m)
         //No potential moves - Calculate checkmate/stalemate
         if(board->turn == WHITE)
         {
-            if(INCHECK_W(board->flags)) board->victor = BLACK;
+            if(IS_IN_CHECK_W(board->flags)) board->victor = BLACK;
             else board->victor = DRAW|STALEMATED_WHITE;
         }
         else
         {
-            if(INCHECK_B(board->flags)) board->victor = WHITE;
+            if(IS_IN_CHECK_B(board->flags)) board->victor = WHITE;
             else board->victor = DRAW|STALEMATED_BLACK;
         }
     }

@@ -196,6 +196,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
         outputValues[outputIndex] += _mm_cvtss_f32(output_128);
 
         if(applyCReLU) outputValues[outputIndex] = SCReLU_Float(outputValues[outputIndex], 0, 1);
+
     }
 }
 
@@ -543,7 +544,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
     memset(weightUpdateValues, INITIAL_UPDATE_VALUE, sizeof(network_weights_training));
 
     double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
-    double sumSquaredError = 0.0; //accumulated value.
+    double totalSumSquaredError = 0.0; //accumulated value.
 
     char fileName[40] = {'\0'};
     for(int i = 0; i < HELPER_THREAD_COUNT; i++)
@@ -560,7 +561,6 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
 
         for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
         {
-            printf("\r\t Analyzing block %d/%d\n", blockIndex, FILE_COUNT);
             sprintf(fileName, "./training/trainingData_%d.txt", blockNumbers[blockIndex]);
             FILE* trainingData = fopen(fileName, "r");
             if(!trainingData)
@@ -573,6 +573,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
             fclose(trainingData);
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
+                *threadData[i].sumSquaredError = 0;
                 threadData[i].seekByteOffset = i * (long) floor(fileBytes / HELPER_THREAD_COUNT);
                 helperThreads[i] = CreateThread(NULL, 0, rpropThreadFunc, &threadData[i], 0, &helperThreadID[i]);
             }
@@ -585,7 +586,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
 
             //Accumulate the values.
             memset(&curBatch_gradientSums[HELPER_THREAD_COUNT], 0.0, sizeof(network_weights_training));
-            sumSquaredError = 0.0;
+            double sumSquaredError = 0.0;
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
                 curBatch_gradientSums[HELPER_THREAD_COUNT].weights4_bias +=  curBatch_gradientSums[i].weights4_bias;
@@ -599,18 +600,19 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
                 sumSquaredError+= sumSquaredErrors[i];
             }
             
-
+            totalSumSquaredError+= sumSquaredError;
+            printf("\r\tAnalyzed block %d/%d; mean squared error = %e", blockIndex, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
             resilient_updateAll(weightUpdateValues, &curBatch_gradientSums[HELPER_THREAD_COUNT], &prevBatch_gradientSums[HELPER_THREAD_COUNT]);
             
-            if(blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
+            if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
         }
         totalIterations++;
         
-        printf("Iteration %d error = %e\n", totalIterations, sumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
+        printf("\rIteration %d error = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
 
 
         //Mean squared error.
-    } while((sumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
+    } while((totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
     FREE(blockNumbers);
     save_trainingWeights();
