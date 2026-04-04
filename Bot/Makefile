@@ -12,7 +12,10 @@ OBJFILES += src/pyrrhic/tbprobe.c
 # CFLAGS += -NDEBUG
 
 # Thread count
-CFLAGS+= -DHELPER_THREAD_COUNT=8
+THREADS ?= 8
+
+# Use the THREADS variable in your CFLAGS
+CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
 # Track nodes visited.
 # CFLAGS+= -DCOUNT_NODES_VISITED=1

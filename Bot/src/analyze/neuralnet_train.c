@@ -3,16 +3,22 @@
 #include "../board/bitboard.h"
 #include "../board/moves.h"
 #include "engine.h"
-#include <math.h>
 #include <float.h>
 #include <immintrin.h>
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
 
-void iterateTrainingWeights(void (*func)(float*, float*), network_weights_training* trainingWeights, float* context) 
+void iterateTrainingWeights(void (*func)(float*, double*), network_weights_training* trainingWeights, double* context) 
 {
     assert(func && trainingWeights);
+
+    double standardDeviation = (context == NULL) ? 1 : 0;
+    if(standardDeviation)
+    {
+        context = &standardDeviation;
+        standardDeviation = sqrt(2.0 / HALF_INPUT_BITS);
+    }
 
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
@@ -23,6 +29,8 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
     }
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) func(&trainingWeights->weights1_bias[i], context);
 
+    if(standardDeviation) standardDeviation = sqrt(2.0 / ACCUMULATOR_NODES_PER_SIDE);
+
     for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
@@ -32,6 +40,8 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
     }
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) func(&trainingWeights->weights2_bias[i], context);
     
+    if(standardDeviation) standardDeviation = sqrt(2.0 / SECOND_HIDDEN_LAYER_NODES);
+
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
@@ -41,6 +51,9 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
     }
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) func(&trainingWeights->weights3_bias[i], context);
     
+    
+    if(standardDeviation) standardDeviation = sqrt(2.0 / THIRD_HIDDEN_LAYER_NODES);
+
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
         func(&trainingWeights->weights4[i], context);
@@ -51,7 +64,7 @@ void iterateTrainingWeights(void (*func)(float*, float*), network_weights_traini
 /**
  * Box-Muller transform.
  */
-void sampleNormalDistribution(float* dest, float* standardDeviation) 
+void sampleNormalDistribution(float* dest, double* standardDeviation) 
 {
     double u1; 
     do { u1 = (double)rand() / (double) RAND_MAX; } while(u1 == 0);
@@ -71,9 +84,7 @@ void load_trainingWeights()
     else
     {
         DEBUG("Failed to load neural network from file.\n");
-
-        float standardDeviation = 0.01;
-        iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, &standardDeviation);
+        iterateTrainingWeights(sampleNormalDistribution, trainingNNUE, NULL);
     }
 }
 
@@ -91,12 +102,12 @@ void save_trainingWeights()
     fclose(output);
 }
 
-void findAbsMax(float* comparedValue, float* max)
+void findAbsMax(float* comparedValue, double* max)
 {
     if(fabsf(*comparedValue) > *max) *max = fabsf(*comparedValue);
 }
 
-void findSum(float* comparedValue, float* sum)
+void findSum(float* comparedValue, double* sum)
 {
     *sum+=*comparedValue;
 }
@@ -106,8 +117,8 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     assert(inputFloats);
     assert(outputBytes);
 
-    float maxValue = -FLT_MAX;
-    float meanValue = 0.0;
+    double maxValue = -DBL_MAX;
+    double meanValue = 0.0;
     iterateTrainingWeights(findAbsMax, inputFloats, &maxValue);
     iterateTrainingWeights(findSum, inputFloats, &meanValue);
     meanValue = meanValue / (HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE + 
@@ -156,17 +167,6 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     printf("\tMax: %f\n", maxValue);
 }
 
-float SCReLU_Float(float val, float min, float max)
-{
-    if(val <= min) return min*min;
-    if(val >= max) return max*max;
-    return val*val;
-}
-float SCReLU_derivative(float val, float min, float max)
-{
-    return (val <= min || val >= max) ? (0.0) : (2*val);
-}
-
 //__m256 stored 8 32-bit floats (ps = packed single-precision)
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU)
 {
@@ -195,7 +195,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
         output_128 = _mm_add_ss(output_128, _mm_shuffle_ps(output_128, output_128, _MM_SHUFFLE(0, 0, 0, 1)));
         outputValues[outputIndex] += _mm_cvtss_f32(output_128);
 
-        if(applyCReLU) outputValues[outputIndex] = SCReLU_Float(outputValues[outputIndex], 0, 1);
+        if(applyCReLU) outputValues[outputIndex] = SCReLU(outputValues[outputIndex], 0, 1);
 
     }
 }
@@ -221,8 +221,7 @@ float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator)
     }
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        //The above step added the biases twice.
-        floatAccumulator->h2[i] = SCReLU_Float(tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i], 0, 1);
+        floatAccumulator->h2[i] = SCReLU(tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i], 0, 1);
     }
 
     calculateLayer_Floats(floatAccumulator->h2, floatAccumulator->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
@@ -275,7 +274,7 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
     
     int trackedEntries = 0;
     float expectedOutput = 0.0;
-    bitboard* board = create_board();
+    bitboard* board = create_board(); 
     accumulator_training floatAccumulator = {0};
     while(trackedEntries < data->entriesToTrack && fgets(inputString, 120, trainingData))
     {
@@ -284,16 +283,17 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
         loadInputAccumulator(board, &floatAccumulator, TRAINING, BLACK|WHITE);
         forwardPropagate_Float(board->turn, &floatAccumulator);
 
-        float error = floatAccumulator.outputNode - expectedOutput;
-        *data->sumSquaredError+= (double) error * error;
+        //if((double)rand()/RAND_MAX < 0.0001) printf("Expected %f, received %f\n", expectedOutput, floatAccumulator.outputNode);
+        float delta4 = floatAccumulator.outputNode - expectedOutput;
+
+        *data->sumSquaredError+= (double) delta4 * delta4;
 
         //Calculate Edge Weight Deltas
-        float delta4 = (expectedOutput - floatAccumulator.outputNode);
 
         float delta3[THIRD_HIDDEN_LAYER_NODES] = {0};
         for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
         {
-            delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_derivative(floatAccumulator.h3[i], 0, 1);
+            delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_Derivative(floatAccumulator.h3[i], 0, 1);
         }
         
         float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
@@ -314,13 +314,13 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
             sum_128 = _mm_add_ps(sum_128, _mm_movehl_ps(sum_128, sum_128));
             sum_128 = _mm_add_ss(sum_128, _mm_shuffle_ps(sum_128, sum_128, _MM_SHUFFLE(0, 0, 0, 1)));
             
-            delta2[i] = _mm_cvtss_f32(sum_128) * SCReLU_derivative(floatAccumulator.h2[i], 0, 1);
+            delta2[i] = _mm_cvtss_f32(sum_128) * SCReLU_Derivative(floatAccumulator.h2[i], 0, 1);
         }
 
         float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
         for (int side = 0; side < 2; side++) 
         {
-            for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) 
+            for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
             {
                 int offset = side * ACCUMULATOR_NODES_PER_SIDE;
 
@@ -339,7 +339,7 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
                 sum_128 = _mm_add_ps(sum_128, _mm_movehl_ps(sum_128, sum_128));
                 sum_128 = _mm_add_ss(sum_128, _mm_shuffle_ps(sum_128, sum_128, _MM_SHUFFLE(0, 0, 0, 1)));
                 
-                delta1[side][i]= _mm_cvtss_f32(sum_128) * SCReLU_derivative(floatAccumulator.accumulator[side][i], 0, 1);
+                delta1[side][i]= _mm_cvtss_f32(sum_128) * SCReLU_Derivative(floatAccumulator.accumulator[side][i], 0, 1);
             }
         }
 
@@ -437,7 +437,7 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
             __m256 v_delta1_0 = _mm256_loadu_ps(&delta1[0][j]);
             __m256 v_delta1_1 = _mm256_loadu_ps(&delta1[1][j]);
             __m256 v_delta1 = _mm256_add_ps(v_delta1_0, v_delta1_1);
-            _mm256_storeu_ps(&data->curBatch_gradientSums->weights2_bias[j], _mm256_add_ps(v_delta1, v_weights));
+            _mm256_storeu_ps(&data->curBatch_gradientSums->weights1_bias[j], _mm256_add_ps(v_delta1, v_weights));
         }
     }
 
@@ -448,24 +448,30 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
 
 void resilient_update(float* weight, float* update_value, float* current_grad, float* prev_grad)
 {
+    if(*current_grad == 0)
+    {
+        *prev_grad = 0;
+        return;
+    }
+
     float change = (*current_grad * *prev_grad);
-    if(change > 0) change = 1;
-    else if(change < 0) change = -1;
 
     if (change > 0) 
     {
         // Gradient direction is the same: speed up
         *update_value = min(*update_value * RESILIENT_INCREASE_FACTOR, MAX_UPDATE_VALUE);
-        *weight += copysignf(1.0f, *current_grad) * *update_value;
+        *weight -= copysignf(1.0f, *current_grad) * *update_value;
         *prev_grad = *current_grad;
     } 
     else if (change < 0) {
-        // Overstepped the minimum: slow down and backtrack
+        // Overstepped the minimum: slow down and backtrack.
+        *weight += copysignf(1.0f, *prev_grad) * *update_value; 
         *update_value = max(*update_value * RESILIENT_DECREASE_FACTOR, MIN_UPDATE_VALUE);
         *prev_grad = 0;       
     } 
     else {
-        *weight += copysignf(1.0f, *current_grad) * *update_value;
+        //prev_grad is 0
+        *weight -= copysignf(1.0f, *current_grad) * *update_value;
         *prev_grad = *current_grad;
     }
 }
@@ -590,7 +596,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
             }
 
             //Accumulate the values.
-            memset(&curBatch_gradientSums[HELPER_THREAD_COUNT], 0.0, sizeof(network_weights_training));
+            memset(&curBatch_gradientSums[HELPER_THREAD_COUNT], 0, sizeof(network_weights_training));
             double sumSquaredError = 0.0;
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
@@ -604,7 +610,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
                 for(int j = 0; j < HALF_INPUT_BITS; j++) for(int k = 0; k < ACCUMULATOR_NODES_PER_SIDE; k++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights1[j][k] +=  curBatch_gradientSums[i].weights1[j][k];
                 sumSquaredError+= sumSquaredErrors[i];
             }
-            
+
             totalSumSquaredError+= sumSquaredError;
             printf("\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
             resilient_updateAll(weightUpdateValues, &curBatch_gradientSums[HELPER_THREAD_COUNT], &prevBatch_gradientSums[HELPER_THREAD_COUNT]);

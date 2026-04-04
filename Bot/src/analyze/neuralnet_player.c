@@ -53,13 +53,6 @@ void save_playingWeights()
     fclose(output);
 }
 
-int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max)
-{
-    if(val <= min) return min*min;
-    if(val >= max) return max*max;
-    return val*val;
-}
-
 //__m256i stores 32 8-bit ints (epi8 = extended packed 8-bit integer (signed))
 void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU)
 {
@@ -99,7 +92,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         
         outputValues[outputIndex] = totalSum;
 
-        if(applyCReLU) outputValues[outputIndex] = SCReLU_Int(outputValues[outputIndex], 0, 1);
+        if(applyCReLU) outputValues[outputIndex] = SCReLU(outputValues[outputIndex], 0, 1);
     }
 }
 
@@ -130,7 +123,7 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator)
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        h2[i] = SCReLU_Int(tempH2[0][i] + tempH2[1][i], 0, 1);
+        h2[i] = SCReLU(tempH2[0][i] + tempH2[1][i], 0, 1);
     }
 
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);

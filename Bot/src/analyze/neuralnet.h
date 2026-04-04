@@ -3,19 +3,23 @@
 
 #include "../structs.h"
 #include "accumulator.h"
+#include <math.h>
 #include <stdint.h>
 
 #define RESILIENT_INCREASE_FACTOR 1.2
 #define RESILIENT_DECREASE_FACTOR 0.5
-#define INITIAL_UPDATE_VALUE 0.0125
-#define MAX_UPDATE_VALUE 50.0
-#define MIN_UPDATE_VALUE 1e-6
+#define INITIAL_UPDATE_VALUE 1.25e-5
+#define MAX_UPDATE_VALUE 1e-4
+#define MIN_UPDATE_VALUE 1e-8
 
 #define POSITIONS_PER_FILE 10000
 #define FILE_COUNT 10000
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
+
+#define SCReLU(val, min, max) ((val <= min) ? min : ((val >= max) ? max : val*val))
+#define SCReLU_Derivative(val, min, max) ((val <= min || val >= max) ? (0.0) : (2.0*val))
 
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;
@@ -28,10 +32,6 @@ void load_playingWeights();
 void save_playingWeights();
 
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes);
-
-//Clipped ReLU [0, 1] is used throughout
-float SCReLU_Float(float val, float min, float max);
-int8_t SCReLU_Int(int8_t val, int8_t min, int8_t max);
 
 /**
  * Uses SIMD to calculate and populate outputValues.

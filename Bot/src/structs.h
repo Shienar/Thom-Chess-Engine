@@ -176,8 +176,7 @@ typedef struct accumulator_training {
     //Incrementally updates.
     uint64_t inputNodes[1280];
     float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
-    
-    //Saved for use in backpropagation.
+
     float h2[SECOND_HIDDEN_LAYER_NODES];
     float h3[THIRD_HIDDEN_LAYER_NODES];
     float outputNode;

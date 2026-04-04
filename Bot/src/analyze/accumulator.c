@@ -112,16 +112,16 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
         int8_t inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, PLAYING);
 
-        if(ISWHITE(color)) calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 0);
-        if(ISBLACK(color)) calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 0);
+        if(ISWHITE(color)) calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 1);
+        if(ISBLACK(color)) calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 1);
     }
     else
     {
         float inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, TRAINING);
 
-        if(ISWHITE(color)) calculateLayer_Floats(inputArray, floatAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 0);
-        if(ISBLACK(color)) calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 0);
+        if(ISWHITE(color)) calculateLayer_Floats(inputArray, floatAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 1);
+        if(ISBLACK(color)) calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 1);
     }
 }
 
