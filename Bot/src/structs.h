@@ -180,11 +180,19 @@ typedef struct accumulator_training {
     float h2[SECOND_HIDDEN_LAYER_NODES];
     float h3[THIRD_HIDDEN_LAYER_NODES];
     float outputNode;
+
+    //Raw values used for SCReLU derivative.
+    // (input nodes are already [0,1] & outputNode isnt't activated)
+    float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //efficiently updateable
+    float rawH2[SECOND_HIDDEN_LAYER_NODES];
+    float rawH3[THIRD_HIDDEN_LAYER_NODES];
+
 } accumulator_training;
 
 typedef struct accumulator_playing {
     uint64_t inputNodes[1280];
     int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
+    int8_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator_playing;
 
 /**

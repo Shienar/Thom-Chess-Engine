@@ -92,7 +92,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         
         outputValues[outputIndex] = totalSum;
 
-        if(applyCReLU) outputValues[outputIndex] = SCReLU(outputValues[outputIndex], 0, 1);
+        if(applyCReLU) outputValues[outputIndex] = SCReLU(outputValues[outputIndex], 0, 127);
     }
 }
 
@@ -123,7 +123,7 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        h2[i] = SCReLU(tempH2[0][i] + tempH2[1][i], 0, 1);
+        h2[i] = SCReLU((tempH2[0][i] + tempH2[1][i]), 0, 127);
     }
 
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);

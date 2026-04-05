@@ -112,16 +112,32 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
         int8_t inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, PLAYING);
 
-        if(ISWHITE(color)) calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 1);
-        if(ISBLACK(color)) calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 1);
+        if(ISWHITE(color)) 
+        {
+            calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_w], playerNNUE->weights1_bias, 0);
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) byteAccumulator->accumulator[0][i] = SCReLU(byteAccumulator->rawAccumulator[0][i], 0, 127);
+        }
+        if(ISBLACK(color)) 
+        {
+            calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &playerNNUE->weights1[extendedBaseIndex_b], playerNNUE->weights1_bias, 0);
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) byteAccumulator->accumulator[1][i] = SCReLU(byteAccumulator->rawAccumulator[1][i], 0, 127);
+        }
     }
     else
     {
         float inputArray[1280];
         extractInputLayerToArray(&inputs[baseIndex_w], &inputs[baseIndex_b], inputArray, TRAINING);
 
-        if(ISWHITE(color)) calculateLayer_Floats(inputArray, floatAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 1);
-        if(ISBLACK(color)) calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 1);
+        if(ISWHITE(color)) 
+        {
+            calculateLayer_Floats(inputArray, floatAccumulator->rawAccumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_w], trainingNNUE->weights1_bias, 0);
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) floatAccumulator->accumulator[0][i] = SCReLU(floatAccumulator->rawAccumulator[0][i], 0, 1);
+        }
+        if(ISBLACK(color)) 
+        {
+            calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, &trainingNNUE->weights1[extendedBaseIndex_b], trainingNNUE->weights1_bias, 0);
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) floatAccumulator->accumulator[1][i] = SCReLU(floatAccumulator->rawAccumulator[1][i], 0, 1);
+        }
     }
 }
 
@@ -179,22 +195,22 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
                 {
                     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32)
                     {
-                        __m256i v_acc = _mm256_loadu_si256((__m256i*)&byteAccumulator->accumulator[0][i]);
+                        __m256i v_acc = _mm256_loadu_si256((__m256i*)&byteAccumulator->rawAccumulator[0][i]);
                         __m256i v_weight = _mm256_loadu_si256((__m256i*)&playerNNUE->weights1[featureIndex_White][i]);
                         
                         v_acc = _mm256_add_epi8(v_acc, _mm256_sign_epi8(v_weight, v_sign));
-                        _mm256_storeu_si256((__m256i*)&byteAccumulator->accumulator[0][i], v_acc);
+                        _mm256_storeu_si256((__m256i*)&byteAccumulator->rawAccumulator[0][i], v_acc);
                     }
                 }
                 if(ISBLACK(color))
                 {
                     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32)
                     {
-                        __m256i v_acc = _mm256_loadu_si256((__m256i*)&byteAccumulator->accumulator[1][i]);
+                        __m256i v_acc = _mm256_loadu_si256((__m256i*)&byteAccumulator->rawAccumulator[1][i]);
                         __m256i v_weight = _mm256_loadu_si256((__m256i*)&playerNNUE->weights1[featureIndex_Black][i]);
                         
                         v_acc = _mm256_add_epi8(v_acc, _mm256_sign_epi8(v_weight, v_sign));
-                        _mm256_storeu_si256((__m256i*)&byteAccumulator->accumulator[0][i], v_acc);
+                        _mm256_storeu_si256((__m256i*)&byteAccumulator->rawAccumulator[1][i], v_acc);
                     }
                 }
             }
@@ -206,22 +222,22 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
                 {
                     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
                     {
-                        __m256 v_acc = _mm256_loadu_ps(&floatAccumulator->accumulator[0][i]);
+                        __m256 v_acc = _mm256_loadu_ps(&floatAccumulator->rawAccumulator[0][i]);
                         __m256 v_weight = _mm256_loadu_ps(&trainingNNUE->weights1[featureIndex_White][i]);
                         
                         v_acc = _mm256_add_ps(v_acc, _mm256_mul_ps(v_weight, v_sign));
-                        _mm256_storeu_ps(&floatAccumulator->accumulator[0][i], v_acc);
+                        _mm256_storeu_ps(&floatAccumulator->rawAccumulator[0][i], v_acc);
                     }
                 }
                 if(ISBLACK(color))
                 {
                     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
                     {
-                        __m256 v_acc = _mm256_loadu_ps(&floatAccumulator->accumulator[1][i]);
+                        __m256 v_acc = _mm256_loadu_ps(&floatAccumulator->rawAccumulator[1][i]);
                         __m256 v_weight = _mm256_loadu_ps(&trainingNNUE->weights1[featureIndex_Black][i]);
                         
                         v_acc = _mm256_add_ps(v_acc, _mm256_mul_ps(v_weight, v_sign));
-                        _mm256_storeu_ps(&floatAccumulator->accumulator[1][i], v_acc);
+                        _mm256_storeu_ps(&floatAccumulator->rawAccumulator[1][i], v_acc);
                     }
                 }
             }
@@ -229,6 +245,31 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
             difference&=(difference - 1);
         }
     }
+
+    //Store activated values.
+    if(byteAccumulator)
+    {
+        if(ISWHITE(color))
+        {
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) byteAccumulator->accumulator[0][i] = SCReLU(byteAccumulator->rawAccumulator[0][i], 0, 127);
+        }
+        if(ISBLACK(color))
+        {
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) byteAccumulator->accumulator[0][i] = SCReLU(byteAccumulator->rawAccumulator[1][i], 0, 127);
+        }
+    }
+    else if(floatAccumulator)
+    {
+        if(ISWHITE(color))
+        {
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) floatAccumulator->accumulator[0][i] = SCReLU(floatAccumulator->rawAccumulator[0][i], 0, 1);
+        }
+        if(ISBLACK(color))
+        {
+            for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) floatAccumulator->accumulator[0][i] = SCReLU(floatAccumulator->rawAccumulator[1][i], 0, 1);
+        }
+    }
+    
 
     copy_board(accumulatorBoard, currentBoard, 1);
 }

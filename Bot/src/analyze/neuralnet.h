@@ -6,7 +6,7 @@
 #include <math.h>
 #include <stdint.h>
 
-#define ADAM_LEARNING_RATE 1e-3 
+#define ADAM_LEARNING_RATE 1e-4 
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
