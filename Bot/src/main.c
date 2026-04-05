@@ -82,7 +82,7 @@ int main(int argc, char** argv)
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
         trainingRefreshTable = createTrainingRefreshTable();
-        resilient_propagation(saveEveryNBlocks, shouldTrain, 1e-6, trainingAccumulator);
+        train(saveEveryNBlocks, shouldTrain, 1e-6, trainingAccumulator);
         save_trainingWeights();
 
         load_playingWeights();
@@ -117,14 +117,16 @@ int main(int argc, char** argv)
     }
     else board = create_board();
 
-    tb_init("./sygyzy/");
 
     if(useBook && !onlyHumans) loadBook();
-    transpositionTable = create_hashTable_tt();
-    
-    load_playingWeights();
-    playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
-    loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
+    if(!onlyHumans) 
+    {
+        transpositionTable = create_hashTable_tt();
+        load_playingWeights();
+        playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+        loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
+        tb_init("./sygyzy/");
+    }
 
     char buffer[6] = {'\0'};
     int error = 0;
@@ -185,11 +187,14 @@ int main(int argc, char** argv)
         }
     }
 
-    FREE(playerNNUE);
-    FREE(playerAccumulator);
-    destroyRefreshTable(playingRefreshTable, PLAYING);
-    destroy_hashTable_tt(transpositionTable);
+    if(!onlyHumans)
+    {
+        FREE(playerNNUE);
+        FREE(playerAccumulator);
+        destroyRefreshTable(playingRefreshTable, PLAYING);
+        destroy_hashTable_tt(transpositionTable);
+        tb_free();
+    }
     destroy_board(board);
-    tb_free();
     dump_allocations();
 }

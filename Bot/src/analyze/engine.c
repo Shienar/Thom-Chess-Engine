@@ -51,8 +51,8 @@ double evaluate(bitboard* board, void* accumulator, int accumulatorType)
         else return -INT8_MIN - 1;
     }
 
-    if(accumulatorType == TRAINING) return (double) forwardPropagate_Float(board->turn, (accumulator_training*) accumulator);
-    else if(accumulatorType == PLAYING) return (double) forwardPropagate_Int(board->turn, (accumulator_playing*) accumulator);
+    if(accumulatorType == TRAINING) return (double) forwardPropagate_Float(board->turn, (accumulator_training*) accumulator, 1);
+    else if(accumulatorType == PLAYING) return (double) forwardPropagate_Int(board->turn, (accumulator_playing*) accumulator, 1);
     
     return 0;
 }

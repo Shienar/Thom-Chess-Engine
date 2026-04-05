@@ -200,7 +200,7 @@ void calculateLayer_Floats(float* inputValues, float* outputValues, int numInput
     }
 }
 
-float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator)
+float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, int centerAndScaleAtZero)
 {
     //Assume accumulator has already been updated.
 
@@ -227,7 +227,8 @@ float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator)
     calculateLayer_Floats(floatAccumulator->h2, floatAccumulator->h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, trainingNNUE->weights3_bias, 1);
     calculateLayer_Floats(floatAccumulator->h3, &floatAccumulator->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, &trainingNNUE->weights4_bias, 0);
 
-    return floatAccumulator->outputNode;
+    if(centerAndScaleAtZero) return (floatAccumulator->outputNode - 0.5) * 127;
+    else return floatAccumulator->outputNode;
 }
 
 void shuffle(int* arr, int count)
@@ -242,8 +243,7 @@ void shuffle(int* arr, int count)
 }
 
 typedef struct rpropThreadData {
-    network_weights_training* curBatch_gradientSums;
-    network_weights_training* prevBatch_gradientSums;
+    network_weights_training* gradientSums;
     long seekByteOffset;
     char* fileName;
     int entriesToTrack;
@@ -259,7 +259,7 @@ void loadTrainingData(char* inputLine, bitboard* board, float* eval)
     load_fen_string_to_board(board, FEN_String);
 }
 
-DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
+DWORD WINAPI calculateGradients(LPVOID lpParam)
 {
     rpropThreadData* data = (rpropThreadData*)lpParam;
     
@@ -281,9 +281,9 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
         loadTrainingData(inputString, board, &expectedOutput);
 
         loadInputAccumulator(board, &floatAccumulator, TRAINING, BLACK|WHITE);
-        forwardPropagate_Float(board->turn, &floatAccumulator);
+        forwardPropagate_Float(board->turn, &floatAccumulator, 0);
 
-        //if((double)rand()/RAND_MAX < 0.0001) printf("Expected %f, received %f\n", expectedOutput, floatAccumulator.outputNode);
+        if((double)rand()/RAND_MAX < 0.0001) printf("Expected %f, received %f\n", expectedOutput, floatAccumulator.outputNode);
         float delta4 = floatAccumulator.outputNode - expectedOutput;
 
         *data->sumSquaredError+= (double) delta4 * delta4;
@@ -347,32 +347,32 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
         __m256 v_deltaMult = _mm256_set1_ps(delta4);
         for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8) 
         {
-            //curBatch_gradientSums->weights4[i]+= delta4 * floatAccumulator->h3[i];
-            __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights4[i]);
+            //gradientSums->weights4[i]+= delta4 * floatAccumulator->h3[i];
+            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights4[i]);
             __m256 v_h3 = _mm256_loadu_ps(&floatAccumulator.h3[i]);
-            _mm256_storeu_ps(&data->curBatch_gradientSums->weights4[i], _mm256_fmadd_ps(v_deltaMult, v_h3, v_weights));
+            _mm256_storeu_ps(&data->gradientSums->weights4[i], _mm256_fmadd_ps(v_deltaMult, v_h3, v_weights));
 
         }
-        data->curBatch_gradientSums->weights4_bias+= delta4;
+        data->gradientSums->weights4_bias+= delta4;
 
         for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
         {
             v_deltaMult = _mm256_set1_ps(floatAccumulator.h2[i]);
             for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8) 
             {
-                //curBatch_gradientSums->weights3[i][j]+= delta3[j] * floatAccumulator->h2[i];
-                __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights3[i][j]);
+                //gradientSums->weights3[i][j]+= delta3[j] * floatAccumulator->h2[i];
+                __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights3[i][j]);
                 __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
-                _mm256_storeu_ps(&data->curBatch_gradientSums->weights3[i][j], _mm256_fmadd_ps(v_deltaMult, v_delta3, v_weights));
+                _mm256_storeu_ps(&data->gradientSums->weights3[i][j], _mm256_fmadd_ps(v_deltaMult, v_delta3, v_weights));
             }
         }
 
         for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8) 
         {
-            //curBatch_gradientSums->weights3_bias[j]+= delta3[j];
-            __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights3_bias[j]);
+            //gradientSums->weights3_bias[j]+= delta3[j];
+            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights3_bias[j]);
             __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
-            _mm256_storeu_ps(&data->curBatch_gradientSums->weights3_bias[j], _mm256_add_ps(v_delta3, v_weights));
+            _mm256_storeu_ps(&data->gradientSums->weights3_bias[j], _mm256_add_ps(v_delta3, v_weights));
         }
         
         for (int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++) 
@@ -380,18 +380,18 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
             v_deltaMult = _mm256_set1_ps(floatAccumulator.accumulator[(int) i / ACCUMULATOR_NODES_PER_SIDE][i % ACCUMULATOR_NODES_PER_SIDE]);
             for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8) 
             {
-                //curBatch_gradientSums->weights2[i][j] += delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
-                __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights2[i][j]);
+                //gradientSums->weights2[i][j] += delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
+                __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights2[i][j]);
                 __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
-                _mm256_storeu_ps(&data->curBatch_gradientSums->weights2[i][j], _mm256_fmadd_ps(v_deltaMult, v_delta2, v_weights));
+                _mm256_storeu_ps(&data->gradientSums->weights2[i][j], _mm256_fmadd_ps(v_deltaMult, v_delta2, v_weights));
             }
         }
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8) 
         {
-            //curBatch_gradientSums->weights2_bias[j] += delta2[j];
-            __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights2_bias[j]);
+            //gradientSums->weights2_bias[j] += delta2[j];
+            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights2_bias[j]);
             __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
-            _mm256_storeu_ps(&data->curBatch_gradientSums->weights2_bias[j], _mm256_add_ps(v_delta2, v_weights));
+            _mm256_storeu_ps(&data->gradientSums->weights2_bias[j], _mm256_add_ps(v_delta2, v_weights));
         }
         
         for (int i = 0; i < 640; i++) 
@@ -406,10 +406,10 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
 
                 for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+= 8) 
                 {
-                    //curBatch_gradientSums->weights1[(64 * i) + square][j] += delta1[0][j];
-                    __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights1[idx][j]);
+                    //gradientSums->weights1[(64 * i) + square][j] += delta1[0][j];
+                    __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights1[idx][j]);
                     __m256 v_delta1 = _mm256_loadu_ps(&delta1[0][j]);
-                    _mm256_storeu_ps(&data->curBatch_gradientSums->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
+                    _mm256_storeu_ps(&data->gradientSums->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
                 }
 
                 inputBitboard_White &= (inputBitboard_White - 1);
@@ -421,10 +421,10 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
 
                 for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8) 
                 {
-                    //curBatch_gradientSums->weights1[(64 * i) + square][j] += delta1[1][j];
-                    __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights1[idx][j]);
+                    //gradientSums->weights1[(64 * i) + square][j] += delta1[1][j];
+                    __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights1[idx][j]);
                     __m256 v_delta1 = _mm256_loadu_ps(&delta1[1][j]);
-                    _mm256_storeu_ps(&data->curBatch_gradientSums->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
+                    _mm256_storeu_ps(&data->gradientSums->weights1[idx][j], _mm256_add_ps(v_delta1, v_weights));
                 }
                 
                 inputBitboard_Black &= (inputBitboard_Black - 1);
@@ -432,12 +432,12 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
         }
         for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8) 
         {
-            //curBatch_gradientSums->weights1_bias[j] += (delta1[0][j] + delta1[1][j]);
-            __m256 v_weights = _mm256_loadu_ps(&data->curBatch_gradientSums->weights1_bias[j]);
+            //gradientSums->weights1_bias[j] += (delta1[0][j] + delta1[1][j]);
+            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights1_bias[j]);
             __m256 v_delta1_0 = _mm256_loadu_ps(&delta1[0][j]);
             __m256 v_delta1_1 = _mm256_loadu_ps(&delta1[1][j]);
             __m256 v_delta1 = _mm256_add_ps(v_delta1_0, v_delta1_1);
-            _mm256_storeu_ps(&data->curBatch_gradientSums->weights1_bias[j], _mm256_add_ps(v_delta1, v_weights));
+            _mm256_storeu_ps(&data->gradientSums->weights1_bias[j], _mm256_add_ps(v_delta1, v_weights));
         }
     }
 
@@ -446,88 +446,171 @@ DWORD WINAPI rpropThreadFunc(LPVOID lpParam)
     return 0;
 }
 
-void resilient_update(float* weight, float* update_value, float* current_grad, float* prev_grad)
+long timestamp = 1;
+float biasCorrection1 = 0.0;
+float biasCorrection2 = 0.0;
+void updateWeight(float* weight, float* gradient, float* firstMoment, float* secondMoment)
 {
-    if(*current_grad == 0)
-    {
-        *prev_grad = 0;
-        return;
-    }
+    *firstMoment = ADAM_BETA1 * *firstMoment + (1.0 - ADAM_BETA1) * *gradient; 
+    *secondMoment = ADAM_BETA2 * *secondMoment + (1.0 - ADAM_BETA2) * (*gradient * *gradient); 
 
-    float change = (*current_grad * *prev_grad);
+    *firstMoment /= (1.0 - biasCorrection1);
+    *secondMoment /= (1.0 - biasCorrection2);
 
-    if (change > 0) 
-    {
-        // Gradient direction is the same: speed up
-        *update_value = min(*update_value * RESILIENT_INCREASE_FACTOR, MAX_UPDATE_VALUE);
-        *weight -= copysignf(1.0f, *current_grad) * *update_value;
-        *prev_grad = *current_grad;
-    } 
-    else if (change < 0) {
-        // Overstepped the minimum: slow down and backtrack.
-        *weight += copysignf(1.0f, *prev_grad) * *update_value; 
-        *update_value = max(*update_value * RESILIENT_DECREASE_FACTOR, MIN_UPDATE_VALUE);
-        *prev_grad = 0;       
-    } 
-    else {
-        //prev_grad is 0
-        *weight -= copysignf(1.0f, *current_grad) * *update_value;
-        *prev_grad = *current_grad;
-    }
+    *weight -= ADAM_LEARNING_RATE * (*firstMoment / (sqrt(*secondMoment) + ADAM_EPSILON));
+
+    *gradient = 0;
 }
 
-void resilient_updateAll(network_weights_training* weightUpdateValues, network_weights_training* curBatch_gradientSums, network_weights_training* prevBatch_gradientSums)
-{
-    //Update weights based on gradient sums.                  
-    //weights4
+typedef struct {
+    network_weights_training *gradientSums;
+    network_weights_training *firstMoment;
+    network_weights_training *secondMoment;
+} updateContext;
+
+VOID CALLBACK UpdateWeights4(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
-        resilient_update(&trainingNNUE->weights4[i], &weightUpdateValues->weights4[i], &curBatch_gradientSums->weights4[i], &prevBatch_gradientSums->weights4[i]);
+        updateWeight(&trainingNNUE->weights4[i], &gradientSums->weights4[i], &firstMoment->weights4[i], &secondMoment->weights4[i]);
     }
-    resilient_update(&trainingNNUE->weights4_bias, &weightUpdateValues->weights4_bias, &curBatch_gradientSums->weights4_bias, &prevBatch_gradientSums->weights4_bias);
-    
-    //weights3
+
+}
+
+VOID CALLBACK UpdateWeights3(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
         {
-            resilient_update(&trainingNNUE->weights3[i][j], &weightUpdateValues->weights3[i][j], &curBatch_gradientSums->weights3[i][j], &prevBatch_gradientSums->weights3[i][j]);
+            updateWeight(&trainingNNUE->weights3[i][j], &gradientSums->weights3[i][j], &firstMoment->weights3[i][j], &secondMoment->weights3[i][j]);
         }
     }
+}
+
+VOID CALLBACK UpdateWeights3_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
-        resilient_update(&trainingNNUE->weights3_bias[i], &weightUpdateValues->weights3_bias[i], &curBatch_gradientSums->weights3_bias[i], &prevBatch_gradientSums->weights3_bias[i]);
+        updateWeight(&trainingNNUE->weights3_bias[i], &gradientSums->weights3_bias[i], &firstMoment->weights3_bias[i], &secondMoment->weights3_bias[i]);
     }
+}
 
-    //weights2
+VOID CALLBACK UpdateWeights2(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
-            resilient_update(&trainingNNUE->weights2[i][j], &weightUpdateValues->weights2[i][j], &curBatch_gradientSums->weights2[i][j], &prevBatch_gradientSums->weights2[i][j]);
+            updateWeight(&trainingNNUE->weights2[i][j], &gradientSums->weights2[i][j], &firstMoment->weights2[i][j], &secondMoment->weights2[i][j]);
         }
     }
+}
+
+VOID CALLBACK UpdateWeights2_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        resilient_update(&trainingNNUE->weights2_bias[i], &weightUpdateValues->weights2_bias[i], &curBatch_gradientSums->weights2_bias[i], &prevBatch_gradientSums->weights2_bias[i]);
+        updateWeight(&trainingNNUE->weights2_bias[i], &gradientSums->weights2_bias[i], &firstMoment->weights2_bias[i], &secondMoment->weights2_bias[i]);
     }
+}
 
-    //weights1
+VOID CALLBACK UpdateWeights1(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            resilient_update(&trainingNNUE->weights1[i][j], &weightUpdateValues->weights1[i][j], &curBatch_gradientSums->weights1[i][j], &prevBatch_gradientSums->weights1[i][j]);
+            updateWeight(&trainingNNUE->weights1[i][j], &gradientSums->weights1[i][j], &firstMoment->weights1[i][j], &secondMoment->weights1[i][j]);
         }
     }
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
-    {
-        resilient_update(&trainingNNUE->weights1_bias[i], &weightUpdateValues->weights1_bias[i], &curBatch_gradientSums->weights1_bias[i], &prevBatch_gradientSums->weights1_bias[i]);
-    }
-    memset(curBatch_gradientSums, 0.0, sizeof(network_weights_training));
 }
 
-void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator)
+VOID CALLBACK UpdateWeights1_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    updateContext* c = (updateContext*)Context;
+
+    network_weights_training *gradientSums = c->gradientSums;
+    network_weights_training *firstMoment = c->firstMoment;
+    network_weights_training *secondMoment = c->secondMoment;
+
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+    {
+        updateWeight(&trainingNNUE->weights1_bias[i], &gradientSums->weights1_bias[i], &firstMoment->weights1_bias[i], &secondMoment->weights1_bias[i]);
+    }
+}
+
+void updateAllWeights(network_weights_training* gradientSums, network_weights_training* firstMoment, network_weights_training* secondMoment)
+{
+    PTP_POOL pool = CreateThreadpool(NULL);
+    
+    SetThreadpoolThreadMaximum(pool, HELPER_THREAD_COUNT);
+    SetThreadpoolThreadMinimum(pool, 1);
+
+    
+    TP_CALLBACK_ENVIRON threadEnvironment;
+    InitializeThreadpoolEnvironment(&threadEnvironment);
+    SetThreadpoolCallbackPool(&threadEnvironment, pool);
+
+    PTP_CLEANUP_GROUP cleanupGroup = CreateThreadpoolCleanupGroup();
+    SetThreadpoolCallbackCleanupGroup(&threadEnvironment, cleanupGroup, NULL);
+
+    updateContext context = {
+        .gradientSums = gradientSums,
+        .firstMoment = firstMoment,
+        .secondMoment = secondMoment
+    };
+    
+    biasCorrection1 = powf(ADAM_BETA1, timestamp);
+    biasCorrection2 = powf(ADAM_BETA2, timestamp);
+
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights4, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights3, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights3_bias, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights2, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights2_bias, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights1, &context, &threadEnvironment));
+    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights1_bias, &context, &threadEnvironment));
+    updateWeight(&trainingNNUE->weights4_bias, &gradientSums->weights4_bias, &firstMoment->weights4_bias, &secondMoment->weights4_bias);
+    
+    CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
+    CloseThreadpoolCleanupGroup(cleanupGroup);
+    DestroyThreadpoolEnvironment(&threadEnvironment);
+    CloseThreadpool(pool);
+
+    timestamp++;
+}
+
+void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator)
 {
     assert(floatAccumulator);
 
@@ -544,14 +627,9 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
     DWORD helperThreadID[HELPER_THREAD_COUNT] = {0};
     rpropThreadData threadData[HELPER_THREAD_COUNT] = {0};
 
-    network_weights_training* curBatch_gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
-    network_weights_training* prevBatch_gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
-    network_weights_training* weightUpdateValues = CALLOC(1, sizeof(network_weights_training));
-
-    float* ptr = (float*)weightUpdateValues;
-    for (size_t i = 0; i < sizeof(network_weights_training) / sizeof(float); i++) {
-        ptr[i] = INITIAL_UPDATE_VALUE;
-    }
+    network_weights_training* gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
+    network_weights_training* firstMoment = CALLOC(1, sizeof(network_weights_training)); //Final index is the accumlated sum
+    network_weights_training* secondMoment = CALLOC(1, sizeof(network_weights_training));
 
     double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
     double totalSumSquaredError = 0.0; //accumulated value.
@@ -559,8 +637,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
     char fileName[40] = {'\0'};
     for(int i = 0; i < HELPER_THREAD_COUNT; i++)
     {
-        threadData[i].curBatch_gradientSums = &curBatch_gradientSums[i];
-        threadData[i].prevBatch_gradientSums = &prevBatch_gradientSums[i];
+        threadData[i].gradientSums = &gradientSums[i];
         threadData[i].entriesToTrack = (int) floor(POSITIONS_PER_FILE / HELPER_THREAD_COUNT);
         threadData[i].fileName = fileName;
         threadData[i].sumSquaredError = &sumSquaredErrors[i];
@@ -586,7 +663,7 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
             {
                 *threadData[i].sumSquaredError = 0;
                 threadData[i].seekByteOffset = i * (long) floor(fileBytes / HELPER_THREAD_COUNT);
-                helperThreads[i] = CreateThread(NULL, 0, rpropThreadFunc, &threadData[i], 0, &helperThreadID[i]);
+                helperThreads[i] = CreateThread(NULL, 0, calculateGradients, &threadData[i], 0, &helperThreadID[i]);
             }
 
             for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
@@ -596,30 +673,31 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
             }
 
             //Accumulate the values.
-            memset(&curBatch_gradientSums[HELPER_THREAD_COUNT], 0, sizeof(network_weights_training));
+            memset(&gradientSums[HELPER_THREAD_COUNT], 0, sizeof(network_weights_training));
             double sumSquaredError = 0.0;
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
-                curBatch_gradientSums[HELPER_THREAD_COUNT].weights4_bias +=  curBatch_gradientSums[i].weights4_bias;
-                for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights4[j] +=  curBatch_gradientSums[i].weights4[j];
-                for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights3_bias[j] +=  curBatch_gradientSums[i].weights3_bias[j];
-                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) for(int k = 0; k < THIRD_HIDDEN_LAYER_NODES; k++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights3[j][k] +=  curBatch_gradientSums[i].weights3[j][k];
-                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights2_bias[j] +=  curBatch_gradientSums[i].weights2_bias[j];
-                for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights2[j][k] +=  curBatch_gradientSums[i].weights2[j][k];
-                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights1_bias[j] +=  curBatch_gradientSums[i].weights1_bias[j];
-                for(int j = 0; j < HALF_INPUT_BITS; j++) for(int k = 0; k < ACCUMULATOR_NODES_PER_SIDE; k++) curBatch_gradientSums[HELPER_THREAD_COUNT].weights1[j][k] +=  curBatch_gradientSums[i].weights1[j][k];
+                gradientSums[HELPER_THREAD_COUNT].weights4_bias +=  gradientSums[i].weights4_bias;
+                for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights4[j] +=  gradientSums[i].weights4[j];
+                for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights3_bias[j] +=  gradientSums[i].weights3_bias[j];
+                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) for(int k = 0; k < THIRD_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights3[j][k] +=  gradientSums[i].weights3[j][k];
+                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights2_bias[j] +=  gradientSums[i].weights2_bias[j];
+                for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights2[j][k] +=  gradientSums[i].weights2[j][k];
+                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) gradientSums[HELPER_THREAD_COUNT].weights1_bias[j] +=  gradientSums[i].weights1_bias[j];
+                for(int j = 0; j < HALF_INPUT_BITS; j++) for(int k = 0; k < ACCUMULATOR_NODES_PER_SIDE; k++) gradientSums[HELPER_THREAD_COUNT].weights1[j][k] +=  gradientSums[i].weights1[j][k];
                 sumSquaredError+= sumSquaredErrors[i];
             }
 
             totalSumSquaredError+= sumSquaredError;
-            printf("\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
-            resilient_updateAll(weightUpdateValues, &curBatch_gradientSums[HELPER_THREAD_COUNT], &prevBatch_gradientSums[HELPER_THREAD_COUNT]);
+            updateAllWeights(&gradientSums[HELPER_THREAD_COUNT], firstMoment, secondMoment);
             
+
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
+            printf("\r\tAnalyzed block %d/%d; MSE = %e\n", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
         }
         totalIterations++;
         
-        printf("\nIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
+        printf("\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
 
 
         //Mean squared error.
@@ -627,7 +705,6 @@ void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAll
 
     FREE(blockNumbers);
     save_trainingWeights();
-    printf("\n");
 }
 
 void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator)
@@ -672,6 +749,7 @@ void generateTrainingData(int depth, int maxTime, accumulator_training* floatAcc
                 char FEN[100] = {'\0'};
                 export_fen_from_board(board, FEN);
                 float evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
+                evaluation = (evaluation / 127) + 0.5;
                 fprintf(output, "%s|%f\n", FEN, evaluation);
 
             }

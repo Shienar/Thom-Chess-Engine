@@ -6,11 +6,10 @@
 #include <math.h>
 #include <stdint.h>
 
-#define RESILIENT_INCREASE_FACTOR 1.2
-#define RESILIENT_DECREASE_FACTOR 0.5
-#define INITIAL_UPDATE_VALUE 1.25e-5
-#define MAX_UPDATE_VALUE 1e-4
-#define MIN_UPDATE_VALUE 1e-8
+#define ADAM_LEARNING_RATE 1e-3 
+#define ADAM_BETA1 0.9
+#define ADAM_BETA2 0.999
+#define ADAM_EPSILON 1e-8
 
 #define POSITIONS_PER_FILE 10000
 #define FILE_COUNT 10000
@@ -39,10 +38,12 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU);
 void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU);
 
-float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator);
-int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator);
+float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, int centerAndScaleAtZero);
+int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int centerAtZero);
 
-void resilient_propagation(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
+// Adaptive Movement Estimation (ADAM)
+// https://arxiv.org/abs/1412.6980v8
+void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
 
 void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator);
 #endif
