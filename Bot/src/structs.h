@@ -147,13 +147,15 @@ typedef struct polyglot_book_entry {
  *      - Enemy Bishop = 7
  *      - Enemy Rook = 8
  *      - Enemy Queen = 9
+ * 
+ * Weights are also stored as w[output][input] to make SIMD possible.
  */
 typedef struct network_weights_training {
-    float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    float weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    float weights2[2 * ACCUMULATOR_NODES_PER_SIDE][SECOND_HIDDEN_LAYER_NODES];
+    float weights2[SECOND_HIDDEN_LAYER_NODES][2 * ACCUMULATOR_NODES_PER_SIDE];
     float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
-    float weights3[SECOND_HIDDEN_LAYER_NODES][THIRD_HIDDEN_LAYER_NODES];
+    float weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     float weights4[THIRD_HIDDEN_LAYER_NODES];
     float weights4_bias;
@@ -162,11 +164,11 @@ typedef struct network_weights_training {
     float scalingFactor;
 } network_weights_training;
 typedef struct network_weights_playing {
-    int8_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    int8_t weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
     int8_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int8_t weights2[2 * ACCUMULATOR_NODES_PER_SIDE][SECOND_HIDDEN_LAYER_NODES];
+    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][2 * ACCUMULATOR_NODES_PER_SIDE];
     int8_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
-    int8_t weights3[SECOND_HIDDEN_LAYER_NODES][THIRD_HIDDEN_LAYER_NODES];
+    int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     int8_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4_bias;

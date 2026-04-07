@@ -54,7 +54,7 @@ void save_playingWeights()
 }
 
 //__m256i stores 32 8-bit ints (epi8 = extended packed 8-bit integer (signed))
-void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU)
+void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numOutputs][numInputs], int inputOffset, int8_t* biasWeights,  int applyCReLU)
 {
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex++)
     {
@@ -66,7 +66,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
             __m256i inputBatch = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex]);
 
             //Weights are an array of float w[INPUT NODES][OUTPUTS NODES]
-            __m256i weightsBatch = _mm256_loadu_si256((__m256i const*) &weights[inputIndex][outputIndex]);
+            __m256i weightsBatch = _mm256_loadu_si256((__m256i const*) &weights[outputIndex][inputIndex + inputOffset]);
 
             //Multiply inputs by weights.
             //Outputs 32-bit results. Neighboring values get summed.
@@ -111,13 +111,13 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
     //trainingNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE to 2* ACCUMULATOR_NODES_PER_SIDE -1] = opponent's side
     if(ISWHITE(turn))
     {
-        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias, 0);
-        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], NULL, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, 0, playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, ACCUMULATOR_NODES_PER_SIDE, NULL, 0);
     }
     else
     {
-        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, &playerNNUE->weights2[ACCUMULATOR_NODES_PER_SIDE], playerNNUE->weights2_bias, 0);
-        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, NULL, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights2_bias, 0);
+        calculateLayer_IntBytes(byteAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, 0, NULL, 0);
     }
     
 
@@ -126,8 +126,8 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
         h2[i] = SCReLU((tempH2[0][i] + tempH2[1][i]), 0, 127);
     }
 
-    calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias, 1);
-    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, &playerNNUE->weights4_bias, 0);
+    calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, 0, playerNNUE->weights3_bias, 1);
+    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, 0, &playerNNUE->weights4_bias, 0);
 
     //Change from [0, 127] to [-64, 63]
     // (It's trained to generate a value in the range but could theoretically generate one outside of it)

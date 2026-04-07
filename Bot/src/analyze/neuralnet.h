@@ -17,7 +17,8 @@
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
-#define SCReLU(val, min, max) ((val <= min) ? min : ((val >= max) ? max : val*val))
+//#define SCReLU(val, min, max) ((val <= min) ? min : ((val >= max) ? max : val*val))
+#define SCReLU(val, min, max) ((val <= min) ? 0.01 * val : ((val >= max) ? max + 0.01 * (val - max) : val*val))
 #define SCReLU_Derivative(val, min, max) ((val <= min || val >= max) ? (0.0) : (2.0*val))
 
 extern network_weights_training* trainingNNUE;
@@ -35,8 +36,8 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
 /**
  * Uses SIMD to calculate and populate outputValues.
  */
-void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numInputs][numOutputs], float* biasWeights,  int applyCReLU);
-void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numInputs][numOutputs], int8_t* biasWeights,  int applyCReLU);
+void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numOutputs][numInputs], int inputOffset, float* biasWeights,  int applyCReLU);
+void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numInputs, int numOutputs, int8_t weights[numOutputs][numInputs], int inputOffset, int8_t* biasWeights,  int applyCReLU);
 
 float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, int centerAndScaleAtZero);
 int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int centerAtZero);
