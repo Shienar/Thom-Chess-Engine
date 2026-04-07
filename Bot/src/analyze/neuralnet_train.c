@@ -273,7 +273,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         loadInputAccumulator(board, &floatAccumulator, TRAINING, BLACK|WHITE);
         forwardPropagate_Float(board->turn, &floatAccumulator, 0);
 
-        if((double)rand()/RAND_MAX < 0.0002) printf("Expected %f, received %f\n", expectedOutput, floatAccumulator.outputNode);
+        //if((double)rand()/RAND_MAX < 0.0002) printf("Expected %f, received %f\n", expectedOutput, floatAccumulator.outputNode);
         float delta4 = floatAccumulator.outputNode - expectedOutput;
 
         *data->sumSquaredError+= (double) delta4 * delta4;
@@ -289,7 +289,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
         for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
         {
-            for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+= 8) 
+            for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) 
             {
                 delta2[i] += delta3[j] * trainingNNUE->weights3[j][i];
             }
@@ -302,7 +302,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         {
             for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
             {
-                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+= 8) 
+                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
                 {
                     delta1[side][i] += delta2[j] * trainingNNUE->weights2[j][side * ACCUMULATOR_NODES_PER_SIDE + i];
                 }
@@ -402,6 +402,8 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
             __m256 v_delta1 = _mm256_add_ps(v_delta1_0, v_delta1_1);
             _mm256_storeu_ps(&data->gradientSums->weights1_bias[j], _mm256_add_ps(v_delta1, v_weights));
         }
+
+        trackedEntries++;
     }
 
     destroy_board(board);
@@ -691,14 +693,16 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
             
 
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
-            printf("\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
+            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
         }
         totalIterations++;
         
-        printf("\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
+        printf("Total sum squared error: %e\n", totalSumSquaredError);
+        printf("\33[2K\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
 
 
         //Mean squared error.
+        
     } while((totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
     FREE(blockNumbers);
