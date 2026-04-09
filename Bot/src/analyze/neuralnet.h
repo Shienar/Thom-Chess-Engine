@@ -6,20 +6,23 @@
 #include <math.h>
 #include <stdint.h>
 
-#define ADAM_LEARNING_RATE 1e-3
+#define ADAM_LEARNING_RATE 1e-4
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
+#define ADAM_WEIGHT_DECAY 0.02
 
-#define POSITIONS_PER_FILE 10000
-#define FILE_COUNT 10000
+#define POSITIONS_PER_FILE 16384
+#define FILE_COUNT 6104
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
+//Leaky SCReLU seems to give better results.
 //#define SCReLU(val, min, max) ((val <= min) ? min : ((val >= max) ? max : val*val))
+//#define SCReLU_Derivative(val, min, max) ((val <= min || val >= max) ? (0.0) : (2.0*val))
 #define SCReLU(val, min, max) ((val <= min) ? 0.01 * val : ((val >= max) ? max + 0.01 * (val - max) : val*val))
-#define SCReLU_Derivative(val, min, max) ((val <= min || val >= max) ? (0.0) : (2.0*val))
+#define SCReLU_Derivative(val, min, max) ((val <= min || val >= max) ? (0.01) : (2.0*val))
 
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;
@@ -27,7 +30,7 @@ extern network_weights_playing* playerNNUE;
 /* Binary  file storage. */
 void load_trainingWeights();
 void save_trainingWeights();
-
+ 
 void load_playingWeights();
 void save_playingWeights();
 

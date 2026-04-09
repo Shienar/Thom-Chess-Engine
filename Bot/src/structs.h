@@ -19,7 +19,7 @@ typedef struct move {
     int flags; 
     struct move* nextMove;
 } move;
-
+   
 typedef struct table_entry_pos {
     uint64_t hashCode;
     int count;

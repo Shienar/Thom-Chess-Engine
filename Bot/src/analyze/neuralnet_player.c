@@ -65,7 +65,7 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
         {
             __m256i inputBatch = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex]);
 
-            //Weights are an array of float w[INPUT NODES][OUTPUTS NODES]
+            //Weights are an array of float w[OUTPUT NODES][INPUT NODES]
             __m256i weightsBatch = _mm256_loadu_si256((__m256i const*) &weights[outputIndex][inputIndex + inputOffset]);
 
             //Multiply inputs by weights.
