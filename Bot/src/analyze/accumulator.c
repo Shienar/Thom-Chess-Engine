@@ -116,12 +116,14 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
         __m256i v_max = _mm256_set1_epi8(127);
         if(ISWHITE(color)) 
         {
-            calculateLayer_IntBytes(inputArray, byteAccumulator->accumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, extendedBaseIndex_w, playerNNUE->weights1_bias, 0);
+            calculateLayer_IntBytes(inputArray, byteAccumulator->rawAccumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, extendedBaseIndex_w, playerNNUE->weights1_bias, 0);
+            memcpy(&byteAccumulator->accumulator[0], &byteAccumulator->rawAccumulator[0], ACCUMULATOR_NODES_PER_SIDE * sizeof(char));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32) SIMD_SCReLU(&byteAccumulator->accumulator[0][i], v_min, v_max);
         }
         if(ISBLACK(color)) 
         {
-            calculateLayer_IntBytes(&inputArray[640], byteAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, extendedBaseIndex_b, playerNNUE->weights1_bias, 0);
+            calculateLayer_IntBytes(&inputArray[640], byteAccumulator->rawAccumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, playerNNUE->weights1, extendedBaseIndex_b, playerNNUE->weights1_bias, 0);
+            memcpy(&byteAccumulator->accumulator[1], &byteAccumulator->rawAccumulator[1], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32) SIMD_SCReLU(&byteAccumulator->accumulator[1][i], v_min, v_max);
         }
     }
@@ -136,11 +138,13 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
         if(ISWHITE(color)) 
         {
             calculateLayer_Floats(inputArray, floatAccumulator->rawAccumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, extendedBaseIndex_w, trainingNNUE->weights1_bias, 0);
+            memcpy(&floatAccumulator->accumulator[0], &floatAccumulator->rawAccumulator[0], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) SIMD_SCReLU_Float(&floatAccumulator->accumulator[0][i], v_min, v_max, v_grad);
         }
         if(ISBLACK(color)) 
         {
-            calculateLayer_Floats(&inputArray[640], floatAccumulator->accumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, extendedBaseIndex_b, trainingNNUE->weights1_bias, 0);
+            calculateLayer_Floats(&inputArray[640], floatAccumulator->rawAccumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, extendedBaseIndex_b, trainingNNUE->weights1_bias, 0);
+            memcpy(&floatAccumulator->accumulator[1], &floatAccumulator->rawAccumulator[1], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) SIMD_SCReLU_Float(&floatAccumulator->accumulator[1][i], v_min, v_max, v_grad);
         }
     }
@@ -237,10 +241,12 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
         __m256i v_max = _mm256_set1_epi8(127);
         if(ISWHITE(color))
         {
+            memcpy(&byteAccumulator->accumulator[0], &byteAccumulator->rawAccumulator[0], ACCUMULATOR_NODES_PER_SIDE * sizeof(char));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32) SIMD_SCReLU(&byteAccumulator->accumulator[0][i], v_min, v_max);
         }
         if(ISBLACK(color))
         {
+            memcpy(&byteAccumulator->accumulator[1], &byteAccumulator->rawAccumulator[1], ACCUMULATOR_NODES_PER_SIDE * sizeof(char));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=32) SIMD_SCReLU(&byteAccumulator->accumulator[1][i], v_min, v_max);
         }
     }
@@ -251,10 +257,12 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
         __m256 v_grad = _mm256_set1_ps(0.01);
         if(ISWHITE(color))
         {
+            memcpy(&floatAccumulator->accumulator[0], &floatAccumulator->rawAccumulator[0], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) SIMD_SCReLU_Float(&floatAccumulator->accumulator[0][i], v_min, v_max, v_grad);
         }
         if(ISBLACK(color))
         {
+            memcpy(&floatAccumulator->accumulator[1], &floatAccumulator->rawAccumulator[1], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) SIMD_SCReLU_Float(&floatAccumulator->accumulator[1][i], v_min, v_max, v_grad);
         }
     }

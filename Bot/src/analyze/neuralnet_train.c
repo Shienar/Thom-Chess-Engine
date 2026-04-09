@@ -480,6 +480,9 @@ static inline void updateWeight(float* weight, float* gradient, float* firstMome
     //*secondMoment = ADAM_BETA2 * *secondMoment + (1.0 - ADAM_BETA2) * (*gradient * *gradient); 
     __m256 v_gradient = _mm256_loadu_ps(gradient);
 
+    //Convert the sum to an average.
+    v_gradient = _mm256_div_ps(v_gradient, _mm256_set1_ps((float) POSITIONS_PER_FILE));
+
     __m256 v_firstMoment = _mm256_loadu_ps(firstMoment);
     v_firstMoment = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA1), v_firstMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA1), v_gradient));
     _mm256_storeu_ps(firstMoment, v_firstMoment);
@@ -504,7 +507,8 @@ static inline void updateWeight(float* weight, float* gradient, float* firstMome
                                                          
     _mm256_storeu_ps(weight, v_weight);
     
-    memset(gradient, 0, 8 * sizeof(float));
+    //memset(gradient, 0, 8 * sizeof(float));
+    _mm256_storeu_ps(gradient, _mm256_setzero_ps());
 }
 
 typedef struct {
@@ -524,7 +528,6 @@ VOID CALLBACK UpdateWeights4(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights4[j] +=  gradientSums[i].weights4[j];
     }
-    for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights4[j] /= POSITIONS_PER_FILE;
 
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8)
     {
@@ -545,12 +548,11 @@ VOID CALLBACK UpdateWeights3(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) for(int k = 0; k < THIRD_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights3[k][j] +=  gradientSums[i].weights3[k][j];
     }
     
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights3[j][i] /= POSITIONS_PER_FILE;
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8)
+        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8)
         {
-            updateWeight(&trainingNNUE->weights3[j][i], &gradientSums[HELPER_THREAD_COUNT].weights3[j][i], &firstMoment->weights3[j][i], &secondMoment->weights3[j][i]);
+            updateWeight(&trainingNNUE->weights3[i][j], &gradientSums[HELPER_THREAD_COUNT].weights3[i][j], &firstMoment->weights3[i][j], &secondMoment->weights3[i][j]);
         }
     }
 }
@@ -566,8 +568,6 @@ VOID CALLBACK UpdateWeights3_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context,
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights3_bias[j] +=  gradientSums[i].weights3_bias[j];
     }
-    
-    for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights3_bias[j] /= POSITIONS_PER_FILE;
 
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8)
     {
@@ -587,12 +587,11 @@ VOID CALLBACK UpdateWeights2(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
         for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights2[k][j] +=  gradientSums[i].weights2[k][j];
     }
 
-    for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights2[j][i] /= POSITIONS_PER_FILE;
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8)
+        for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j+=8)
         {
-            updateWeight(&trainingNNUE->weights2[j][i], &gradientSums[HELPER_THREAD_COUNT].weights2[j][i], &firstMoment->weights2[j][i], &secondMoment->weights2[j][i]);
+            updateWeight(&trainingNNUE->weights2[i][j], &gradientSums[HELPER_THREAD_COUNT].weights2[i][j], &firstMoment->weights2[i][j], &secondMoment->weights2[i][j]);
         }
     }
 }
@@ -608,8 +607,6 @@ VOID CALLBACK UpdateWeights2_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context,
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights2_bias[j] +=  gradientSums[i].weights2_bias[j];
     }
-    
-    for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights2_bias[j] /= POSITIONS_PER_FILE;
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i+=8)
     {
@@ -629,12 +626,11 @@ VOID CALLBACK UpdateWeights1(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
         for(int j = 0; j < HALF_INPUT_BITS; j++) for(int k = 0; k < ACCUMULATOR_NODES_PER_SIDE; k++) gradientSums[HELPER_THREAD_COUNT].weights1[k][j] +=  gradientSums[i].weights1[k][j]; 
     }
 
-    for(int i = 0; i < HALF_INPUT_BITS; i++)
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
     {
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) gradientSums[HELPER_THREAD_COUNT].weights1[j][i] /= POSITIONS_PER_FILE;
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8)
+        for(int j = 0; j < HALF_INPUT_BITS; j+=8)
         {
-            updateWeight(&trainingNNUE->weights1[j][i], &gradientSums[HELPER_THREAD_COUNT].weights1[j][i], &firstMoment->weights1[j][i], &secondMoment->weights1[j][i]);
+            updateWeight(&trainingNNUE->weights1[i][j], &gradientSums[HELPER_THREAD_COUNT].weights1[i][j], &firstMoment->weights1[i][j], &secondMoment->weights1[i][j]);
         }
     }
 }
@@ -651,8 +647,6 @@ VOID CALLBACK UpdateWeights1_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context,
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) gradientSums[HELPER_THREAD_COUNT].weights1_bias[j] +=  gradientSums[i].weights1_bias[j];  
     }
-    
-    for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) gradientSums[HELPER_THREAD_COUNT].weights1_bias[j] /= POSITIONS_PER_FILE;
 
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8)
     {
