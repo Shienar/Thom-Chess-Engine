@@ -8,6 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
+/**
+ * TODO:
+ *  - Optimize move generation.
+ */
 int main(int argc, char** argv)
 {
     /**
@@ -44,7 +48,7 @@ int main(int argc, char** argv)
             printf("--nobook\t\tPrevents loading an opening book\n");
             printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
             printf("--train\t\tTrains the neural network. Specify the maximum number of iterations and how often the network should save to file.\n");
-            printf("--generate\t\tCreates training data for the neural network. Specify the number of entries.\n");
+            printf("--generate\t\tCreates training data for the neural network.\n");
             printf("--singlethread\t\tDisables helper threads.\n");
             printf("\n\n");
             exit(0);
@@ -60,7 +64,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atoi(argv[i]); }
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); i++; saveEveryNBlocks = atoi(argv[i]); }
-        else if(strcmp(argv[i], "--generate") == 0) { i++; shouldCreateTrainingData = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--generate") == 0) { shouldCreateTrainingData = 1; }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
         else if(strcmp(argv[i], "--init") == 0) { 
             load_trainingWeights();
@@ -100,7 +104,9 @@ int main(int argc, char** argv)
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
         trainingRefreshTable = createTrainingRefreshTable();
+
         generateTrainingData(depth, maxTime, trainingAccumulator);
+
         dump_allocations();
         exit(0);
     }
@@ -124,6 +130,7 @@ int main(int argc, char** argv)
         transpositionTable = create_hashTable_tt();
         load_playingWeights();
         playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+        playingRefreshTable = createPlayingRefreshTable();
         loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
         tb_init("./sygyzy/");
     }
@@ -159,7 +166,7 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move* bestMove = calculateBestMove(board, depth, maxTime);
+                move* bestMove = calculateBestMove(board, depth, maxTime, PLAYING);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose, printHistory);

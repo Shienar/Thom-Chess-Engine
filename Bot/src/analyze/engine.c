@@ -382,7 +382,7 @@ DWORD WINAPI helperThreadFunction(LPVOID lpParam)
     return 0;
 }
 
-move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
+move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType)
 {
     #ifdef COUNT_NODES_VISITED
     nodesEvaluated = 0;
@@ -477,10 +477,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     accumulator_training_refreshTable** threadFloatRefreshTables = NULL;
     void* accumulator = NULL;
     void* accumulatorTable = NULL;
-    int weightType = -1;
     if(playerNNUE)
     {
-        weightType = PLAYING;
         accumulator = playerAccumulator;
         if(!accumulator) accumulator = playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
         accumulatorTable = playingRefreshTable;
@@ -498,7 +496,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     }
     else if(trainingNNUE)
     {
-        weightType = TRAINING;
         accumulator = trainingAccumulator;
         if(!accumulator) accumulator = trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
         accumulatorTable = trainingRefreshTable;
@@ -516,8 +513,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
     }
 
     //Always fully evaluate at depth 1:
-    updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
-    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, NULL, accumulator, accumulatorTable, weightType);
+    updateAccumulatorFromTable(board, accumulator, accumulatorTable, networkType);
+    double aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, 1, 1, principalVariation, 0, NULL, accumulator, accumulatorTable, networkType);
 
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
@@ -531,7 +528,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         {
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
-                copy_board(params[i].board, board, 1);
+                copy_board(params[i].board, board, 1, 1);
                 params[i].depth = currentDepth + (i%2);
                 *params[i].endTime = LONG_MAX;
                 params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
@@ -547,8 +544,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
         //Avoid for lower depths.
         if(currentDepth < 5)
         {
-            updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
-            aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
+            updateAccumulatorFromTable(board, accumulator, accumulatorTable, networkType);
+            aspiration_expectedValue = principalVariationSearch(board, -DBL_MAX, DBL_MAX, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, networkType);
         }
         else
         {
@@ -560,8 +557,8 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
             {
                 if(clock() > endTime) break;
 
-                updateAccumulatorFromTable(board, accumulator, accumulatorTable, weightType);
-                double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, weightType);
+                updateAccumulatorFromTable(board, accumulator, accumulatorTable, networkType);
+                double score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, accumulator, accumulatorTable, networkType);
 
                 if(score <= alpha)
                 {

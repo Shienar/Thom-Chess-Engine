@@ -61,6 +61,6 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
 /**
  * Iterative deepening function.
  */
-move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds);
+move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType);
 
 #endif

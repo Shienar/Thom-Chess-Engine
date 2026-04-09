@@ -9,12 +9,10 @@ OBJFILES += src/hashtables/*.c
 OBJFILES += src/pyrrhic/tbprobe.c
 
 # No debug flag for assert() removals.
-# CFLAGS += -NDEBUG
+CFLAGS += -DNDEBUG
 
 # Thread count
 THREADS ?= 8
-
-# Use the THREADS variable in your CFLAGS
 CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
 # Track nodes visited.
@@ -22,7 +20,7 @@ CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
-# gprof ./ChessBot.exe -b > output.txt
+# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -PgetBookMove -PfindAbsMax -PquantizeWeights -PfindSum -PiterateTrainingWeights -b > output.txt
 # CFLAGS += -pg -no-pie
 
 all: clean $(TARGET)

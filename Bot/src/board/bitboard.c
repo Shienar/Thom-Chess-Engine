@@ -5,30 +5,6 @@
 #include <string.h>
 #include <math.h>
 
-//Returns value in range [1, 8]
-int getColumn(int square)
-{
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Cannot get column of square %d - out of bounds [0, 63]", square);
-        return 0;
-    }
-
-    return square%8 + 1;
-}
-
-//Returns value in range [1, 8]
-int getRow(int square)
-{
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Cannot get row of square %d - out of bounds [0, 63]", square);
-        return 0;
-    } 
-
-    return floor(square/8) + 1;
-}
-
 char getColumnChar(int x, int isSquare)
 {
     if(isSquare)
@@ -95,13 +71,13 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
                 else if(ISQUEEN(piece)) pieceChar = 'q';
                 else if(ISKING(piece)) pieceChar = 'k';
 
-                if(ISWHITE(piece)) pieceChar+=26;
+                if(ISWHITE(piece)) pieceChar-=32;
                 rows[row][columnIndex] = pieceChar;
             }
             else
             {
                 if(columnIndex == 0) rows[row][columnIndex] = '1';
-                if(rows[row][columnIndex - 1] >= '0' && rows[row][columnIndex - 1] <= '7') rows[row][columnIndex]++;
+                if(rows[row][columnIndex - 1] >= '1' && rows[row][columnIndex - 1] <= '7') rows[row][columnIndex - 1]++;
             }
         }
     }
@@ -427,51 +403,10 @@ void destroy_board(bitboard* board)
     FREE(board);
 }
 
-void copy_board(bitboard* dest, bitboard* source, int copyHT)
+void copy_board(bitboard* dest, bitboard* source, int copyHT, int copyMoves)
 {
     assert(dest && source);
 
-    dest->pawn_w = source->pawn_w;
-    dest->pawn_b = source->pawn_b;
-    
-    dest->bishop_w = source->bishop_w;
-    dest->bishop_b = source->bishop_b;
-    
-    dest->knight_w = source->knight_w;
-    dest->knight_b = source->knight_b;
-    
-    dest->rook_w = source->rook_w;
-    dest->rook_b = source->rook_b;
-    
-    dest->queen_w = source->queen_w;
-    dest->queen_b = source->queen_b;
-    
-    dest->king_w = source->king_w;
-    dest->king_b = source->king_b;
-
-    dest->pieces_w = source->pieces_w;
-    dest->pieces_b = source->pieces_b;
-    dest->pieces_all = source->pieces_all;
-
-    dest->kingSquare_b = source->kingSquare_b;
-    dest->kingSquare_w  = source->kingSquare_w;
-
-    for(int i = 0; i < 64; i++)
-    {
-        dest->pieceArr[i] = source->pieceArr[i];
-    }
-
-    //Castling Rights & Check
-    dest->flags = source->flags;
-
-    //Turn
-    dest->turn = source->turn;
-
-    //Checkmate
-    dest->victor = source->victor;
-
-    //History: 
-    
     //Make sure to free a preexisting move stack to avoid memory leaks.
     while(dest->moveStackTop)
     {
@@ -479,7 +414,12 @@ void copy_board(bitboard* dest, bitboard* source, int copyHT)
         dest->moveStackTop = dest->moveStackTop->nextMove;
         FREE(tempMove);
     }
-    if(source->moveStackTop)
+    destroy_hashTable_pos(dest->ht);
+
+    memcpy(dest, source, sizeof(bitboard));
+
+    //History: 
+    if(copyMoves && source->moveStackTop)
     {
         dest->moveStackTop = CALLOC(1, sizeof(move));
         move* currentMove = source->moveStackTop;
@@ -501,27 +441,10 @@ void copy_board(bitboard* dest, bitboard* source, int copyHT)
     {
         dest->moveStackTop = NULL;
     }
-
-    dest->enPassantSquare = source->enPassantSquare;
     
     //Copying hash tables is expensive and isn't always necessary.
-    if(copyHT) 
-    {
-        destroy_hashTable_pos(dest->ht);
-        dest->ht = copy_hashTable_pos(source->ht);
-    }
-}
-
-int findPieceOnSquare(bitboard* board, int square)
-{
-    assert(board);
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Cannot check square %d - out of bounds [0, 63]", square);
-        return 0;
-    }
-
-    return board->pieceArr[square];
+    if(copyHT) dest->ht = copy_hashTable_pos(source->ht);
+    else dest->ht = NULL;
 }
 
 //Will clear all piece tpyes if Least Significant Byte's value is out of range 1-6

@@ -4,7 +4,6 @@
 #include "../board/moves.h"
 #include "engine.h"
 #include <float.h>
-#include <immintrin.h>
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
@@ -154,37 +153,86 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     printf("\tMax: %f\n", maxValue);
 }
 
+static inline float horizontalSIMDSum_Float(__m256 vector)
+{
+    __m128 output_128 = _mm_add_ps(_mm256_extractf128_ps(vector, 1), _mm256_castps256_ps128(vector));
+    output_128 = _mm_add_ps(output_128, _mm_movehl_ps(output_128, output_128));
+    output_128 = _mm_add_ss(output_128, _mm_shuffle_ps(output_128, output_128, _MM_SHUFFLE(0, 0, 0, 1)));
+    return _mm_cvtss_f32(output_128);
+}
+
 //__m256 stored 8 32-bit floats (ps = packed single-precision)
 void calculateLayer_Floats(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numOutputs][numInputs], int inputOffset, float* biasWeights,  int applyCReLU)
 {
-    for(int outputIndex = 0; outputIndex < numOutputs; outputIndex++)
+    for(int outputIndex = 0; outputIndex < numOutputs; outputIndex+=8)
     {
-       if(biasWeights) outputValues[outputIndex] = biasWeights[outputIndex];
-       else outputValues[outputIndex] = 0.0;
-
-        __m256 output = _mm256_setzero_ps();
+        __m256 v_output1 = _mm256_setzero_ps();
+        __m256 v_output2 = _mm256_setzero_ps();
+        __m256 v_output3 = _mm256_setzero_ps();
+        __m256 v_output4 = _mm256_setzero_ps();
+        __m256 v_output5 = _mm256_setzero_ps();
+        __m256 v_output6 = _mm256_setzero_ps();
+        __m256 v_output7 = _mm256_setzero_ps();
+        __m256 v_output8 = _mm256_setzero_ps();
 
         for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=8)
         {
-            __m256 inputBatch = _mm256_loadu_ps(&inputValues[inputIndex]);
+            __m256 v_inputs = _mm256_loadu_ps(&inputValues[inputIndex]);
 
             //Weights are an array of float w[OUTPUT NODES][INPUT NODES] 
             //Passed as a single pointer to array head. inputIndex = row; outputIndex = column;
-            __m256 weightsBatch = _mm256_loadu_ps(&weights[outputIndex][inputIndex + inputOffset]);
+            __m256 v_weights1 = _mm256_loadu_ps(&weights[outputIndex + 0][inputIndex + inputOffset]);
+            __m256 v_weights2 = _mm256_loadu_ps(&weights[outputIndex + 1][inputIndex + inputOffset]);
+            __m256 v_weights3 = _mm256_loadu_ps(&weights[outputIndex + 2][inputIndex + inputOffset]);
+            __m256 v_weights4 = _mm256_loadu_ps(&weights[outputIndex + 3][inputIndex + inputOffset]);
+            __m256 v_weights5 = _mm256_loadu_ps(&weights[outputIndex + 4][inputIndex + inputOffset]);
+            __m256 v_weights6 = _mm256_loadu_ps(&weights[outputIndex + 5][inputIndex + inputOffset]);
+            __m256 v_weights7 = _mm256_loadu_ps(&weights[outputIndex + 6][inputIndex + inputOffset]);
+            __m256 v_weights8 = _mm256_loadu_ps(&weights[outputIndex + 7][inputIndex + inputOffset]);
 
             //Multiply inputs by weights and add to intermediate.
-            output = _mm256_fmadd_ps(inputBatch, weightsBatch, output);
+            v_output1 = _mm256_fmadd_ps(v_inputs, v_weights1, v_output1);
+            v_output2 = _mm256_fmadd_ps(v_inputs, v_weights2, v_output2);
+            v_output3 = _mm256_fmadd_ps(v_inputs, v_weights3, v_output3);
+            v_output4 = _mm256_fmadd_ps(v_inputs, v_weights4, v_output4);
+            v_output5 = _mm256_fmadd_ps(v_inputs, v_weights5, v_output5);
+            v_output6 = _mm256_fmadd_ps(v_inputs, v_weights6, v_output6);
+            v_output7 = _mm256_fmadd_ps(v_inputs, v_weights7, v_output7);
+            v_output8 = _mm256_fmadd_ps(v_inputs, v_weights8, v_output8);
         }
 
-        //Horizontal addition
-        __m128 output_128 = _mm_add_ps(_mm256_extractf128_ps(output, 1), _mm256_castps256_ps128(output));
-        output_128 = _mm_add_ps(output_128, _mm_movehl_ps(output_128, output_128));
-        output_128 = _mm_add_ss(output_128, _mm_shuffle_ps(output_128, output_128, _MM_SHUFFLE(0, 0, 0, 1)));
-        outputValues[outputIndex] += _mm_cvtss_f32(output_128);
-
-        if(applyCReLU) outputValues[outputIndex] = SCReLU(outputValues[outputIndex], 0, 1);
-
+        outputValues[outputIndex + 0] = horizontalSIMDSum_Float(v_output1);
+        outputValues[outputIndex + 1] = horizontalSIMDSum_Float(v_output2);
+        outputValues[outputIndex + 2] = horizontalSIMDSum_Float(v_output3);
+        outputValues[outputIndex + 3] = horizontalSIMDSum_Float(v_output4);
+        outputValues[outputIndex + 4] = horizontalSIMDSum_Float(v_output5);
+        outputValues[outputIndex + 5] = horizontalSIMDSum_Float(v_output6);
+        outputValues[outputIndex + 6] = horizontalSIMDSum_Float(v_output7);
+        outputValues[outputIndex + 7] = horizontalSIMDSum_Float(v_output8);
+        if(biasWeights)
+        {
+            outputValues[outputIndex + 0]+= biasWeights[outputIndex + 0];
+            outputValues[outputIndex + 1]+= biasWeights[outputIndex + 1];
+            outputValues[outputIndex + 2]+= biasWeights[outputIndex + 2];
+            outputValues[outputIndex + 3]+= biasWeights[outputIndex + 3];
+            outputValues[outputIndex + 4]+= biasWeights[outputIndex + 4];
+            outputValues[outputIndex + 5]+= biasWeights[outputIndex + 5];
+            outputValues[outputIndex + 6]+= biasWeights[outputIndex + 6];
+            outputValues[outputIndex + 7]+= biasWeights[outputIndex + 7];
+        }
     }
+
+    if(applyCReLU)
+    {
+        __m256 v_min = _mm256_setzero_ps();
+        __m256 v_max = _mm256_set1_ps(1.0);
+        __m256 v_grad = _mm256_set1_ps(0.01);
+        for(int i = 0; i < numOutputs; i+=8)
+        {
+            SIMD_SCReLU_Float(&outputValues[i], v_min, v_max, v_grad);
+        }
+    }
+
 }
 
 float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, int centerAndScaleAtZero)
@@ -206,14 +254,26 @@ float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, i
         calculateLayer_Floats(floatAccumulator->accumulator[0], tempH2[0], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights2_bias, 0);
         calculateLayer_Floats(floatAccumulator->accumulator[1], tempH2[1], ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, trainingNNUE->weights2, 0, NULL, 0);
     }
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    
+    __m256 v_min = _mm256_setzero_ps();
+    __m256 v_max = _mm256_set1_ps(1.0);
+    __m256 v_grad = _mm256_set1_ps(0.01);
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i+=8)
     {
-        floatAccumulator->rawH2[i] = tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i];
-        floatAccumulator->h2[i] = SCReLU(floatAccumulator->rawH2[i], 0, 1);
+        //floatAccumulator->rawH2[i] = tempH2[0][i] + tempH2[1][i] - trainingNNUE->weights2_bias[i];
+        //floatAccumulator->h2[i] = SCReLU_Leaky(floatAccumulator->rawH2[i], 0, 1);
+        _mm256_storeu_ps(&floatAccumulator->rawH2[i], _mm256_add_ps(_mm256_loadu_ps(&tempH2[0][i]), _mm256_loadu_ps(&tempH2[0][i])));
+        memcpy(&floatAccumulator->h2[i], &floatAccumulator->rawH2[i], 256);
+        SIMD_SCReLU_Float(&floatAccumulator->h2[i], v_min, v_max, v_grad);
     }
 
     calculateLayer_Floats(floatAccumulator->h2, floatAccumulator->rawH3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, trainingNNUE->weights3, 0, trainingNNUE->weights3_bias, 0);
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) floatAccumulator->h3[i] = SCReLU(floatAccumulator->rawH3[i], 0, 1);
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8) 
+    {
+        //floatAccumulator->h3[i] = SCReLU_Leaky(floatAccumulator->rawH3[i], 0, 1);
+        memcpy(&floatAccumulator->h3[i], &floatAccumulator->rawH3[i], 256);
+        SIMD_SCReLU_Float(&floatAccumulator->h3[i], v_min, v_max, v_grad);
+    }
 
     calculateLayer_Floats(floatAccumulator->h3, &floatAccumulator->outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &trainingNNUE->weights4, 0, &trainingNNUE->weights4_bias, 0);
 
@@ -283,7 +343,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         float delta3[THIRD_HIDDEN_LAYER_NODES] = {0};
         for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
         {
-            delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_Derivative(floatAccumulator.rawH3[i], 0, 1);
+            delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_Leaky_Derivative(floatAccumulator.rawH3[i], 0, 1);
         }
         
         float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
@@ -294,7 +354,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
                 delta2[i] += delta3[j] * trainingNNUE->weights3[j][i];
             }
             
-            delta2[i] *= SCReLU_Derivative(floatAccumulator.rawH2[i], 0, 1);
+            delta2[i] *= SCReLU_Leaky_Derivative(floatAccumulator.rawH2[i], 0, 1);
         }
 
         float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
@@ -307,7 +367,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
                     delta1[side][i] += delta2[j] * trainingNNUE->weights2[j][side * ACCUMULATOR_NODES_PER_SIDE + i];
                 }
                 
-                delta1[side][i] *= SCReLU_Derivative(floatAccumulator.rawAccumulator[side][i], 0, 1);
+                delta1[side][i] *= SCReLU_Leaky_Derivative(floatAccumulator.rawAccumulator[side][i], 0, 1);
             }
         }
 
@@ -740,7 +800,7 @@ void generateTrainingData(int depth, int maxTime, accumulator_training* floatAcc
     while(1)
     {
         sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
-        output = fopen(fileName, "w");
+        output = fopen(fileName, "r");
         if(!output) break;
         else
         {
@@ -751,43 +811,65 @@ void generateTrainingData(int depth, int maxTime, accumulator_training* floatAcc
     }
 
     int entryCount = 0;
-
-    while(entryCount < POSITIONS_PER_FILE)
+    char FEN[100] = {'\0'};
+    if(fileNumber > 1)
     {
-        bitboard* board = create_board();
-        loadInputAccumulator(board, floatAccumulator, TRAINING, BLACK|WHITE);
-
-        transpositionTable = create_hashTable_tt();
-
-        //Avoid boring games.
-        int movesSinceLastInterestingMove = 0;
-
-        while(1)
-        {
-            move* bestMove = calculateBestMove(board, depth, maxTime);
-            
-            //No one is in check and the best move isn't a capture.
-            if(!bestMove->capturedPiece && !(board->flags&0x30) && transposition_table_get(board, transpositionTable))
-            {
-                movesSinceLastInterestingMove = 0;
-
-                char FEN[100] = {'\0'};
-                export_fen_from_board(board, FEN);
-                float evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
-                evaluation = (evaluation / 127) + 0.5;
-                fprintf(output, "%s|%f\n", FEN, evaluation);
-
-            }
-            else movesSinceLastInterestingMove++;
-
-            if(board->victor || movesSinceLastInterestingMove > 10 || entryCount >= POSITIONS_PER_FILE) break;
-            if(moveFromStruct(board, bestMove)) break;
-        }
-        destroy_hashTable_tt(transpositionTable);
-        transpositionTable = NULL;
-        destroy_board(board);
+        fileNumber--;
+        sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
+        output = fopen(fileName, "r");
+        while(fgets(FEN, 100, output)) entryCount++;
+        fclose(output);
     }
 
+    while(fileNumber <= FILE_COUNT)
+    {
+        sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
+        output = fopen(fileName, "a");
+
+
+        while(entryCount < POSITIONS_PER_FILE)
+        {
+            bitboard* board = create_board();
+            loadInputAccumulator(board, floatAccumulator, TRAINING, BLACK|WHITE);
+
+            transpositionTable = create_hashTable_tt();
+
+            //Avoid boring games.
+            int movesSinceLastInterestingMove = 0;
+
+            while(1)
+            {
+                move* bestMove = calculateBestMove(board, depth, maxTime, TRAINING);
+                
+                //No one is in check and the best move isn't a capture.
+                if(!bestMove->capturedPiece && !(board->flags&0x30) && transposition_table_get(board, transpositionTable))
+                {
+                    movesSinceLastInterestingMove = 0;
+
+                    export_fen_from_board(board, FEN);
+                    float evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
+                    evaluation = (evaluation / 127) + 0.5;
+                    fprintf(output, "%s|%f\n", FEN, evaluation);
+                    
+                    entryCount++;
+                    printf("\rFile %d/%d, Entries: %d/%d", fileNumber, FILE_COUNT, entryCount, POSITIONS_PER_FILE);
+
+                }
+                else movesSinceLastInterestingMove++;
+
+                if(board->victor || movesSinceLastInterestingMove > 10 || entryCount >= POSITIONS_PER_FILE) break;
+                if(moveFromStruct(board, bestMove)) break;
+            }
+            destroy_hashTable_tt(transpositionTable);
+            transpositionTable = NULL;
+            destroy_board(board);
+        }
+
+        fileNumber++;
+        entryCount = 0;
+
+        fclose(output);
+    }
+    
     FREE(trainingNNUE);
-    fclose(output);
 }

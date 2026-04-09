@@ -35,10 +35,10 @@ int isThreatened(bitboard* board, int square, int squareColor);
 //Includes illegal moves (in regards to check)
 uint64_t pyrrhicPawnAttacks(int square, int color);
 uint64_t pawnMoves(bitboard* board, int square, int color);
-uint64_t bishopMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
-uint64_t knightMoves(uint64_t allyPieces, int square);
-uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
-uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t bishopMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t knightMoves(bitboard* board, uint64_t allyPieces, int square);
+uint64_t rookMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square);
+uint64_t queenMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square);
 uint64_t pyrrhicKingAttacks(int square);
 uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats);
 

@@ -70,15 +70,8 @@ hashtable_pos* copy_hashTable_pos(hashtable_pos* src)
         return NULL;
     }
 
-    for(size_t i = 0; i < newTable->capacity; i++)
-    {
-        if(src->array[i].count != 0)
-        {
-            newTable->array[i].count = src->array[i].count;
-            newTable->array[i].hashCode = src->array[i].hashCode;
-        }
-    }
-
+    memcpy(newTable->array, src->array, newTable->capacity * sizeof(table_entry_pos));
+    
     return newTable;
 }
 

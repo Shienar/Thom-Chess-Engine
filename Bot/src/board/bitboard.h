@@ -81,12 +81,13 @@
 #define TEXT_COLOR_SOURCE_BLACK_PIECE "\033[48;2;130;130;50;38;2;255;100;100m"
 #define TEXT_NONE "\033[0m"
 
-int getColumn(int square);
-int getRow(int square);
+#define getColumn(square) (square%8 + 1)
+#define getRow(square) (square/8 + 1)
+
 char getColumnChar(int x, int isSquare);
 void getSquareName(int square, char* target);
 int getSquareNumber(char* squareName);
-int findPieceOnSquare(bitboard* board, int square);
+#define findPieceOnSquare(board, square) (board->pieceArr[square])
 
 //Required by pyrrhic.
 //Return index of popped bit in range [0,63]
@@ -98,7 +99,7 @@ void export_fen_from_board(bitboard* board, char* outputFenString);
 void load_fen_string_to_board(bitboard* board, const char* fenString);
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);
 void destroy_board(bitboard* board);
-void copy_board(bitboard* dest, bitboard* source, int copyHT);
+void copy_board(bitboard* dest, bitboard* source, int copyHT, int copyMoves);
 
 void board_clear_square(bitboard* board, int square, int pieceType);
 void board_set(bitboard* board, int square, int piece);

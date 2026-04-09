@@ -219,16 +219,21 @@ const uint64_t zobrist_keys[781] = {
 
 uint64_t getHashCode(bitboard* board)
 {
-    if(!board)  return 0;
+    if(!board) return 0;
 
     uint64_t returnValue = 0;
 
     int piece;
-    for(int i = 0; i < 64; i++)
+    uint64_t mask = board->pieces_all;
+    while(mask)
     {
-        piece = findPieceOnSquare(board, i);
+        int square = __builtin_ctzll(mask);
 
-        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(i) - 1)) + (getColumn(i) - 1)];
+        piece = findPieceOnSquare(board, square);
+
+        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(square) - 1)) + (getColumn(square) - 1)];
+
+        mask&=(mask - 1);
     }
 
     if(board->flags&1) returnValue^=zobrist_keys[768];
