@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <immintrin.h>
 
-#define ADAM_LEARNING_RATE 1e-4
+#define ADAM_LEARNING_RATE 3e-4
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
@@ -19,10 +19,11 @@
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
-//Leaky SCReLU seems to give better results for training.
+//Leaky SCReLU is giving be the best results for training.
+#define LEAK_FACTOR 0.01
 #define SCReLU(val, min, max) ((val <= min) ? min : ((val * val >= max) ? max : val*val))
-#define SCReLU_Leaky(val, min, max) ((val <= min) ? 0.01 * val : ((val >= max) ? max + 0.01 * (val - max) : val*val))
-#define SCReLU_Leaky_Derivative(val, min, max) ((val <= min || val >= max) ? (0.01) : (2.0*val))
+#define SCReLU_Leaky(val, min, max) ((val <= min) ? LEAK_FACTOR * val : ((val >= max) ? max + LEAK_FACTOR * (val - max) : val*val))
+#define SCReLU_Leaky_Derivative(val, min, max) ((val <= min || val >= max) ? (LEAK_FACTOR) : (2.0*val))
 static inline void SIMD_SCReLU(int8_t* val, __m256i v_min, __m256i v_max)
 {
     __m256i v_val = _mm256_loadu_si256((const __m256i*) val);
@@ -81,8 +82,12 @@ void calculateLayer_IntBytes(int8_t* inputValues, int8_t* outputValues, int numI
 float forwardPropagate_Float(int turn, accumulator_training* floatAccumulator, int centerAndScaleAtZero);
 int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int centerAtZero);
 
-// Adaptive Movement Estimation (ADAM)
-// https://arxiv.org/abs/1412.6980v8
+/**
+ * Adaptive Moment Estimation 
+ *  - Weight Decay
+ *  - Sparse adjustments on input layer.
+ * https://arxiv.org/abs/1412.6980v8
+ */
 void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
 
 void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator);

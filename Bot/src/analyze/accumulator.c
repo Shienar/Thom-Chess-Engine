@@ -134,7 +134,7 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
 
         __m256 v_min = _mm256_setzero_ps();
         __m256 v_max = _mm256_set1_ps(1.0);
-        __m256 v_grad = _mm256_set1_ps(0.01);
+        __m256 v_grad = _mm256_set1_ps(LEAK_FACTOR);
         if(ISWHITE(color)) 
         {
             calculateLayer_Floats(inputArray, floatAccumulator->rawAccumulator[0], 640, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, extendedBaseIndex_w, trainingNNUE->weights1_bias, 0);
@@ -254,7 +254,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     {
         __m256 v_min = _mm256_setzero_ps();
         __m256 v_max = _mm256_set1_ps(1.0);
-        __m256 v_grad = _mm256_set1_ps(0.01);
+        __m256 v_grad = _mm256_set1_ps(LEAK_FACTOR);
         if(ISWHITE(color))
         {
             memcpy(&floatAccumulator->accumulator[0], &floatAccumulator->rawAccumulator[0], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
