@@ -121,38 +121,22 @@ typedef struct polyglot_book_entry {
 } polyglot_book_entry;
 
 
-#define INPUT_BITS 40960
-#define HALF_INPUT_BITS 20480
+#define INPUT_BITS 20480
+#define HALF_INPUT_BITS 10240
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE 256
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
 
-#define KING_BUCKETS 32
-#define BITBOARDS_PER_INPUT_SIDE 320 //1 bitboard for each of the ten pieces for each king bucket.
+#define KING_BUCKETS 16
+#define BITBOARDS_PER_INPUT_SIDE 160 //1 bitboard for each of the ten pieces for each king bucket.
+
+extern int kingBuckets[64];
+extern int kingBucketMap[KING_BUCKETS];
 
 /**
- * Weights
- * 
- * Each index in the inputNodes array is a bitboard.
- * To find the bitboard of PIECE while COLOR's
- * king is on SQUARE, use the following formula.
- * 
- * i = (BITBOARDS_PER_INPUT_SIDE * ISBLACK(COLOR)) + (10 * kingBuckets[SQUARE]) + PIECE
- *  - PIECE 
- *      - Ally Pawn = 0
- *      - Ally Knight = 1
- *      - Ally Bishop = 2
- *      - Ally Rook = 3
- *      - Ally Queen = 4
- *      - Enemy Pawn = 5
- *      - Enemy Knight = 6
- *      - Enemy Bishop = 7
- *      - Enemy Rook = 8
- *      - Enemy Queen = 9
- * 
- * Weights are also stored as w[output][input] to make SIMD possible.
+ * Weights are stored as w[output][input] to make SIMD possible.
  */
 typedef struct network_weights_training {
     float weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
@@ -180,7 +164,7 @@ typedef struct network_weights_playing {
 
 typedef struct accumulator_training {
     //Incrementally updates.
-    uint64_t inputNodes[640];
+    uint64_t inputNodes[320];
     float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
 
     float h2[SECOND_HIDDEN_LAYER_NODES];
@@ -196,7 +180,7 @@ typedef struct accumulator_training {
 } accumulator_training;
 
 typedef struct accumulator_playing {
-    uint64_t inputNodes[640];
+    uint64_t inputNodes[320];
     int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
     int8_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator_playing;

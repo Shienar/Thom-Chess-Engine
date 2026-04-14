@@ -7,25 +7,6 @@
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
-float learning_rate = MAX_LEARNING_RATE;
-
-/**
- * - Index X contains the king bucket index at square X.
- * - Created for white's perspective; must be flipped for black.
- * 
- * topleft: a1
- * bottomright: h8
- */
-int kingBuckets[64] = {
-    0,  1,  2,  3,  4,  5,  6,  7,
-    8,  9,  10, 11, 12, 13, 14, 15,
-    16, 16, 17, 17, 18, 18, 19, 19,
-    20, 20, 21, 21, 22, 22, 23, 23,
-    24, 24, 25, 25, 26, 26, 27, 27,
-    24, 24, 25, 25, 26, 26, 27, 27,
-    28, 28, 29, 29, 30, 30, 31, 31,
-    28, 28, 29, 29, 30, 30, 31, 31
-};
 
 void iterateTrainingWeights(void (*func)(float*, double*), network_weights_training* trainingWeights, double* context) 
 {
@@ -387,7 +368,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         forwardPropagate_Float(board->turn, &floatAccumulator, 0);
 
         float delta4 = floatAccumulator.outputNode - expectedOutput;
-        //if(trackedEntries == 0) printf("\nExpected %f, received %f, error %f", expectedOutput, floatAccumulator.outputNode, delta4);
+        //if(trackedEntries == 0) printf("\nExpected %f, received %f", expectedOutput, floatAccumulator.outputNode);
 
         *data->sumSquaredError+= (double) delta4 * delta4;
 
@@ -530,6 +511,14 @@ static inline void updateWeight(float* weight, float* gradient, float* firstMome
 {
     __m256 v_gradient = _mm256_loadu_ps(gradient);
 
+    //Mask = all ones for nonzero float blocks; all zeros for zero float blocks.
+    __m256 v_mask = _mm256_cmp_ps(v_gradient, _mm256_setzero_ps(), _CMP_NEQ_OQ);
+    if(_mm256_movemask_ps(v_mask) == 0) 
+    {
+        //All 8 floats in gradient block are zero (no need to set values to zero)
+        return;
+    }
+
     //Convert the sum to an average.
     v_gradient = _mm256_div_ps(v_gradient, _mm256_set1_ps((float) POSITIONS_PER_FILE));
 
@@ -551,60 +540,11 @@ static inline void updateWeight(float* weight, float* gradient, float* firstMome
     //update weight.
     __m256 v_weight = _mm256_loadu_ps(weight);
     v_weight = _mm256_sub_ps(v_weight, 
-                             _mm256_mul_ps(_mm256_set1_ps(learning_rate), 
+                             _mm256_mul_ps(_mm256_set1_ps(ADAM_LEARNING_RATE), 
                                            _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),
                                                                                                     _mm256_set1_ps(ADAM_EPSILON))),
                                                          _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));                                     
     _mm256_storeu_ps(weight, v_weight);
-    
-    //reset gradient sum
-    _mm256_storeu_ps(gradient, _mm256_setzero_ps());
-}
-
-static inline void updateSparseWeight(float* weight, float* gradient, float* firstMoment, float* secondMoment)
-{
-    __m256 v_gradient = _mm256_loadu_ps(gradient);
-
-    //Mask = all ones for nonzero float blocks; all zeros for zero float blocks.
-    __m256 v_mask = _mm256_cmp_ps(v_gradient, _mm256_setzero_ps(), _CMP_NEQ_OQ);
-    if(_mm256_movemask_ps(v_mask) == 0) 
-    {
-        //All 8 floats in gradient block are zero (no need to set values to zero)
-        return;
-    }
-
-    //Convert the sum to an average.
-    v_gradient = _mm256_div_ps(v_gradient, _mm256_set1_ps((float) POSITIONS_PER_FILE));
-
-    //update first moment. Bias it around the first encountered gradient.
-    __m256 v_firstMoment = _mm256_loadu_ps(firstMoment);
-    __m256 v_initMomentMask = _mm256_cmp_ps(v_firstMoment, _mm256_setzero_ps(), _CMP_NEQ_OQ);
-    v_firstMoment = _mm256_blendv_ps(_mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA1), v_firstMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA1), v_gradient)), 
-                                     v_gradient,
-                                     v_initMomentMask);
-    _mm256_maskstore_ps(firstMoment, _mm256_castps_si256(v_mask), v_firstMoment);
-
-    //update second moment. Bias it around the first encountered gradient.
-    __m256 v_secondMoment = _mm256_loadu_ps(secondMoment);
-    v_gradient = _mm256_mul_ps(v_gradient, v_gradient);
-    v_initMomentMask = _mm256_cmp_ps(v_secondMoment, _mm256_setzero_ps(), _CMP_NEQ_OQ);
-    v_secondMoment = _mm256_blendv_ps(_mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA2), v_secondMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA2), v_gradient)), 
-                                     v_gradient,
-                                     v_initMomentMask);
-    _mm256_maskstore_ps(secondMoment, _mm256_castps_si256(v_mask), v_secondMoment);
-
-    //Bias corrections are too chaotic for the sparse updates.
-    //The network never converged when using them.
-
-    //update weight.
-    __m256 v_weight = _mm256_loadu_ps(weight);
-    v_weight = _mm256_sub_ps(v_weight, 
-                             _mm256_mul_ps(_mm256_set1_ps(learning_rate), 
-                                           _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),  _mm256_set1_ps(ADAM_EPSILON))),
-                                                         _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));   
-                                                         
-    //Only store weights if the gradient is nonzero.
-    _mm256_maskstore_ps(weight, _mm256_castps_si256(v_mask), v_weight);
     
     //reset gradient sum
     _mm256_storeu_ps(gradient, _mm256_setzero_ps());
@@ -729,7 +669,7 @@ VOID CALLBACK UpdateWeights1(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
     {
         for(int j = 0; j < HALF_INPUT_BITS; j+=8)
         {
-            updateSparseWeight(&trainingNNUE->weights1[i][j], &gradientSums[HELPER_THREAD_COUNT].weights1[i][j], &firstMoment->weights1[i][j], &secondMoment->weights1[i][j]);    
+            updateWeight(&trainingNNUE->weights1[i][j], &gradientSums[HELPER_THREAD_COUNT].weights1[i][j], &firstMoment->weights1[i][j], &secondMoment->weights1[i][j]);    
         }
     }
 }
@@ -794,7 +734,7 @@ void updateAllWeights(network_weights_training* gradientSums, network_weights_tr
     float corrected_firstMoment = firstMoment->weights4_bias * biasCorrection1;
     float corrected_secondMoment = secondMoment->weights4_bias * biasCorrection2;
 
-    trainingNNUE->weights4_bias -= learning_rate * ( (corrected_firstMoment / (sqrt(corrected_secondMoment) + ADAM_EPSILON)) + (ADAM_WEIGHT_DECAY * trainingNNUE->weights4_bias) );
+    trainingNNUE->weights4_bias -= ADAM_LEARNING_RATE * ( (corrected_firstMoment / (sqrt(corrected_secondMoment) + ADAM_EPSILON)) + (ADAM_WEIGHT_DECAY * trainingNNUE->weights4_bias) );
     gradientSums[HELPER_THREAD_COUNT].weights4_bias = 0;
     
     CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
@@ -828,8 +768,6 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
     double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
     double totalSumSquaredError = 0.0; //accumulated value.
-    float currentStep = 0;
-    float steps_per_cycle = FILE_COUNT * maxIterations;
 
     char fileName[40] = {'\0'};
     for(int i = 0; i < HELPER_THREAD_COUNT; i++)
@@ -876,10 +814,6 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
             totalSumSquaredError+= sumSquaredError;
 
             updateAllWeights(gradientSums, firstMoment, secondMoment);
-            
-            learning_rate = MIN_LEARNING_RATE + 0.5 * (MAX_LEARNING_RATE - MIN_LEARNING_RATE) * (1 + cos(PI * (currentStep/steps_per_cycle)));
-            currentStep++;
-            if(currentStep >= steps_per_cycle) currentStep = 0;
 
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
             printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);

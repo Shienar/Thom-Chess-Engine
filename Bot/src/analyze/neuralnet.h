@@ -8,16 +8,11 @@
 #include <immintrin.h>
 
 #define PI 3.141592653589793
-
-//cosine annealing learning rate
-extern float learning_rate;
-#define MAX_LEARNING_RATE 1e-3
-#define MIN_LEARNING_RATE 1e-6
-
+#define ADAM_LEARNING_RATE 1e-4
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 0.02
+#define ADAM_WEIGHT_DECAY 1e-4
 
 #define POSITIONS_PER_FILE 16384
 #define FILE_COUNT 6104
@@ -65,9 +60,6 @@ static inline void SIMD_SCReLU_Float(float* val, __m256 v_min, __m256 v_max, __m
 
     _mm256_storeu_ps(val, v_val);
 }
-
-extern int kingBuckets[64];
-
 
 extern network_weights_training* trainingNNUE;
 extern network_weights_playing* playerNNUE;

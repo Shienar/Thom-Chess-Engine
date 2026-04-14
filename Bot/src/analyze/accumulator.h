@@ -7,6 +7,8 @@
 #define TRAINING 1
 #define PLAYING 2
 
+#define MIRROR_SQUARE(x) x^=7
+
 //Main thread accumulators
 extern accumulator_training* trainingAccumulator;
 extern accumulator_playing* playerAccumulator;
