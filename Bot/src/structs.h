@@ -121,12 +121,16 @@ typedef struct polyglot_book_entry {
 } polyglot_book_entry;
 
 
-#define INPUT_BITS 81920
-#define HALF_INPUT_BITS 40960
+#define INPUT_BITS 40960
+#define HALF_INPUT_BITS 20480
+#define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE 256
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
+
+#define KING_BUCKETS 32
+#define BITBOARDS_PER_INPUT_SIDE 320 //1 bitboard for each of the ten pieces for each king bucket.
 
 /**
  * Weights
@@ -135,8 +139,8 @@ typedef struct polyglot_book_entry {
  * To find the bitboard of PIECE while COLOR's
  * king is on SQUARE, use the following formula.
  * 
- * i = (640 * ISBLACK(COLOR)) + (10 * SQUARE) + PIECE
- *  - PIECE
+ * i = (BITBOARDS_PER_INPUT_SIDE * ISBLACK(COLOR)) + (10 * kingBuckets[SQUARE]) + PIECE
+ *  - PIECE 
  *      - Ally Pawn = 0
  *      - Ally Knight = 1
  *      - Ally Bishop = 2
@@ -153,7 +157,7 @@ typedef struct polyglot_book_entry {
 typedef struct network_weights_training {
     float weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    float weights2[SECOND_HIDDEN_LAYER_NODES][2 * ACCUMULATOR_NODES_PER_SIDE];
+    float weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
     float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
     float weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
@@ -166,7 +170,7 @@ typedef struct network_weights_training {
 typedef struct network_weights_playing {
     int8_t weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
     int8_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][2 * ACCUMULATOR_NODES_PER_SIDE];
+    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
     int8_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
     int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     int8_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
@@ -176,7 +180,7 @@ typedef struct network_weights_playing {
 
 typedef struct accumulator_training {
     //Incrementally updates.
-    uint64_t inputNodes[1280];
+    uint64_t inputNodes[640];
     float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
 
     float h2[SECOND_HIDDEN_LAYER_NODES];
@@ -192,7 +196,7 @@ typedef struct accumulator_training {
 } accumulator_training;
 
 typedef struct accumulator_playing {
-    uint64_t inputNodes[1280];
+    uint64_t inputNodes[640];
     int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
     int8_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator_playing;
@@ -210,12 +214,12 @@ typedef struct accumulator_playing {
  *  - accumulators[i].accumulator[1]
  */
 typedef struct accumulator_playing_refreshTable {
-    bitboard* boards[2][64];
-    accumulator_playing accumulators[64];
+    bitboard* boards[2][KING_BUCKETS];
+    accumulator_playing accumulators[KING_BUCKETS];
 } accumulator_playing_refreshTable;
 typedef struct accumulator_training_refreshTable {
-    bitboard* boards[2][64];
-    accumulator_training accumulators[64];
+    bitboard* boards[2][KING_BUCKETS];
+    accumulator_training accumulators[KING_BUCKETS];
 } accumulator_training_refreshTable;
 
 #endif

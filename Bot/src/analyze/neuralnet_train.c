@@ -7,6 +7,25 @@
 #include <windows.h>
 
 network_weights_training* trainingNNUE = NULL;
+float learning_rate = MAX_LEARNING_RATE;
+
+/**
+ * - Index X contains the king bucket index at square X.
+ * - Created for white's perspective; must be flipped for black.
+ * 
+ * topleft: a1
+ * bottomright: h8
+ */
+int kingBuckets[64] = {
+    0,  1,  2,  3,  4,  5,  6,  7,
+    8,  9,  10, 11, 12, 13, 14, 15,
+    16, 16, 17, 17, 18, 18, 19, 19,
+    20, 20, 21, 21, 22, 22, 23, 23,
+    24, 24, 25, 25, 26, 26, 27, 27,
+    24, 24, 25, 25, 26, 26, 27, 27,
+    28, 28, 29, 29, 30, 30, 31, 31,
+    28, 28, 29, 29, 30, 30, 31, 31
+};
 
 void iterateTrainingWeights(void (*func)(float*, double*), network_weights_training* trainingWeights, double* context) 
 {
@@ -21,7 +40,7 @@ void iterateTrainingWeights(void (*func)(float*, double*), network_weights_train
     }
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) func(&trainingWeights->weights1_bias[i], context);
 
-    for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
+    for(int i = 0; i < ACCUMULATOR_NODES; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
@@ -53,7 +72,7 @@ void sampleNormalDistribution(float* dest, double standardDeviation)
 {
     double u1; 
     do { u1 = (double)rand() / (double) RAND_MAX; } while(u1 == 0);
-    *dest = standardDeviation * sqrt(-2.0 * log(u1)) * cos(2 * 6.283185307179586 *  (double)rand()/(double)RAND_MAX);
+    *dest = standardDeviation * sqrt(-2.0 * log(u1)) * cos(2 * PI *  (double)rand()/(double)RAND_MAX);
 }
 
 void load_trainingWeights()
@@ -81,7 +100,7 @@ void load_trainingWeights()
         for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) sampleNormalDistribution(&trainingNNUE->weights1_bias[i], standardDeviation);
 
         standardDeviation = sqrt(2.0 / 512.0); //He initialization for the rest of the weights.
-        for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
+        for(int i = 0; i < ACCUMULATOR_NODES; i++)
         {
             for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
             {
@@ -143,7 +162,7 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     iterateTrainingWeights(findSum, inputFloats, &meanValue);
     meanValue = meanValue / (HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE + 
                             ACCUMULATOR_NODES_PER_SIDE +
-                            2 * ACCUMULATOR_NODES_PER_SIDE * SECOND_HIDDEN_LAYER_NODES +
+                            ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES +
                             SECOND_HIDDEN_LAYER_NODES +
                             SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES +
                             2 * THIRD_HIDDEN_LAYER_NODES + 1);
@@ -158,7 +177,7 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     }
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (uint8_t) roundf(inputFloats->weights1_bias[i] / inputFloats->scalingFactor);
 
-    for(int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i++)
+    for(int i = 0; i < ACCUMULATOR_NODES; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
@@ -368,7 +387,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         forwardPropagate_Float(board->turn, &floatAccumulator, 0);
 
         float delta4 = floatAccumulator.outputNode - expectedOutput;
-        if(trackedEntries == 0) printf("\nExpected %f, received %f, error %f", expectedOutput, floatAccumulator.outputNode, delta4);
+        //if(trackedEntries == 0) printf("\nExpected %f, received %f, error %f", expectedOutput, floatAccumulator.outputNode, delta4);
 
         *data->sumSquaredError+= (double) delta4 * delta4;
 
@@ -440,7 +459,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
         {
             v_deltaMult = _mm256_set1_ps(delta2[j]);
-            for (int i = 0; i < 2 * ACCUMULATOR_NODES_PER_SIDE; i+=8) 
+            for (int i = 0; i < ACCUMULATOR_NODES; i+=8) 
             {
                 //gradientSums->weights2[i][j] += delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
                 __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights2[j][i]);
@@ -456,10 +475,10 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
             _mm256_storeu_ps(&data->gradientSums->weights2_bias[j], _mm256_add_ps(v_delta2, v_weights));
         }
         
-        for (int i = 0; i < 640; i++) 
+        for (int i = 0; i < BITBOARDS_PER_INPUT_SIDE; i++) 
         {
             uint64_t inputBitboard_White = floatAccumulator.inputNodes[i];
-            uint64_t inputBitboard_Black = floatAccumulator.inputNodes[640 + i];
+            uint64_t inputBitboard_Black = floatAccumulator.inputNodes[BITBOARDS_PER_INPUT_SIDE + i];
 
             while (inputBitboard_White) {
 
@@ -475,7 +494,7 @@ DWORD WINAPI calculateGradients(LPVOID lpParam)
             }
 
             while (inputBitboard_Black) {
-                int square = __builtin_ctzll(inputBitboard_Black);
+                int square = FLIP_SQUARE(__builtin_ctzll(inputBitboard_Black));
                 int idx = 64 * i + square;
 
                 for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) 
@@ -526,13 +545,13 @@ static inline void updateWeight(float* weight, float* gradient, float* firstMome
     _mm256_storeu_ps(secondMoment, v_secondMoment);
 
     //calculate bias corrections for weight update.
-    v_firstMoment = _mm256_mul_ps(v_firstMoment, _mm256_set1_ps(biasCorrection1));
-    v_secondMoment = _mm256_mul_ps(v_secondMoment, _mm256_set1_ps(biasCorrection2));
+    v_firstMoment = _mm256_div_ps(v_firstMoment, _mm256_set1_ps(biasCorrection1));
+    v_secondMoment = _mm256_div_ps(v_secondMoment, _mm256_set1_ps(biasCorrection2));
 
     //update weight.
     __m256 v_weight = _mm256_loadu_ps(weight);
     v_weight = _mm256_sub_ps(v_weight, 
-                             _mm256_mul_ps(_mm256_set1_ps(ADAM_LEARNING_RATE), 
+                             _mm256_mul_ps(_mm256_set1_ps(learning_rate), 
                                            _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),
                                                                                                     _mm256_set1_ps(ADAM_EPSILON))),
                                                          _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));                                     
@@ -550,39 +569,42 @@ static inline void updateSparseWeight(float* weight, float* gradient, float* fir
     __m256 v_mask = _mm256_cmp_ps(v_gradient, _mm256_setzero_ps(), _CMP_NEQ_OQ);
     if(_mm256_movemask_ps(v_mask) == 0) 
     {
-        //All 8 floats in gradient block are zero.
-        _mm256_storeu_ps(gradient, _mm256_setzero_ps());
+        //All 8 floats in gradient block are zero (no need to set values to zero)
         return;
     }
 
     //Convert the sum to an average.
     v_gradient = _mm256_div_ps(v_gradient, _mm256_set1_ps((float) POSITIONS_PER_FILE));
 
-    //update first moment
+    //update first moment. Bias it around the first encountered gradient.
     __m256 v_firstMoment = _mm256_loadu_ps(firstMoment);
-    v_firstMoment = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA1), v_firstMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA1), v_gradient));
+    __m256 v_initMomentMask = _mm256_cmp_ps(v_firstMoment, _mm256_setzero_ps(), _CMP_NEQ_OQ);
+    v_firstMoment = _mm256_blendv_ps(_mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA1), v_firstMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA1), v_gradient)), 
+                                     v_gradient,
+                                     v_initMomentMask);
+    _mm256_maskstore_ps(firstMoment, _mm256_castps_si256(v_mask), v_firstMoment);
 
-    //update second moment
+    //update second moment. Bias it around the first encountered gradient.
     __m256 v_secondMoment = _mm256_loadu_ps(secondMoment);
     v_gradient = _mm256_mul_ps(v_gradient, v_gradient);
-    v_secondMoment = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA2), v_secondMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA2), v_gradient));
+    v_initMomentMask = _mm256_cmp_ps(v_secondMoment, _mm256_setzero_ps(), _CMP_NEQ_OQ);
+    v_secondMoment = _mm256_blendv_ps(_mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA2), v_secondMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA2), v_gradient)), 
+                                     v_gradient,
+                                     v_initMomentMask);
+    _mm256_maskstore_ps(secondMoment, _mm256_castps_si256(v_mask), v_secondMoment);
 
-    //calculate bias corrections for weight update.
-    v_firstMoment = _mm256_mul_ps(v_firstMoment, _mm256_set1_ps(biasCorrection1));
-    v_secondMoment = _mm256_mul_ps(v_secondMoment, _mm256_set1_ps(biasCorrection2));
+    //Bias corrections are too chaotic for the sparse updates.
+    //The network never converged when using them.
 
     //update weight.
     __m256 v_weight = _mm256_loadu_ps(weight);
     v_weight = _mm256_sub_ps(v_weight, 
-                             _mm256_mul_ps(_mm256_set1_ps(ADAM_LEARNING_RATE), 
-                                           _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),
-                                                                                                    _mm256_set1_ps(ADAM_EPSILON))),
-                                                         _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));
+                             _mm256_mul_ps(_mm256_set1_ps(learning_rate), 
+                                           _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),  _mm256_set1_ps(ADAM_EPSILON))),
+                                                         _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));   
                                                          
     //Only store weights if the gradient is nonzero.
     _mm256_maskstore_ps(weight, _mm256_castps_si256(v_mask), v_weight);
-    _mm256_maskstore_ps(firstMoment, _mm256_castps_si256(v_mask), v_firstMoment);
-    _mm256_maskstore_ps(secondMoment, _mm256_castps_si256(v_mask), v_secondMoment);
     
     //reset gradient sum
     _mm256_storeu_ps(gradient, _mm256_setzero_ps());
@@ -661,12 +683,12 @@ VOID CALLBACK UpdateWeights2(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_
 
     for(int i = 0; i < HELPER_THREAD_COUNT; i++)
     {
-        for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights2[k][j] +=  gradientSums[i].weights2[k][j];
+        for(int j = 0; j < ACCUMULATOR_NODES; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights2[k][j] +=  gradientSums[i].weights2[k][j];
     }
 
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
-        for(int j = 0; j < 2 * ACCUMULATOR_NODES_PER_SIDE; j+=8)
+        for(int j = 0; j < ACCUMULATOR_NODES; j+=8)
         {
             updateWeight(&trainingNNUE->weights2[i][j], &gradientSums[HELPER_THREAD_COUNT].weights2[i][j], &firstMoment->weights2[i][j], &secondMoment->weights2[i][j]);
         }
@@ -752,9 +774,8 @@ void updateAllWeights(network_weights_training* gradientSums, network_weights_tr
         .secondMoment = secondMoment
     };
     
-    //Multiply by these instead of divide.
-    biasCorrection1 = 1.0 / (1.0 - powf(ADAM_BETA1, timestamp));
-    biasCorrection2 = 1.0 / (1.0 - powf(ADAM_BETA2, timestamp));
+    biasCorrection1 = 1.0 - powf(ADAM_BETA1, timestamp);
+    biasCorrection2 = 1.0 - powf(ADAM_BETA2, timestamp);
 
     SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights4, &context, &threadEnvironment));
     SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights3, &context, &threadEnvironment));
@@ -773,7 +794,7 @@ void updateAllWeights(network_weights_training* gradientSums, network_weights_tr
     float corrected_firstMoment = firstMoment->weights4_bias * biasCorrection1;
     float corrected_secondMoment = secondMoment->weights4_bias * biasCorrection2;
 
-    trainingNNUE->weights4_bias -= ADAM_LEARNING_RATE * ( (corrected_firstMoment / (sqrt(corrected_secondMoment) + ADAM_EPSILON)) + (ADAM_WEIGHT_DECAY * trainingNNUE->weights4_bias) );
+    trainingNNUE->weights4_bias -= learning_rate * ( (corrected_firstMoment / (sqrt(corrected_secondMoment) + ADAM_EPSILON)) + (ADAM_WEIGHT_DECAY * trainingNNUE->weights4_bias) );
     gradientSums[HELPER_THREAD_COUNT].weights4_bias = 0;
     
     CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
@@ -807,6 +828,8 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
     double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
     double totalSumSquaredError = 0.0; //accumulated value.
+    float currentStep = 0;
+    float steps_per_cycle = FILE_COUNT * maxIterations;
 
     char fileName[40] = {'\0'};
     for(int i = 0; i < HELPER_THREAD_COUNT; i++)
@@ -854,6 +877,9 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
             updateAllWeights(gradientSums, firstMoment, secondMoment);
             
+            learning_rate = MIN_LEARNING_RATE + 0.5 * (MAX_LEARNING_RATE - MIN_LEARNING_RATE) * (1 + cos(PI * (currentStep/steps_per_cycle)));
+            currentStep++;
+            if(currentStep >= steps_per_cycle) currentStep = 0;
 
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
             printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
