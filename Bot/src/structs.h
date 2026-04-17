@@ -147,9 +147,6 @@ typedef struct network_weights_training {
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     float weights4[THIRD_HIDDEN_LAYER_NODES];
     float weights4_bias;
-
-    //Saved for dequantization.
-    float scalingFactor;
 } network_weights_training;
 typedef struct network_weights_playing {
     int8_t weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];

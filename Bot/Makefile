@@ -1,12 +1,14 @@
 CC = gcc
-CFLAGS = -Wall -g -std=c99 -march=native
+CFLAGS = -Wall -g -std=c99 -march=native -fopenmp 
 TARGET = ChessBot
+LIBS = -lOpenCL
 
 OBJFILES = src/*.c
 OBJFILES += src/analyze/*.c
 OBJFILES += src/board/*.c
 OBJFILES += src/hashtables/*.c
 OBJFILES += src/pyrrhic/tbprobe.c
+OBJFILES += src/gpu/*.c
 
 # No debug flag for assert() removals.
 CFLAGS += -DNDEBUG
@@ -26,7 +28,7 @@ CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 all: clean $(TARGET)
 
 $(TARGET): $(OBJFILES)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES) $(LIBS)
 
 clean:
 	rm -f $(TARGET) *~ leaks.txt

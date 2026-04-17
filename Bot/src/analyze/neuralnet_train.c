@@ -5,8 +5,13 @@
 #include "engine.h"
 #include <float.h>
 #include <windows.h>
+#include "../gpu/gpu_funcs.h"
+#include "omp.h"
 
 network_weights_training* trainingNNUE = NULL;
+float learningRate = STARTING_LR;
+float num_consecutive_increases = 0; //increases in loss / MSE are bad
+float num_consecutive_decreases = 0;
 
 void iterateTrainingWeights(void (*func)(float*, double*), network_weights_training* trainingWeights, double* context) 
 {
@@ -148,41 +153,41 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
                             SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES +
                             2 * THIRD_HIDDEN_LAYER_NODES + 1);
     
-    inputFloats->scalingFactor = maxValue / 127;
+    float scalingFactor = maxValue / 127;
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            outputBytes->weights1[j][i] = (uint8_t) roundf(inputFloats->weights1[j][i] / inputFloats->scalingFactor);
+            outputBytes->weights1[j][i] = (uint8_t) roundf(inputFloats->weights1[j][i] / scalingFactor);
         }
     }
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (uint8_t) roundf(inputFloats->weights1_bias[i] / inputFloats->scalingFactor);
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (uint8_t) roundf(inputFloats->weights1_bias[i] / scalingFactor);
 
     for(int i = 0; i < ACCUMULATOR_NODES; i++)
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
-            outputBytes->weights2[j][i] = (uint8_t) roundf(inputFloats->weights2[j][i] / inputFloats->scalingFactor);
+            outputBytes->weights2[j][i] = (uint8_t) roundf(inputFloats->weights2[j][i] / scalingFactor);
         }
     }
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputBytes->weights2_bias[i] = (uint8_t) roundf(inputFloats->weights2_bias[i] / inputFloats->scalingFactor);
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputBytes->weights2_bias[i] = (uint8_t) roundf(inputFloats->weights2_bias[i] / scalingFactor);
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
         {
-            outputBytes->weights3[j][i] = (uint8_t) roundf(inputFloats->weights3[j][i] / inputFloats->scalingFactor);
+            outputBytes->weights3[j][i] = (uint8_t) roundf(inputFloats->weights3[j][i] / scalingFactor);
         }
     }
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (uint8_t) roundf(inputFloats->weights3_bias[i] / inputFloats->scalingFactor);
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (uint8_t) roundf(inputFloats->weights3_bias[i] / scalingFactor);
     
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
-        outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / inputFloats->scalingFactor);
+        outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / scalingFactor);
     }
-    outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / inputFloats->scalingFactor);
+    outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
 
     printf("Quantized Weights:\n");
-    printf("\tScaling Factor: %f\n", inputFloats->scalingFactor);
+    printf("\tScaling Factor: %f\n", scalingFactor);
     printf("\tMean: %f\n", meanValue);
     printf("\tMax: %f\n", maxValue);
 }
@@ -326,14 +331,6 @@ void shuffle(int* arr, int count)
     }
 }
 
-typedef struct rpropThreadData {
-    network_weights_training* gradientSums;
-    long seekByteOffset;
-    char* fileName;
-    int entriesToTrack;
-    double* sumSquaredError;
-} rpropThreadData;
-
 void loadTrainingData(char* inputLine, bitboard* board, float* eval)
 {
     char* FEN_String = strtok(inputLine, "|");
@@ -343,440 +340,34 @@ void loadTrainingData(char* inputLine, bitboard* board, float* eval)
     load_fen_string_to_board(board, FEN_String);
 }
 
-DWORD WINAPI calculateGradients(LPVOID lpParam)
-{
-    rpropThreadData* data = (rpropThreadData*)lpParam;
-    
-    char inputString[120] = {'\0'};
-
-    FILE* trainingData = fopen(data->fileName, "r");
-
-    fseek(trainingData, data->seekByteOffset, SEEK_SET);
-
-    //File pointer is randomly located on a line. Skip it
-    if(data->seekByteOffset > 0) fgets(inputString, 120, trainingData);
-    
-    int trackedEntries = 0;
-    float expectedOutput = 0.0;
-    bitboard* board = create_board(); 
-    accumulator_training floatAccumulator = {0};
-    while(trackedEntries < data->entriesToTrack && fgets(inputString, 120, trainingData))
-    {
-        loadTrainingData(inputString, board, &expectedOutput);
-
-        loadInputAccumulator(board, &floatAccumulator, TRAINING, BLACK|WHITE);
-        forwardPropagate_Float(board->turn, &floatAccumulator, 0);
-
-        float delta4 = floatAccumulator.outputNode - expectedOutput;
-        //if(trackedEntries == 0) printf("\nExpected %f, received %f", expectedOutput, floatAccumulator.outputNode);
-
-        *data->sumSquaredError+= (double) delta4 * delta4;
-
-        //Calculate Edge Weight Deltas
-
-        float delta3[THIRD_HIDDEN_LAYER_NODES] = {0};
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
-        {
-            delta3[i] = delta4 * trainingNNUE->weights4[i] * SCReLU_Leaky_Derivative(floatAccumulator.rawH3[i], 0, 1);
-        }
-        
-        float delta2[SECOND_HIDDEN_LAYER_NODES] = {0};
-        for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
-        {
-            for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) 
-            {
-                delta2[i] += delta3[j] * trainingNNUE->weights3[j][i];
-            }
-            
-            delta2[i] *= SCReLU_Leaky_Derivative(floatAccumulator.rawH2[i], 0, 1);
-        }
-
-        float delta1[2][ACCUMULATOR_NODES_PER_SIDE] = {0};
-        for (int side = 0; side < 2; side++) 
-        {
-            for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
-            {
-                for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
-                {
-                    delta1[side][i] += delta2[j] * trainingNNUE->weights2[j][side * ACCUMULATOR_NODES_PER_SIDE + i];
-                }
-                
-                delta1[side][i] *= SCReLU_Leaky_Derivative(floatAccumulator.rawAccumulator[side][i], 0, 1);
-            }
-        }
-
-        //Accumulate edge weight deltas into the gradient sum
-        __m256 v_deltaMult = _mm256_set1_ps(delta4);
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8) 
-        {
-            //gradientSums->weights4[i]+= delta4 * floatAccumulator->h3[i];
-            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights4[i]);
-            __m256 v_h3 = _mm256_loadu_ps(&floatAccumulator.h3[i]);
-            _mm256_storeu_ps(&data->gradientSums->weights4[i], _mm256_fmadd_ps(v_deltaMult, v_h3, v_weights));
-
-        }
-        data->gradientSums->weights4_bias+= delta4;
-
-        for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) 
-        {
-            v_deltaMult = _mm256_set1_ps(delta3[j]);
-            for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i+=8)
-            {
-                //gradientSums->weights3[j][i]+= delta3[j] * floatAccumulator->h2[i];
-                __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights3[j][i]);
-                __m256 v_h2 = _mm256_loadu_ps(&floatAccumulator.h2[i]);
-                _mm256_storeu_ps(&data->gradientSums->weights3[j][i], _mm256_fmadd_ps(v_deltaMult, v_h2, v_weights));
-            }
-        }
-
-        for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j+=8) 
-        {
-            //gradientSums->weights3_bias[j]+= delta3[j];
-            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights3_bias[j]);
-            __m256 v_delta3 = _mm256_loadu_ps(&delta3[j]);
-            _mm256_storeu_ps(&data->gradientSums->weights3_bias[j], _mm256_add_ps(v_delta3, v_weights));
-        }
-        
-        for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) 
-        {
-            v_deltaMult = _mm256_set1_ps(delta2[j]);
-            for (int i = 0; i < ACCUMULATOR_NODES; i+=8) 
-            {
-                //gradientSums->weights2[i][j] += delta2[j] * floatAccumulator->accumulator[(int) (i / ACCUMULATOR_NODES_PER_SIDE)][i % ACCUMULATOR_NODES_PER_SIDE];
-                __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights2[j][i]);
-                __m256 v_acc = _mm256_loadu_ps(&floatAccumulator.accumulator[(int) i / ACCUMULATOR_NODES_PER_SIDE][i % ACCUMULATOR_NODES_PER_SIDE]);
-                _mm256_storeu_ps(&data->gradientSums->weights2[j][i], _mm256_fmadd_ps(v_deltaMult, v_acc, v_weights));
-            }
-        }
-        for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8) 
-        {
-            //gradientSums->weights2_bias[j] += delta2[j];
-            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights2_bias[j]);
-            __m256 v_delta2 = _mm256_loadu_ps(&delta2[j]);
-            _mm256_storeu_ps(&data->gradientSums->weights2_bias[j], _mm256_add_ps(v_delta2, v_weights));
-        }
-        
-        for (int i = 0; i < BITBOARDS_PER_INPUT_SIDE; i++) 
-        {
-            uint64_t inputBitboard_White = floatAccumulator.inputNodes[i];
-            uint64_t inputBitboard_Black = floatAccumulator.inputNodes[BITBOARDS_PER_INPUT_SIDE + i];
-
-            while (inputBitboard_White) {
-
-                int square = __builtin_ctzll(inputBitboard_White);
-                int idx = 64 * i + square;
-
-                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) 
-                {
-                    data->gradientSums->weights1[j][idx] += delta1[0][j];
-                }
-
-                inputBitboard_White &= (inputBitboard_White - 1);
-            }
-
-            while (inputBitboard_Black) {
-                int square = FLIP_SQUARE(__builtin_ctzll(inputBitboard_Black));
-                int idx = 64 * i + square;
-
-                for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) 
-                {
-                    data->gradientSums->weights1[j][idx] += delta1[1][j];
-                }
-                
-                inputBitboard_Black &= (inputBitboard_Black - 1);
-            }
-        }
-        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8) 
-        {
-            //gradientSums->weights1_bias[j] += (delta1[0][j] + delta1[1][j]);
-            __m256 v_weights = _mm256_loadu_ps(&data->gradientSums->weights1_bias[j]);
-            __m256 v_delta1_0 = _mm256_loadu_ps(&delta1[0][j]);
-            __m256 v_delta1_1 = _mm256_loadu_ps(&delta1[1][j]);
-            __m256 v_delta1 = _mm256_add_ps(v_delta1_0, v_delta1_1);
-            _mm256_storeu_ps(&data->gradientSums->weights1_bias[j], _mm256_add_ps(v_delta1, v_weights));
-        }
-
-        trackedEntries++;
-    }
-
-    destroy_board(board);
-    fclose(trainingData);
-    return 0;
-}
-
-long timestamp = 1;
-float biasCorrection1 = 0.0;
-float biasCorrection2 = 0.0;
-static inline void updateWeight(float* weight, float* gradient, float* firstMoment, float* secondMoment)
-{
-    __m256 v_gradient = _mm256_loadu_ps(gradient);
-
-    //Mask = all ones for nonzero float blocks; all zeros for zero float blocks.
-    __m256 v_mask = _mm256_cmp_ps(v_gradient, _mm256_setzero_ps(), _CMP_NEQ_OQ);
-    if(_mm256_movemask_ps(v_mask) == 0) 
-    {
-        //All 8 floats in gradient block are zero (no need to set values to zero)
-        return;
-    }
-
-    //Convert the sum to an average.
-    v_gradient = _mm256_div_ps(v_gradient, _mm256_set1_ps((float) POSITIONS_PER_FILE));
-
-    //update first moment
-    __m256 v_firstMoment = _mm256_loadu_ps(firstMoment);
-    v_firstMoment = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA1), v_firstMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA1), v_gradient));
-    _mm256_storeu_ps(firstMoment, v_firstMoment);
-
-    //update second moment
-    __m256 v_secondMoment = _mm256_loadu_ps(secondMoment);
-    v_gradient = _mm256_mul_ps(v_gradient, v_gradient);
-    v_secondMoment = _mm256_add_ps(_mm256_mul_ps(_mm256_set1_ps((float) ADAM_BETA2), v_secondMoment), _mm256_mul_ps(_mm256_set1_ps((float) 1.0 - ADAM_BETA2), v_gradient));
-    _mm256_storeu_ps(secondMoment, v_secondMoment);
-
-    //calculate bias corrections for weight update.
-    v_firstMoment = _mm256_div_ps(v_firstMoment, _mm256_set1_ps(biasCorrection1));
-    v_secondMoment = _mm256_div_ps(v_secondMoment, _mm256_set1_ps(biasCorrection2));
-
-    //update weight.
-    __m256 v_weight = _mm256_loadu_ps(weight);
-    v_weight = _mm256_sub_ps(v_weight, 
-                             _mm256_mul_ps(_mm256_set1_ps(ADAM_LEARNING_RATE), 
-                                           _mm256_add_ps(_mm256_div_ps(v_firstMoment, _mm256_add_ps(_mm256_sqrt_ps(v_secondMoment),
-                                                                                                    _mm256_set1_ps(ADAM_EPSILON))),
-                                                         _mm256_mul_ps(_mm256_set1_ps(ADAM_WEIGHT_DECAY), v_weight))));                                     
-    _mm256_storeu_ps(weight, v_weight);
-    
-    //reset gradient sum
-    _mm256_storeu_ps(gradient, _mm256_setzero_ps());
-}
-
-typedef struct {
-    network_weights_training *gradientSums;
-    network_weights_training *firstMoment;
-    network_weights_training *secondMoment;
-} updateContext;
-
-VOID CALLBACK UpdateWeights4(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights4[j] +=  gradientSums[i].weights4[j];
-    }
-
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8)
-    {
-        updateWeight(&trainingNNUE->weights4[i], &gradientSums[HELPER_THREAD_COUNT].weights4[i], &firstMoment->weights4[i], &secondMoment->weights4[i]);
-    }
-
-}
-
-VOID CALLBACK UpdateWeights3(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) for(int k = 0; k < THIRD_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights3[k][j] +=  gradientSums[i].weights3[k][j];
-    }
-    
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
-    {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j+=8)
-        {
-            updateWeight(&trainingNNUE->weights3[i][j], &gradientSums[HELPER_THREAD_COUNT].weights3[i][j], &firstMoment->weights3[i][j], &secondMoment->weights3[i][j]);
-        }
-    }
-}
-
-VOID CALLBACK UpdateWeights3_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-    
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights3_bias[j] +=  gradientSums[i].weights3_bias[j];
-    }
-
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i+=8)
-    {
-        updateWeight(&trainingNNUE->weights3_bias[i], &gradientSums[HELPER_THREAD_COUNT].weights3_bias[i], &firstMoment->weights3_bias[i], &secondMoment->weights3_bias[i]);
-    }
-}
-
-VOID CALLBACK UpdateWeights2(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < ACCUMULATOR_NODES; j++) for(int k = 0; k < SECOND_HIDDEN_LAYER_NODES; k++) gradientSums[HELPER_THREAD_COUNT].weights2[k][j] +=  gradientSums[i].weights2[k][j];
-    }
-
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
-    {
-        for(int j = 0; j < ACCUMULATOR_NODES; j+=8)
-        {
-            updateWeight(&trainingNNUE->weights2[i][j], &gradientSums[HELPER_THREAD_COUNT].weights2[i][j], &firstMoment->weights2[i][j], &secondMoment->weights2[i][j]);
-        }
-    }
-}
-
-VOID CALLBACK UpdateWeights2_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) gradientSums[HELPER_THREAD_COUNT].weights2_bias[j] +=  gradientSums[i].weights2_bias[j];
-    }
-
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i+=8)
-    {
-        updateWeight(&trainingNNUE->weights2_bias[i], &gradientSums[HELPER_THREAD_COUNT].weights2_bias[i], &firstMoment->weights2_bias[i], &secondMoment->weights2_bias[i]);
-    }
-}
-
-VOID CALLBACK UpdateWeights1(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < HALF_INPUT_BITS; j++) for(int k = 0; k < ACCUMULATOR_NODES_PER_SIDE; k++) gradientSums[HELPER_THREAD_COUNT].weights1[k][j] +=  gradientSums[i].weights1[k][j]; 
-    }
-
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
-    {
-        for(int j = 0; j < HALF_INPUT_BITS; j+=8)
-        {
-            updateWeight(&trainingNNUE->weights1[i][j], &gradientSums[HELPER_THREAD_COUNT].weights1[i][j], &firstMoment->weights1[i][j], &secondMoment->weights1[i][j]);    
-        }
-    }
-}
-
-VOID CALLBACK UpdateWeights1_bias(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
-    updateContext* c = (updateContext*)Context;
-
-    network_weights_training *gradientSums = c->gradientSums;
-    network_weights_training *firstMoment = c->firstMoment;
-    network_weights_training *secondMoment = c->secondMoment;
-
-    
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) gradientSums[HELPER_THREAD_COUNT].weights1_bias[j] +=  gradientSums[i].weights1_bias[j];  
-    }
-
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8)
-    {
-        updateWeight(&trainingNNUE->weights1_bias[i], &gradientSums[HELPER_THREAD_COUNT].weights1_bias[i], &firstMoment->weights1_bias[i], &secondMoment->weights1_bias[i]);
-    }
-}
-
-void updateAllWeights(network_weights_training* gradientSums, network_weights_training* firstMoment, network_weights_training* secondMoment)
-{
-    PTP_POOL pool = CreateThreadpool(NULL);
-    
-    SetThreadpoolThreadMaximum(pool, HELPER_THREAD_COUNT);
-    SetThreadpoolThreadMinimum(pool, 1);
-
-    
-    TP_CALLBACK_ENVIRON threadEnvironment;
-    InitializeThreadpoolEnvironment(&threadEnvironment);
-    SetThreadpoolCallbackPool(&threadEnvironment, pool);
-
-    PTP_CLEANUP_GROUP cleanupGroup = CreateThreadpoolCleanupGroup();
-    SetThreadpoolCallbackCleanupGroup(&threadEnvironment, cleanupGroup, NULL);
-
-    updateContext context = {
-        .gradientSums = gradientSums,
-        .firstMoment = firstMoment,
-        .secondMoment = secondMoment
-    };
-    
-    biasCorrection1 = 1.0 - powf(ADAM_BETA1, timestamp);
-    biasCorrection2 = 1.0 - powf(ADAM_BETA2, timestamp);
-
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights4, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights3, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights3_bias, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights2, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights2_bias, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights1, &context, &threadEnvironment));
-    SubmitThreadpoolWork(CreateThreadpoolWork(UpdateWeights1_bias, &context, &threadEnvironment));
-
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++) gradientSums[HELPER_THREAD_COUNT].weights4_bias +=  gradientSums[i].weights4_bias;
-    gradientSums[HELPER_THREAD_COUNT].weights4_bias /= POSITIONS_PER_FILE;
-
-    firstMoment->weights4_bias = ADAM_BETA1 * firstMoment->weights4_bias + (1.0 - ADAM_BETA1) * gradientSums[HELPER_THREAD_COUNT].weights4_bias; 
-    secondMoment->weights4_bias = ADAM_BETA2 * secondMoment->weights4_bias + (1.0 - ADAM_BETA2) * (gradientSums[HELPER_THREAD_COUNT].weights4_bias * gradientSums[HELPER_THREAD_COUNT].weights4_bias); 
-    
-    float corrected_firstMoment = firstMoment->weights4_bias * biasCorrection1;
-    float corrected_secondMoment = secondMoment->weights4_bias * biasCorrection2;
-
-    trainingNNUE->weights4_bias -= ADAM_LEARNING_RATE * ( (corrected_firstMoment / (sqrt(corrected_secondMoment) + ADAM_EPSILON)) + (ADAM_WEIGHT_DECAY * trainingNNUE->weights4_bias) );
-    gradientSums[HELPER_THREAD_COUNT].weights4_bias = 0;
-    
-    CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
-    CloseThreadpoolCleanupGroup(cleanupGroup);
-    DestroyThreadpoolEnvironment(&threadEnvironment);
-    CloseThreadpool(pool);
-
-    timestamp++;
-}
-
 void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator)
 {
     assert(floatAccumulator);
+        
+    initOpenCL(trainingNNUE);
 
     int* blockNumbers = CALLOC(FILE_COUNT, sizeof(int));
-    for(int i = 0; i < FILE_COUNT; i++)
-    {
-        blockNumbers[i] = i + 1;
-    }
+    for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
+
+    short* activeInputs = CALLOC(64 * POSITIONS_PER_FILE, sizeof(short)); 
+    char* activeCount = CALLOC(POSITIONS_PER_FILE, sizeof(char));
+    float* expectedOutputs = CALLOC(POSITIONS_PER_FILE, sizeof(float));
 
     int totalIterations = 0;
 
-    
-    HANDLE helperThreads[HELPER_THREAD_COUNT] = {0};
-    DWORD helperThreadID[HELPER_THREAD_COUNT] = {0};
-    rpropThreadData threadData[HELPER_THREAD_COUNT] = {0};
+    double totalSumSquaredError = 0.0; //accumulated value per iteration
 
-    network_weights_training* gradientSums = CALLOC(HELPER_THREAD_COUNT + 1, sizeof(network_weights_training)); //Final index is the accumlated sum
-    network_weights_training* firstMoment = CALLOC(1, sizeof(network_weights_training)); //Final index is the accumlated sum
-    network_weights_training* secondMoment = CALLOC(1, sizeof(network_weights_training));
+    //similar to circular array queue, but we don't care about dequeueing and we just replace oldest with newest
+    double averageErrorWindow[WINDOW_SIZE] = {0.0};
+    double averageErrorSum = 0.0;
+    double previousAverageWindowError = 0.0;
+    int insertionIndex = 0; 
 
-    double* sumSquaredErrors = CALLOC(HELPER_THREAD_COUNT, sizeof(double));
-    double totalSumSquaredError = 0.0; //accumulated value.
+    int warmupPeriod = WINDOW_SIZE;
+    int cooldown = WINDOW_SIZE;
 
     char fileName[40] = {'\0'};
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++)
-    {
-        threadData[i].gradientSums = &gradientSums[i];
-        threadData[i].entriesToTrack = (int) floor(POSITIONS_PER_FILE / HELPER_THREAD_COUNT);
-        threadData[i].fileName = fileName;
-        threadData[i].sumSquaredError = &sumSquaredErrors[i];
-    }
+    char inputString[120] = {'\0'};
 
     do{
         shuffle(blockNumbers, FILE_COUNT);
@@ -784,6 +375,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
         for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
         {
+            //clock_t startTime = clock();
             sprintf(fileName, "./training/trainingData_%d.txt", blockNumbers[blockIndex]);
             FILE* trainingData = fopen(fileName, "r");
             if(!trainingData)
@@ -791,42 +383,177 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                 DEBUG("\nFailed to open file: %s\n", fileName);
                 continue;
             }
-            fseek(trainingData, 0, SEEK_END);
-            long fileBytes = ftell(trainingData);
+            memset(activeInputs, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
+            memset(activeCount, 0, POSITIONS_PER_FILE * sizeof(char));
+
+            int trackedEntries = 0;
+            bitboard* board = create_board(); 
+            while(trackedEntries < POSITIONS_PER_FILE && fgets(inputString, 120, trainingData))
+            {
+                loadTrainingData(inputString, board, &expectedOutputs[trackedEntries]);
+                trackedEntries++;
+
+                //char* activeIndicesCount = &activeCount[trackedEntries];
+
+                activeCount[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
+
+                uint64_t inputs[20] = {0};
+
+                inputs[0] = board->pawn_w;
+                inputs[1] = board->knight_w;
+                inputs[2] = board->bishop_w;
+                inputs[3] = board->rook_w;
+                inputs[4] = board->queen_w;
+                inputs[5] = board->pawn_b;
+                inputs[6] = board->knight_b;
+                inputs[7] = board->bishop_b;
+                inputs[8] = board->rook_b;
+                inputs[9] = board->queen_b;
+
+                inputs[10] = FLIP_MASK(board->pawn_b);
+                inputs[11] = FLIP_MASK(board->knight_b);
+                inputs[12] = FLIP_MASK(board->bishop_b);
+                inputs[13] = FLIP_MASK(board->rook_b);
+                inputs[14] = FLIP_MASK(board->queen_b);
+                inputs[15] = FLIP_MASK(board->pawn_w);
+                inputs[16] = FLIP_MASK(board->knight_w);
+                inputs[17] = FLIP_MASK(board->bishop_w);
+                inputs[18] = FLIP_MASK(board->rook_w);
+                inputs[19] = FLIP_MASK(board->queen_w);
+
+                if(getColumn(board->kingSquare_w) > 4)
+                {
+                    inputs[0] = mirrorBoard(inputs[0]);
+                    inputs[1] = mirrorBoard(inputs[1]);
+                    inputs[2] = mirrorBoard(inputs[2]);
+                    inputs[3] = mirrorBoard(inputs[3]);
+                    inputs[4] = mirrorBoard(inputs[4]);
+                    inputs[5] = mirrorBoard(inputs[5]);
+                    inputs[6] = mirrorBoard(inputs[6]);
+                    inputs[7] = mirrorBoard(inputs[7]);
+                    inputs[8] = mirrorBoard(inputs[8]);
+                    inputs[9] = mirrorBoard(inputs[9]);
+                }
+                if(getColumn(board->kingSquare_b) > 4)
+                {
+                    inputs[10] = mirrorBoard(inputs[10]);
+                    inputs[11] = mirrorBoard(inputs[11]);
+                    inputs[12] = mirrorBoard(inputs[12]);
+                    inputs[13] = mirrorBoard(inputs[13]);
+                    inputs[14] = mirrorBoard(inputs[14]);
+                    inputs[15] = mirrorBoard(inputs[15]);
+                    inputs[16] = mirrorBoard(inputs[16]);
+                    inputs[17] = mirrorBoard(inputs[17]);
+                    inputs[18] = mirrorBoard(inputs[18]);
+                    inputs[19] = mirrorBoard(inputs[19]);
+                }
+
+                for(int side = 0; side < 2; side++)
+                {
+                    int baseIndex = (side == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
+                    int trackedInputs = 0;
+                    for(int piece = 0; piece < 10; piece++)
+                    {
+                        uint64_t mask = inputs[10 * side + piece];
+                        while(mask)
+                        {
+                            activeInputs[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            trackedInputs++;
+                            mask&=(mask - 1);
+                        }
+                    }
+                }
+                
+            }
+            destroy_board(board);
+
             fclose(trainingData);
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++)
+
+            //printf("\nCPU Time: %f seconds\n", (float) (clock() - startTime) / CLOCKS_PER_SEC);
+            //startTime = clock();
+
+            enqueueKernels(activeInputs, activeCount, expectedOutputs, learningRate);
+
+            double sumSquaredError = getSumSquaredError();
+            //printf("GPU Time: %f seconds\n", (float) (clock() - startTime) / CLOCKS_PER_SEC);
+
+            sumSquaredError /= POSITIONS_PER_FILE;
+            if(blockIndex%100 == 0)
             {
-                *threadData[i].sumSquaredError = 0;
-                threadData[i].seekByteOffset = i * (long) floor(fileBytes / HELPER_THREAD_COUNT);
-                helperThreads[i] = CreateThread(NULL, 0, calculateGradients, &threadData[i], 0, &helperThreadID[i]);
+                //Avoid Floating point drift by periodically recalculating.
+                averageErrorSum = 0.0;
+                for(int i = 0; i < WINDOW_SIZE; i++)
+                {
+                    averageErrorSum+= averageErrorWindow[i];
+                }
+            }
+            else
+            {
+                averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
+            }
+            
+            averageErrorWindow[insertionIndex] = sumSquaredError;
+            double averageWindowError = averageErrorSum / WINDOW_SIZE;
+            insertionIndex = (insertionIndex + 1)%WINDOW_SIZE;
+
+            //GreedyLR
+            if(averageWindowError < (previousAverageWindowError * (1 - LR_THRESHOLD)))
+            {
+                num_consecutive_decreases++;
+                num_consecutive_increases = 0;
+            }
+            else 
+            {
+                num_consecutive_decreases = 0;
+                num_consecutive_increases++;
+            }
+            if(cooldown)
+            {
+                cooldown--;
+                num_consecutive_increases = 0;
+            }
+            if(warmupPeriod)
+            {
+                warmupPeriod--;
+                num_consecutive_decreases = 0;
+            }
+            if(num_consecutive_decreases > PATIENCE)
+            {
+                learningRate/=LR_FACTOR;
+                learningRate = min(MAX_LR, max(learningRate, MIN_LR));
+                warmupPeriod = WARMUP_PERIOD;
+            }
+            else if(num_consecutive_increases > PATIENCE)
+            {
+                learningRate*=LR_FACTOR;
+                learningRate = min(MAX_LR, max(learningRate, MIN_LR));
+                cooldown = COOLDOWN_PERIOD;
             }
 
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+            previousAverageWindowError = averageWindowError;
+
+            printf("\33[2K\r\tAnalyzed block %d/%d; Block MSE = %e; Window MSE = %e; LearningRate=%e", blockIndex + 1, FILE_COUNT, sumSquaredError, averageWindowError, learningRate);
+            
+            if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) 
             {
-                WaitForSingleObject(helperThreads[i], INFINITE);
-                CloseHandle(helperThreads[i]);
+                getWeights(trainingNNUE);
+                save_trainingWeights();
             }
-
-            memset(&gradientSums[HELPER_THREAD_COUNT], 0, sizeof(network_weights_training));
-
-            double sumSquaredError = 0.0;
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++) sumSquaredError+= sumSquaredErrors[i];
-            totalSumSquaredError+= sumSquaredError;
-
-            updateAllWeights(gradientSums, firstMoment, secondMoment);
-
-            if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) save_trainingWeights();
-            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError/POSITIONS_PER_FILE);
         }
         totalIterations++;
         
         printf("\33[2K\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
 
+        getWeights(trainingNNUE);
         save_trainingWeights();
     } while((totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
     FREE(blockNumbers);
-    save_trainingWeights();
+    FREE(activeInputs);
+    FREE(activeCount);
+    FREE(expectedOutputs);
+
+    freeOpenCL();
 }
 
 void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator)

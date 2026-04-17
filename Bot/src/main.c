@@ -8,10 +8,6 @@
 #include <stdio.h>
 #include <string.h>
 
-/**
- * TODO:
- *  - Optimize move generation.
- */
 int main(int argc, char** argv)
 {
     /**
@@ -85,8 +81,9 @@ int main(int argc, char** argv)
     {
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
-        trainingRefreshTable = createTrainingRefreshTable();
+
         train(saveEveryNBlocks, shouldTrain, 1e-6, trainingAccumulator);
+        
         save_trainingWeights();
 
         load_playingWeights();
