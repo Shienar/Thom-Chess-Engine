@@ -25,6 +25,8 @@ openCLContext opencl_context = {
 
 openCLKernelMemory opencl_mem = {NULL};
 
+cl_event readEvent;
+
 char* getKernelFunctions()
 {
     FILE* input = fopen("./src/gpu/kernels.cl", "rb"); 
@@ -402,7 +404,7 @@ void freeOpenCL()
 }
 
 int timestamp = 0;
-void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate)
+void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate, double* outputSSE)
 {
     clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.activeInputs, CL_FALSE, 0, POSITIONS_PER_FILE * 64 * sizeof(short), (void*)activeInputs, 0, NULL, NULL);
     clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.activeCount, CL_FALSE, 0, POSITIONS_PER_FILE * sizeof(char), (void*)activeCount, 0, NULL, NULL);
@@ -440,7 +442,10 @@ void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutpu
     
     size_t calcDelta4Size = POSITIONS_PER_FILE;
     size_t calcDelta4Size_Local = 64;
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta4, 1, NULL, &calcDelta4Size, &calcDelta4Size_Local, 0, NULL, NULL);
+    cl_event delta4Event;
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta4, 1, NULL, &calcDelta4Size, &calcDelta4Size_Local, 0, NULL, &delta4Event);
+
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.sumsquarederror, CL_FALSE, 0, sizeof(double), outputSSE, 1, &delta4Event, &readEvent);
 
     size_t calcDelta3Size[2] = { POSITIONS_PER_FILE, THIRD_HIDDEN_LAYER_NODES };
     size_t calcDelta3Size_Local[2] = { 1, 32 };
@@ -496,22 +501,6 @@ void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutpu
     ENQUEUE_ADAM(opencl_mem.bias4, opencl_mem.gradientBias4Sum, opencl_mem.m_bias4, opencl_mem.v_bias4, bias4Size, lr, biasCorrection1, biasCorrection2);
 
     clFlush(opencl_context.queue);
-}
-
-double getSumSquaredError()
-{
-    double returnedValue = 0.0;
-    cl_int err = clEnqueueReadBuffer(opencl_context.queue, opencl_mem.sumsquarederror, CL_TRUE, 0, sizeof(double), &returnedValue, 0, NULL, NULL);
-    if(!isfinite(returnedValue) || isnan(returnedValue))
-    {
-        DEBUG("Fetched SSE of %f", returnedValue);
-        returnedValue = 1.0;
-    }
-    if(err != CL_SUCCESS)
-    {
-        DEBUG("\nError reading sum squared error.");
-    }
-    return returnedValue;
 }
 
 void getWeights(network_weights_training* weights)

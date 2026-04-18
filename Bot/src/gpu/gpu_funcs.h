@@ -93,6 +93,7 @@ typedef struct {
 
 extern openCLContext opencl_context;
 extern openCLKernelMemory opencl_mem;
+extern cl_event readEvent;
 
 int initOpenCL(network_weights_training* trainingWeights);
 void freeOpenCL();
@@ -107,8 +108,7 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.adam, 6, sizeof(cl_float), &biasCorrection2); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.adam, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate);
-double getSumSquaredError();
+void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate, double* outputSSE);
 void getWeights(network_weights_training* weights);
 
 #endif

@@ -375,7 +375,6 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
         for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
         {
-            //clock_t startTime = clock();
             sprintf(fileName, "./training/trainingData_%d.txt", blockNumbers[blockIndex]);
             FILE* trainingData = fopen(fileName, "r");
             if(!trainingData)
@@ -392,8 +391,6 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
             {
                 loadTrainingData(inputString, board, &expectedOutputs[trackedEntries]);
                 trackedEntries++;
-
-                //char* activeIndicesCount = &activeCount[trackedEntries];
 
                 activeCount[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
 
@@ -469,29 +466,13 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
             fclose(trainingData);
 
-            //printf("\nCPU Time: %f seconds\n", (float) (clock() - startTime) / CLOCKS_PER_SEC);
-            //startTime = clock();
-
-            enqueueKernels(activeInputs, activeCount, expectedOutputs, learningRate);
-
-            double sumSquaredError = getSumSquaredError();
-            //printf("GPU Time: %f seconds\n", (float) (clock() - startTime) / CLOCKS_PER_SEC);
+            
+            double sumSquaredError = 0.0;
+            enqueueKernels(activeInputs, activeCount, expectedOutputs, learningRate, &sumSquaredError);
+            clWaitForEvents(1, &readEvent);
 
             sumSquaredError /= POSITIONS_PER_FILE;
-            if(blockIndex%100 == 0)
-            {
-                //Avoid Floating point drift by periodically recalculating.
-                averageErrorSum = 0.0;
-                for(int i = 0; i < WINDOW_SIZE; i++)
-                {
-                    averageErrorSum+= averageErrorWindow[i];
-                }
-            }
-            else
-            {
-                averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
-            }
-            
+            averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
             averageErrorWindow[insertionIndex] = sumSquaredError;
             double averageWindowError = averageErrorSum / WINDOW_SIZE;
             insertionIndex = (insertionIndex + 1)%WINDOW_SIZE;
@@ -532,7 +513,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
             previousAverageWindowError = averageWindowError;
 
-            printf("\33[2K\r\tAnalyzed block %d/%d; Block MSE = %e; Window MSE = %e; LearningRate=%e", blockIndex + 1, FILE_COUNT, sumSquaredError, averageWindowError, learningRate);
+            printf("\33[2K\r\tAnalyzed block %d/%d; Block MSE = %e; Window MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError, averageWindowError);
             
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) 
             {

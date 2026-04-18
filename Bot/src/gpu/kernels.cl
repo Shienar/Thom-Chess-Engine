@@ -408,6 +408,8 @@ __kernel void adam(__global float* weights,
     // Flattened array of weights.
     int i = get_global_id(0);
 
+    if(gradientSum[i] == 0) return;
+
     float grad = gradientSum[i] / POSITIONS_PER_FILE;
 
     firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad;
