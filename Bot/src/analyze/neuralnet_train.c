@@ -12,44 +12,6 @@ network_weights_training* trainingNNUE = NULL;
 float num_consecutive_increases = 0; //increases in loss / MSE are bad
 float num_consecutive_decreases = 0;
 
-void iterateTrainingWeights(void (*func)(float*, double*), network_weights_training* trainingWeights, double* context) 
-{
-    assert(func && trainingWeights);
-
-    for(int i = 0; i < HALF_INPUT_BITS; i++)
-    {
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-        {
-            func(&trainingWeights->weights1[j][i], context);
-        }
-    }
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) func(&trainingWeights->weights1_bias[i], context);
-
-    for(int i = 0; i < ACCUMULATOR_NODES; i++)
-    {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
-        {
-            func(&trainingWeights->weights2[j][i], context);
-        }
-    }
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) func(&trainingWeights->weights2_bias[i], context);
-
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
-    {
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
-        {
-            func(&trainingWeights->weights3[j][i], context);
-        }
-    }
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) func(&trainingWeights->weights3_bias[i], context);
-
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
-    {
-        func(&trainingWeights->weights4[i], context);
-    }
-    func(&trainingWeights->weights4_bias, context);
-}
-
 /**
  * Box-Muller transform.
  */
@@ -73,7 +35,9 @@ void load_trainingWeights()
     else
     {
         DEBUG("Failed to load neural network from file.\n");
-        double standardDeviation = 0.1; // High deviation for sparse input layer.
+
+
+        double standardDeviation = sqrt(2.0/30.0);
         
         for(int i = 0; i < HALF_INPUT_BITS; i++)
         {
@@ -82,9 +46,9 @@ void load_trainingWeights()
                 sampleNormalDistribution(&trainingNNUE->weights1[j][i], standardDeviation);
             }
         }
-        for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) sampleNormalDistribution(&trainingNNUE->weights1_bias[i], standardDeviation);
+        for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) trainingNNUE->weights1_bias[i] = 0.0;
 
-        standardDeviation = sqrt(2.0 / 512.0); //He initialization for the rest of the weights.
+        standardDeviation = sqrt(2.0 / 512.0);
         for(int i = 0; i < ACCUMULATOR_NODES; i++)
         {
             for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
@@ -92,7 +56,7 @@ void load_trainingWeights()
                 sampleNormalDistribution(&trainingNNUE->weights2[j][i], standardDeviation);
             }
         }
-        for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) sampleNormalDistribution(&trainingNNUE->weights2_bias[i], standardDeviation);
+        for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) trainingNNUE->weights2_bias[i] = 0.0;
 
         standardDeviation = sqrt(2.0 / 32.0);
         for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
@@ -102,13 +66,13 @@ void load_trainingWeights()
                 sampleNormalDistribution(&trainingNNUE->weights3[j][i], standardDeviation);
             }
         }
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) sampleNormalDistribution(&trainingNNUE->weights3_bias[i], standardDeviation);
+        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) trainingNNUE->weights3_bias[i] = 0.0;
 
         for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
         {
             sampleNormalDistribution(&trainingNNUE->weights4[i], standardDeviation);
         }
-        sampleNormalDistribution(&trainingNNUE->weights4_bias, standardDeviation);
+        trainingNNUE->weights4_bias = 0.0;
     }
 }
 
@@ -126,25 +90,125 @@ void save_trainingWeights()
     fclose(output);
 }
 
-void findAbsMax(float* comparedValue, double* max)
-{
-    if(fabsf(*comparedValue) > *max) *max = fabsf(*comparedValue);
-}
-
-void findSum(float* comparedValue, double* sum)
-{
-    *sum+=*comparedValue;
-}
-
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes)
 {
     assert(inputFloats);
     assert(outputBytes);
 
-    double maxValue = -DBL_MAX;
+    double maxValue = 0.0;
+    double tempMaxValue = 0.0;
     double meanValue = 0.0;
-    iterateTrainingWeights(findAbsMax, inputFloats, &maxValue);
-    iterateTrainingWeights(findSum, inputFloats, &meanValue);
+
+    printf("Training Weights:\n");
+
+    for(int i = 0; i < HALF_INPUT_BITS; i++)
+    {
+        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+        {
+            meanValue+= fabsf(trainingNNUE->weights1[j][i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights1[j][i]), tempMaxValue);
+        }
+    }
+    printf("\tWeights 1:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
+    {
+            meanValue+= fabsf(trainingNNUE->weights1_bias[i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights1_bias[i]), tempMaxValue);
+    }
+    printf("\tWeights 1 Bias:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (ACCUMULATOR_NODES_PER_SIDE));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    for(int i = 0; i < ACCUMULATOR_NODES; i++)
+    {
+        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
+        {
+            meanValue+= fabsf(trainingNNUE->weights2[j][i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights2[j][i]), tempMaxValue);
+        }
+    }
+    printf("\tWeights 2:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) 
+    {
+            meanValue+= fabsf(trainingNNUE->weights2_bias[i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights2_bias[i]), tempMaxValue);
+    }
+    printf("\tWeights 2 Bias:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (SECOND_HIDDEN_LAYER_NODES));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    {
+        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
+        {
+            meanValue+= fabsf(trainingNNUE->weights3[j][i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights3[j][i]), tempMaxValue);
+        }
+    }
+    printf("\tWeights 3:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
+    {
+            meanValue+= fabsf(trainingNNUE->weights3_bias[i]);
+            tempMaxValue = max(fabsf(trainingNNUE->weights3_bias[i]), tempMaxValue);
+    }
+    printf("\tWeights 3 Bias:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (THIRD_HIDDEN_LAYER_NODES));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
+    {
+        meanValue+= fabsf(trainingNNUE->weights4[i]);
+        tempMaxValue = max(fabsf(trainingNNUE->weights4[i]), tempMaxValue);
+    }
+    printf("\tWeights 4:\n");
+    printf("\t\tAbsolute Mean: %f\n", meanValue / (THIRD_HIDDEN_LAYER_NODES));
+    printf("\t\tAbsolute Max: %f\n", tempMaxValue);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+
+    meanValue += trainingNNUE->weights4_bias;
+    printf("\tWeights 4 Bias: %f\n", trainingNNUE->weights4_bias);
+
+    maxValue = max(tempMaxValue, maxValue);
+    tempMaxValue = 0;
+    meanValue = 0;
+    
     meanValue = meanValue / (HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE + 
                             ACCUMULATOR_NODES_PER_SIDE +
                             ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES +
@@ -153,6 +217,9 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
                             2 * THIRD_HIDDEN_LAYER_NODES + 1);
     
     float scalingFactor = maxValue / 127;
+    
+    printf("\tScaling Factor: %f\n", scalingFactor);
+
     for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
@@ -184,11 +251,6 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
         outputBytes->weights4[i] = (uint8_t) roundf(inputFloats->weights4[i] / scalingFactor);
     }
     outputBytes->weights4_bias = (uint8_t) roundf(inputFloats->weights4_bias / scalingFactor);
-
-    printf("Quantized Weights:\n");
-    printf("\tScaling Factor: %f\n", scalingFactor);
-    printf("\tMean: %f\n", meanValue);
-    printf("\tMax: %f\n", maxValue);
 }
 
 static inline float horizontalSIMDSum_Float(__m256 vector)
@@ -348,14 +410,12 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
 
     short* activeInputs_A = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
-    char* activeCount_A = _aligned_malloc(POSITIONS_PER_FILE * sizeof(char), 4096);
     float* expectedOutputs_A = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
     
     short* activeInputs_B = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
-    char* activeCount_B = _aligned_malloc(POSITIONS_PER_FILE * sizeof(char), 4096);
     float* expectedOutputs_B = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
     
-    initOpenCL(trainingNNUE, activeInputs_A, activeCount_A, expectedOutputs_A, activeInputs_B, activeCount_B, expectedOutputs_B);
+    initOpenCL(trainingNNUE, activeInputs_A, expectedOutputs_A, activeInputs_B, expectedOutputs_B);
 
     int totalIterations = 0;
 
@@ -381,29 +441,23 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
             if(inputGroup == INPUT_GROUP_A)
             {
                 memset(activeInputs_A, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
-                memset(activeCount_A, 0, POSITIONS_PER_FILE * sizeof(char));
             }
             else
             {
                 memset(activeInputs_B, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
-                memset(activeCount_B, 0, POSITIONS_PER_FILE * sizeof(char));
             }
 
             int trackedEntries = 0;
             bitboard* board = create_board(); 
             while(trackedEntries < POSITIONS_PER_FILE && fgets(inputString, 120, trainingData))
             {
-                
-                trackedEntries++;
                 if(inputGroup == INPUT_GROUP_A) 
                 {
                     loadTrainingData(inputString, board, &expectedOutputs_A[trackedEntries]);
-                    activeCount_A[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
                 }
                 else 
                 {
                     loadTrainingData(inputString, board, &expectedOutputs_B[trackedEntries]);
-                    activeCount_B[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
                 }
 
                 uint64_t inputs[20] = {0};
@@ -466,21 +520,22 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                         uint64_t mask = inputs[10 * side + piece];
                         while(mask)
                         {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                            else activeInputs_B[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[trackedEntries * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            else activeInputs_B[trackedEntries * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
                             trackedInputs++;
                             mask&=(mask - 1);
                         }
                         //-1 padding
                         while(trackedInputs < 32)
                         {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = -1;
-                            else activeInputs_B[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = -1;
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[trackedEntries * 64 + 32 * side + trackedInputs] = -1;
+                            else activeInputs_B[trackedEntries * 64 + 32 * side + trackedInputs] = -1;
                             trackedInputs++;
                         }
                     }
                 }
                 
+                trackedEntries++;
             }
             destroy_board(board);
 
@@ -513,10 +568,8 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
     FREE(blockNumbers);
     FREE(activeInputs_A);
-    FREE(activeCount_A);
     FREE(expectedOutputs_A);
     FREE(activeInputs_B);
-    FREE(activeCount_B);
     FREE(expectedOutputs_B);
 
     freeOpenCL();

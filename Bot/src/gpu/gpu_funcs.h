@@ -12,10 +12,10 @@
 #define INPUT_GROUP_B 1
 
 //cosine annealing is done using timestamp in enqueueKernels()
-#define MIN_LR 1e-6
-#define MAX_LR 5e-4
-extern uint32_t maxCosineAnnealingTimestamp;
-
+#define MIN_LR 1e-4f
+#define MAX_LR 1e-3f
+#define INTERVAL_SCALE 1.5f
+#define FIRST_INTERVAL 20
 
 typedef struct {
     cl_platform_id platform;
@@ -40,11 +40,9 @@ typedef struct {
 
 typedef struct {
     cl_mem activeInputs_A;
-    cl_mem activeCount_A;
     cl_mem expectedOutput_A;
 
     cl_mem activeInputs_B;
-    cl_mem activeCount_B;
     cl_mem expectedOutput_B;
 
     cl_mem weights1;
@@ -108,8 +106,8 @@ extern openCLContext opencl_context;
 extern openCLKernelMemory opencl_mem;
 extern cl_event readEvent;
 
-int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, char* host_activeCounts_A, float* host_expectedOutputs_A,
-                                                        short* host_activeInputs_B, char* host_activeCounts_B, float* host_expectedOutputs_B);
+int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, float* host_expectedOutputs_A,
+                                                        short* host_activeInputs_B, float* host_expectedOutputs_B);
 void freeOpenCL();
 
 #define ENQUEUE_ADAM(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \

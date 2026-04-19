@@ -1,3 +1,6 @@
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+
 #define POSITIONS_PER_FILE 16384
 #define INPUT_BITS 20480
 #define HALF_INPUT_BITS 10240
@@ -9,10 +12,7 @@
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-5
-
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
+#define ADAM_WEIGHT_DECAY 1e-3
 
 /******* UTIL *******/
 
@@ -39,6 +39,16 @@ inline void AtomicAddFloat(volatile __global float* source, const float operand 
     }
     while (atomic_cmpxchg( (volatile __global unsigned int*)source, prevVal.intVal, newVal.intVal ) != prevVal.intVal);
 }
+inline void AtomicAddFloatLocal(volatile __local float* source, const float operand )
+{
+    union { unsigned int intVal; float floatVal; } newVal;
+    union { unsigned int intVal; float floatVal; } prevVal;
+    do {
+        prevVal.floatVal = *source;
+        newVal.floatVal = prevVal.floatVal + operand;
+    }
+    while (atomic_cmpxchg( (volatile __local unsigned int*)source, prevVal.intVal, newVal.intVal ) != prevVal.intVal);
+}
 inline void AtomicAddDouble(volatile __global double* source, const double operand)
 {
     union { unsigned long long u64; double f64; } newVal;
@@ -55,7 +65,6 @@ inline void AtomicAddDouble(volatile __global double* source, const double opera
 
 //~ 10 ms
 __kernel void calculateAccumulator(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [POSITIONS_PER_FILE][2][32] - max 32 active features
-                                    __global const char* activeCount,      //how many active features. [POSITIONS_PER_FILE]
                                     __global const float* weights,          //shared
                                     __global const float* bias,             //shared
                                     __global float* output)  //contains every activated output in entire batch
@@ -66,12 +75,14 @@ __kernel void calculateAccumulator(__global const short* activeInputs,       //c
     int side = outputIndex / ACCUMULATOR_NODES_PER_SIDE;
     int sideOutputIndex = outputIndex % ACCUMULATOR_NODES_PER_SIDE;
 
-    __global const short* myActiveInputs = &activeInputs[batchIndex * 2 * 32 + side * 32];
+    __global const short* myActiveInputs = &activeInputs[batchIndex * 64 + side * 32];
 
     float sum = bias[sideOutputIndex];
-    for(int activeIndex = 0; activeIndex < activeCount[batchIndex]; activeIndex++)
+    int activeIndex = 0;
+    while(myActiveInputs[activeIndex] != -1 && activeIndex < 32)
     {
         sum += weights[myActiveInputs[activeIndex] * ACCUMULATOR_NODES_PER_SIDE + sideOutputIndex];
+        activeIndex++;
     }
     output[batchIndex * ACCUMULATOR_NODES + outputIndex] = screlu_leaky(sum); 
 }
@@ -123,7 +134,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         sum = screlu_leaky(sum);
         
         shared[localID] = sum;
-        h2_output[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = sum;
+        h3_output[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = sum;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -259,7 +270,7 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
         if(localID < stride)
         {
             tempSum[localID] += tempSum[localID + stride];
-            if(weightIndex == 0) partialBiasSum += tempBias[localID + stride];
+            if(weightIndex == 0) tempBias[localID] += tempBias[localID + stride];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
@@ -267,7 +278,7 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
     if(localID == 0)
     {
         AtomicAddFloat(&gradient4_Sum[weightIndex], tempSum[0]);
-        if(weightIndex == 0) AtomicAddFloat(&bias4_Sum[weightIndex], tempBias[0]);
+        if(weightIndex == 0) AtomicAddFloat(bias4_Sum, tempBias[0]);
     }
 }
 
@@ -281,8 +292,8 @@ __kernel void calculateGradient3(__global const float* delta3, //THIRD_HIDDEN_LA
     int localID = get_local_id(1);
     int localSize = get_local_size(1);
 
-    int outIndex = flatWeightIndex / THIRD_HIDDEN_LAYER_NODES;
-    int inIndex  = flatWeightIndex % THIRD_HIDDEN_LAYER_NODES;
+    int outIndex = flatWeightIndex % THIRD_HIDDEN_LAYER_NODES;
+    int inIndex  = flatWeightIndex / THIRD_HIDDEN_LAYER_NODES;
 
     float partialSum = 0.0;
     float partialBiasSum = 0.0; //Only managed by the threads with weightIndex == 0.
@@ -325,9 +336,11 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     int inputNodeIndex = get_group_id(0); // 0 to 511
     int localID = get_local_id(0);        // 0 to 63
 
-    __local float shared[32][64];
+    __local float shared_weight[32][64];
+    __local float shared_bias[32][64];
 
     float partialGradientSums[32] = {0.0f};
+    float partialBiasSums[32] = {0.0f};
 
     //64 threads each work on subsets of the batch.
     for (int batchIndex = localID; batchIndex < POSITIONS_PER_FILE; batchIndex += 64) 
@@ -336,48 +349,44 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
         
         for(int outputWeight = 0; outputWeight < SECOND_HIDDEN_LAYER_NODES; outputWeight++) {
             partialGradientSums[outputWeight] += h1_val * delta2[batchIndex * 32 + outputWeight];
+            if(inputNodeIndex == 0) partialBiasSums[outputWeight] += delta2[batchIndex * 32 + outputWeight];
         }
     }
 
     //share the private partialGradientSums
     for(int n = 0; n < 32; n++) {
-        shared[n][localID] = partialGradientSums[n];
+        shared_weight[n][localID] = partialGradientSums[n];
+        if(inputNodeIndex == 0) shared_bias[n][localID] = partialBiasSums[n];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
     //Use 32 threads to sum the values from the 64 threads.
     if (localID < 32) {
         float finalWeightGradient = 0.0f;
+        float finalBiasGradient = 0.0f;
         for(int i = 0; i < 64; i++) {
-            finalWeightGradient += shared[localID][i];
+            finalWeightGradient += shared_weight[localID][i];
+            if(inputNodeIndex == 0) finalBiasGradient += shared_weight[localID][i];
         }
         AtomicAddFloat(&gradient2_Sum[inputNodeIndex * 32 + localID], finalWeightGradient);
+        if(inputNodeIndex == 0) AtomicAddFloat(&bias2_Sum[localID], finalBiasGradient);
     }
 }
 
-//~1-5 - lock heavy - lot of variance
+//~3.5ms
 __kernel void calculateGradient1(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [POSITIONS_PER_FILE][2][32] - max 32 active features
-                                    __global const char* activeCount,      //how many active features per side. [POSITIONS_PER_FILE]
                                     __global const float* delta1, // ACCUMULATOR_NODES per batch sample
                                     __global float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
                                     __global float* bias1_Sum)    // ACCUMULATOR_NODES_PER_SIDE shared
 {
     int batchIndex = get_global_id(0);
     int localID = get_local_id(1);
-    int localSize = get_local_size(1);
 
     // Shared storage for the 64 active features of this board position
     __local short sharedFeatures[64];
-    __local int count;
-    if(localID == 0) count = activeCount[batchIndex];
 
     sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
 
-    
-    //locally calculae it & sum it before the atomic call.
-    __local float partialBiasSums[64];
-    partialBiasSums[localID] = 0.0;
-    
     barrier(CLK_LOCAL_MEM_FENCE);
 
 
@@ -387,23 +396,16 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
         float d1_w = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];
         float d1_b = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex];
 
-        partialBiasSums[localID] += d1_w + d1_b;
+        AtomicAddFloat(&bias1_Sum[outIndex], d1_b + d1_w);
 
-        for (int f = 0; f < count; f++) 
+        int f = 0;
+        while(sharedFeatures[f] != -1 && f < 32)
         {
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * 256 + outIndex], d1_w);
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * 256 + outIndex], d1_b);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_w);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_b);
+            f++;
         }
     }
-    
-    barrier(CLK_LOCAL_MEM_FENCE);
-    for(int stride = localSize / 2; stride > 0; stride/=2)
-    {
-        if(localID < stride) partialBiasSums[localID] += partialBiasSums[localID + stride];
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-    if(localID == 0) AtomicAddFloat(bias1_Sum, partialBiasSums[0]);
 }
 
 /******* Adam Update *******/
@@ -418,8 +420,6 @@ __kernel void adam(__global float* weights,
     // Flattened array of weights.
     int i = get_global_id(0);
 
-    if(gradientSum[i] == 0) return;
-
     float grad = gradientSum[i] / POSITIONS_PER_FILE;
 
     firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad;
@@ -428,5 +428,8 @@ __kernel void adam(__global float* weights,
     float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1);
     float correctedSecondMoment = secondMoment[i] / (1.0f - biasCorrection2);
 
-    weights[i] -= learningRate * (correctedFirstMoment / (native_sqrt(correctedSecondMoment) + ADAM_EPSILON) + weights[i] * ADAM_WEIGHT_DECAY);
+    if(!grad) return;
+
+    weights[i] -= learningRate * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
+    weights[i] -= learningRate * ADAM_WEIGHT_DECAY * weights[i];
 }

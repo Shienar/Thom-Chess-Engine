@@ -25,9 +25,9 @@ openCLKernelMemory opencl_mem = {NULL};
 
 cl_event readEvent;
 cl_float lr = MAX_LR;
-uint32_t maxCosineAnnealingTimestamp = 0; //set in main
-
-int timestamp;
+int64_t cosineIntervalLength;
+uint64_t cosineTimestamp;
+uint64_t timestamp;
 char* getKernelFunctions()
 {
     FILE* input = fopen("./src/gpu/kernels.cl", "rb"); 
@@ -51,11 +51,14 @@ char* getKernelFunctions()
     return source;
 }
 
-int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, char* host_activeCounts_A, float* host_expectedOutputs_A,
-                                                        short* host_activeInputs_B, char* host_activeCounts_B, float* host_expectedOutputs_B)
+int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, float* host_expectedOutputs_A,
+                                                        short* host_activeInputs_B, float* host_expectedOutputs_B)
 {
-    int err = 0;
+    cosineIntervalLength = FIRST_INTERVAL;
+    cosineTimestamp = 0;
     timestamp = 0;
+
+    int err = 0;
 
     err = clGetPlatformIDs(1, &opencl_context.platform, NULL);
     err = clGetDeviceIDs(opencl_context.platform, CL_DEVICE_TYPE_GPU, 1, &opencl_context.device, NULL);
@@ -72,7 +75,8 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
 
     err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, NULL, NULL, NULL);
     
-    if (err) {
+    if (err)
+    {
         char log[4096];
         clGetProgramBuildInfo(opencl_context.program, opencl_context.device, CL_PROGRAM_BUILD_LOG, 4096, log, NULL);
         printf("Build Error:\n%s\n", log);
@@ -93,11 +97,9 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
 
     
     opencl_mem.activeInputs_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * 64 * sizeof(short), host_activeInputs_A, NULL);
-    opencl_mem.activeCount_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(char), host_activeCounts_A, NULL);
     opencl_mem.expectedOutput_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(float), host_expectedOutputs_A, NULL);
     
     opencl_mem.activeInputs_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * 64 * sizeof(short), host_activeInputs_B, NULL);
-    opencl_mem.activeCount_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(char), host_activeCounts_B, NULL);
     opencl_mem.expectedOutput_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(float), host_expectedOutputs_B, NULL);
 
     opencl_mem.weights1 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
@@ -217,16 +219,14 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias4, &zero, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
 
     clSetKernelArg(opencl_context.calculateAccumulator_A, 0, sizeof(cl_mem), &opencl_mem.activeInputs_A);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 1, sizeof(cl_mem), &opencl_mem.activeCount_A);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 2, sizeof(cl_mem), &opencl_mem.weights1);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 3, sizeof(cl_mem), &opencl_mem.bias1);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 1, sizeof(cl_mem), &opencl_mem.weights1);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 2, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 3, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
     
     clSetKernelArg(opencl_context.calculateAccumulator_B, 0, sizeof(cl_mem), &opencl_mem.activeInputs_B);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 1, sizeof(cl_mem), &opencl_mem.activeCount_B);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 2, sizeof(cl_mem), &opencl_mem.weights1);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 3, sizeof(cl_mem), &opencl_mem.bias1);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 1, sizeof(cl_mem), &opencl_mem.weights1);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 2, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 3, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
 
     clSetKernelArg(opencl_context.forwardPropagate, 0, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
     clSetKernelArg(opencl_context.forwardPropagate, 1, sizeof(cl_mem), &opencl_mem.weights2);
@@ -283,16 +283,14 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     clSetKernelArg(opencl_context.calculateGradient2, 3, sizeof(cl_mem), &opencl_mem.gradientBias2Sum);
 
     clSetKernelArg(opencl_context.calculateGradient1_A, 0, sizeof(cl_mem), &opencl_mem.activeInputs_A);
-    clSetKernelArg(opencl_context.calculateGradient1_A, 1, sizeof(cl_mem), &opencl_mem.activeCount_A);
-    clSetKernelArg(opencl_context.calculateGradient1_A, 2, sizeof(cl_mem), &opencl_mem.delta1);
-    clSetKernelArg(opencl_context.calculateGradient1_A, 3, sizeof(cl_mem), &opencl_mem.gradient1Sum);
-    clSetKernelArg(opencl_context.calculateGradient1_A, 4, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 1, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 2, sizeof(cl_mem), &opencl_mem.gradient1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 3, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
     
     clSetKernelArg(opencl_context.calculateGradient1_B, 0, sizeof(cl_mem), &opencl_mem.activeInputs_B);
-    clSetKernelArg(opencl_context.calculateGradient1_B, 1, sizeof(cl_mem), &opencl_mem.activeCount_B);
-    clSetKernelArg(opencl_context.calculateGradient1_B, 2, sizeof(cl_mem), &opencl_mem.delta1);
-    clSetKernelArg(opencl_context.calculateGradient1_B, 3, sizeof(cl_mem), &opencl_mem.gradient1Sum);
-    clSetKernelArg(opencl_context.calculateGradient1_B, 4, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 1, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 2, sizeof(cl_mem), &opencl_mem.gradient1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 3, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
 
     return (err == CL_SUCCESS);
 }
@@ -300,10 +298,8 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
 void freeOpenCL()
 {
     clReleaseMemObject(opencl_mem.activeInputs_A);
-    clReleaseMemObject(opencl_mem.activeCount_A);
     clReleaseMemObject(opencl_mem.expectedOutput_A);
     clReleaseMemObject(opencl_mem.activeInputs_B);
-    clReleaseMemObject(opencl_mem.activeCount_B);
     clReleaseMemObject(opencl_mem.expectedOutput_B);
     clReleaseMemObject(opencl_mem.weights1);
     clReleaseMemObject(opencl_mem.weights2);
@@ -422,27 +418,28 @@ void freeOpenCL()
 void enqueueKernels(int bufferSide, double* outputSSE)
 {
     //cosine annealing
-    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * timestamp / maxCosineAnnealingTimestamp));
+    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
+    if(cosineTimestamp >= cosineIntervalLength)
+    {
+        cosineTimestamp = 0;
+        cosineIntervalLength*=INTERVAL_SCALE;
+    }
 
     if(bufferSide == INPUT_GROUP_A)
     {
         void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeInputs_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * 64 * sizeof(short), 0, NULL, NULL, NULL);
-        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeCount_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(char), 0, NULL, NULL, NULL);
-        void* ptr3 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
 
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeInputs_A, ptr1, 0, NULL, NULL);
-        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeCount_A, ptr2, 0, NULL, NULL);
-        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_A, ptr3, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_A, ptr2, 0, NULL, NULL);
     }
     else if(bufferSide == INPUT_GROUP_B)
     {
         void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeInputs_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * 64 * sizeof(short), 0, NULL, NULL, NULL);
-        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeCount_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(char), 0, NULL, NULL, NULL);
-        void* ptr3 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
 
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeInputs_B, ptr1, 0, NULL, NULL);
-        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeCount_B, ptr2, 0, NULL, NULL);
-        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_B, ptr3, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_B, ptr2, 0, NULL, NULL);
 
     }
 
@@ -488,10 +485,22 @@ void enqueueKernels(int bufferSide, double* outputSSE)
     size_t calcGrad2Size_Local = 64; 
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient2, 1, NULL, &calcGrad2Size, &calcGrad2Size_Local, 0, NULL, NULL);
     
-    size_t calcGrad1Size[2] = {ACCUMULATOR_NODES_PER_SIDE, 64};
+
+    size_t calcGrad1Size[2] = {POSITIONS_PER_FILE, 64};
     size_t calcGrad1Size_Local[2] = {1, 64}; 
     if(bufferSide == INPUT_GROUP_A) clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient1_A, 2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, NULL);
     else clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient1_B, 2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, NULL);
+
+    /*
+    cl_event perf;
+    clWaitForEvents(1, &perf);
+    cl_ulong start, end;
+    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+    printf("\nLayer 1 Gradient Calculation Time: %0.3f ms\n", (double)(end - start) / 1000000.0);
+    clReleaseEvent(perf);
+    */
+
 
     timestamp++;
     cl_float biasCorrection1 = pow(ADAM_BETA1, timestamp);

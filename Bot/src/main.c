@@ -5,7 +5,6 @@
 #include "./analyze/book.h"
 #include "./analyze/neuralnet.h"
 #include "./pyrrhic/tbprobe.h"
-#include "./gpu/gpu_funcs.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -83,7 +82,6 @@ int main(int argc, char** argv)
         load_trainingWeights();
         trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
 
-        maxCosineAnnealingTimestamp = shouldTrain * FILE_COUNT;
         train(saveEveryNBlocks, shouldTrain, 1e-3, trainingAccumulator);
         
         save_trainingWeights();
