@@ -24,7 +24,10 @@ openCLContext opencl_context = {
 openCLKernelMemory opencl_mem = {NULL};
 
 cl_event readEvent;
+cl_float lr = MAX_LR;
+uint32_t maxCosineAnnealingTimestamp = 0; //set in main
 
+int timestamp;
 char* getKernelFunctions()
 {
     FILE* input = fopen("./src/gpu/kernels.cl", "rb"); 
@@ -52,6 +55,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
                                                         short* host_activeInputs_B, char* host_activeCounts_B, float* host_expectedOutputs_B)
 {
     int err = 0;
+    timestamp = 0;
 
     err = clGetPlatformIDs(1, &opencl_context.platform, NULL);
     err = clGetDeviceIDs(opencl_context.platform, CL_DEVICE_TYPE_GPU, 1, &opencl_context.device, NULL);
@@ -415,9 +419,11 @@ void freeOpenCL()
     }
 }
 
-int timestamp = 0;
-void enqueueKernels(int bufferSide, float learningRate, double* outputSSE)
+void enqueueKernels(int bufferSide, double* outputSSE)
 {
+    //cosine annealing
+    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * timestamp / maxCosineAnnealingTimestamp));
+
     if(bufferSide == INPUT_GROUP_A)
     {
         void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeInputs_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * 64 * sizeof(short), 0, NULL, NULL, NULL);
@@ -490,7 +496,6 @@ void enqueueKernels(int bufferSide, float learningRate, double* outputSSE)
     timestamp++;
     cl_float biasCorrection1 = pow(ADAM_BETA1, timestamp);
     cl_float biasCorrection2 = pow(ADAM_BETA2, timestamp);
-    cl_float lr = (cl_float)learningRate;
 
     size_t weight1Size = HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE;
     size_t weight2Size = ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES;

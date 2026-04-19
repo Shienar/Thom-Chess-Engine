@@ -11,6 +11,12 @@
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
+//cosine annealing is done using timestamp in enqueueKernels()
+#define MIN_LR 1e-6
+#define MAX_LR 5e-4
+extern uint32_t maxCosineAnnealingTimestamp;
+
+
 typedef struct {
     cl_platform_id platform;
     cl_device_id device;
@@ -116,7 +122,7 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.adam, 6, sizeof(cl_float), &biasCorrection2); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.adam, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-void enqueueKernels(int bufferSide, float learningRate, double* outputSSE);
+void enqueueKernels(int bufferSide, double* outputSSE);
 void getWeights(network_weights_training* weights);
 
 #endif

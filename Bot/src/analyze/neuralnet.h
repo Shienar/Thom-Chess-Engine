@@ -9,19 +9,6 @@
 
 #define PI 3.141592653589793
 
-//GreedyLR
-//https://arxiv.org/abs/2512.14527
-extern float learningRate;
-#define STARTING_LR 1e-4f
-#define MAX_LR 3e-3f
-#define MIN_LR 1e-6f
-#define LR_FACTOR 0.9f
-#define PATIENCE 10
-#define WINDOW_SIZE 50
-#define LR_THRESHOLD 0.01f
-#define WARMUP_PERIOD 10
-#define COOLDOWN_PERIOD 10
-
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8

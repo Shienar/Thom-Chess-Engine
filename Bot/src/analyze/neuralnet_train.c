@@ -9,7 +9,6 @@
 #include "omp.h"
 
 network_weights_training* trainingNNUE = NULL;
-float learningRate = STARTING_LR;
 float num_consecutive_increases = 0; //increases in loss / MSE are bad
 float num_consecutive_decreases = 0;
 
@@ -362,15 +361,6 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
     double totalSumSquaredError = 0.0; //accumulated value per iteration
 
-    //similar to circular array queue, but we don't care about dequeueing and we just replace oldest with newest
-    double averageErrorWindow[WINDOW_SIZE] = {0.0};
-    double averageErrorSum = 0.0;
-    double previousAverageWindowError = 0.0;
-    int insertionIndex = 0; 
-
-    int warmupPeriod = WINDOW_SIZE;
-    int cooldown = WINDOW_SIZE;
-
     char fileName[40] = {'\0'};
     char inputString[120] = {'\0'};
 
@@ -498,69 +488,14 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
             
             double sumSquaredError = 0.0;
-            enqueueKernels(inputGroup, learningRate, &sumSquaredError);
+            enqueueKernels(inputGroup, &sumSquaredError);
             clWaitForEvents(1, &readEvent);
             clReleaseEvent(readEvent);
 
             totalSumSquaredError+=sumSquaredError;
 
-            sumSquaredError /= POSITIONS_PER_FILE;
 
-            if(averageErrorWindow[insertionIndex] > 10.0)
-            {
-                //Really large floating point numbers can cause floating point drift.
-                averageErrorSum = 0;
-                averageErrorWindow[insertionIndex] = sumSquaredError;
-                for(int i = 0; i < WINDOW_SIZE; i++)
-                {
-                    averageErrorSum += averageErrorWindow[i];
-                }
-            }
-            else
-            {
-                averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
-                averageErrorWindow[insertionIndex] = sumSquaredError;
-            }
-            double averageWindowError = averageErrorSum / WINDOW_SIZE;
-            insertionIndex = (insertionIndex + 1)%WINDOW_SIZE;
-
-            //GreedyLR
-            if(averageWindowError < (previousAverageWindowError * (1 - LR_THRESHOLD)))
-            {
-                num_consecutive_decreases++;
-                num_consecutive_increases = 0;
-            }
-            else 
-            {
-                num_consecutive_decreases = 0;
-                num_consecutive_increases++;
-            }
-            if(cooldown)
-            {
-                cooldown--;
-                num_consecutive_increases = 0;
-            }
-            if(warmupPeriod)
-            {
-                warmupPeriod--;
-                num_consecutive_decreases = 0;
-            }
-            if(num_consecutive_decreases > PATIENCE)
-            {
-                learningRate/=LR_FACTOR;
-                learningRate = min(MAX_LR, max(learningRate, MIN_LR));
-                warmupPeriod = WARMUP_PERIOD;
-            }
-            else if(num_consecutive_increases > PATIENCE)
-            {
-                learningRate*=LR_FACTOR;
-                learningRate = min(MAX_LR, max(learningRate, MIN_LR));
-                cooldown = COOLDOWN_PERIOD;
-            }
-
-            previousAverageWindowError = averageWindowError;
-
-            printf("\33[2K\r\tAnalyzed block %d/%d; Block MSE = %e; Window MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError, averageWindowError);
+            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError / POSITIONS_PER_FILE);
             
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) 
             {
