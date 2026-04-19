@@ -9,18 +9,16 @@ openCLContext opencl_context = {
     .context = NULL,
     .queue = NULL,
     .program = NULL,
-    .calculateAccumulator = NULL,
-    .calculateH2 = NULL,
-    .calculateH3 = NULL,
-    .calculateOutput = NULL,
-    .calculateDelta4 = NULL,
-    .calculateDelta3 = NULL,
-    .calculateDelta2 = NULL,
-    .calculateDelta1 = NULL,
+    .calculateAccumulator_A = NULL,
+    .calculateAccumulator_B = NULL,
+    .forwardPropagate = NULL,
+    .backpropagate_A = NULL,
+    .backpropagate_B = NULL,
     .calculateGradient4 = NULL,
     .calculateGradient3 = NULL,
     .calculateGradient2 = NULL,
-    .calculateGradient1 = NULL
+    .calculateGradient1_A = NULL,
+    .calculateGradient1_B = NULL
 };
 
 openCLKernelMemory opencl_mem = {NULL};
@@ -50,7 +48,8 @@ char* getKernelFunctions()
     return source;
 }
 
-int initOpenCL(network_weights_training* trainingNNUE)
+int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, char* host_activeCounts_A, float* host_expectedOutputs_A,
+                                                        short* host_activeInputs_B, char* host_activeCounts_B, float* host_expectedOutputs_B)
 {
     int err = 0;
 
@@ -58,6 +57,8 @@ int initOpenCL(network_weights_training* trainingNNUE)
     err = clGetDeviceIDs(opencl_context.platform, CL_DEVICE_TYPE_GPU, 1, &opencl_context.device, NULL);
     opencl_context.context = clCreateContext(NULL, 1, &opencl_context.device, NULL, NULL, &err);
     
+    //cl_queue_properties queueProperties[] = {CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0};
+    //opencl_context.queue = clCreateCommandQueueWithProperties(opencl_context.context, opencl_context.device, queueProperties, &err);
     opencl_context.queue = clCreateCommandQueueWithProperties(opencl_context.context, opencl_context.device, NULL, &err);
     
     char* kernelSource = getKernelFunctions();
@@ -74,23 +75,26 @@ int initOpenCL(network_weights_training* trainingNNUE)
         return err;
     }
 
-    opencl_context.calculateAccumulator = clCreateKernel(opencl_context.program, "calculateAccumulator", &err);
-    opencl_context.calculateH2 = clCreateKernel(opencl_context.program, "calculateH2", &err);
-    opencl_context.calculateH3 = clCreateKernel(opencl_context.program, "calculateH3", &err);
-    opencl_context.calculateOutput = clCreateKernel(opencl_context.program, "calculateOutput", &err);
-    opencl_context.calculateDelta4 = clCreateKernel(opencl_context.program, "calculateDelta4", &err);
-    opencl_context.calculateDelta3 = clCreateKernel(opencl_context.program, "calculateDelta3", &err);
-    opencl_context.calculateDelta2 = clCreateKernel(opencl_context.program, "calculateDelta2", &err);
-    opencl_context.calculateDelta1 = clCreateKernel(opencl_context.program, "calculateDelta1", &err);
+    opencl_context.calculateAccumulator_A = clCreateKernel(opencl_context.program, "calculateAccumulator", &err);
+    opencl_context.calculateAccumulator_B = clCreateKernel(opencl_context.program, "calculateAccumulator", &err);
+    opencl_context.forwardPropagate = clCreateKernel(opencl_context.program, "forwardPropagate", &err);
+    opencl_context.backpropagate_A = clCreateKernel(opencl_context.program, "backpropagate", &err);
+    opencl_context.backpropagate_B = clCreateKernel(opencl_context.program, "backpropagate", &err);
     opencl_context.calculateGradient4 = clCreateKernel(opencl_context.program, "calculateGradient4", &err);
     opencl_context.calculateGradient3 = clCreateKernel(opencl_context.program, "calculateGradient3", &err);
     opencl_context.calculateGradient2 = clCreateKernel(opencl_context.program, "calculateGradient2", &err);
-    opencl_context.calculateGradient1 = clCreateKernel(opencl_context.program, "calculateGradient1", &err);
+    opencl_context.calculateGradient1_A = clCreateKernel(opencl_context.program, "calculateGradient1", &err);
+    opencl_context.calculateGradient1_B = clCreateKernel(opencl_context.program, "calculateGradient1", &err);
     opencl_context.adam = clCreateKernel(opencl_context.program, "adam", &err);
 
     
-    opencl_mem.activeInputs = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY, POSITIONS_PER_FILE * 64 * sizeof(short), NULL, NULL);
-    opencl_mem.activeCount = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY, POSITIONS_PER_FILE * sizeof(char), NULL, NULL);
+    opencl_mem.activeInputs_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * 64 * sizeof(short), host_activeInputs_A, NULL);
+    opencl_mem.activeCount_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(char), host_activeCounts_A, NULL);
+    opencl_mem.expectedOutput_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(float), host_expectedOutputs_A, NULL);
+    
+    opencl_mem.activeInputs_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * 64 * sizeof(short), host_activeInputs_B, NULL);
+    opencl_mem.activeCount_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(char), host_activeCounts_B, NULL);
+    opencl_mem.expectedOutput_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, POSITIONS_PER_FILE * sizeof(float), host_expectedOutputs_B, NULL);
 
     opencl_mem.weights1 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
     opencl_mem.weights2 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, NULL, NULL);
@@ -106,7 +110,6 @@ int initOpenCL(network_weights_training* trainingNNUE)
     opencl_mem.h2Output = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, POSITIONS_PER_FILE * sizeof(float) * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.h3Output = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, POSITIONS_PER_FILE * sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.finalOutput = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, POSITIONS_PER_FILE * sizeof(float), NULL, NULL);
-    opencl_mem.expectedOutput = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, POSITIONS_PER_FILE * sizeof(float), NULL, NULL);
     
     opencl_mem.sumsquarederror = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(double), NULL, NULL);
 
@@ -209,46 +212,56 @@ int initOpenCL(network_weights_training* trainingNNUE)
     clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias3, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
     clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias4, &zero, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
 
-    clSetKernelArg(opencl_context.calculateAccumulator, 0, sizeof(cl_mem), &opencl_mem.activeInputs);
-    clSetKernelArg(opencl_context.calculateAccumulator, 1, sizeof(cl_mem), &opencl_mem.activeCount);
-    clSetKernelArg(opencl_context.calculateAccumulator, 2, sizeof(cl_mem), &opencl_mem.weights1);
-    clSetKernelArg(opencl_context.calculateAccumulator, 3, sizeof(cl_mem), &opencl_mem.bias1);
-    clSetKernelArg(opencl_context.calculateAccumulator, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 0, sizeof(cl_mem), &opencl_mem.activeInputs_A);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 1, sizeof(cl_mem), &opencl_mem.activeCount_A);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 2, sizeof(cl_mem), &opencl_mem.weights1);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 3, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 0, sizeof(cl_mem), &opencl_mem.activeInputs_B);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 1, sizeof(cl_mem), &opencl_mem.activeCount_B);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 2, sizeof(cl_mem), &opencl_mem.weights1);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 3, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
 
-    clSetKernelArg(opencl_context.calculateH2, 0, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
-    clSetKernelArg(opencl_context.calculateH2, 1, sizeof(cl_mem), &opencl_mem.weights2);
-    clSetKernelArg(opencl_context.calculateH2, 2, sizeof(cl_mem), &opencl_mem.bias2);
-    clSetKernelArg(opencl_context.calculateH2, 3, sizeof(cl_mem), &opencl_mem.h2Output);
-
-    clSetKernelArg(opencl_context.calculateH3, 0, sizeof(cl_mem), &opencl_mem.h2Output);
-    clSetKernelArg(opencl_context.calculateH3, 1, sizeof(cl_mem), &opencl_mem.weights3);
-    clSetKernelArg(opencl_context.calculateH3, 2, sizeof(cl_mem), &opencl_mem.bias3);
-    clSetKernelArg(opencl_context.calculateH3, 3, sizeof(cl_mem), &opencl_mem.h3Output);
-
-    clSetKernelArg(opencl_context.calculateOutput, 0, sizeof(cl_mem), &opencl_mem.h3Output);
-    clSetKernelArg(opencl_context.calculateOutput, 1, sizeof(cl_mem), &opencl_mem.weights4);
-    clSetKernelArg(opencl_context.calculateOutput, 2, sizeof(cl_mem), &opencl_mem.bias4);
-    clSetKernelArg(opencl_context.calculateOutput, 3, sizeof(cl_mem), &opencl_mem.finalOutput);
-
-    clSetKernelArg(opencl_context.calculateDelta4, 0, sizeof(cl_mem), &opencl_mem.finalOutput);
-    clSetKernelArg(opencl_context.calculateDelta4, 1, sizeof(cl_mem), &opencl_mem.expectedOutput);
-    clSetKernelArg(opencl_context.calculateDelta4, 2, sizeof(cl_mem), &opencl_mem.delta4);
-    clSetKernelArg(opencl_context.calculateDelta4, 3, sizeof(cl_mem), &opencl_mem.sumsquarederror);
-
-    clSetKernelArg(opencl_context.calculateDelta3, 0, sizeof(cl_mem), &opencl_mem.delta4);
-    clSetKernelArg(opencl_context.calculateDelta3, 1, sizeof(cl_mem), &opencl_mem.weights4);
-    clSetKernelArg(opencl_context.calculateDelta3, 2, sizeof(cl_mem), &opencl_mem.h3Output);
-    clSetKernelArg(opencl_context.calculateDelta3, 3, sizeof(cl_mem), &opencl_mem.delta3);
-
-    clSetKernelArg(opencl_context.calculateDelta2, 0, sizeof(cl_mem), &opencl_mem.delta3);
-    clSetKernelArg(opencl_context.calculateDelta2, 1, sizeof(cl_mem), &opencl_mem.weights3);
-    clSetKernelArg(opencl_context.calculateDelta2, 2, sizeof(cl_mem), &opencl_mem.h2Output);
-    clSetKernelArg(opencl_context.calculateDelta2, 3, sizeof(cl_mem), &opencl_mem.delta2);
-
-    clSetKernelArg(opencl_context.calculateDelta1, 0, sizeof(cl_mem), &opencl_mem.delta2);
-    clSetKernelArg(opencl_context.calculateDelta1, 1, sizeof(cl_mem), &opencl_mem.weights2);
-    clSetKernelArg(opencl_context.calculateDelta1, 2, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
-    clSetKernelArg(opencl_context.calculateDelta1, 3, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.forwardPropagate, 0, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.forwardPropagate, 1, sizeof(cl_mem), &opencl_mem.weights2);
+    clSetKernelArg(opencl_context.forwardPropagate, 2, sizeof(cl_mem), &opencl_mem.bias2);
+    clSetKernelArg(opencl_context.forwardPropagate, 3, sizeof(cl_mem), &opencl_mem.h2Output);
+    clSetKernelArg(opencl_context.forwardPropagate, 4, sizeof(cl_mem), &opencl_mem.weights3);
+    clSetKernelArg(opencl_context.forwardPropagate, 5, sizeof(cl_mem), &opencl_mem.bias3);
+    clSetKernelArg(opencl_context.forwardPropagate, 6, sizeof(cl_mem), &opencl_mem.h3Output);
+    clSetKernelArg(opencl_context.forwardPropagate, 7, sizeof(cl_mem), &opencl_mem.weights4);
+    clSetKernelArg(opencl_context.forwardPropagate, 8, sizeof(cl_mem), &opencl_mem.bias4);
+    clSetKernelArg(opencl_context.forwardPropagate, 9, sizeof(cl_mem), &opencl_mem.finalOutput);
+    
+    clSetKernelArg(opencl_context.backpropagate_A, 0, sizeof(cl_mem), &opencl_mem.finalOutput);
+    clSetKernelArg(opencl_context.backpropagate_A, 1, sizeof(cl_mem), &opencl_mem.expectedOutput_A);
+    clSetKernelArg(opencl_context.backpropagate_A, 2, sizeof(cl_mem), &opencl_mem.h3Output);
+    clSetKernelArg(opencl_context.backpropagate_A, 3, sizeof(cl_mem), &opencl_mem.h2Output);
+    clSetKernelArg(opencl_context.backpropagate_A, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.backpropagate_A, 5, sizeof(cl_mem), &opencl_mem.weights4);
+    clSetKernelArg(opencl_context.backpropagate_A, 6, sizeof(cl_mem), &opencl_mem.weights3);
+    clSetKernelArg(opencl_context.backpropagate_A, 7, sizeof(cl_mem), &opencl_mem.weights2);
+    clSetKernelArg(opencl_context.backpropagate_A, 8, sizeof(cl_mem), &opencl_mem.delta4);
+    clSetKernelArg(opencl_context.backpropagate_A, 9, sizeof(cl_mem), &opencl_mem.delta3);
+    clSetKernelArg(opencl_context.backpropagate_A, 10, sizeof(cl_mem), &opencl_mem.delta2);
+    clSetKernelArg(opencl_context.backpropagate_A, 11, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.backpropagate_A, 12, sizeof(cl_mem), &opencl_mem.sumsquarederror);
+    
+    clSetKernelArg(opencl_context.backpropagate_B, 0, sizeof(cl_mem), &opencl_mem.finalOutput);
+    clSetKernelArg(opencl_context.backpropagate_B, 1, sizeof(cl_mem), &opencl_mem.expectedOutput_B);
+    clSetKernelArg(opencl_context.backpropagate_B, 2, sizeof(cl_mem), &opencl_mem.h3Output);
+    clSetKernelArg(opencl_context.backpropagate_B, 3, sizeof(cl_mem), &opencl_mem.h2Output);
+    clSetKernelArg(opencl_context.backpropagate_B, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
+    clSetKernelArg(opencl_context.backpropagate_B, 5, sizeof(cl_mem), &opencl_mem.weights4);
+    clSetKernelArg(opencl_context.backpropagate_B, 6, sizeof(cl_mem), &opencl_mem.weights3);
+    clSetKernelArg(opencl_context.backpropagate_B, 7, sizeof(cl_mem), &opencl_mem.weights2);
+    clSetKernelArg(opencl_context.backpropagate_B, 8, sizeof(cl_mem), &opencl_mem.delta4);
+    clSetKernelArg(opencl_context.backpropagate_B, 9, sizeof(cl_mem), &opencl_mem.delta3);
+    clSetKernelArg(opencl_context.backpropagate_B, 10, sizeof(cl_mem), &opencl_mem.delta2);
+    clSetKernelArg(opencl_context.backpropagate_B, 11, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.backpropagate_B, 12, sizeof(cl_mem), &opencl_mem.sumsquarederror);
 
     clSetKernelArg(opencl_context.calculateGradient4, 0, sizeof(cl_mem), &opencl_mem.delta4);
     clSetKernelArg(opencl_context.calculateGradient4, 1, sizeof(cl_mem), &opencl_mem.h3Output);
@@ -265,19 +278,29 @@ int initOpenCL(network_weights_training* trainingNNUE)
     clSetKernelArg(opencl_context.calculateGradient2, 2, sizeof(cl_mem), &opencl_mem.gradient2Sum);
     clSetKernelArg(opencl_context.calculateGradient2, 3, sizeof(cl_mem), &opencl_mem.gradientBias2Sum);
 
-    clSetKernelArg(opencl_context.calculateGradient1, 0, sizeof(cl_mem), &opencl_mem.activeInputs);
-    clSetKernelArg(opencl_context.calculateGradient1, 1, sizeof(cl_mem), &opencl_mem.activeCount);
-    clSetKernelArg(opencl_context.calculateGradient1, 2, sizeof(cl_mem), &opencl_mem.delta1);
-    clSetKernelArg(opencl_context.calculateGradient1, 3, sizeof(cl_mem), &opencl_mem.gradient1Sum);
-    clSetKernelArg(opencl_context.calculateGradient1, 4, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 0, sizeof(cl_mem), &opencl_mem.activeInputs_A);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 1, sizeof(cl_mem), &opencl_mem.activeCount_A);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 2, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 3, sizeof(cl_mem), &opencl_mem.gradient1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_A, 4, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
+    
+    clSetKernelArg(opencl_context.calculateGradient1_B, 0, sizeof(cl_mem), &opencl_mem.activeInputs_B);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 1, sizeof(cl_mem), &opencl_mem.activeCount_B);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 2, sizeof(cl_mem), &opencl_mem.delta1);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 3, sizeof(cl_mem), &opencl_mem.gradient1Sum);
+    clSetKernelArg(opencl_context.calculateGradient1_B, 4, sizeof(cl_mem), &opencl_mem.gradientBias1Sum);
 
     return (err == CL_SUCCESS);
 }
 
 void freeOpenCL()
 {
-    clReleaseMemObject(opencl_mem.activeInputs);
-    clReleaseMemObject(opencl_mem.activeCount);
+    clReleaseMemObject(opencl_mem.activeInputs_A);
+    clReleaseMemObject(opencl_mem.activeCount_A);
+    clReleaseMemObject(opencl_mem.expectedOutput_A);
+    clReleaseMemObject(opencl_mem.activeInputs_B);
+    clReleaseMemObject(opencl_mem.activeCount_B);
+    clReleaseMemObject(opencl_mem.expectedOutput_B);
     clReleaseMemObject(opencl_mem.weights1);
     clReleaseMemObject(opencl_mem.weights2);
     clReleaseMemObject(opencl_mem.weights3);
@@ -290,7 +313,6 @@ void freeOpenCL()
     clReleaseMemObject(opencl_mem.h2Output);
     clReleaseMemObject(opencl_mem.h3Output);
     clReleaseMemObject(opencl_mem.finalOutput);
-    clReleaseMemObject(opencl_mem.expectedOutput);
     clReleaseMemObject(opencl_mem.sumsquarederror);
     clReleaseMemObject(opencl_mem.delta4);
     clReleaseMemObject(opencl_mem.delta3);
@@ -321,45 +343,30 @@ void freeOpenCL()
     clReleaseMemObject(opencl_mem.v_bias3);
     clReleaseMemObject(opencl_mem.v_bias4);
 
-    if (opencl_context.calculateAccumulator)  
+    if (opencl_context.calculateAccumulator_A)  
     {
-        clReleaseKernel(opencl_context.calculateAccumulator);
-        opencl_context.calculateAccumulator = NULL;
+        clReleaseKernel(opencl_context.calculateAccumulator_A);
+        opencl_context.calculateAccumulator_A = NULL;
     }
-    if (opencl_context.calculateH2)  
+    if (opencl_context.calculateAccumulator_B)  
     {
-        clReleaseKernel(opencl_context.calculateH2);
-        opencl_context.calculateH2 = NULL;
+        clReleaseKernel(opencl_context.calculateAccumulator_B);
+        opencl_context.calculateAccumulator_B = NULL;
     }
-    if (opencl_context.calculateH3)  
+    if (opencl_context.forwardPropagate)  
     {
-        clReleaseKernel(opencl_context.calculateH3);
-        opencl_context.calculateH3 = NULL;
+        clReleaseKernel(opencl_context.forwardPropagate);
+        opencl_context.forwardPropagate = NULL;
     }
-    if (opencl_context.calculateOutput)  
+    if (opencl_context.backpropagate_A)  
     {
-        clReleaseKernel(opencl_context.calculateOutput);
-        opencl_context.calculateOutput = NULL;
+        clReleaseKernel(opencl_context.backpropagate_A);
+        opencl_context.backpropagate_A = NULL;
     }
-    if (opencl_context.calculateDelta4)  
+    if (opencl_context.backpropagate_B)  
     {
-        clReleaseKernel(opencl_context.calculateDelta4);
-        opencl_context.calculateDelta4 = NULL;
-    }
-    if (opencl_context.calculateDelta3)  
-    {
-        clReleaseKernel(opencl_context.calculateDelta3);
-        opencl_context.calculateDelta3 = NULL;
-    }
-    if (opencl_context.calculateDelta2)  
-    {
-        clReleaseKernel(opencl_context.calculateDelta2);
-        opencl_context.calculateDelta2 = NULL;
-    }
-    if (opencl_context.calculateDelta1)  
-    {
-        clReleaseKernel(opencl_context.calculateDelta1);
-        opencl_context.calculateDelta1 = NULL;
+        clReleaseKernel(opencl_context.backpropagate_B);
+        opencl_context.backpropagate_B = NULL;
     }
     if (opencl_context.calculateGradient4)  
     {
@@ -376,10 +383,15 @@ void freeOpenCL()
         clReleaseKernel(opencl_context.calculateGradient2);
         opencl_context.calculateGradient2 = NULL;
     }
-    if (opencl_context.calculateGradient1)  
+    if (opencl_context.calculateGradient1_A)  
     {
-        clReleaseKernel(opencl_context.calculateGradient1);
-        opencl_context.calculateGradient1 = NULL;
+        clReleaseKernel(opencl_context.calculateGradient1_A);
+        opencl_context.calculateGradient1_A = NULL;
+    }
+    if (opencl_context.calculateGradient1_B)  
+    {
+        clReleaseKernel(opencl_context.calculateGradient1_B);
+        opencl_context.calculateGradient1_B = NULL;
     }
     if (opencl_context.adam)  
     {
@@ -404,11 +416,29 @@ void freeOpenCL()
 }
 
 int timestamp = 0;
-void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate, double* outputSSE)
+void enqueueKernels(int bufferSide, float learningRate, double* outputSSE)
 {
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.activeInputs, CL_FALSE, 0, POSITIONS_PER_FILE * 64 * sizeof(short), (void*)activeInputs, 0, NULL, NULL);
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.activeCount, CL_FALSE, 0, POSITIONS_PER_FILE * sizeof(char), (void*)activeCount, 0, NULL, NULL);
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.expectedOutput, CL_FALSE, 0, POSITIONS_PER_FILE * sizeof(float), (void*)expectedOutputs, 0, NULL, NULL);
+    if(bufferSide == INPUT_GROUP_A)
+    {
+        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeInputs_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * 64 * sizeof(short), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeCount_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(char), 0, NULL, NULL, NULL);
+        void* ptr3 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
+
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeInputs_A, ptr1, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeCount_A, ptr2, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_A, ptr3, 0, NULL, NULL);
+    }
+    else if(bufferSide == INPUT_GROUP_B)
+    {
+        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeInputs_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * 64 * sizeof(short), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.activeCount_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(char), 0, NULL, NULL, NULL);
+        void* ptr3 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.expectedOutput_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, POSITIONS_PER_FILE * sizeof(float), 0, NULL, NULL, NULL);
+
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeInputs_B, ptr1, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.activeCount_B, ptr2, 0, NULL, NULL);
+        clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.expectedOutput_B, ptr3, 0, NULL, NULL);
+
+    }
 
     float zero = 0.0f;
     double zero_d = 0.0;
@@ -426,39 +456,20 @@ void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutpu
 
     size_t calcAccumSize[2] = {POSITIONS_PER_FILE, ACCUMULATOR_NODES};
     size_t calcAccumSize_Local[2] = {1, 32};
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateAccumulator, 2, NULL, calcAccumSize, calcAccumSize_Local, 0, NULL, NULL);
+    if(bufferSide == INPUT_GROUP_A) clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateAccumulator_A, 2, NULL, calcAccumSize, calcAccumSize_Local, 0, NULL, NULL);
+    else clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateAccumulator_B, 2, NULL, calcAccumSize, calcAccumSize_Local, 0, NULL, NULL);
+
+    size_t fpropSize[2] = {POSITIONS_PER_FILE, 64};
+    size_t fpropSizee_Local[2] = {1, 64};
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.forwardPropagate, 2, NULL, fpropSize, fpropSizee_Local, 0, NULL, NULL);
     
-    size_t calcH2Size[2] = {POSITIONS_PER_FILE, SECOND_HIDDEN_LAYER_NODES};
-    size_t calcH2Size_Local[2] = {1, 32};
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateH2, 2, NULL, calcH2Size, calcH2Size_Local, 0, NULL, NULL);
-    
-    size_t calcH3Size[2] = {POSITIONS_PER_FILE, THIRD_HIDDEN_LAYER_NODES};
-    size_t calcH3Size_Local[2] = {1, SECOND_HIDDEN_LAYER_NODES};
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateH3, 2, NULL, calcH3Size, calcH3Size_Local, 0, NULL, NULL);
+    size_t calcDeltaSize[2] = {POSITIONS_PER_FILE, 64};
+    size_t calcDeltaSize_Local[2] = {1, 64};
+    if(bufferSide == INPUT_GROUP_A) clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.backpropagate_A, 2, NULL, calcDeltaSize, calcDeltaSize_Local, 0, NULL, NULL);
+    else clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.backpropagate_B, 2, NULL, calcDeltaSize, calcDeltaSize_Local, 0, NULL, NULL);
 
-    size_t calcOutputSize[2] = {POSITIONS_PER_FILE, THIRD_HIDDEN_LAYER_NODES};
-    size_t calcOutputSize_Local[2] = {1, 32};
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateOutput, 2, NULL, calcOutputSize, calcOutputSize_Local, 0, NULL, NULL);
-    
-    size_t calcDelta4Size = POSITIONS_PER_FILE;
-    size_t calcDelta4Size_Local = 64;
-    cl_event delta4Event;
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta4, 1, NULL, &calcDelta4Size, &calcDelta4Size_Local, 0, NULL, &delta4Event);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.sumsquarederror, CL_FALSE, 0, sizeof(double), outputSSE, 0, NULL, &readEvent);
 
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.sumsquarederror, CL_FALSE, 0, sizeof(double), outputSSE, 1, &delta4Event, &readEvent);
-
-    size_t calcDelta3Size[2] = { POSITIONS_PER_FILE, THIRD_HIDDEN_LAYER_NODES };
-    size_t calcDelta3Size_Local[2] = { 1, 32 };
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta3, 2, NULL, calcDelta3Size, calcDelta3Size_Local, 0, NULL, NULL);
-
-    size_t calcDelta2Size[2] = { POSITIONS_PER_FILE, SECOND_HIDDEN_LAYER_NODES };
-    size_t calcDelta2Size_Local[2] = { 1, 32 };
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta2, 2, NULL, calcDelta2Size, calcDelta2Size_Local, 0, NULL, NULL);
-
-    size_t calcDelta1Size[2] = { POSITIONS_PER_FILE, ACCUMULATOR_NODES };
-    size_t calcDelta1Size_Local[2] = { 1, 32 };
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateDelta1, 2, NULL, calcDelta1Size, calcDelta1Size_Local, 0, NULL, NULL);
-    
     size_t calcGrad4Size[2] = { 32, 64 };
     size_t calcGrad4Size_Local[2]  = { 1, 64 };
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient4, 2, NULL, calcGrad4Size, calcGrad4Size_Local, 0, NULL, NULL);
@@ -467,13 +478,14 @@ void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutpu
     size_t calcGrad3Size_Local[2]  = { 1, 64 }; 
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient3, 2, NULL, calcGrad3Size, calcGrad3Size_Local, 0, NULL, NULL);
 
-    size_t calcGrad2Size[2] = { POSITIONS_PER_FILE, 64 };
-    size_t calcGrad2Size_Local[2]  = { 1, 64 }; 
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient2, 2, NULL, calcGrad2Size, calcGrad2Size_Local, 0, NULL, NULL);
+    size_t calcGrad2Size = ACCUMULATOR_NODES * 64;
+    size_t calcGrad2Size_Local = 64; 
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient2, 1, NULL, &calcGrad2Size, &calcGrad2Size_Local, 0, NULL, NULL);
     
-    size_t calcGrad1Size[2] = { POSITIONS_PER_FILE, 256 };
-    size_t calcGrad1Size_Local[2]  = { 1, 64 }; 
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient1, 2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, NULL);
+    size_t calcGrad1Size[2] = {ACCUMULATOR_NODES_PER_SIDE, 64};
+    size_t calcGrad1Size_Local[2] = {1, 64}; 
+    if(bufferSide == INPUT_GROUP_A) clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient1_A, 2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, NULL);
+    else clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.calculateGradient1_B, 2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, NULL);
 
     timestamp++;
     cl_float biasCorrection1 = pow(ADAM_BETA1, timestamp);

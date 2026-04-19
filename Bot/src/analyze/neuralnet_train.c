@@ -344,14 +344,19 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 {
     assert(floatAccumulator);
         
-    initOpenCL(trainingNNUE);
 
     int* blockNumbers = CALLOC(FILE_COUNT, sizeof(int));
     for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
 
-    short* activeInputs = CALLOC(64 * POSITIONS_PER_FILE, sizeof(short)); 
-    char* activeCount = CALLOC(POSITIONS_PER_FILE, sizeof(char));
-    float* expectedOutputs = CALLOC(POSITIONS_PER_FILE, sizeof(float));
+    short* activeInputs_A = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
+    char* activeCount_A = _aligned_malloc(POSITIONS_PER_FILE * sizeof(char), 4096);
+    float* expectedOutputs_A = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
+    
+    short* activeInputs_B = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
+    char* activeCount_B = _aligned_malloc(POSITIONS_PER_FILE * sizeof(char), 4096);
+    float* expectedOutputs_B = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
+    
+    initOpenCL(trainingNNUE, activeInputs_A, activeCount_A, expectedOutputs_A, activeInputs_B, activeCount_B, expectedOutputs_B);
 
     int totalIterations = 0;
 
@@ -375,6 +380,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
         for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
         {
+            int inputGroup = INPUT_GROUP(blockIndex);
             sprintf(fileName, "./training/trainingData_%d.txt", blockNumbers[blockIndex]);
             FILE* trainingData = fopen(fileName, "r");
             if(!trainingData)
@@ -382,17 +388,33 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                 DEBUG("\nFailed to open file: %s\n", fileName);
                 continue;
             }
-            memset(activeInputs, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
-            memset(activeCount, 0, POSITIONS_PER_FILE * sizeof(char));
+            if(inputGroup == INPUT_GROUP_A)
+            {
+                memset(activeInputs_A, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
+                memset(activeCount_A, 0, POSITIONS_PER_FILE * sizeof(char));
+            }
+            else
+            {
+                memset(activeInputs_B, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
+                memset(activeCount_B, 0, POSITIONS_PER_FILE * sizeof(char));
+            }
 
             int trackedEntries = 0;
             bitboard* board = create_board(); 
             while(trackedEntries < POSITIONS_PER_FILE && fgets(inputString, 120, trainingData))
             {
-                loadTrainingData(inputString, board, &expectedOutputs[trackedEntries]);
+                
                 trackedEntries++;
-
-                activeCount[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
+                if(inputGroup == INPUT_GROUP_A) 
+                {
+                    loadTrainingData(inputString, board, &expectedOutputs_A[trackedEntries]);
+                    activeCount_A[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
+                }
+                else 
+                {
+                    loadTrainingData(inputString, board, &expectedOutputs_B[trackedEntries]);
+                    activeCount_B[trackedEntries] = __builtin_popcountll(board->pieces_all&(~(board->king_b|board->king_w)));
+                }
 
                 uint64_t inputs[20] = {0};
 
@@ -454,9 +476,17 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                         uint64_t mask = inputs[10 * side + piece];
                         while(mask)
                         {
-                            activeInputs[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            else activeInputs_B[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
                             trackedInputs++;
                             mask&=(mask - 1);
+                        }
+                        //-1 padding
+                        while(trackedInputs < 32)
+                        {
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = -1;
+                            else activeInputs_B[POSITIONS_PER_FILE * 64 + 32 * side + trackedInputs] = -1;
+                            trackedInputs++;
                         }
                     }
                 }
@@ -468,12 +498,29 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
             
             double sumSquaredError = 0.0;
-            enqueueKernels(activeInputs, activeCount, expectedOutputs, learningRate, &sumSquaredError);
+            enqueueKernels(inputGroup, learningRate, &sumSquaredError);
             clWaitForEvents(1, &readEvent);
+            clReleaseEvent(readEvent);
+
+            totalSumSquaredError+=sumSquaredError;
 
             sumSquaredError /= POSITIONS_PER_FILE;
-            averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
-            averageErrorWindow[insertionIndex] = sumSquaredError;
+
+            if(averageErrorWindow[insertionIndex] > 10.0)
+            {
+                //Really large floating point numbers can cause floating point drift.
+                averageErrorSum = 0;
+                averageErrorWindow[insertionIndex] = sumSquaredError;
+                for(int i = 0; i < WINDOW_SIZE; i++)
+                {
+                    averageErrorSum += averageErrorWindow[i];
+                }
+            }
+            else
+            {
+                averageErrorSum += sumSquaredError - averageErrorWindow[insertionIndex];
+                averageErrorWindow[insertionIndex] = sumSquaredError;
+            }
             double averageWindowError = averageErrorSum / WINDOW_SIZE;
             insertionIndex = (insertionIndex + 1)%WINDOW_SIZE;
 
@@ -530,9 +577,12 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     } while((totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
     FREE(blockNumbers);
-    FREE(activeInputs);
-    FREE(activeCount);
-    FREE(expectedOutputs);
+    FREE(activeInputs_A);
+    FREE(activeCount_A);
+    FREE(expectedOutputs_A);
+    FREE(activeInputs_B);
+    FREE(activeCount_B);
+    FREE(expectedOutputs_B);
 
     freeOpenCL();
 }

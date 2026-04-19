@@ -12,10 +12,10 @@
 //GreedyLR
 //https://arxiv.org/abs/2512.14527
 extern float learningRate;
-#define STARTING_LR 5e-5f
+#define STARTING_LR 1e-4f
 #define MAX_LR 3e-3f
 #define MIN_LR 1e-6f
-#define LR_FACTOR 0.75f
+#define LR_FACTOR 0.9f
 #define PATIENCE 10
 #define WINDOW_SIZE 50
 #define LR_THRESHOLD 0.01f

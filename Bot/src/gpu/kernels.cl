@@ -25,7 +25,7 @@ inline float screlu_leaky(float x)
 //x is an activated value that gets the sqrt() taken from it if needed.
 inline float screlu_leaky_derivative(float x)
 {
-    return ((x <= 0.0 || x >= 1.0) ? (0.01) : (2.0*sqrt(x)));
+    return ((x <= 0.0 || x >= 1.0) ? (0.01) : (2.0*native_sqrt(x)));
 }
 
 //From https://streamhpc.com/blog/2016-02-09/atomic-operations-for-floats-in-opencl-improved/
@@ -52,6 +52,8 @@ inline void AtomicAddDouble(volatile __global double* source, const double opera
 }
 
 /******* Forward Propagation *******/
+
+//~ 10 ms
 __kernel void calculateAccumulator(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [POSITIONS_PER_FILE][2][32] - max 32 active features
                                     __global const char* activeCount,      //how many active features. [POSITIONS_PER_FILE]
                                     __global const float* weights,          //shared
@@ -74,174 +76,160 @@ __kernel void calculateAccumulator(__global const short* activeInputs,       //c
     output[batchIndex * ACCUMULATOR_NODES + outputIndex] = screlu_leaky(sum); 
 }
 
-__kernel void calculateH2(__global const float* inputBatch,
-                            __global const float* weights,
-                            __global const float* bias,
-                            __global float* output)
+//~0.75 ms
+__kernel void forwardPropagate(__global const float* accumulatorOutput,
+                                __global float* h2_weights, __global float* h2_bias, __global float* h2_output,
+                                __global float* h3_weights, __global float* h3_bias, __global float* h3_output,
+                                __global float* output_weights, __global float* output_bias, __global float* outputs)
 {
     int batchIndex = get_global_id(0);
-    int outputIndex = get_global_id(1);
-    int localID = get_local_id(1);
+    int localID = get_local_id(1); //0-63. Threads 32-63 help with loading / reduction. Threads 0-31 get an output node.
 
-    //each local thread contributes to loading part of sharedinput.
-    __local float sharedInput[ACCUMULATOR_NODES];
-    for(int i = localID; i < ACCUMULATOR_NODES; i+= SECOND_HIDDEN_LAYER_NODES)
+    //each local thread contributes to loading part of the input.
+    //this same array will get reused later on, even if its too big to store outputs for h2/h3
+    __local float shared[ACCUMULATOR_NODES];
+    for(int i = localID; i < ACCUMULATOR_NODES; i+= 64)
     {
-        sharedInput[i] = inputBatch[batchIndex * ACCUMULATOR_NODES + i];
+        shared[i] = accumulatorOutput[batchIndex * ACCUMULATOR_NODES + i];
     }
-    
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    float sum = bias[outputIndex];
-    for (int inputIndex = 0; inputIndex < ACCUMULATOR_NODES; inputIndex++) 
+    //calculate h2
+    float sum = 0.0;
+    if (localID < SECOND_HIDDEN_LAYER_NODES) 
     {
-        sum += sharedInput[inputIndex] * weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
-    }
-    output[batchIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex] = screlu_leaky(sum); 
-}
-
-__kernel void calculateH3(__global const float* inputBatch,
-                            __global const float* weights,
-                            __global const float* bias,
-                            __global float* output)
-{
-    int batchIndex = get_global_id(0);
-    int outputIndex = get_global_id(1);
-    int localID = get_local_id(0); 
-    
-    __local float sharedInput[SECOND_HIDDEN_LAYER_NODES];
-    sharedInput[localID] = inputBatch[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
-    
-    barrier(CLK_LOCAL_MEM_FENCE);
-    
-    float sum = bias[outputIndex];
-
-    for (int inputIndex = 0; inputIndex < SECOND_HIDDEN_LAYER_NODES; inputIndex++) {
-        sum += sharedInput[inputIndex] * weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + outputIndex];
-    }
-    output[batchIndex * THIRD_HIDDEN_LAYER_NODES + outputIndex] = screlu_leaky(sum); 
-}
-
-
-__kernel void calculateOutput(__global const float* inputBatch,
-                                __global const float* weights,
-                                __global const float* bias,
-                                __global float* output)
-{
-    int batchIndex = get_global_id(0);
-    int localID = get_local_id(1);
-
-    __local float sum[32];
-    sum[localID] = inputBatch[batchIndex * 32 + localID] * weights[localID];
-    
-    barrier(CLK_LOCAL_MEM_FENCE);
-    
-    __global const float* myInput = &inputBatch[batchIndex * THIRD_HIDDEN_LAYER_NODES];
-
-    for(int stride = THIRD_HIDDEN_LAYER_NODES / 2; stride > 0; stride/=2)
-    {
-        if(localID < stride)
+        sum = h2_bias[localID];
+        for (int inputIndex = 0; inputIndex < ACCUMULATOR_NODES; inputIndex++) 
         {
-            sum[localID] += sum[localID + stride];
+            sum += shared[inputIndex] * h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID];
+        }
+        sum = screlu_leaky(sum);
+
+
+        shared[localID] = sum; //faster retrieval for use in this function.
+        h2_output[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = sum; //for use in backprop
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    //calculate h3
+    sum = 0.0;
+    if(localID < THIRD_HIDDEN_LAYER_NODES)
+    {
+        sum = h3_bias[localID];
+        for (int inputIndex = 0; inputIndex < SECOND_HIDDEN_LAYER_NODES; inputIndex++) 
+        {
+            sum += shared[inputIndex] * h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID];
+        }
+        sum = screlu_leaky(sum);
+        
+        shared[localID] = sum;
+        h2_output[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = sum;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    //calculate output
+    sum = 0.0;
+    if (localID < THIRD_HIDDEN_LAYER_NODES) 
+    {
+        shared[localID] = shared[localID] * output_weights[localID];
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // Parallel Reduction for the final sum
+    for(int stride = THIRD_HIDDEN_LAYER_NODES / 2; stride > 0; stride /= 2) 
+    {
+        if(localID < stride) 
+        {
+            shared[localID] += shared[localID + stride];
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
+
     if(localID == 0) 
     {
-        output[batchIndex] = sum[0] + *bias;
+        outputs[batchIndex] = shared[0] + *output_bias;
     }
 }
 
 /******* Backpropagation (Delta calculations) *******/
-__kernel void calculateDelta4(__global const float* outputNodes,
-                                __global const float* expectedOutputs,
-                                __global float* delta4,
-                                __global double* sumSquaredError)
+
+//~5.5 ms
+__kernel void backpropagate( __global const float* outputNodes, __global const float* expectedOutputs,
+                            __global const float* h3, 
+                            __global const float* h2,
+                            __global const float* h1,
+                            __global const float* weights4,
+                            __global const float* weights3,
+                            __global const float* weights2,
+                            __global float* delta4,
+                            __global float* delta3,
+                            __global float* delta2,
+                            __global float* delta1,
+                            __global double* sumSquaredError)
 {
     int batchIndex = get_global_id(0);
-    int localID = get_local_id(0);
-    int localSize = get_local_size(0);
-    int groupID = get_group_id(0);
+    int localID = get_local_id(1);
 
-    double error = outputNodes[batchIndex] - expectedOutputs[batchIndex];
-    delta4[batchIndex] = error;
+    __local float shared_delta[64]; 
+    __local double shared_sse[64];
 
-    __local double temp[256];
-    temp[localID] = error * error;
-    barrier(CLK_LOCAL_MEM_FENCE);
-    
-    //parallel reduction of partial sum within group.
-    for(int stride = localSize / 2; stride > 0; stride/=2)
-    {
-        if(localID < stride) temp[localID] += temp[localID + stride]; 
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
+    //delta4
+    float d4 = 0.0f;
     if(localID == 0) 
     {
-        AtomicAddDouble(sumSquaredError, temp[0]);
-    }
-}
-
-__kernel void calculateDelta3(__global const float* delta4,
-                                __global const float* weights,
-                                __global const float* outputs,
-                                __global float* delta3)
-{
-    int batchIndex = get_global_id(0);
-    int nodeIndex = get_global_id(1);
-
-    delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + nodeIndex] = delta4[batchIndex] * weights[nodeIndex] * screlu_leaky_derivative(outputs[batchIndex * THIRD_HIDDEN_LAYER_NODES + nodeIndex]);
-}
-
-__kernel void calculateDelta2(__global const float* delta3,
-                                __global const float* weights,
-                                __global const float* outputs,
-                                __global float* delta2)
-{
-    int batchIndex = get_global_id(0);
-    int nodeIndex = get_global_id(1);
-    int localID = get_local_id(1);
-
-    __local float shared_delta3[32];
-    shared_delta3[localID] = delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
+        d4 = outputNodes[batchIndex] - expectedOutputs[batchIndex];
+        delta4[batchIndex] = d4;
+        shared_delta[0] = d4;
+        shared_sse[0] = (d4 * d4);
+    } 
+    else shared_sse[localID] = 0.0;
     barrier(CLK_LOCAL_MEM_FENCE);
     
-    float sum = 0;
-    for(int i = 0; i < 32; i++)
+    //delta3
+    d4 = shared_delta[0];
+    if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
-        sum += shared_delta3[i] * weights[i * THIRD_HIDDEN_LAYER_NODES + nodeIndex];
-    }           
-    delta2[batchIndex * THIRD_HIDDEN_LAYER_NODES + nodeIndex] = sum * screlu_leaky_derivative(outputs[batchIndex * THIRD_HIDDEN_LAYER_NODES + nodeIndex]);
-
-}
-
-__kernel void calculateDelta1(__global const float* delta2,
-                                __global const float* weights,
-                                __global const float* outputs,
-                                __global float* delta1)
-{
-    int batchIndex = get_global_id(0);
-    int nodeIndex = get_global_id(1);
-    int localID = get_local_id(1);
-
-    int side = nodeIndex / ACCUMULATOR_NODES_PER_SIDE;
-    int localNodeIndex = nodeIndex % ACCUMULATOR_NODES_PER_SIDE;
-
-    __local float shared_delta2[32];
-    if(localID < 32) shared_delta2[localID] = delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
+        float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
+        float d3 = d4 * weights4[localID] * screlu_leaky_derivative(h3_val);
+        delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
+        shared_delta[localID] = d3;
+    }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-
-    float sum = 0;
-    for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
+    //delta2
+    if(localID < SECOND_HIDDEN_LAYER_NODES) 
     {
-        sum+= shared_delta2[j] * weights[nodeIndex * SECOND_HIDDEN_LAYER_NODES + j];
-    }           
-    delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_leaky_derivative(outputs[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
+        float sum = 0.0f;
+        for (int outputIndex = 0; outputIndex < THIRD_HIDDEN_LAYER_NODES; outputIndex++) 
+        {
+            sum += shared_delta[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
+        }
+        float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
+        float d2 = sum * screlu_leaky_derivative(h2_val);
+        delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = d2;
+        shared_delta[localID] = d2;
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    //delta 1
+    //512 delta / 64 threads = 8 deltas per
+    for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=64) 
+    {
+        float sum = 0.0f;
+        for (int outputIndex = 0; outputIndex < SECOND_HIDDEN_LAYER_NODES; outputIndex++) 
+        {
+            sum += shared_delta[outputIndex] * weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
+        }
+        delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_leaky_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
+    }
+
+    //SSE accumulation
+    if (localID == 0)  AtomicAddDouble(sumSquaredError, shared_sse[0]);
 }
 
-/******* Calculate & Accumulate Edge Weight Deltas *******/
+/******* Calculate & Accumulate Edge Weight Gradients *******/
+
+//<0.001ms
 __kernel void calculateGradient4(__global const float* delta4, //1 per batch sample
                                     __global const float* h3, //THIRD_HIDDEN_LAYER_NODES per batch sample
                                     __global float* gradient4_Sum, //THIRD_HIDDEN_LAYER_NODES shared
@@ -283,6 +271,7 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
     }
 }
 
+//~1ms
 __kernel void calculateGradient3(__global const float* delta3, //THIRD_HIDDEN_LAYER_NODES per batch sample
                                 __global const float* h2, //SECOND_HIDDEN_LAYER_NODES per batch sample
                                 __global float* gradient3_Sum, //SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES shared
@@ -327,73 +316,94 @@ __kernel void calculateGradient3(__global const float* delta3, //THIRD_HIDDEN_LA
     }
 }
 
+//~5.8ms
 __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_LAYER_NODES per batch sample
                                 __global const float* h1, //ACCUMULATOR_NODES per batch sample
                                 __global float* gradient2_Sum, //ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES shared
                                 __global float* bias2_Sum) //SECOND_HIDDEN_LAYER_NODES shared
 {
-    int flatWeightIndex = get_global_id(0);
-    int localID = get_local_id(1);
-    int localSize = get_local_size(1);
+    int inputNodeIndex = get_group_id(0); // 0 to 511
+    int localID = get_local_id(0);        // 0 to 63
 
-    int outIndex = flatWeightIndex / 32;
-    int inIndex  = flatWeightIndex % 32;
+    __local float shared[32][64];
 
-    float partialSum = 0.0;
-    float partialBiasSum = 0.0; //Only managed by the threads with weightIndex == 0.
-    
-    for(int batchIndex = localID; batchIndex < POSITIONS_PER_FILE; batchIndex+=localSize)  
+    float partialGradientSums[32] = {0.0f};
+
+    //64 threads each work on subsets of the batch.
+    for (int batchIndex = localID; batchIndex < POSITIONS_PER_FILE; batchIndex += 64) 
     {
-        partialSum += delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + outIndex] * h1[batchIndex * ACCUMULATOR_NODES + inIndex];
-        if(inIndex == 0) partialBiasSum += delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + outIndex];
+        float h1_val = h1[batchIndex * ACCUMULATOR_NODES + inputNodeIndex];
+        
+        for(int outputWeight = 0; outputWeight < SECOND_HIDDEN_LAYER_NODES; outputWeight++) {
+            partialGradientSums[outputWeight] += h1_val * delta2[batchIndex * 32 + outputWeight];
+        }
     }
 
-    __local float tempSum[64];
-    __local float tempBias[64];
-    tempSum[localID] = partialSum;
-    if(inIndex == 0) tempBias[localID] = partialBiasSum;
+    //share the private partialGradientSums
+    for(int n = 0; n < 32; n++) {
+        shared[n][localID] = partialGradientSums[n];
+    }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    for(int stride = localSize / 2; stride > 0; stride/=2)
-    {
-        if(localID < stride)
-        {
-            tempSum[localID] += tempSum[localID + stride];
-            if(inIndex == 0) tempBias[localID] += tempBias[localID + stride];
+    //Use 32 threads to sum the values from the 64 threads.
+    if (localID < 32) {
+        float finalWeightGradient = 0.0f;
+        for(int i = 0; i < 64; i++) {
+            finalWeightGradient += shared[localID][i];
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-    if(localID == 0)
-    {
-        AtomicAddFloat(&gradient2_Sum[inIndex * 32 + outIndex], tempSum[0]);
-        if(inIndex == 0) AtomicAddFloat(&bias2_Sum[outIndex], tempBias[0]);
+        AtomicAddFloat(&gradient2_Sum[inputNodeIndex * 32 + localID], finalWeightGradient);
     }
 }
 
+//~1-5 - lock heavy - lot of variance
 __kernel void calculateGradient1(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [POSITIONS_PER_FILE][2][32] - max 32 active features
                                     __global const char* activeCount,      //how many active features per side. [POSITIONS_PER_FILE]
                                     __global const float* delta1, // ACCUMULATOR_NODES per batch sample
                                     __global float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
                                     __global float* bias1_Sum)    // ACCUMULATOR_NODES_PER_SIDE shared
 {
-    int batchIndex = get_global_id(0); 
-    int outIndex = get_global_id(1); // 0-255
+    int batchIndex = get_global_id(0);
+    int localID = get_local_id(1);
+    int localSize = get_local_size(1);
 
-    //Bias update
-    float d1_w = delta1[batchIndex * ACCUMULATOR_NODES + outIndex]; //Delta contributed from first half of input nodes / accumulator.
-    float d1_b = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex]; //Delta contributed from second half of input nodes / accumulator.
-    AtomicAddFloat(&bias1_Sum[outIndex], d1_w + d1_b);
+    // Shared storage for the 64 active features of this board position
+    __local short sharedFeatures[64];
+    __local int count;
+    if(localID == 0) count = activeCount[batchIndex];
 
-    for(int side = 0; side < 2; side++)
+    sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
+
+    
+    //locally calculae it & sum it before the atomic call.
+    __local float partialBiasSums[64];
+    partialBiasSums[localID] = 0.0;
+    
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+
+    //Process all 256 nodes in chunks of 64
+    for (int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64) 
     {
-        __global const short* myActiveInputs = &activeInputs[batchIndex * 64 + side * 32];
-        float currentDelta = (side == 0) ? d1_w : d1_b;
-        for(int i = 0; i < activeCount[batchIndex * 2]; i++)
+        float d1_w = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];
+        float d1_b = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex];
+
+        partialBiasSums[localID] += d1_w + d1_b;
+
+        for (int f = 0; f < count; f++) 
         {
-            AtomicAddFloat(&gradient1_Sum[myActiveInputs[i] * ACCUMULATOR_NODES_PER_SIDE + outIndex], currentDelta);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * 256 + outIndex], d1_w);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * 256 + outIndex], d1_b);
         }
     }
+    
+    barrier(CLK_LOCAL_MEM_FENCE);
+    for(int stride = localSize / 2; stride > 0; stride/=2)
+    {
+        if(localID < stride) partialBiasSums[localID] += partialBiasSums[localID + stride];
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    if(localID == 0) AtomicAddFloat(bias1_Sum, partialBiasSums[0]);
 }
 
 /******* Adam Update *******/
@@ -418,5 +428,5 @@ __kernel void adam(__global float* weights,
     float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1);
     float correctedSecondMoment = secondMoment[i] / (1.0f - biasCorrection2);
 
-    weights[i] -= learningRate * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON) + weights[i] * ADAM_WEIGHT_DECAY);
+    weights[i] -= learningRate * (correctedFirstMoment / (native_sqrt(correctedSecondMoment) + ADAM_EPSILON) + weights[i] * ADAM_WEIGHT_DECAY);
 }

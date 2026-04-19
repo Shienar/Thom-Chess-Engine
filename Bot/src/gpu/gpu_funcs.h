@@ -6,6 +6,11 @@
 #include "../debug.h"
 #include "../analyze/neuralnet.h"
 
+//CPU fills one group while gpu uses other group.
+#define INPUT_GROUP(block) (block%2)
+#define INPUT_GROUP_A 0
+#define INPUT_GROUP_B 1
+
 typedef struct {
     cl_platform_id platform;
     cl_device_id device;
@@ -14,24 +19,27 @@ typedef struct {
     cl_program program;
 
     //One kernel per function to run.
-    cl_kernel calculateAccumulator;
-    cl_kernel calculateH2;
-    cl_kernel calculateH3;
-    cl_kernel calculateOutput;
-    cl_kernel calculateDelta4;
-    cl_kernel calculateDelta3;
-    cl_kernel calculateDelta2;
-    cl_kernel calculateDelta1;
+    cl_kernel calculateAccumulator_A;
+    cl_kernel calculateAccumulator_B;
+    cl_kernel forwardPropagate;
+    cl_kernel backpropagate_A;
+    cl_kernel backpropagate_B;
     cl_kernel calculateGradient4;
     cl_kernel calculateGradient3;
     cl_kernel calculateGradient2;
-    cl_kernel calculateGradient1;
+    cl_kernel calculateGradient1_A;
+    cl_kernel calculateGradient1_B;
     cl_kernel adam;
 } openCLContext;
 
 typedef struct {
-    cl_mem activeInputs;
-    cl_mem activeCount;
+    cl_mem activeInputs_A;
+    cl_mem activeCount_A;
+    cl_mem expectedOutput_A;
+
+    cl_mem activeInputs_B;
+    cl_mem activeCount_B;
+    cl_mem expectedOutput_B;
 
     cl_mem weights1;
     cl_mem weights2;
@@ -47,7 +55,6 @@ typedef struct {
     cl_mem h2Output;
     cl_mem h3Output;
     cl_mem finalOutput;
-    cl_mem expectedOutput;
     
     cl_mem sumsquarederror;
     
@@ -95,7 +102,8 @@ extern openCLContext opencl_context;
 extern openCLKernelMemory opencl_mem;
 extern cl_event readEvent;
 
-int initOpenCL(network_weights_training* trainingWeights);
+int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, char* host_activeCounts_A, float* host_expectedOutputs_A,
+                                                        short* host_activeInputs_B, char* host_activeCounts_B, float* host_expectedOutputs_B);
 void freeOpenCL();
 
 #define ENQUEUE_ADAM(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \
@@ -108,7 +116,7 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.adam, 6, sizeof(cl_float), &biasCorrection2); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.adam, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-void enqueueKernels(short* activeInputs, char* activeCount, float* expectedOutputs, float learningRate, double* outputSSE);
+void enqueueKernels(int bufferSide, float learningRate, double* outputSSE);
 void getWeights(network_weights_training* weights);
 
 #endif
