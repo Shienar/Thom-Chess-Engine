@@ -14,14 +14,14 @@
 #define ADAM_EPSILON 1e-8
 #define ADAM_WEIGHT_DECAY 1e-3
 
-#define POSITIONS_PER_FILE 16384
+#define MINIBATCH_SIZE 16384
 #define FILE_COUNT 6104
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
 //Leaky SCReLU is giving be the best results for training.
-#define LEAK_FACTOR 0.01
+#define LEAK_FACTOR 0.2
 #define SCReLU(val, min, max) ((val <= min) ? min : ((val * val >= max) ? max : val*val))
 #define SCReLU_Leaky(val, min, max) ((val <= min) ? LEAK_FACTOR * val : ((val >= max) ? max + LEAK_FACTOR * (val - max) : val*val))
 #define SCReLU_Leaky_Derivative(val, min, max) ((val <= min || val >= max) ? (LEAK_FACTOR) : (2.0*val))
@@ -89,6 +89,4 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
  * https://arxiv.org/abs/1412.6980v8
  */
 void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accumulator_training* floatAccumulator);
-
-void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator);
 #endif

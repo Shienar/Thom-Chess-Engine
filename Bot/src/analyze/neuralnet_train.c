@@ -409,11 +409,11 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     int* blockNumbers = CALLOC(FILE_COUNT, sizeof(int));
     for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
 
-    short* activeInputs_A = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
-    float* expectedOutputs_A = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
+    short* activeInputs_A = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
+    float* expectedOutputs_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
     
-    short* activeInputs_B = _aligned_malloc(64 * POSITIONS_PER_FILE * sizeof(short), 4096); 
-    float* expectedOutputs_B = _aligned_malloc(POSITIONS_PER_FILE * sizeof(float), 4096);
+    short* activeInputs_B = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
+    float* expectedOutputs_B = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
     
     initOpenCL(trainingNNUE, activeInputs_A, expectedOutputs_A, activeInputs_B, expectedOutputs_B);
 
@@ -422,7 +422,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     double totalSumSquaredError = 0.0; //accumulated value per iteration
 
     char fileName[40] = {'\0'};
-    char inputString[120] = {'\0'};
+    char inputStrings[MINIBATCH_SIZE][105] = {'\0'};
 
     do{
         shuffle(blockNumbers, FILE_COUNT);
@@ -440,117 +440,125 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
             }
             if(inputGroup == INPUT_GROUP_A)
             {
-                memset(activeInputs_A, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
+                memset(activeInputs_A, 0, 64 * MINIBATCH_SIZE * sizeof(short));
             }
             else
             {
-                memset(activeInputs_B, 0, 64 * POSITIONS_PER_FILE * sizeof(short));
+                memset(activeInputs_B, 0, 64 * MINIBATCH_SIZE * sizeof(short));
             }
 
-            int trackedEntries = 0;
-            bitboard* board = create_board(); 
-            while(trackedEntries < POSITIONS_PER_FILE && fgets(inputString, 120, trainingData))
+            int entryNumber = 0;
+            while(entryNumber < MINIBATCH_SIZE && fgets(inputStrings[entryNumber++], 105, trainingData));
+            
+            fclose(trainingData);
+
+            #pragma omp parallel
             {
-                if(inputGroup == INPUT_GROUP_A) 
+                bitboard* board = create_board();
+                
+                #pragma omp for schedule(static)
+                for(entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
                 {
-                    loadTrainingData(inputString, board, &expectedOutputs_A[trackedEntries]);
-                }
-                else 
-                {
-                    loadTrainingData(inputString, board, &expectedOutputs_B[trackedEntries]);
-                }
-
-                uint64_t inputs[20] = {0};
-
-                inputs[0] = board->pawn_w;
-                inputs[1] = board->knight_w;
-                inputs[2] = board->bishop_w;
-                inputs[3] = board->rook_w;
-                inputs[4] = board->queen_w;
-                inputs[5] = board->pawn_b;
-                inputs[6] = board->knight_b;
-                inputs[7] = board->bishop_b;
-                inputs[8] = board->rook_b;
-                inputs[9] = board->queen_b;
-
-                inputs[10] = FLIP_MASK(board->pawn_b);
-                inputs[11] = FLIP_MASK(board->knight_b);
-                inputs[12] = FLIP_MASK(board->bishop_b);
-                inputs[13] = FLIP_MASK(board->rook_b);
-                inputs[14] = FLIP_MASK(board->queen_b);
-                inputs[15] = FLIP_MASK(board->pawn_w);
-                inputs[16] = FLIP_MASK(board->knight_w);
-                inputs[17] = FLIP_MASK(board->bishop_w);
-                inputs[18] = FLIP_MASK(board->rook_w);
-                inputs[19] = FLIP_MASK(board->queen_w);
-
-                if(getColumn(board->kingSquare_w) > 4)
-                {
-                    inputs[0] = mirrorBoard(inputs[0]);
-                    inputs[1] = mirrorBoard(inputs[1]);
-                    inputs[2] = mirrorBoard(inputs[2]);
-                    inputs[3] = mirrorBoard(inputs[3]);
-                    inputs[4] = mirrorBoard(inputs[4]);
-                    inputs[5] = mirrorBoard(inputs[5]);
-                    inputs[6] = mirrorBoard(inputs[6]);
-                    inputs[7] = mirrorBoard(inputs[7]);
-                    inputs[8] = mirrorBoard(inputs[8]);
-                    inputs[9] = mirrorBoard(inputs[9]);
-                }
-                if(getColumn(board->kingSquare_b) > 4)
-                {
-                    inputs[10] = mirrorBoard(inputs[10]);
-                    inputs[11] = mirrorBoard(inputs[11]);
-                    inputs[12] = mirrorBoard(inputs[12]);
-                    inputs[13] = mirrorBoard(inputs[13]);
-                    inputs[14] = mirrorBoard(inputs[14]);
-                    inputs[15] = mirrorBoard(inputs[15]);
-                    inputs[16] = mirrorBoard(inputs[16]);
-                    inputs[17] = mirrorBoard(inputs[17]);
-                    inputs[18] = mirrorBoard(inputs[18]);
-                    inputs[19] = mirrorBoard(inputs[19]);
-                }
-
-                for(int side = 0; side < 2; side++)
-                {
-                    int baseIndex = (side == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
-                    int trackedInputs = 0;
-                    for(int piece = 0; piece < 10; piece++)
+                     if(inputGroup == INPUT_GROUP_A) 
                     {
-                        uint64_t mask = inputs[10 * side + piece];
-                        while(mask)
+                        loadTrainingData(inputStrings[entryNumber], board, &expectedOutputs_A[entryNumber]);
+                    }
+                    else 
+                    {
+                        loadTrainingData(inputStrings[entryNumber], board, &expectedOutputs_B[entryNumber]);
+                    }
+
+                    uint64_t inputs[20] = {0};
+
+                    inputs[0] = board->pawn_w;
+                    inputs[1] = board->knight_w;
+                    inputs[2] = board->bishop_w;
+                    inputs[3] = board->rook_w;
+                    inputs[4] = board->queen_w;
+                    inputs[5] = board->pawn_b;
+                    inputs[6] = board->knight_b;
+                    inputs[7] = board->bishop_b;
+                    inputs[8] = board->rook_b;
+                    inputs[9] = board->queen_b;
+
+                    inputs[10] = FLIP_MASK(board->pawn_b);
+                    inputs[11] = FLIP_MASK(board->knight_b);
+                    inputs[12] = FLIP_MASK(board->bishop_b);
+                    inputs[13] = FLIP_MASK(board->rook_b);
+                    inputs[14] = FLIP_MASK(board->queen_b);
+                    inputs[15] = FLIP_MASK(board->pawn_w);
+                    inputs[16] = FLIP_MASK(board->knight_w);
+                    inputs[17] = FLIP_MASK(board->bishop_w);
+                    inputs[18] = FLIP_MASK(board->rook_w);
+                    inputs[19] = FLIP_MASK(board->queen_w);
+
+                    if(getColumn(board->kingSquare_w) > 4)
+                    {
+                        inputs[0] = mirrorBoard(inputs[0]);
+                        inputs[1] = mirrorBoard(inputs[1]);
+                        inputs[2] = mirrorBoard(inputs[2]);
+                        inputs[3] = mirrorBoard(inputs[3]);
+                        inputs[4] = mirrorBoard(inputs[4]);
+                        inputs[5] = mirrorBoard(inputs[5]);
+                        inputs[6] = mirrorBoard(inputs[6]);
+                        inputs[7] = mirrorBoard(inputs[7]);
+                        inputs[8] = mirrorBoard(inputs[8]);
+                        inputs[9] = mirrorBoard(inputs[9]);
+                    }
+                    if(getColumn(board->kingSquare_b) > 4)
+                    {
+                        inputs[10] = mirrorBoard(inputs[10]);
+                        inputs[11] = mirrorBoard(inputs[11]);
+                        inputs[12] = mirrorBoard(inputs[12]);
+                        inputs[13] = mirrorBoard(inputs[13]);
+                        inputs[14] = mirrorBoard(inputs[14]);
+                        inputs[15] = mirrorBoard(inputs[15]);
+                        inputs[16] = mirrorBoard(inputs[16]);
+                        inputs[17] = mirrorBoard(inputs[17]);
+                        inputs[18] = mirrorBoard(inputs[18]);
+                        inputs[19] = mirrorBoard(inputs[19]);
+                    }
+
+                    for(int side = 0; side < 2; side++)
+                    {
+                        int baseIndex = (side == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
+                        
+                        int trackedInputs = 0;
+                        for(int piece = 0; piece < 10; piece++)
                         {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[trackedEntries * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                            else activeInputs_B[trackedEntries * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                            trackedInputs++;
-                            mask&=(mask - 1);
+                            uint64_t mask = inputs[10 * side + piece];
+                            while(mask)
+                            {
+                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                                trackedInputs++;
+                                mask&=(mask - 1);
+                            }
                         }
+                        
                         //-1 padding
                         while(trackedInputs < 32)
                         {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[trackedEntries * 64 + 32 * side + trackedInputs] = -1;
-                            else activeInputs_B[trackedEntries * 64 + 32 * side + trackedInputs] = -1;
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
+                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
                             trackedInputs++;
                         }
                     }
                 }
-                
-                trackedEntries++;
+                destroy_board(board);
             }
-            destroy_board(board);
 
-            fclose(trainingData);
-
-            
             double sumSquaredError = 0.0;
             enqueueKernels(inputGroup, &sumSquaredError);
+
             clWaitForEvents(1, &readEvent);
+
             clReleaseEvent(readEvent);
 
             totalSumSquaredError+=sumSquaredError;
 
 
-            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError / POSITIONS_PER_FILE);
+            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError / MINIBATCH_SIZE);
             
             if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) 
             {
@@ -560,11 +568,11 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
         }
         totalIterations++;
         
-        printf("\33[2K\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT));
+        printf("\33[2K\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(MINIBATCH_SIZE * FILE_COUNT));
 
         getWeights(trainingNNUE);
         save_trainingWeights();
-    } while((totalSumSquaredError/(POSITIONS_PER_FILE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
+    } while((totalSumSquaredError/(MINIBATCH_SIZE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
     FREE(blockNumbers);
     FREE(activeInputs_A);
@@ -573,86 +581,4 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     FREE(expectedOutputs_B);
 
     freeOpenCL();
-}
-
-void generateTrainingData(int depth, int maxTime, accumulator_training* floatAccumulator)
-{
-    int fileNumber = 1;
-    char fileName[40] = {'\0'};
-    FILE* output;
-    while(1)
-    {
-        sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
-        output = fopen(fileName, "r");
-        if(!output) break;
-        else
-        {
-            fclose(output);
-            fileNumber++;
-        }
-
-    }
-
-    int entryCount = 0;
-    char FEN[100] = {'\0'};
-    if(fileNumber > 1)
-    {
-        fileNumber--;
-        sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
-        output = fopen(fileName, "r");
-        while(fgets(FEN, 100, output)) entryCount++;
-        fclose(output);
-    }
-
-    while(fileNumber <= FILE_COUNT)
-    {
-        sprintf(fileName, "./training/trainingData_%d.txt", fileNumber);
-        output = fopen(fileName, "a");
-
-
-        while(entryCount < POSITIONS_PER_FILE)
-        {
-            bitboard* board = create_board();
-            loadInputAccumulator(board, floatAccumulator, TRAINING, BLACK|WHITE);
-
-            transpositionTable = create_hashTable_tt();
-
-            //Avoid boring games.
-            int movesSinceLastInterestingMove = 0;
-
-            while(1)
-            {
-                move* bestMove = calculateBestMove(board, depth, maxTime, TRAINING);
-                
-                //No one is in check and the best move isn't a capture.
-                if(!bestMove->capturedPiece && !(board->flags&0x30) && transposition_table_get(board, transpositionTable))
-                {
-                    movesSinceLastInterestingMove = 0;
-
-                    export_fen_from_board(board, FEN);
-                    float evaluation = (float) transposition_table_get(board, transpositionTable)->evaluation;
-                    evaluation = (evaluation / 127) + 0.5;
-                    fprintf(output, "%s|%f\n", FEN, evaluation);
-                    
-                    entryCount++;
-                    printf("\rFile %d/%d, Entries: %d/%d", fileNumber, FILE_COUNT, entryCount, POSITIONS_PER_FILE);
-
-                }
-                else movesSinceLastInterestingMove++;
-
-                if(board->victor || movesSinceLastInterestingMove > 10 || entryCount >= POSITIONS_PER_FILE) break;
-                if(moveFromStruct(board, bestMove)) break;
-            }
-            destroy_hashTable_tt(transpositionTable);
-            transpositionTable = NULL;
-            destroy_board(board);
-        }
-
-        fileNumber++;
-        entryCount = 0;
-
-        fclose(output);
-    }
-    
-    FREE(trainingNNUE);
 }
