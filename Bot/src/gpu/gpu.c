@@ -28,6 +28,7 @@ cl_float lr = MAX_LR;
 int64_t cosineIntervalLength;
 uint64_t cosineTimestamp;
 uint64_t timestamp;
+int intervalCount;
 char* getKernelFunctions()
 {
     FILE* input = fopen("./src/gpu/kernels.cl", "rb"); 
@@ -57,6 +58,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     cosineIntervalLength = FIRST_INTERVAL;
     cosineTimestamp = 0;
     timestamp = 0;
+    intervalCount = 0;
 
     int err = 0;
 
@@ -425,10 +427,11 @@ void enqueueKernels(int bufferSide, double* outputSSE)
 {
     //cosine annealing
     lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
-    if(cosineTimestamp >= cosineIntervalLength)
+    if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
     {
         cosineTimestamp = 0;
         cosineIntervalLength*=INTERVAL_SCALE;
+        intervalCount++;
     }
 
     if(bufferSide == INPUT_GROUP_A)

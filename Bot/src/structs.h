@@ -5,31 +5,25 @@
 #include <time.h>
 
 typedef struct move {
-    int startSquare;
-    int endSquare;
-    int piece;
-    int promoteTo;
-    int capturedPiece;
-    int capturedPieceSquare; //Not always the same as endsquare because of en passant
+    int8_t startSquare;
+    int8_t endSquare;
+    int8_t piece;
+    int8_t promoteTo;
+    int8_t capturedPiece;
+    int8_t capturedPieceSquare; //Not always the same as endsquare because of en passant
+} move;
+
+typedef struct moveEntry {
+    move m;
     
-    int prevEnPassantSquare;
+    int8_t prevEnPassantSquare;
     int previousMovesSinceLastChange;
     
     //Flags from the previous board state.
     int flags; 
-    struct move* nextMove;
-} move;
-   
-typedef struct table_entry_pos {
-    uint64_t hashCode;
-    int count;
-} table_entry_pos;
+    struct moveEntry* nextEntry;
 
-typedef struct hashtable_pos {
-    table_entry_pos* array;
-    size_t capacity;
-    size_t size;
-} hashtable_pos;
+} moveEntry;
 
 typedef struct table_entry_tt {
     uint64_t hashCode;
@@ -44,7 +38,6 @@ typedef struct table_entry_tt {
 typedef struct hashtable_tt {
     table_entry_tt* array;
     size_t capacity;
-    size_t size;
 } hashtable_tt;
 
 //a1 = 0, h1 = 7
@@ -102,8 +95,9 @@ typedef struct bitboard {
     int movesSinceLastChange;
 
     //History
-    move* moveStackTop;
-    hashtable_pos* ht;
+    moveEntry* moveStackTop;
+    uint64_t repetitionHashCodes[128];
+    uint8_t repetitionIndex;
 
     //A pawn can capture to this square.
     //[0,63] OR -1 if empty.
@@ -111,15 +105,16 @@ typedef struct bitboard {
 
     //Other
     int halfMoveCount;
+
+    uint64_t hashCode;
 } bitboard;
 
-typedef struct polyglot_book_entry {
-    uint64_t hashKey;
-    uint16_t move;
-    uint16_t weight;
-    uint32_t learn;
-} polyglot_book_entry;
-
+typedef struct magic {
+    uint64_t mask;
+    uint64_t magic;
+    uint64_t* attacks;
+    int shiftOffset;
+} magic;
 
 #define INPUT_BITS 20480
 #define HALF_INPUT_BITS 10240
@@ -158,6 +153,7 @@ typedef struct network_weights_playing {
     int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4_bias;
 } network_weights_playing;
+
 
 typedef struct accumulator_training {
     //Incrementally updates.

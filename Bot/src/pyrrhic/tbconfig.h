@@ -48,8 +48,8 @@
 #define PYRRHIC_POPLSB(x)                popLSB(x)
 
 #define PYRRHIC_PAWN_ATTACKS(sq, c)      (pyrrhicPawnAttacks(sq, c))
-#define PYRRHIC_KNIGHT_ATTACKS(sq)       (knightMoves(NULL, 0, sq))
-#define PYRRHIC_BISHOP_ATTACKS(sq, occ)  (bishopMoves(NULL, 0, occ, sq))
-#define PYRRHIC_ROOK_ATTACKS(sq, occ)    (rookMoves(NULL, 0, occ, sq))
-#define PYRRHIC_QUEEN_ATTACKS(sq, occ)   (queenMoves(NULL, 0, occ, sq))
+#define PYRRHIC_KNIGHT_ATTACKS(sq)       (knightMoves(0, sq))
+#define PYRRHIC_BISHOP_ATTACKS(sq, occ)  (bishopMoves(0, occ, sq))
+#define PYRRHIC_ROOK_ATTACKS(sq, occ)    (rookMoves(0, occ, sq))
+#define PYRRHIC_QUEEN_ATTACKS(sq, occ)   (queenMoves(0, occ, sq))
 #define PYRRHIC_KING_ATTACKS(sq)         (pyrrhicKingAttacks(sq))

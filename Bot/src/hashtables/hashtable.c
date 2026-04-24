@@ -217,6 +217,31 @@ const uint64_t zobrist_keys[781] = {
    0xF8D626AAAF278509ull,
 };
 
+uint64_t getEnPassantHash(bitboard* board)
+{
+    if (board->enPassantSquare == -1) return 0;
+
+    int epSquare = board->enPassantSquare;
+    int epRow = getRow(epSquare);
+    uint64_t borderingPawnMask = 0;
+
+    int capturedPawnSquare = (epRow == 5) ? epSquare + 8 : epSquare - 8;
+
+    if (getColumn(capturedPawnSquare) > 0) borderingPawnMask |= (1ull << (capturedPawnSquare - 1));
+    if (getColumn(capturedPawnSquare) < 7) borderingPawnMask |= (1ull << (capturedPawnSquare + 1));
+
+    if (epRow == 5) 
+    {
+        if (borderingPawnMask & board->pawn_w) return zobrist_keys[772 + getColumn(epSquare)]; 
+    } 
+    else
+    {
+        if (borderingPawnMask & board->pawn_b) return zobrist_keys[772 + getColumn(epSquare)];
+    }
+
+    return 0;
+}
+
 uint64_t getHashCode(bitboard* board)
 {
     if(!board) return 0;
@@ -231,7 +256,7 @@ uint64_t getHashCode(bitboard* board)
 
         piece = findPieceOnSquare(board, square);
 
-        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(square) - 1)) + (getColumn(square) - 1)];
+        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(square))) + (getColumn(square))];
 
         mask&=(mask - 1);
     }
@@ -242,23 +267,7 @@ uint64_t getHashCode(bitboard* board)
     if(board->flags&8) returnValue^=zobrist_keys[771];
 
 
-    if(board->enPassantSquare != -1)
-    {
-        int endSquare;
-        if(ISWHITE(board->turn)) endSquare = board->enPassantSquare + 8;
-        else endSquare = board->enPassantSquare - 8;
-
-        //Additional check that there is a pawn that  can make the capture.
-        uint64_t borderingPawnMask = 0;
-        if(getColumn(endSquare) > 1) borderingPawnMask|=(1ull<<(endSquare - 1));
-        if(getColumn(endSquare) < 8) borderingPawnMask|=(1ull<<(endSquare + 1));
-
-        if((ISWHITE(board->turn) && (borderingPawnMask&board->pawn_w)) ||
-            (ISBLACK(board->turn) && (borderingPawnMask&board->pawn_b)))
-            {
-                returnValue^=zobrist_keys[772 + getColumn(endSquare) - 1];
-            }
-    }
+    returnValue ^= getEnPassantHash(board);
 
     if(ISWHITE(board->turn)) returnValue^=zobrist_keys[780];
 

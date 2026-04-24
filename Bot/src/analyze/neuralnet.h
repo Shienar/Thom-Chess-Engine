@@ -1,11 +1,10 @@
 #ifndef NEURALNETWORK
 #define NEURALNETWORK
 
-#include "../structs.h"
-#include "accumulator.h"
 #include <math.h>
 #include <stdint.h>
 #include <immintrin.h>
+#include "../board/bitboard.h"
 
 #define PI 3.141592653589793
 
@@ -15,7 +14,7 @@
 #define ADAM_WEIGHT_DECAY 1e-3
 
 #define MINIBATCH_SIZE 16384
-#define FILE_COUNT 6104
+#define FILE_COUNT 30518
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)

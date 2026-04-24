@@ -51,18 +51,14 @@ void unloadBook()
     }
 }
 
-typedef struct weight_node {
-    uint16_t weight;
-    struct weight_node* next;
-} weight_node;
-
 move* getBookMove(bitboard* board)
 {
-    uint64_t polyglotKey = getHashCode(board);
+    uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
-    move* moveHead = NULL;
-    weight_node* weightHead  = NULL;
+    move potentialMoves[64] = {0};
+    uint16_t moveWeights[64] = {0};
+    int moveCount = 0;
 
     for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
     {
@@ -87,18 +83,14 @@ move* getBookMove(bitboard* board)
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
             int promoteTo = ((moveBits&0x7000)>>12) + 1;
             
-            move* tempMove = CALLOC(1, sizeof(move));
-            weight_node* tempWeight = CALLOC(1, sizeof(weight_node));
-            tempWeight->weight = _byteswap_ushort(entry->weight);
-            totalWeight+= tempWeight->weight;
+            move* tempMove = &potentialMoves[moveCount];
+            moveWeights[moveCount] = _byteswap_ushort(entry->weight);
+            totalWeight+= moveWeights[moveCount];
 
             tempMove->promoteTo = promoteTo;
             tempMove->startSquare = startSquare;
             tempMove->endSquare = endSquare;
-            tempMove->flags = board->flags;
-            tempMove->previousMovesSinceLastChange = board->movesSinceLastChange;
             tempMove->piece = findPieceOnSquare(board, startSquare);
-            tempMove->nextMove = NULL;
 
             //Overwrite the polyglot castling syntax with our own.
             if(ISKING(tempMove->piece))
@@ -109,47 +101,27 @@ move* getBookMove(bitboard* board)
 
             if((tempMove->capturedPiece = findPieceOnSquare(board, endSquare))) tempMove->capturedPieceSquare = endSquare;
 
-            tempMove->nextMove = moveHead;
-            moveHead = tempMove;
-            tempWeight->next = weightHead;
-            weightHead = tempWeight;
+            moveCount++;
+            if(moveCount >= 64) break;
         }
     }
 
-    if(!moveHead) return NULL;
+    if(moveCount == 0) return NULL;
 
     uint32_t randomValue = ((rand()<<16)|rand())%totalWeight;
-    move* returnedMove = NULL;
-    move* tempMove;
-    weight_node* tempWeight;
-    for(tempMove = moveHead, tempWeight = weightHead; tempMove != NULL; tempMove=tempMove->nextMove, tempWeight=tempWeight->next)
-    {
-        if(randomValue < tempWeight->weight || !tempMove->nextMove)
-        {
-            returnedMove = tempMove;
+    int selectedIndex = 0;
+
+    for(int i = 0; i < moveCount; i++) {
+        if(randomValue < moveWeights[i]) {
+            selectedIndex = i;
             break;
         }
-        else randomValue-= tempWeight->weight;
+        randomValue -= moveWeights[i];
     }
 
-    move* prevMove = moveHead;
-    weight_node* prevWeight = weightHead;
-    tempMove = moveHead->nextMove;
-    tempWeight = weightHead->next;
+    move* returnedMove = CALLOC(1, sizeof(move));
+    *returnedMove = potentialMoves[selectedIndex];
 
-    while(prevMove && prevWeight)
-    {
-        if(prevMove != returnedMove) FREE(prevMove);
-        FREE(prevWeight);
-
-        prevMove = tempMove;
-        if(tempMove) tempMove = tempMove->nextMove;
-
-        prevWeight = tempWeight;
-        if(tempWeight) tempWeight = tempWeight->next;
-    }
-
-    returnedMove->nextMove = NULL;
     return returnedMove;
     
 }

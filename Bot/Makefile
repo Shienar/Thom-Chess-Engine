@@ -13,6 +13,9 @@ OBJFILES += src/gpu/*.c
 # No debug flag for assert() removals.
 CFLAGS += -DNDEBUG
 
+# Speedup, harder debugging.
+CFLAGS += -O3
+
 # Thread count
 THREADS ?= 8
 CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
@@ -22,8 +25,8 @@ CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
-# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -PgetBookMove -PfindAbsMax -PquantizeWeights -PfindSum -PiterateTrainingWeights -b > output.txt
-# CFLAGS += -pg -no-pie
+# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -PgetBookMove -b > output.txt
+CFLAGS += -pg -no-pie
 
 all: clean $(TARGET)
 

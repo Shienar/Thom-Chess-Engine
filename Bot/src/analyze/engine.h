@@ -4,6 +4,7 @@
 #include "../structs.h"
 #include "../hashtables/transpositiontable.h"
 #include "neuralnet.h"
+#include "accumulator.h"
 #include <time.h>
 
 //The evaluation score given to draws.
@@ -29,8 +30,9 @@ extern int useHelperThreads;
 #define MAXIMUM_ASPIRATION_MARGIN 40.0
 #define ASPIRATION_MARGIN_MULT_FACTOR 2.0
 
-//Enables node tracking. Comment out to disable.
-//#define COUNT_NODES_VISITED 1
+#define MAX_DEPTH 20
+
+int perft(bitboard* board, int depth, int maxDepth, int verbose);
 
 /**
  * Evaluates a position based on piece/square weights.
@@ -61,6 +63,6 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
 /**
  * Iterative deepening function.
  */
-move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType);
+move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType);
 
 #endif

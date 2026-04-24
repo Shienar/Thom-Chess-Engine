@@ -3,7 +3,7 @@
 #define BITBOARD_H
 
 #include "../structs.h"
-#include "../hashtables/repetitiontable.h"
+#include "../hashtables/hashtable.h"
 
 #define WHITE 0x10
 #define BLACK 0x20
@@ -48,7 +48,7 @@
 #define QUEENSIDE_CASTLE_WHITE(flag) ((flag&2)>>1)
 #define KINGSIDE_CASTLE_BLACK(flag) ((flag&4)>>2)
 #define QUEENSIDE_CASTLE_BLACK(flag) ((flag&8)>>3)
-#define BAN_KINGCASTLE_W(flag) (flag&=(~1))
+#define BAN_KINGCASTLE_W(flag) (flag&=(~1));
 #define BAN_QUEENCASTLE_W(flag) (flag&=(~2))
 #define BAN_KINGCASTLE_B(flag) (flag&=(~4))
 #define BAN_QUEENCASTLE_B(flag) (flag&=(~8))
@@ -81,8 +81,8 @@
 #define TEXT_COLOR_SOURCE_BLACK_PIECE "\033[48;2;130;130;50;38;2;255;100;100m"
 #define TEXT_NONE "\033[0m"
 
-#define getColumn(square) (square%8 + 1)
-#define getRow(square) (square/8 + 1)
+#define getColumn(square) (square%8)
+#define getRow(square) (square/8)
 
 char getColumnChar(int x, int isSquare);
 void getSquareName(int square, char* target);
@@ -99,9 +99,9 @@ void export_fen_from_board(bitboard* board, char* outputFenString);
 void load_fen_string_to_board(bitboard* board, const char* fenString);
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber);
 void destroy_board(bitboard* board);
-void copy_board(bitboard* dest, bitboard* source, int copyHT, int copyMoves);
+void copy_board(bitboard* dest, bitboard* source, int copyMoves);
 
-void board_clear_square(bitboard* board, int square, int pieceType);
+void board_clear_square(bitboard* board, int square);
 void board_set(bitboard* board, int square, int piece);
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
@@ -109,9 +109,21 @@ void board_print(bitboard* board, int printValues, int printHistory);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
 
-int moves_push(bitboard* board, move* m);
-move* moves_pop(bitboard* board);
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, bitboard* prevBoard);
+int moves_push(bitboard* board, move m);
+moveEntry* moves_pop(bitboard* board);
+static inline void createMove(move* m, int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare)
+{
+    if(!m) return;
+
+    m->startSquare = startSquare;
+    m->endSquare = endSquare;
+    m->promoteTo = promoteTo;
+    m->piece = piece;
+    m->capturedPiece = capturedPiece;
+    m->capturedPieceSquare = capturedPieceSquare;
+}
+
+int containsRepetition(bitboard* board);
 
 void dumpMoves(bitboard* board);
 #endif

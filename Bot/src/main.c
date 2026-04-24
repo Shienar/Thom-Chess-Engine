@@ -5,10 +5,16 @@
 #include "./analyze/book.h"
 #include "./analyze/neuralnet.h"
 #include "./pyrrhic/tbprobe.h"
+#include "./analyze/engine.h"
 #include <stdio.h>
 #include <string.h>
 #include <omp.h>
 
+/**
+ * Bugs:
+ *  - occasional repetition table errors caused by inconsistent moving / unmoving.
+ * 
+ */
 int main(int argc, char** argv)
 {
     /**
@@ -25,6 +31,7 @@ int main(int argc, char** argv)
     int shouldTrain = 0;
     int useBook = 1; 
     int saveEveryNBlocks = 10;
+    int shouldPerft = 0;
     for(int i = 1; i < argc; i++)
     {
         if(strcmp(argv[i], "--help") == 0)
@@ -45,12 +52,13 @@ int main(int argc, char** argv)
             printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
             printf("--train\t\ttrains the neural network. Pass in iteration count and how often you want to save.\n");
             printf("--singlethread\t\tDisables helper threads.\n");
+            printf("--perft\t\tMove generation performance test.\n");
             printf("\n\n");
             exit(0);
         }
         else if(strcmp(argv[i], "-v") == 0) verbose = 1;
         else if(strcmp(argv[i], "--black") == 0) player_color = BLACK;
-        else if(strcmp(argv[i], "--depth") == 0) { i++; depth = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--depth") == 0) { i++; depth = min(atoi(argv[i]), MAX_DEPTH - 5); }
         else if(strcmp(argv[i], "--debug") == 0) enableDebugMessages();
         else if(strcmp(argv[i], "--leaks") == 0) enableLeakTracking();
         else if(strcmp(argv[i], "--history") == 0) printHistory = 1;
@@ -70,11 +78,17 @@ int main(int argc, char** argv)
             dump_allocations();
             exit(0);
         }
+        else if(strcmp(argv[i], "--perft") == 0) shouldPerft = 1;
         else if(strcmp(argv[i], "--singlethread") == 0) useHelperThreads = 0;
     }
 
     omp_set_num_threads(HELPER_THREAD_COUNT); 
     srand(time(NULL));
+
+    initMagics();
+    initPawnAttacks();
+    initKnightMoveTable();
+    initKingMoveTable();
 
     if(shouldTrain)
     {
@@ -108,6 +122,20 @@ int main(int argc, char** argv)
     }
     else board = create_board();
 
+    
+    if(shouldPerft)
+    {
+        clock_t startTime = clock();
+        int result = perft(board, depth, depth, verbose);
+        clock_t duration = clock() - startTime;
+        double seconds = (double) duration / CLOCKS_PER_SEC;
+        double NPS = result / seconds;
+
+        printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
+        destroy_board(board);
+        exit(0);
+    }
+
 
     if(useBook && !onlyHumans) loadBook();
     if(!onlyHumans) 
@@ -137,7 +165,7 @@ int main(int argc, char** argv)
             }
             else if(buffer[0] == 'u')
             {
-                move* tempMove = unmove(board);
+                moveEntry* tempMove = unmove(board);
                 if(tempMove) FREE(tempMove);
                 board_print(board, verbose, printHistory);
             }
@@ -151,7 +179,7 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move* bestMove = calculateBestMove(board, depth, maxTime, PLAYING);
+                move bestMove = calculateBestMove(board, depth, maxTime, PLAYING);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose, printHistory);

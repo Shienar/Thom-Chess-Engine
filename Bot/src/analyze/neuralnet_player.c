@@ -160,7 +160,7 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
     //Assume accumulator has already been updated.
     int8_t h2[SECOND_HIDDEN_LAYER_NODES] = {0};
     int8_t h3[THIRD_HIDDEN_LAYER_NODES] = {0};
-    int8_t outputNode = 0;
+    int8_t outputNode[8] = {0}; 
 
     int8_t tempH2[2][SECOND_HIDDEN_LAYER_NODES];
 
@@ -190,11 +190,11 @@ int8_t forwardPropagate_Int(int turn, accumulator_playing* byteAccumulator, int 
     }
 
     calculateLayer_IntBytes(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, 0, playerNNUE->weights3_bias, 1);
-    calculateLayer_IntBytes(h3, &outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, 0, &playerNNUE->weights4_bias, 0);
+    calculateLayer_IntBytes(h3, outputNode, THIRD_HIDDEN_LAYER_NODES, OUTPUT_LAYER_NODES, &playerNNUE->weights4, 0, &playerNNUE->weights4_bias, 0);
 
     //Change from [0, 127] to [-64, 63]
     // (It's trained to generate a value in the range but could theoretically generate one outside of it)
-    if(centerAtZero) outputNode-=64;
+    if(centerAtZero) outputNode[0]-=64;
 
-    return outputNode;
+    return outputNode[0];
 }

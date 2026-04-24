@@ -3,578 +3,323 @@
 #include <string.h>
 #include "../debug.h"
 
-move** generateMoveList(bitboard* board, int capturesOnly)
+int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
 {
     if(board->victor) 
     {
         DEBUG("Cannot generate moves for terminated game; Victor=x%02x", board->victor);
-        return NULL;
+        return 0;
     }
 
     int size = 0;
-    int capacity = 32;
-    move** movesList = CALLOC(capacity, sizeof(move*));
-    if(!movesList)
+    generatePawnMoves(movesList, &size, board, capturesOnly);
+    uint64_t allies, enemies, knights, bishop, rook, queen, king;
+    if(ISWHITE(board->turn))
     {
-        DEBUG("Failed to generate movesList");
-        return NULL;
-    } 
-
-    uint64_t turnsBitBoard = (ISWHITE(board->turn)) ? board->pieces_w : board->pieces_b;
-    while(turnsBitBoard)
+        allies = board->pieces_w;
+        enemies = board->pieces_b;
+        knights = board->knight_w;
+        bishop = board->bishop_w;
+        rook = board->rook_w;
+        queen = board->queen_w;
+        king = board->king_w;
+    }
+    else
     {
-        int currentSquare = __builtin_ctzll(turnsBitBoard);
+        allies = board->pieces_b;
+        enemies = board->pieces_w;
+        knights = board->knight_b;
+        bishop = board->bishop_b;
+        rook = board->rook_b;
+        queen = board->queen_b;
+        king = board->king_b;
+    }
 
-        int piece = findPieceOnSquare(board, currentSquare);
-        move** tempMoves = generatePieceMoves(board, piece, currentSquare, piece, capturesOnly);
+    while(knights) 
+    {
+        int startSquare = __builtin_ctzll(knights);
+        uint64_t mask = knightMoves(allies, startSquare);
+        if (capturesOnly) mask &= enemies;
         
-        int index = 0;
-        while (tempMoves[index] != NULL) {
-            if (size >= capacity) {
-                capacity += 8;
-                movesList = (move**)realloc(movesList, capacity * sizeof(move*));
-                if (!movesList) return NULL;
-            }
-            movesList[size] = (move*)calloc(1, sizeof(move));
-            memcpy(movesList[size], tempMoves[index], sizeof(move));
-            size++;
-            index++;
+        while(mask) 
+        {
+            int endSquare = __builtin_ctzll(mask);
+            int target = findPieceOnSquare(board, endSquare); 
+            createMove(&movesList[size++], startSquare, endSquare, 0, (KNIGHT | board->turn), target, (target ? endSquare : 0));
+            mask&=(mask-1);
         }
-        freeMoveList(tempMoves);
+        knights&=(knights-1);
+    }
 
-        turnsBitBoard &= (turnsBitBoard - 1);
+    while(bishop) 
+    {
+        int startSquare = __builtin_ctzll(bishop);
+        uint64_t moveMask = bishopMoves(allies, enemies, startSquare);
+        if (capturesOnly) moveMask &= enemies;
+
+        while(moveMask) 
+        {
+            int endSquare = __builtin_ctzll(moveMask);
+            int target = findPieceOnSquare(board, endSquare);
+            createMove(&movesList[size++], startSquare, endSquare, 0, (BISHOP | board->turn), target, (target ? endSquare : 0));
+            moveMask&=(moveMask-1);
+        }
+        bishop&=(bishop-1);
+    }
+
+    while(rook) 
+    {
+        int startSquare = __builtin_ctzll(rook);
+        uint64_t moveMask = rookMoves(allies, enemies, startSquare); 
+        if (capturesOnly) moveMask &= enemies;
+
+        while(moveMask) 
+        {
+            int endSquare = __builtin_ctzll(moveMask);
+            int target = findPieceOnSquare(board, endSquare);
+            createMove(&movesList[size++], startSquare, endSquare, 0, (ROOK | board->turn), target, (target ? endSquare : 0));
+            moveMask&=(moveMask-1);
+        }
+        rook&=(rook-1);
     }
     
-    //Game over, no moves available.
-    //stalemate/checkmate gets decided elsewhere.
-    if(size == 0) 
+    while(queen) 
     {
-        FREE(movesList);
-        return NULL;
+        int startSquare = __builtin_ctzll(queen);
+        uint64_t moveMask = queenMoves(allies, enemies, startSquare); 
+        if (capturesOnly) moveMask &= enemies;
+
+        while(moveMask) 
+        {
+            int endSquare = __builtin_ctzll(moveMask);
+            int target = findPieceOnSquare(board, endSquare);
+            createMove(&movesList[size++], startSquare, endSquare, 0, (QUEEN | board->turn), target, (target ? endSquare : 0));
+            moveMask&=(moveMask-1);
+        }
+        queen&=(queen-1);
     }
 
-    movesList = REALLOC(movesList, (size+1)*sizeof(move*));
-    if(!movesList) return NULL;
-    movesList[size] = NULL;
-
-    return movesList;
+    int startSquare = __builtin_ctzll(king);
+    uint64_t moveMask = kingMoves(board, startSquare, board->turn);
+    if (capturesOnly) moveMask &= enemies;
+    while(moveMask) 
+    {
+        int endSquare = __builtin_ctzll(moveMask);
+        int target = findPieceOnSquare(board, endSquare);
+        createMove(&movesList[size++], startSquare, endSquare, 0, (KING | board->turn), target, (target ? endSquare : 0));
+        moveMask&=(moveMask-1);
+    }
+    
+    return size;
 }
 
-move** generatePieceMoves(bitboard* board, int piece, int square, int color, int capturesOnly)
+void generatePawnMoves(move* moveList, int* size, bitboard* board, int capturesOnly)
 {
-    assert(piece && "Piece type is invalid.");
-    assert(square >= 0 && square <= 63);
-    assert(ISWHITE(color) || ISBLACK(color));
+    assert(board);
+    
+    uint64_t mask = 0;
+    int piece = PAWN|(board->turn);
 
-    move** moveArray = CALLOC(40, sizeof(move*));
-    if(!moveArray) return NULL;
-    int size = 0;
-    uint64_t moveMask;
-
-    uint64_t opposingPieceMask;
-    uint64_t allyPieceMask;
-    if(ISWHITE(color)) 
+    if(ISWHITE(piece))
     {
-        opposingPieceMask = board->pieces_b;
-        allyPieceMask = board->pieces_w;
-    }
-    else 
-    {
-        opposingPieceMask = board->pieces_w;
-        allyPieceMask = board->pieces_b;
-    }
-
-    if(ISPAWN(piece))
-    {
-        moveMask = pawnMoves(board, square, color);
-        int currentSquare = 0;
-        while(moveMask)
+        if(!capturesOnly)
         {
-            if(moveMask&1 && (!capturesOnly || (capturesOnly && opposingPieceMask&1) || board->enPassantSquare == currentSquare))
+            mask = WHITE_PAWN_PUSH_MASK(board);
+            while(mask)
             {
-                int targetPiece = findPieceOnSquare(board, currentSquare);
-                int targetSquare = currentSquare;
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare - 8;
 
-                if((ISWHITE(color) && currentSquare >= 56) || (ISBLACK(color) && currentSquare <= 7))
+                if(endSquare >= 56)
                 {
                     //Promotion
-                    moveArray[size] = createMove(square, currentSquare, KNIGHT, PAWN|color, targetPiece, targetSquare, board);
-                    size++;
-                    
-                    moveArray[size] = createMove(square, currentSquare, BISHOP, PAWN|color, targetPiece, targetSquare, board);
-                    size++;
-                    
-                    moveArray[size] = createMove(square, currentSquare, ROOK, PAWN|color, targetPiece, targetSquare, board);
-                    size++;
-                    
-                    moveArray[size] = createMove(square, currentSquare, QUEEN, PAWN|color, targetPiece, targetSquare, board);
-                    size++;
+                    createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, 0, 0);
+                    createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, 0, 0); 
+                    createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, 0, 0);     
+                    createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, 0, 0);
                 }
-                else
-                {
-                    if(board->enPassantSquare == currentSquare)
-                    {
-                        targetPiece = PAWN;
-                        if(ISWHITE(color)) 
-                        {
-                            targetPiece|=BLACK;
-                            targetSquare-=8;
-                        }
-                        else
-                        {
-                            targetPiece|=WHITE;
-                            targetSquare+=8;
-                        }
-                    }
+                else createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, 0, 0);
 
-                    moveArray[size] = createMove(square, currentSquare, 0, PAWN|color, targetPiece, targetSquare, board);
-                    size++;
-                }
+                mask&=(mask - 1);
             }
-            moveMask = moveMask >> 1;
-            opposingPieceMask = opposingPieceMask >> 1;
-            currentSquare++;
-        }
-    }
-    else 
-    {
-        if(ISKNIGHT(piece))
-        {
-            moveMask = knightMoves(board, allyPieceMask, square);
-        }
-        else if(ISBISHOP(piece))
-        {
-            moveMask = bishopMoves(board, allyPieceMask, opposingPieceMask, square);
-        }
-        else if(ISROOK(piece))
-        {
-            moveMask = rookMoves(board, allyPieceMask, opposingPieceMask, square); 
-        }
-        else if(ISQUEEN(piece))
-        {
-            moveMask = queenMoves(board, allyPieceMask, opposingPieceMask, square);
-        }
-        else if(ISKING(piece))
-        {
-            moveMask = kingMoves(board, square, color, 0);
-        }
-        int currentSquare = 0;
 
-        while(moveMask)
-        {
-            if(moveMask&1  && (!capturesOnly || (capturesOnly && opposingPieceMask&1)))
+            mask = WHITE_PAWN_DOUBLEPUSH_MASK(board);
+            while(mask)
             {
-                int targetPiece = findPieceOnSquare(board, currentSquare);
-                moveArray[size] = createMove(square, currentSquare, 0, piece|color, targetPiece, currentSquare, board);
-                size++;
-            }
-            moveMask = moveMask >> 1;
-            opposingPieceMask = opposingPieceMask >> 1;
-            currentSquare++;
-        }
-    }
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare - 16;
 
-    if(board->flags&0x30)
-    {
-        //One side is in check
-        move** legalMoveArray = CALLOC(size, sizeof(move*));
-        bitboard* tempBoard = create_board();
-        int legalSize = 0;
-        for(int i = 0; i < size; i++)
+                createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, 0, 0);
+                
+                mask&=(mask - 1);
+            }
+        }
+
+        mask = WHITE_PAWN_LEFTATTACKS(board);
+        while(mask)
         {
-            copy_board(tempBoard, board, 0, 0);
-            //Check if move is legal.
-            if(movePiece(tempBoard, moveArray[i]->startSquare, moveArray[i]->endSquare, moveArray[i]->piece, moveArray[i]->promoteTo) == 0)
-            {
-                if((ISWHITE(color) && isThreatened(tempBoard, tempBoard->kingSquare_w, WHITE)) ||
-                    (ISBLACK(color) && isThreatened(tempBoard, tempBoard->kingSquare_b, BLACK)))
-                {
-                    continue;
-                }
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare - 7;
+            int capturedPiece = findPieceOnSquare(board, endSquare);
 
-                legalMoveArray[legalSize] = CALLOC(1, sizeof(move));
-                memcpy(legalMoveArray[legalSize], moveArray[i], sizeof(move));
-                legalSize++;
+            if(endSquare >= 56)
+            {
+                //Promotion
+                createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, capturedPiece, endSquare);
+            }
+            else createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, capturedPiece, endSquare);
+            
+            mask&=(mask - 1);
+        }
+
+        mask = WHITE_PAWN_RIGHTATTACKS(board);
+        while(mask)
+        {
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare - 9;
+            int capturedPiece = findPieceOnSquare(board, endSquare);
+
+            if(endSquare >= 56)
+            {
+                //Promotion
+                createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, capturedPiece, endSquare);
+            }
+            else createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, capturedPiece, endSquare);
+            
+            mask&=(mask - 1);
+        }
+
+        
+        if(board->enPassantSquare != -1)
+        {
+            uint64_t epMask = 1ull << board->enPassantSquare;
+            mask = EN_PASSANT_ATTACKERS_WHITE(epMask, board);
+            while(mask)
+            {
+                int startSquare = __builtin_ctzll(mask);
+                createMove(&moveList[(*size)++], startSquare, board->enPassantSquare, 0, piece, PAWN|BLACK, board->enPassantSquare - 8);
+                mask&=(mask - 1);
             }
         }
-        destroy_board(tempBoard);
-        moveArray[size] = NULL;
-        freeMoveList(moveArray);
 
-        legalMoveArray = REALLOC(legalMoveArray, (legalSize+1)*sizeof(move));
-        if(legalMoveArray == NULL) return NULL;
-        legalMoveArray[legalSize] = NULL;
-
-        return legalMoveArray;
     }
     else
     {
-        moveArray = REALLOC(moveArray, (size+1)*sizeof(move));
-        moveArray[size] = NULL;
-        return moveArray;
-    }
-    
-}
-
-void freeMoveList(move** moveList)
-{
-    if(!moveList) return;
-
-    int index = 0;
-    while(moveList[index])
-    {
-        FREE(moveList[index]);
-        moveList[index] = NULL;
-        index++;
-    }
-    
-    FREE(moveList);
-    moveList = NULL;
-}
-
-int isPinned(bitboard* board, int questionedSquare, int kingSquare, int kingColor)
-{
-    uint64_t rookqueen = 0;
-    uint64_t bishopqueen = 0;
-
-    if(ISBLACK(kingColor))
-    {
-        rookqueen = board->rook_w|board->queen_w;
-        bishopqueen = board->bishop_w|board->queen_w;
-    }
-    else if(ISWHITE(kingColor))
-    {
-        rookqueen = board->rook_b|board->queen_b;
-        bishopqueen = board->bishop_b|board->queen_b;
-    }
-
-    if(getRow(questionedSquare) == getRow(kingSquare))
-    {
-        //Check for discovered rook/queen attack
-        if(questionedSquare < kingSquare)
+        if(!capturesOnly)
         {
-            //King is on a higher column, same row.
-
-            //Check for pieces between questionedSquare and king square.
-            uint64_t greaterMask = (1ull << (kingSquare + 1)) - 1;
-            uint64_t lesserMask = (1ull << questionedSquare) - 1;
-            uint64_t squaresBetweenMask = greaterMask ^ lesserMask;
-
-            if(!(board->pieces_all&squaresBetweenMask))
+            mask = BLACK_PAWN_PUSH_MASK(board);
+            while(mask)
             {
-                //No pieces between questionedSquare and kingSquare
-                //Find the closest attacking rook/queen in other direction.
-                if(questionedSquare%8 >= 0)
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare + 8;
+
+                if(endSquare <= 7)
                 {
-                    int checkedSquare = questionedSquare - 1;
-                    while(checkedSquare%8 >= 0)
-                    {
-                        if(((1ull<<checkedSquare)&rookqueen) != 0)
-                        {
-                            //Opposing Rook or queen is looking at king across questionedSquare.
-                            return PIN_TYPE_LEFT;
-                        }
-                        else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                        {
-                            //Blocking piece
-                            break;
-                        }
-                        checkedSquare--;
-                    }
+                    //Promotion
+                    createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, 0, 0);
+                    createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, 0, 0); 
+                    createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, 0, 0);     
+                    createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, 0, 0);
                 }
-                //Nothing found pinning the questioned square.
-                return PIN_TYPE_NONE;
+                else createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, 0, 0);
+
+                mask&=(mask - 1);
+            }
+
+            mask = BLACK_PAWN_DOUBLEPUSH_MASK(board);
+            while(mask)
+            {
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare + 16;
+
+                createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, 0, 0);
+                
+                mask&=(mask - 1);
             }
         }
-        else
+
+        mask = BLACK_PAWN_LEFTATTACKS(board);
+        while(mask)
         {
-            //King is on a lower column, same row
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare + 7;
+            int capturedPiece = findPieceOnSquare(board, endSquare);
 
-            //Check for pieces between questionedSquare and king square.
-            uint64_t greaterMask = (1ull << (questionedSquare + 1)) - 1;
-            uint64_t lesserMask = (1ull << kingSquare) - 1;
-            uint64_t squaresBetweenMask = greaterMask ^ lesserMask;
-
-            if(!(board->pieces_all&squaresBetweenMask))
+            if(endSquare <= 7)
             {
-                //Find the closest attacking rook/queen in other direction.
-                if(questionedSquare%8 <= 7)
-                {
-                    int checkedSquare = questionedSquare + 1;
-                    while(checkedSquare%8 <= 7)
-                    {
-                        if(((1ull<<checkedSquare)&rookqueen) != 0)
-                        {
-                            //White rook or queen is looking at black king.
-                            return PIN_TYPE_RIGHT;
-                        }
-                        else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                        {
-                            //Blocking piece
-                            break;
-                        }
-                        checkedSquare++;
-                    }
-                }
-                //Nothing found pinning the questioned square.
-                return PIN_TYPE_NONE;
-            }
-        }
-    }
-    else if (getColumn(questionedSquare) == getColumn(kingSquare))
-    {
-        if(questionedSquare < kingSquare)
-        {
-            //King is above questioned square.
-
-            //Search for blocking pieces between the two squares.
-            uint64_t squaresBetweenMask = 0;
-            for(int i = questionedSquare + 8; i < kingSquare; i+=8)
-            {
-                squaresBetweenMask |= (1ull << i);
-            }
-
-            if(!(board->pieces_all&squaresBetweenMask))
-            {
-                //Find the closest attacking rook/queen in other direction.
-                if(questionedSquare/8 >= 0)
-                {
-                    int checkedSquare = questionedSquare - 8;
-                    while(checkedSquare/8 >= 0)
-                    {
-                        if(((1ull<<checkedSquare)&rookqueen) != 0)
-                        {
-                            //Attacking rook or queen is looking at king across questioned square.
-                            return PIN_TYPE_BELOW;
-                        }
-                        else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                        {
-                            //Blocking piece
-                            break;
-                        }
-                        checkedSquare-=8;
-                    }
-                }
-                //Nothing found.
-                return PIN_TYPE_NONE;
-            }
-        }
-        else
-        {
-            //King is below questioned square.
-
-            //Search for blocking pieces between the two squares.
-            uint64_t squaresBetweenMask = 0;
-            for(int i = kingSquare + 8; i < questionedSquare; i+=8)
-            {
-                squaresBetweenMask |= (1ull << i);
-            }
-
-            if(!(board->pieces_all&squaresBetweenMask))
-            {
-                //Find the closest attacking rook/queen in other direction.
-                if(questionedSquare/8 <= 7)
-                {
-                    int checkedSquare = questionedSquare + 8;
-                    while(checkedSquare/8 <= 7)
-                    {
-                        if(((1ull<<checkedSquare)&rookqueen) != 0)
-                        {
-                            //White rook or queen is looking at black king.
-                            return PIN_TYPE_ABOVE;
-                        }
-                        else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                        {
-                            //Blocking piece
-                            break;
-                        }
-                        checkedSquare+=8;
-                    }
-                }
-                //Nothing found
-                return PIN_TYPE_NONE;
-            }
-        }
-    }
-    else
-    {
-        int startRow = getRow(questionedSquare);
-        int kingRow = getRow(kingSquare);
-        int startColumn = getColumn(questionedSquare);
-        int kingColumn = getColumn(kingSquare);
-
-        //Check if black king is on same diagonal as questionedSquare to check for discovered queen/bishop attack.
-        if(abs(startRow - kingRow) == abs(startColumn - kingColumn))
-        {
-            if(startRow < kingRow)
-            {
-                if(startColumn < kingColumn)
-                {
-                    //questionedSquare is to the bottomleft of black king.
-
-                    //Search for blocking pieces between the two squares.
-                    uint64_t squaresBetweenMask = 0;
-                    for(int i = questionedSquare + 9; i < kingSquare; i+=9)
-                    {
-                        squaresBetweenMask |= (1ull << i);
-                    }
-
-                    if(!(board->pieces_all&squaresBetweenMask))
-                    {
-                        //Find the closest attacking bishop/queen to the bottomleft.
-                        if(questionedSquare >= 9 && getColumn(questionedSquare) > 1)
-                        {
-                            int checkedSquare = questionedSquare - 9;
-                            while(checkedSquare >= 0 && getColumn(checkedSquare) < getColumn(questionedSquare) && getRow(checkedSquare) < getRow(questionedSquare))
-                            {
-                                if(((1ull<<checkedSquare)&bishopqueen) != 0)
-                                {
-                                    //White rook or queen is looking at black king.
-                                    return PIN_TYPE_DOWNLEFT;
-                                }
-                                else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                                {
-                                    //Blocking piece
-                                    break;
-                                }
-                                checkedSquare-=9;
-                            }
-                        }
-                        //Nothing found
-                        return PIN_TYPE_NONE;
-                    }
-                }
-                else
-                {
-                    //questionedSquare is to the bottomright of black king.
-
-                    //Search for blocking pieces between the two squares.
-                    uint64_t squaresBetweenMask = 0;
-                    for(int i = questionedSquare + 7; i < kingSquare; i+=7)
-                    {
-                        squaresBetweenMask |= (1ull << i);
-                    }
-
-                    if(!(board->pieces_all&squaresBetweenMask))
-                    {
-                        //Find the closest attacking bishop/queen to the bottomright.
-                        if(questionedSquare >= 8 && getColumn(questionedSquare) < 8) 
-                        {
-                            int checkedSquare = questionedSquare - 7;
-                            while(checkedSquare >= 0 && getColumn(checkedSquare) > getColumn(questionedSquare) && getRow(checkedSquare) < getRow(questionedSquare))
-                            {
-                                if(((1ull<<checkedSquare)&bishopqueen) != 0)
-                                {
-                                    //White rook or queen is looking at black king.
-                                    return PIN_TYPE_DOWNRIGHT;
-                                }
-                                else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                                {
-                                    //Blocking piece
-                                    break;
-                                }
-                                checkedSquare-=7;
-                            }
-                        }
-                        //Nothing found
-                        return PIN_TYPE_NONE;
-                    }
-                }
+                //Promotion
+                createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, capturedPiece, endSquare);
             }
             else
             {
-                if(startColumn < kingColumn)
-                {
-                    //questionedSquare is to the topleft of black king.
+                createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, capturedPiece, endSquare);
+            }
+            
+            mask&=(mask - 1);
+        }
 
-                    //Search for blocking pieces between the two squares.
-                    uint64_t squaresBetweenMask = 0;
-                    for(int i = kingSquare + 7; i < questionedSquare; i+=7)
-                    {
-                        squaresBetweenMask |= (1ull << i);
-                    }
+        mask = BLACK_PAWN_RIGHTATTACKS(board);
+        while(mask)
+        {
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare + 9;
+            int capturedPiece = findPieceOnSquare(board, endSquare);
 
-                    if(!(board->pieces_all&squaresBetweenMask))
-                    {
-                        //Find the closest attacking bishop/queen to the topleft.
-                        if(questionedSquare < 56 && getColumn(questionedSquare) > 1)
-                        {
-                            int checkedSquare = questionedSquare + 7;
-                            while(checkedSquare <= 63 && getColumn(checkedSquare) < getColumn(questionedSquare) && getRow(checkedSquare) > getRow(questionedSquare))
-                            {
-                                if(((1ull<<checkedSquare)&bishopqueen) != 0)
-                                {
-                                    //White rook or queen is looking at black king.
-                                    return PIN_TYPE_UPLEFT;
-                                }
-                                else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                                {
-                                    //Blocking piece
-                                    break;
-                                }
-                                checkedSquare+=7;
-                            }
-                        }
-                        //Nothing found
-                        return PIN_TYPE_NONE;
-                    }
-                }
-                else
-                {
-                    //questionedSquare is to the topright of black king.
+            if(endSquare <= 7)
+            {
+                //Promotion
+                createMove(&moveList[(*size)++], startSquare, endSquare, KNIGHT, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, BISHOP, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, ROOK, piece, capturedPiece, endSquare);
+                createMove(&moveList[(*size)++], startSquare, endSquare, QUEEN, piece, capturedPiece, endSquare);
+            }
+            else
+            {
+                createMove(&moveList[(*size)++], startSquare, endSquare, 0, piece, capturedPiece, endSquare);
+            }
+            
+            mask&=(mask - 1);
+        }
 
-                    //Search for blocking pieces between the two squares.
-                    uint64_t squaresBetweenMask = 0;
-                    for(int i = kingSquare + 9; i < questionedSquare; i+=9)
-                    {
-                        squaresBetweenMask |= (1ull << i);
-                    }
-                    if(!(board->pieces_all&squaresBetweenMask))
-                    {
-                        //Find the closest attacking bishop/queen to the topright.
-                        if(questionedSquare < 56 && getColumn(questionedSquare) < 8)
-                        {
-                            int checkedSquare = questionedSquare + 9;
-                            while(checkedSquare <= 63 && getColumn(checkedSquare) > getColumn(questionedSquare) && getRow(checkedSquare) > getRow(questionedSquare))
-                            {
-                                if(((1ull<<checkedSquare)&bishopqueen) != 0)
-                                {
-                                    //White rook or queen is looking at black king.
-                                    return PIN_TYPE_UPRIGHT;
-                                }
-                                else if(((1ull<<checkedSquare)&board->pieces_all) != 0)
-                                {
-                                    //Blocking piece
-                                    break;
-                                }
-                                checkedSquare+=9;
-                            }
-                        }
-                        //Nothing found
-                        return PIN_TYPE_NONE;
-                    }
-                }
+        
+        if(board->enPassantSquare != -1)
+        {
+            uint64_t epMask = 1ull << board->enPassantSquare;
+            mask = EN_PASSANT_ATTACKERS_BLACK(epMask, board);
+            while(mask)
+            {
+                int startSquare = __builtin_ctzll(mask);
+                createMove(&moveList[(*size)++], startSquare, board->enPassantSquare, 0, piece, PAWN|WHITE, board->enPassantSquare + 8);
+                mask&=(mask - 1);
             }
         }
     }
-    return PIN_TYPE_NONE;
 }
 
 int isThreatened(bitboard* board, int square, int squareColor)
 {
-    uint64_t bishopqueen;
-    uint64_t rookqueen;
-    uint64_t enemyPieces;
-    uint64_t allyPieces;
+    uint64_t bishopqueen = 0;
+    uint64_t rookqueen = 0;
+    uint64_t enemyPieces = 0;
+    uint64_t allyPieces = 0;
     if(ISWHITE(squareColor))
     {
         enemyPieces = board->pieces_b;
         allyPieces = board->pieces_w;
         bishopqueen = board->bishop_b|board->queen_b;
         rookqueen = board->rook_b|board->queen_b;
-        if(square < 48 && ( (getColumn(square) > 1 && (1ull<<(square+7)&board->pawn_b)) ||  (getColumn(square) < 8 && (1ull<<(square+9)&board->pawn_b)) ) ) return THREAT_TYPE_PAWN;
-        if(knightMoves(board, allyPieces, square)&(board->knight_b)) return THREAT_TYPE_KNIGHT;
-        if(kingMoves(board, square, squareColor, 1)&(board->king_b)) return THREAT_TYPE_KING;
+        if(square < 48 && pawnAttacks[0][square]&board->pawn_b) return THREAT_TYPE_PAWN;
+        if(knightAttacks[square]&(board->knight_b)) return THREAT_TYPE_KNIGHT;
+        if(kingAttacks[square]&(board->king_b)) return THREAT_TYPE_KING;
     }
     else if(ISBLACK(squareColor))
     {
@@ -582,436 +327,92 @@ int isThreatened(bitboard* board, int square, int squareColor)
         allyPieces = board->pieces_b;
         bishopqueen = board->bishop_w|board->queen_w;
         rookqueen = board->rook_w|board->queen_w;
-        if(square > 15 && ( (getColumn(square) > 1 && (1ull<<(square-7)&board->pawn_w)) || (getColumn(square) < 8 && (1ull<<(square-9)&board->pawn_w)) ) ) return THREAT_TYPE_PAWN;
-        if(knightMoves(board, allyPieces, square)&(board->knight_w)) return THREAT_TYPE_KNIGHT;
-        if(kingMoves(board, square, squareColor, 1)&(board->king_w)) return THREAT_TYPE_KING;
+        if(square > 15 && pawnAttacks[1][square]&board->pawn_w) return THREAT_TYPE_PAWN;
+        if(knightAttacks[square]&(board->knight_w)) return THREAT_TYPE_KNIGHT;
+        if(kingAttacks[square]&(board->king_w)) return THREAT_TYPE_KING;
     }
-    if(bishopMoves(board, allyPieces, enemyPieces, square)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
-    if(rookMoves(board, allyPieces, enemyPieces, square)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
+    if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
+    if(rookMoves(allyPieces, enemyPieces, square)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
 
     return THREAT_TYPE_NONE;
 }
 
 uint64_t pyrrhicPawnAttacks(int square, int color)
 {
-    uint64_t diagonalCaptureMask = 0;
-
-    //Convert color to pyrhhic system.
-    if(color == 1)
-    {
-        //White
-        if(getColumn(square) > 1) diagonalCaptureMask|=(1ull<<(square+7));
-        if(getColumn(square) < 8) diagonalCaptureMask|=(1ull<<(square+9));
-    }
-    else
-    {
-        //Black
-        if(getColumn(square) > 1) diagonalCaptureMask|=(1ull<<(square-9));
-        if(getColumn(square) < 8) diagonalCaptureMask|=(1ull<<(square-7));
-    }
-
-    return diagonalCaptureMask;
+    color = (color == 1) ? 0 : 1;
+    return pawnAttacks[color][square];
 }
 
-uint64_t pawnMoves(bitboard* board, int square, int color)
+uint64_t knightMoves(uint64_t allyPieces, int square)
 {
-    uint64_t returnValue = 0;
-    if(ISWHITE(color))
-    {
-        int pinType = isPinned(board, square, board->kingSquare_w, color);
-
-        //Frontleft capture check
-        if(!pinType && board->pieces_b&(1ull<<(square+7)) && getColumn(square) > 1) returnValue|=(1ull<<(square+7));
-        
-        //Frontright capture check
-        if(!pinType && board->pieces_b&(1ull<<(square+9)) && getColumn(square) < 8) returnValue|=(1ull<<(square+9));
-
-        //One move forward check
-        if((!pinType || pinType == PIN_TYPE_ABOVE || pinType == PIN_TYPE_BELOW) && !(board->pieces_all&(1ull<<(square+8))))
-        {
-            returnValue|=(1ull<<(square+8));
-
-            //Two moves forward check
-            if(getRow(square) == 2 && !(board->pieces_all&(1ull<<(square+16)))) returnValue|=(1ull<<(square+16));
-        }
-
-        //En passant
-        if(board->enPassantSquare != -1)
-        {
-            int epPinType = isPinned(board, board->enPassantSquare, board->kingSquare_w, color);
-            if(!epPinType || epPinType == PIN_TYPE_ABOVE || epPinType == PIN_TYPE_BELOW)
-            {
-                if(((board->enPassantSquare - square == 7 && (!pinType || pinType == PIN_TYPE_UPLEFT)) || 
-                    (board->enPassantSquare - square == 9 && (!pinType || pinType == PIN_TYPE_UPRIGHT))) && 
-                    abs(getColumn(board->enPassantSquare) - getColumn(square)) == 1)
-                {
-                    returnValue|=(1ull<<(board->enPassantSquare));
-                }
-            }
-        }
-    }
-    else
-    {
-        int pinType = isPinned(board, square, board->kingSquare_b, color);
-
-        //Frontleft capture check
-        if(!pinType && board->pieces_w&(1ull<<(square-7)) && getColumn(square) < 8) returnValue|=(1ull<<(square-7));
-        
-        //Frontright capture check
-        if(!pinType && board->pieces_w&(1ull<<(square-9)) && getColumn(square) > 1) returnValue|=(1ull<<(square-9));
-
-        //One move forward check
-        if((!pinType || pinType == PIN_TYPE_ABOVE || pinType == PIN_TYPE_BELOW) && !(board->pieces_all&(1ull<<(square-8))))
-        {
-            returnValue|=(1ull<<(square-8));
-
-            //Two moves forward check
-            if(getRow(square) == 7 && !(board->pieces_all&(1ull<<(square-16)))) returnValue|=(1ull<<(square-16));
-        }
-        
-         //En passant
-        if(board->enPassantSquare != -1)
-        {
-            int epPinType = isPinned(board, board->enPassantSquare, board->kingSquare_b, color);
-            if(!epPinType || epPinType == PIN_TYPE_ABOVE || epPinType == PIN_TYPE_BELOW)
-            {
-                if(((board->enPassantSquare - square == -7 && (!pinType || pinType == PIN_TYPE_DOWNRIGHT)) || 
-                    (board->enPassantSquare - square == -9 && (!pinType || pinType == PIN_TYPE_DOWNLEFT))) && 
-                    abs(getColumn(board->enPassantSquare) - getColumn(square)) == 1)
-                {
-                    returnValue|=(1ull<<(board->enPassantSquare));
-                }
-            }
-        }
-    }
-
-    return returnValue;
+    return knightAttacks[square]&(~allyPieces);
 }
 
-uint64_t knightMoves(bitboard* board, uint64_t allyPieces, int square)
+uint64_t bishopMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
-    int ksq, color;
-    if(board)
-    {
-        if(allyPieces == board->pieces_w)
-        {
-            ksq = board->kingSquare_w;
-            color = WHITE;
-        }
-        else
-        {
-            ksq = board->kingSquare_b;
-            color = BLACK;
-        }
-        if(isPinned(board, square, ksq, color)) return 0;
-    }
-    
-
-    uint64_t returnedValue = 0;
-    int row = getRow(square);
-    int column = getColumn(square);
-
-    /*
-     *      - 2 - 3 -
-     *      1 - - - 4
-     *      - - N - -
-     *      8 - - - 5
-     *      - 7 - 6 -
-     * 
-     *  1: endSquare = square + 6
-     *  2: endSquare = square + 15
-     *  3: endSquare = square + 17
-     *  4: endSquare = square + 10
-     *  5: endSquare = square - 6
-     *  6: endSquare = square - 15
-     *  7: endSquare = square - 17
-     *  8: endSquare = square - 10
-     */
-
-    if(column - 2 >= 1 && row + 1 <= 8) returnedValue|=(1ull<<(square+6));
-    if(column - 1 >= 1 && row + 2 <= 8) returnedValue|=(1ull<<(square+15));
-    if(column + 1 <= 8 && row + 2 <= 8) returnedValue|=(1ull<<(square+17));
-    if(column + 2 <= 8 && row + 1 <= 8) returnedValue|=(1ull<<(square+10));
-    if(column + 2 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-6));
-    if(column + 1 <= 8 && row - 2 >= 1) returnedValue|=(1ull<<(square-15));
-    if(column - 1 >= 1 && row - 2 >= 1) returnedValue|=(1ull<<(square-17));
-    if(column - 2 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-10));
-
-    returnedValue&=(~allyPieces);
-
-    return returnedValue;
+    uint64_t occupancy = (allyPieces|enemyPieces) & bishopMagics[square].mask;
+    return bishopMagics[square].attacks[(occupancy * bishopMagics[square].magic) >> bishopMagics[square].shiftOffset] & (~allyPieces);
 }
 
-uint64_t bishopMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square)
+uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
-    uint64_t potentialMoves = 0;
-
-    int questionedSquare;
-    int pinType = 0;
-    if(board)
-    {
-        int ksq, color;
-
-        if(allyPieces == board->pieces_w)
-        {
-            ksq = board->kingSquare_w;
-            color = WHITE;
-        }
-        else
-        {
-            ksq = board->kingSquare_b;
-            color = BLACK;
-        }
-        pinType = isPinned(board, square, ksq, color);
-    }
-    
-
-    
-    if(!pinType || pinType == PIN_TYPE_DOWNRIGHT || pinType == PIN_TYPE_UPLEFT)
-    {
-        //Topleft    
-        questionedSquare = square + 7;
-        while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) < getColumn(square) && getRow(questionedSquare) > getRow(square))
-        {
-            uint64_t questionedMask = (1ull<<questionedSquare);
-            if(enemyPieces&questionedMask)
-            {
-                potentialMoves|=questionedMask;
-                break;
-            }
-            else if(allyPieces&questionedMask) break;
-            else potentialMoves|=questionedMask;
-
-            questionedSquare+=7;
-        }
-
-        //Topright
-        questionedSquare = square + 9;
-        while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) > getColumn(square) && getRow(questionedSquare) > getRow(square))
-        {
-            uint64_t questionedMask = (1ull<<questionedSquare);
-            if(enemyPieces&questionedMask)
-            {
-                potentialMoves|=questionedMask;
-                break;
-            }
-            else if(allyPieces&questionedMask) break;
-            else potentialMoves|=questionedMask;
-
-            questionedSquare+=9;
-        }
-    }
-    
-    if(!pinType || pinType == PIN_TYPE_DOWNLEFT || pinType == PIN_TYPE_UPRIGHT)
-    {
-        //Bottomleft
-        questionedSquare = square - 9;
-        while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) < getColumn(square) && getRow(questionedSquare) < getRow(square))
-        {
-            uint64_t questionedMask = (1ull<<questionedSquare);
-            if(enemyPieces&questionedMask)
-            {
-                potentialMoves|=questionedMask;
-                break;
-            }
-            else if(allyPieces&questionedMask) break;
-            else potentialMoves|=questionedMask;
-
-            questionedSquare-=9;
-        }
-
-        //Bottomright
-        questionedSquare = square - 7;
-        while(questionedSquare >= 0 && questionedSquare <= 63 && getColumn(questionedSquare) > getColumn(square) && getRow(questionedSquare) < getRow(square))
-        {
-            uint64_t questionedMask = (1ull<<questionedSquare);
-            if(enemyPieces&questionedMask)
-            {
-                potentialMoves|=questionedMask;
-                break;
-            }
-            else if(allyPieces&questionedMask) break;
-            else potentialMoves|=questionedMask; //Empty target
-
-            questionedSquare-=7;
-        }
-    }
-
-    return potentialMoves;
+    uint64_t occupancy = (allyPieces|enemyPieces) & rookMagics[square].mask;
+    return rookMagics[square].attacks[(occupancy * rookMagics[square].magic) >> rookMagics[square].shiftOffset] & (~allyPieces);
 }
 
-uint64_t rookMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square)
+uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square)
 {
-    uint64_t potentialMoves = 0;
-    uint64_t tempMask = 0;
-
-    int pinType = 0;
-    if(board)
-    {
-        int ksq, color;
-        if(allyPieces == board->pieces_w)
-        {
-            ksq = board->kingSquare_w;
-            color = WHITE;
-        }
-        else
-        {
-            ksq = board->kingSquare_b;
-            color = BLACK;
-        }
-        pinType = isPinned(board, square, ksq, color);
-    }
-        
-
-    if(!pinType || pinType == PIN_TYPE_LEFT || pinType == PIN_TYPE_RIGHT)
-    {
-        //Right
-        for(int column = getColumn(square) + 1; column <= 8; column++)
-        {
-            tempMask = (1ull<<(square + (column - getColumn(square))));
-            if(enemyPieces&tempMask)
-            {
-                potentialMoves|=tempMask;
-                break;
-            }
-            else if(allyPieces&tempMask) break;
-            else potentialMoves|=tempMask;
-        }
-
-        //Left
-        for(int column = getColumn(square) - 1; column >= 1; column--)
-        {
-            tempMask = (1ull<<(square + (column - getColumn(square))));
-            if(enemyPieces&tempMask)
-            {
-                potentialMoves|=tempMask;
-                break;
-            }
-            else if(allyPieces&tempMask) break;
-            else potentialMoves|=tempMask;
-        }
-    }
-
-    if(!pinType || pinType == PIN_TYPE_ABOVE || pinType == PIN_TYPE_BELOW)
-    {
-        //Above
-        for(int row = getRow(square) + 1; row <= 8; row++)
-        {
-            tempMask = (1ull<<(square + 8*(row - getRow(square))));
-            if(enemyPieces&tempMask)
-            {
-                potentialMoves|=tempMask;
-                break;
-            }
-            else if(allyPieces&tempMask) break;
-            else potentialMoves|=tempMask;
-        }
-
-        //Below
-        for(int row = getRow(square) - 1; row >= 1; row--)
-        {
-            tempMask = (1ull<<(square + 8*(row - getRow(square))));
-            if(enemyPieces&tempMask)
-            {
-                potentialMoves|=tempMask;
-                break;
-            }
-            else if(allyPieces&tempMask) break;
-            else potentialMoves|=tempMask;
-        }
-    }
-
-    return potentialMoves;
-}
-
-uint64_t queenMoves(bitboard* board, uint64_t allyPieces, uint64_t enemyPieces, int square)
-{
-    return rookMoves(board, allyPieces, enemyPieces, square)|bishopMoves(board, allyPieces, enemyPieces, square);
+    return rookMoves(allyPieces, enemyPieces, square)|bishopMoves(allyPieces, enemyPieces, square);
 }
 
 uint64_t pyrrhicKingAttacks(int square)
 {
-    uint64_t returnedValue = 0;
-    int row = getRow(square);
-    int column = getColumn(square);
-
-    if(column - 1 >= 1 && row + 1 <= 8) returnedValue|=(1ull<<(square+7));
-    if(row + 1 <= 8) returnedValue|=(1ull<<(square+8));
-    if(column + 1 <= 8 && row + 1 <= 8) returnedValue|=(1ull<<(square+9));
-    if(column - 1 >= 1) returnedValue|=(1ull<<(square-1));
-    if(column + 1 <= 8) returnedValue|=(1ull<<(square+1));
-    if(column - 1 >= 1 && row - 1 >= 1) returnedValue|=(1ull<<(square-9));
-    if(row - 1 >= 1) returnedValue|=(1ull<<(square-8));
-    if(column + 1 <= 8 && row - 1 >= 1) returnedValue|=(1ull<<(square-7));
-
-    return returnedValue;
+    return kingAttacks[square];
 }
 
-uint64_t kingMoves(bitboard* board, int square, int color, int ignoreThreats)
+uint64_t kingMoves(bitboard* board, int square, int color)
 {
-    uint64_t returnedValue = 0;
-    int row = getRow(square);
-    int column = getColumn(square);
-
-    /*
-     *     
-     *      1 2 3
-     *      4 K 5
-     *      6 7 8
-     * 
-     *  1: endSquare = square + 7
-     *  2: endSquare = square + 8
-     *  3: endSquare = square + 9
-     *  4: endSquare = square - 1
-     *  5: endSquare = square + 1
-     *  6: endSquare = square - 9
-     *  7: endSquare = square - 8
-     *  8: endSquare = square - 7
-     */
-    if(column - 1 >= 1 && row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+7, color))) returnedValue|=(1ull<<(square+7));
-    if(row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+8, color))) returnedValue|=(1ull<<(square+8));
-    if(column + 1 <= 8 && row + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+9, color))) returnedValue|=(1ull<<(square+9));
-    if(column - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-1, color))) returnedValue|=(1ull<<(square-1));
-    if(column + 1 <= 8 && (ignoreThreats || !isThreatened(board, square+1, color))) returnedValue|=(1ull<<(square+1));
-    if(column - 1 >= 1 && row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-9, color))) returnedValue|=(1ull<<(square-9));
-    if(row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-8, color))) returnedValue|=(1ull<<(square-8));
-    if(column + 1 <= 8 && row - 1 >= 1 && (ignoreThreats || !isThreatened(board, square-7, color))) returnedValue|=(1ull<<(square-7));
-
-
+    uint64_t returnedValue = kingAttacks[square];
 
     if(ISWHITE(color))
     {
-        returnedValue^=(returnedValue&board->pieces_w);
+        returnedValue&=(~board->pieces_w);
 
-        //Castling
-        if(!ignoreThreats)
-        {
-            uint64_t betweenMask = 0x60; //Squares 5 and 6 between king on 4 and rook on 7
+        //uint64_t betweenMask = 0x60; //Squares 5 and 6 between king on 4 and rook on 7
 
-            //White kingside
-            if((board->flags&1) && !(board->flags&16) && !(board->pieces_all&betweenMask) && !isThreatened(board, square+1, color) && !isThreatened(board, square+2, color)) returnedValue|=0x40;
+        //White kingside
+        if((board->flags&1) && !(board->flags&16) && !(board->pieces_all&0x60) && 
+                                                        !isThreatened(board, square, color) && 
+                                                        !isThreatened(board, square+1, color) && 
+                                                        !isThreatened(board, square+2, color)) returnedValue|=0x40;
 
-            betweenMask = 0xE; //Square 1 and 2 and 3 between rook on 0 and king on 4
-            //White queenside
-            if((board->flags&2) && !(board->flags&16) && !(board->pieces_all&betweenMask) && !isThreatened(board, square-1, color) && !isThreatened(board, square-2, color)) returnedValue|=0x4;
-        }
+        //betweenMask = 0xE; //Square 1 and 2 and 3 between rook on 0 and king on 4
+
+        //White queenside
+        if((board->flags&2) && !(board->flags&16) && !(board->pieces_all&0xE) && 
+                                                        !isThreatened(board, square, color) && 
+                                                        !isThreatened(board, square-1, color) && 
+                                                        !isThreatened(board, square-2, color)) returnedValue|=0x4;
+        
     }
     else
     {
-        returnedValue^=(returnedValue&board->pieces_b);
+        returnedValue&=(~board->pieces_b);
 
-        //Castling
-        if(!ignoreThreats)
-        {
-            uint64_t betweenMask = 0x6000000000000000; //Squares 61 and 62 between king on 60 and rook on 63
+        //uint64_t betweenMask = 0x6000000000000000; //Squares 61 and 62 between king on 60 and rook on 63
 
-            //Black kingside
-            if((board->flags&4) && !(board->flags&32) && !(board->pieces_all&betweenMask) && !isThreatened(board, square+1, color) && !isThreatened(board, square+2, color)) returnedValue|=0x4000000000000000;
+        //Black kingside
+        if((board->flags&4) && !(board->flags&32) && !(board->pieces_all&0x6000000000000000) && 
+                                                            !isThreatened(board, square, color) &&
+                                                            !isThreatened(board, square+1, color) && 
+                                                            !isThreatened(board, square+2, color)) returnedValue|=0x4000000000000000;
 
-            betweenMask = 0x0E00000000000000; //Square 57 and 58 and 59 between rook on 56 and king on 60
-            //Black queenside
-            if((board->flags&8) && !(board->flags&32) && !(board->pieces_all&betweenMask) && !isThreatened(board, square-1, color) && !isThreatened(board, square-2, color)) returnedValue|=0x0400000000000000;
-        }
+        //betweenMask = 0x0E00000000000000; //Square 57 and 58 and 59 between rook on 56 and king on 60
+        //Black queenside
+        if((board->flags&8) && !(board->flags&32) && !(board->pieces_all&0x0E00000000000000) &&
+                                                            !isThreatened(board, square, color) &&
+                                                            !isThreatened(board, square-1, color) && 
+                                                            !isThreatened(board, square-2, color)) returnedValue|=0x0400000000000000;
     }
     
     return returnedValue;
@@ -1043,7 +444,7 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //1 or 2 moves forward
 
         //Set new board positions.
-        board_clear_square(board, startSquare, (color|PAWN));
+        board_clear_square(board, startSquare);
 
         if((ISWHITE(color) && endSquare > 55) || (ISBLACK(color) && endSquare < 8))
         {
@@ -1058,8 +459,18 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Update en passant square if necessary.
         if(difference == 16)
         {
-            if(ISWHITE(color)) board->enPassantSquare = endSquare - 8;
-            else board->enPassantSquare = endSquare + 8;
+            if(ISWHITE(color)) 
+            {
+                board->hashCode ^= getEnPassantHash(board);
+                board->enPassantSquare = endSquare - 8;
+                board->hashCode ^= getEnPassantHash(board);
+            }
+            else 
+            {
+                board->hashCode ^= getEnPassantHash(board);
+                board->enPassantSquare = endSquare + 8;
+                board->hashCode ^= getEnPassantHash(board);
+            }
         }
     }
     else if(difference == 7 || difference == 9)
@@ -1069,43 +480,12 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         //Check for en passant.
         if(endSquare == board->enPassantSquare)
         {
-            int pinType = 0;
-            //Check if target pawn is pinned to turn's king.
-            if(ISWHITE(color) && (pinType = isPinned(board, board->enPassantSquare - 8, board->kingSquare_w, WHITE)) && pinType != PIN_TYPE_ABOVE)
-            {
-                char kingSquareName[3] = {0};
-                getSquareName(board->kingSquare_w, kingSquareName);
-                char pawnSquareName[3] = {0};
-                getSquareName(board->moveStackTop->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to white king on %s (%d)", pawnSquareName, board->enPassantSquare - 8, kingSquareName, board->kingSquare_w);
-                return -1;
-            }
-            else if(ISBLACK(color) && (pinType =  isPinned(board, board->enPassantSquare + 8, board->kingSquare_b, BLACK)) && pinType != PIN_TYPE_BELOW)
-            {
-                char kingSquareName[3] = {0};
-                getSquareName(board->kingSquare_b, kingSquareName);
-                char pawnSquareName[3] = {0};
-                getSquareName(board->moveStackTop->nextMove->endSquare, pawnSquareName);
-                DEBUG("Cannot capture en-passant. Other pawn on %s (%d) is pinned to black king on %s (%d)", pawnSquareName, board->enPassantSquare + 8, kingSquareName, board->kingSquare_b);
-                return -1;
-            }
-
-            //Check if capturing other pawn reveals a discovered check.
-            if(ISWHITE(color) && isPinned(board, board->enPassantSquare - 8, board->kingSquare_b, BLACK))
-            {
-                CHECK_B(board->flags);
-            }
-            else if(ISBLACK(color) && isPinned(board, board->enPassantSquare + 8, board->kingSquare_w, WHITE))
-            {
-                CHECK_W(board->flags);
-            }
-
-            if(ISWHITE(color)) board_clear_square(board, board->enPassantSquare - 8, PAWN|BLACK);
-            else board_clear_square(board, board->enPassantSquare + 8, PAWN|WHITE);
+            if(ISWHITE(color)) board_clear_square(board, board->enPassantSquare - 8);
+            else board_clear_square(board, board->enPassantSquare + 8);
         }
 
         //Set new board positions.
-        board_clear_square(board, startSquare, (color|PAWN));
+        board_clear_square(board, startSquare);
 
         if((ISWHITE(color) && endSquare > 55) || (ISBLACK(color) && endSquare < 8))
         {
@@ -1116,16 +496,6 @@ int movePawn(bitboard *board, int startSquare, int endSquare, int color, int pro
         {
             board_set(board, endSquare, (color|PAWN));
         }      
-    }
-
-    //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(pawnMoves(board, endSquare, WHITE)))
-    {
-        CHECK_B(board->flags);
-    }
-    else if(ISBLACK(color) && board->king_w&(pawnMoves(board, endSquare, BLACK)))
-    {
-        CHECK_W(board->flags);
     }
 
     return 0;
@@ -1147,18 +517,8 @@ int moveKnight(bitboard *board, int startSquare, int endSquare, int color)
     }
 
     //Set new board positions after ensuring position is valid.
-    board_clear_square(board, startSquare, (color|KNIGHT));
+    board_clear_square(board, startSquare);
     board_set(board, endSquare, (color|KNIGHT));
-
-    //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(knightMoves(NULL, board->pieces_w, endSquare)))
-    {
-        CHECK_B(board->flags);
-    }
-    else if(ISBLACK(color) && board->king_w&(knightMoves(NULL, board->pieces_b, endSquare)))
-    {
-        CHECK_W(board->flags);
-    }
  
     return 0;
 }
@@ -1178,18 +538,8 @@ int moveBishop(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
 
-    board_clear_square(board, startSquare, (color|BISHOP));
+    board_clear_square(board, startSquare);
     board_set(board, endSquare, (color|BISHOP));
-
-    //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(bishopMoves(NULL, board->pieces_w, board->pieces_b, endSquare)))
-    {
-        CHECK_B(board->flags);
-    }
-    else if(ISBLACK(color) && board->king_w&(bishopMoves(NULL, board->pieces_b, board->pieces_w, endSquare)))
-    {
-        CHECK_W(board->flags);
-    }
 
     return 0;
 }
@@ -1209,35 +559,8 @@ int moveRook(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     }
 
-    board_clear_square(board, startSquare, (color|ROOK));
+    board_clear_square(board, startSquare);
     board_set(board, endSquare, (color|ROOK));
-
-    if(ISWHITE(color))
-    {
-        if(startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) 
-        {
-            BAN_QUEENCASTLE_W(board->flags);
-        }
-        else if(startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) 
-        {
-            BAN_KINGCASTLE_W(board->flags);
-        }
-
-        if(board->king_b&(rookMoves(NULL, board->pieces_w, board->pieces_b, endSquare))) CHECK_B(board->flags);
-    }
-    else if(ISBLACK(color))
-    {
-        if(startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) 
-        {
-            BAN_QUEENCASTLE_B(board->flags);
-        }
-        else if(startSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) 
-        {
-            BAN_KINGCASTLE_B(board->flags);
-        }
-
-        if(board->king_w&(rookMoves(NULL, board->pieces_b, board->pieces_w, endSquare))) CHECK_W(board->flags);
-    }
     
     return 0;
 }
@@ -1258,18 +581,8 @@ int moveQueen(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     } 
 
-    board_clear_square(board, startSquare, (color|QUEEN));
+    board_clear_square(board, startSquare);
     board_set(board, endSquare, (color|QUEEN));
-
-    //Calculate direct check attacks.
-    if(ISWHITE(color) && board->king_b&(queenMoves(NULL, board->pieces_w, board->pieces_b, endSquare)))
-    {
-        CHECK_B(board->flags);
-    }
-    else if(ISBLACK(color) && board->king_w&(queenMoves(NULL, board->pieces_b, board->pieces_w, endSquare)))
-    {
-        CHECK_W(board->flags);
-    }
 
     return 0;
 }
@@ -1290,39 +603,22 @@ int moveKing(bitboard *board, int startSquare, int endSquare, int color)
         return -1;
     } 
 
-    if(ISBLACK(color)) 
-    {
-        board->kingSquare_b = endSquare;
+    if(ISBLACK(color)) board->kingSquare_b = endSquare;
+    else board->kingSquare_w = endSquare;
 
-        if(QUEENSIDE_CASTLE_BLACK(board->flags) || KINGSIDE_CASTLE_BLACK(board->flags))
-        {
-            BAN_QUEENCASTLE_B(board->flags);
-            BAN_KINGCASTLE_B(board->flags);
-        }
-    }
-    else
-    {
-        board->kingSquare_w = endSquare;
 
-        if(QUEENSIDE_CASTLE_WHITE(board->flags) || KINGSIDE_CASTLE_WHITE(board->flags))
-        {
-            BAN_QUEENCASTLE_W(board->flags);
-            BAN_KINGCASTLE_W(board->flags);
-        }
-    }
-
-    board_clear_square(board, startSquare, (color|KING));
+    board_clear_square(board, startSquare);
     board_set(board, endSquare, (color|KING));
 
     //Castling
     if(startSquare - endSquare == 2)
     {
-        board_clear_square(board, startSquare - 4, (color|ROOK));
+        board_clear_square(board, startSquare - 4);
         board_set(board, endSquare + 1, (color|ROOK));
     }
     else if(startSquare - endSquare == -2)
     {
-        board_clear_square(board, startSquare + 3, (color|ROOK));
+        board_clear_square(board, startSquare + 3);
         board_set(board, endSquare - 1, (color|ROOK));
     }
 
@@ -1424,96 +720,298 @@ int moveFromString(bitboard* board, char* str)
         capturedSquare = endSquare;
     }
 
-    return moveFromStruct(board, createMove(startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare, board));
+    move m = {0};
+    createMove(&m, startSquare, endSquare, promoteTo, piece, capturedPiece, capturedSquare);
+    move moveList[256];
+    int count = generateMoveList(moveList, board, 0);
+    int isPotentialMove = 0;
+    for(int index = 0; index < count; index++)
+    {
+        if(m.startSquare == moveList[index].startSquare && m.endSquare == moveList[index].endSquare)
+        {
+            isPotentialMove = 1;
+            break;
+        }
+    }
+
+    if(!isPotentialMove)
+    {
+        printf("Piece move is not legal.\n");
+        return -1;
+    }
+
+    return moveFromStruct(board, m);
 }
 
-int moveFromStruct(bitboard* board, move* m)
+int moveFromStruct(bitboard* board, move m)
 {   
-    assert(board && m);
+    assert(board);
     
     if(board->victor)
     {
         DEBUG("Cannot move from terminal gamestate; Victor=x%02x", board->victor);
         return -1;
     }
-    else if(ISBLACK(m->piece) && board->turn == WHITE)
+    else if(ISBLACK(m.piece) && board->turn == WHITE)
     {
-        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m->startSquare, m->endSquare);
+        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m.startSquare, m.endSquare);
         return -1;
     }
-    else if(ISWHITE(m->piece) && board->turn == BLACK)
+    else if(ISWHITE(m.piece) && board->turn == BLACK)
     {
-        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m->startSquare, m->endSquare);
+        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m.startSquare, m.endSquare);
         return -1;
     }
-    else if(m->startSquare < 0 || m->startSquare > 63 || m->endSquare < 0 || m->endSquare > 63)
+    else if(m.startSquare < 0 || m.startSquare > 63 || m.endSquare < 0 || m.endSquare > 63)
     {
-        DEBUG("Piece cannot move out of bounds (%d -> %d).", m->startSquare, m->endSquare);
+        DEBUG("Piece cannot move out of bounds (%d -> %d).", m.startSquare, m.endSquare);
         return -1;
     }
-    else if(m->startSquare == m->endSquare)
+    else if(m.startSquare == m.endSquare)
     {
-        DEBUG("Piece cannot move in place on square %d.", m->startSquare);
+        DEBUG("Piece cannot move in place on square %d.", m.startSquare);
         return -1;
     }
 
-    if(movePiece(board, m->startSquare, m->endSquare, m->piece, m->promoteTo) != 0) 
+    moves_push(board, m);
+    if(movePiece(board, m.startSquare, m.endSquare, m.piece, m.promoteTo) != 0) 
     {
         DEBUG("Failed to move piece from struct.");
+        moveEntry* entry = moves_pop(board);
+        if(entry) FREE(entry);
         return -1;
     }
-    moves_push(board, m);
     
-    if(!(ISPAWN(m->piece) && abs(m->startSquare - m->endSquare) == 16)) board->enPassantSquare = -1;
+    if((ISWHITE(board->turn) && isThreatened(board, board->kingSquare_w, WHITE)) || (ISBLACK(board->turn) && isThreatened(board, board->kingSquare_b, BLACK)))
+    {
+        moveEntry* entry = moves_pop(board);
+
+        if(ISKING(entry->m.piece) && abs(entry->m.endSquare - entry->m.startSquare) == 2)
+        {
+            //Undo castle.
+            if(entry->m.endSquare == 2)
+            {
+                //White queenside castle
+                board_clear_square(board, 2);
+                board_clear_square(board, 3);
+                board_set(board, 0, ROOK|WHITE);
+                board_set(board, 4, KING|WHITE);
+                board->kingSquare_w = 4;
+            }
+            else if(entry->m.endSquare == 6)
+            {
+                //White kingside castle
+                board_clear_square(board, 6);
+                board_clear_square(board, 5);
+                board_set(board, 7, ROOK|WHITE);
+                board_set(board, 4, KING|WHITE);
+                board->kingSquare_w = 4;
+            }
+            else if(entry->m.endSquare == 58)
+            {
+                //Black queenside castle
+                board_clear_square(board, 58);
+                board_clear_square(board, 59);
+                board_set(board, 56, ROOK|BLACK);
+                board_set(board, 60, KING|BLACK);
+                board->kingSquare_b = 60;
+            }
+            else if(entry->m.endSquare == 62)
+            {
+                //Black kingside castle
+                board_clear_square(board, 62);
+                board_clear_square(board, 61);
+                board_set(board, 63, ROOK|BLACK);
+                board_set(board, 60, KING|BLACK);
+                board->kingSquare_b = 60;
+            }
+        }
+        else
+        {
+            board_clear_square(board, entry->m.endSquare);
+            board_set(board, entry->m.startSquare, entry->m.piece);
+
+            if(entry->m.capturedPiece) board_set(board, entry->m.capturedPieceSquare, entry->m.capturedPiece);
+
+            if(ISKING(entry->m.piece))
+            {
+                if(ISWHITE(entry->m.piece)) board->kingSquare_w = entry->m.startSquare;
+                else board->kingSquare_b = entry->m.startSquare;
+            }
+        }
+        
+        if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+        if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+        if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+        if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+
+        board->flags = entry->flags;
+        
+        if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+        if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+        if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+        if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+
+        board->movesSinceLastChange = entry->previousMovesSinceLastChange;
+
+        board->hashCode ^= getEnPassantHash(board);
+        board->enPassantSquare = entry->prevEnPassantSquare;
+        board->hashCode ^= getEnPassantHash(board);
+        FREE(entry);
+
+        return -1;
+    }
+    
+    if(!(ISPAWN(m.piece) && abs(m.startSquare - m.endSquare) == 16) && board->enPassantSquare != -1) 
+    {
+        board->hashCode ^= getEnPassantHash(board);
+        board->enPassantSquare = -1;
+    }
 
     //50 move rule counting
-    if(ISPAWN(m->piece) || m->capturedPiece) board->movesSinceLastChange = 0;
+    if(ISPAWN(m.piece) || m.capturedPiece) board->movesSinceLastChange = 0;
     else board->movesSinceLastChange++;
     board->halfMoveCount++;
 
-
-    //Calculate discovered checks and change turn.
+    //Calculate checks and change turn.
     if(board->turn == WHITE)
     {
         if(IS_IN_CHECK_W(board->flags)) UNCHECK_W(board->flags);
-        if(isPinned(board, m->startSquare, board->kingSquare_b, BLACK)) CHECK_B(board->flags);
+        if(isThreatened(board, board->kingSquare_b, BLACK)) CHECK_B(board->flags);
         board->turn=BLACK;
+        board->hashCode ^= zobrist_keys[780];
     }
     else
     {
         if(IS_IN_CHECK_B(board->flags)) UNCHECK_B(board->flags);
-        if(isPinned(board, m->startSquare, board->kingSquare_w, WHITE)) CHECK_W(board->flags);
+        if(isThreatened(board, board->kingSquare_w, WHITE)) CHECK_W(board->flags);
         board->turn=WHITE;
+        board->hashCode ^= zobrist_keys[780];
     }
 
-    move** potentialMoveList = NULL;
+    
+    board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
+
     //3-fold repetition check
-    if(increment_table_value(board->ht, board) >= 3) board->victor = DRAW|THREEFOLD;
+    if(containsRepetition(board)) board->victor = DRAW|THREEFOLD;
     else if(board->movesSinceLastChange >= 100) board->victor = DRAW|FIFTYMOVERULE; //Variable stores half-moves
     else if((board->king_b|board->king_w) == board->pieces_all) board->victor = DRAW|INSUFFICIENT_MATERIAL; //King v King drawn INSUFFICIENT_MATERIAL
-    else if(!(potentialMoveList = generateMoveList(board, 0)))
+    else 
     {
-        //No potential moves - Calculate checkmate/stalemate
-        if(board->turn == WHITE)
-        {
-            if(IS_IN_CHECK_W(board->flags)) board->victor = BLACK;
-            else board->victor = DRAW|STALEMATED_WHITE;
-        }
+        //Look for legal moves - calculate checkmate / stalemate.
+        int existsLegalMove = 0;
+        move moveList[256];
+        int entryCount = generateMoveList(moveList, board, 0);
+        if(!entryCount) existsLegalMove = 0;
         else
         {
-            if(IS_IN_CHECK_B(board->flags)) board->victor = WHITE;
-            else board->victor = DRAW|STALEMATED_BLACK;
+            for(int index = 0; index < entryCount; index++)
+            {
+                moves_push(board, moveList[index]);
+                if(movePiece(board, moveList[index].startSquare, moveList[index].endSquare, moveList[index].piece, moveList[index].promoteTo) != 0) 
+                {
+                    moveEntry* entry = moves_pop(board);
+                    if(entry) FREE(entry);
+                    continue;
+                }
+
+                if((ISWHITE(board->turn) && !isThreatened(board, board->kingSquare_w, WHITE)) || (ISBLACK(board->turn) && !isThreatened(board, board->kingSquare_b, BLACK)))
+                {
+                    existsLegalMove = 1;
+                }
+
+                moveEntry* entry = moves_pop(board);
+                if(ISKING(entry->m.piece) && abs(entry->m.endSquare - entry->m.startSquare) == 2)
+                {
+                    //Undo castle.
+                    if(entry->m.endSquare == 2)
+                    {
+                        //White queenside castle
+                        board_clear_square(board, 2);
+                        board_clear_square(board, 3);
+                        board_set(board, 0, ROOK|WHITE);
+                        board_set(board, 4, KING|WHITE);
+                        board->kingSquare_w = 4;
+                    }
+                    else if(entry->m.endSquare == 6)
+                    {
+                        //White kingside castle
+                        board_clear_square(board, 6);
+                        board_clear_square(board, 5);
+                        board_set(board, 7, ROOK|WHITE);
+                        board_set(board, 4, KING|WHITE);
+                        board->kingSquare_w = 4;
+                    }
+                    else if(entry->m.endSquare == 58)
+                    {
+                        //Black queenside castle
+                        board_clear_square(board, 58);
+                        board_clear_square(board, 59);
+                        board_set(board, 56, ROOK|BLACK);
+                        board_set(board, 60, KING|BLACK);
+                        board->kingSquare_b = 60;
+                    }
+                    else if(entry->m.endSquare == 62)
+                    {
+                        //Black kingside castle
+                        board_clear_square(board, 62);
+                        board_clear_square(board, 61);
+                        board_set(board, 63, ROOK|BLACK);
+                        board_set(board, 60, KING|BLACK);
+                        board->kingSquare_b = 60;
+                    }
+                }
+                else
+                {
+                    board_clear_square(board, entry->m.endSquare);
+                    board_set(board, entry->m.startSquare, entry->m.piece);
+
+                    if(entry->m.capturedPiece) board_set(board, entry->m.capturedPieceSquare, entry->m.capturedPiece);
+
+                    if(ISKING(entry->m.piece))
+                    {
+                        if(ISWHITE(entry->m.piece)) board->kingSquare_w = entry->m.startSquare;
+                        else board->kingSquare_b = entry->m.startSquare;
+                    }
+                }
+                
+                if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+                if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+                if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+                if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+
+                board->flags = entry->flags;
+                
+                if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+                if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+                if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+                if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+
+                board->movesSinceLastChange = entry->previousMovesSinceLastChange;
+
+                board->hashCode ^= getEnPassantHash(board);
+                board->enPassantSquare = entry->prevEnPassantSquare;
+                board->hashCode ^= getEnPassantHash(board);
+            }
         }
-    }
-    else
-    {
-        //Freeing the movelist allocation from the previous conditional.
-        freeMoveList(potentialMoveList);
+        
 
+        if(!existsLegalMove)
+        {
+            if(board->turn == WHITE)
+            {
+                if(IS_IN_CHECK_W(board->flags)) board->victor = BLACK;
+                else board->victor = DRAW|STALEMATED_WHITE;
+            }
+            else
+            {
+                if(IS_IN_CHECK_B(board->flags)) board->victor = WHITE;
+                else board->victor = DRAW|STALEMATED_BLACK;
+            }
+        }
         /* Other Drawn INSUFFICIENT_MATERIALs */
-
         //King + Minor Piece vs King
-        if(board->pieces_b == board->king_b && board->pawn_w == 0 && board->rook_w == 0 && board->queen_w == 0)
+        else if(board->pieces_b == board->king_b && board->pawn_w == 0 && board->rook_w == 0 && board->queen_w == 0)
         {
             uint64_t mask = 1;
             int count = 0;
@@ -1545,57 +1043,57 @@ int moveFromStruct(bitboard* board, move* m)
             board->victor = DRAW|INSUFFICIENT_MATERIAL;
         }
     }
-    
+
     return 0;
 }
 
-move* unmove(bitboard *board)
+moveEntry* unmove(bitboard *board)
 {
     assert(board);
 
-    decrement_table_value(board->ht, board);
-    move* m = moves_pop(board);
-    if(!m)
+    board->repetitionIndex--;
+    moveEntry* entry = moves_pop(board);
+    if(!entry)
     {
         DEBUG("No move history to undo.");
         return NULL;
     }
 
-    if(ISKING(m->piece) && abs(m->endSquare-m->startSquare) == 2)
+    if(ISKING(entry->m.piece) && abs(entry->m.endSquare - entry->m.startSquare) == 2)
     {
         //Undo castle.
-        if(m->endSquare == 2)
+        if(entry->m.endSquare == 2)
         {
             //White queenside castle
-            board_clear_square(board, 2, KING|WHITE);
-            board_clear_square(board, 3, ROOK|WHITE);
+            board_clear_square(board, 2);
+            board_clear_square(board, 3);
             board_set(board, 0, ROOK|WHITE);
             board_set(board, 4, KING|WHITE);
             board->kingSquare_w = 4;
         }
-        else if(m->endSquare == 6)
+        else if(entry->m.endSquare == 6)
         {
             //White kingside castle
-            board_clear_square(board, 6, KING|WHITE);
-            board_clear_square(board, 5, ROOK|WHITE);
+            board_clear_square(board, 6);
+            board_clear_square(board, 5);
             board_set(board, 7, ROOK|WHITE);
             board_set(board, 4, KING|WHITE);
             board->kingSquare_w = 4;
         }
-        else if(m->endSquare == 58)
+        else if(entry->m.endSquare == 58)
         {
             //Black queenside castle
-            board_clear_square(board, 58, KING|BLACK);
-            board_clear_square(board, 59, ROOK|BLACK);
+            board_clear_square(board, 58);
+            board_clear_square(board, 59);
             board_set(board, 56, ROOK|BLACK);
             board_set(board, 60, KING|BLACK);
             board->kingSquare_b = 60;
         }
-        else if(m->endSquare == 62)
+        else if(entry->m.endSquare == 62)
         {
             //Black kingside castle
-            board_clear_square(board, 62, KING|BLACK);
-            board_clear_square(board, 61, ROOK|BLACK);
+            board_clear_square(board, 62);
+            board_clear_square(board, 61);
             board_set(board, 63, ROOK|BLACK);
             board_set(board, 60, KING|BLACK);
             board->kingSquare_b = 60;
@@ -1603,29 +1101,50 @@ move* unmove(bitboard *board)
     }
     else
     {
-        if(m->promoteTo) board_clear_square(board, m->endSquare, m->promoteTo);
-        board_clear_square(board, m->endSquare, m->piece);
-        board_set(board, m->startSquare, m->piece);
+        board_clear_square(board, entry->m.endSquare);
+        board_set(board, entry->m.startSquare, entry->m.piece);
 
-        if(m->capturedPiece) board_set(board, m->capturedPieceSquare, m->capturedPiece);
+        if(entry->m.capturedPiece) board_set(board, entry->m.capturedPieceSquare, entry->m.capturedPiece);
 
-        if(ISKING(m->piece))
+        if(ISKING(entry->m.piece))
         {
-            if(ISWHITE(m->piece)) board->kingSquare_w = m->startSquare;
-            else board->kingSquare_b = m->startSquare;
+            if(ISWHITE(entry->m.piece)) board->kingSquare_w = entry->m.startSquare;
+            else board->kingSquare_b = entry->m.startSquare;
         }
     }
     
-    board->flags = m->flags;
-    board->movesSinceLastChange = m->previousMovesSinceLastChange;
-    board->enPassantSquare = m->prevEnPassantSquare;
+    if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+    if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+    if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+    if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
 
-    if(board->turn == WHITE) board->turn = BLACK;
-    else if (board->turn==BLACK) board->turn = WHITE;
+    board->flags = entry->flags;
+    
+    if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+    if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+    if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+    if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+
+    board->movesSinceLastChange = entry->previousMovesSinceLastChange;
+
+    board->hashCode ^= getEnPassantHash(board);
+    board->enPassantSquare = entry->prevEnPassantSquare;
+    board->hashCode ^= getEnPassantHash(board);
+
+    if(board->turn == WHITE) 
+    {
+        board->turn = BLACK;
+        board->hashCode ^= zobrist_keys[780];
+    }
+    else if (board->turn == BLACK) 
+    {
+        board->turn = WHITE;
+        board->hashCode ^= zobrist_keys[780];
+    }
     
     board->victor = 0;
     board->halfMoveCount--;
 
 
-    return m;
+    return entry;
 }

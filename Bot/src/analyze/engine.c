@@ -8,6 +8,7 @@
 #include <float.h>
 #include <math.h>
 
+
 int useHelperThreads = 1;
 
 #ifdef COUNT_NODES_VISITED
@@ -15,12 +16,37 @@ int nodesEvaluated = 0;
 int nodesVisited = 0;
 #endif
 
+int perft(bitboard* board, int depth, int maxDepth, int verbose)
+{
+    if(!depth) return 1;
+    int nodes = 0;
+
+    move moveList[256];
+    int count = generateMoveList(moveList, board, 0);
+    for(int index = 0; index < count; index++)
+    {
+        if(!moveFromStruct(board, moveList[index]))
+        {
+            int branchNodes = perft(board, depth - 1, maxDepth, verbose);
+            nodes += branchNodes;
+            if (verbose && depth == maxDepth) {
+                char fromSquare[3] = {'\0'};
+                char toSquare[3] = {'\0'};
+                getSquareName(moveList[index].startSquare, fromSquare);
+                getSquareName(moveList[index].endSquare, toSquare);
+                printf("Move %s%s: nodes %d\n", fromSquare, toSquare, branchNodes);
+            }
+            unmove(board);
+        }
+    }
+    return nodes;
+}
+
 double evaluate(bitboard* board, void* accumulator, int accumulatorType)
 {
     #ifdef COUNT_NODES_VISITED 
     nodesEvaluated++;
     #endif
-    
     assert(board);
     assert(accumulator);
 
@@ -55,28 +81,6 @@ double evaluate(bitboard* board, void* accumulator, int accumulatorType)
     else if(accumulatorType == PLAYING) return (double) forwardPropagate_Int(board->turn, (accumulator_playing*) accumulator, 1);
     
     return 0;
-}
-//For qsort_s
-int sortMoves(void* c, const void* a, const void* b)
-{
-    move* move_a = *(move**)a;
-    move* move_b = *(move**)b;
-
-    if(c)
-    {
-        move* best_move = (move*)c;
-        if(move_a->startSquare == best_move->startSquare && move_a->endSquare == best_move->endSquare) return -1;
-        else if(move_b->startSquare == best_move->startSquare && move_b->endSquare == best_move->endSquare) return 1;
-    }
-
-    if(move_a->capturedPiece && move_b->capturedPiece) return ((move_b->capturedPiece&0xF) - (move_b->piece&0xF)) - ((move_a->capturedPiece&0xF) - (move_a->piece&0xF));
-    else if(move_a->capturedPiece) return -1;
-    else if(move_b->capturedPiece) return 1;
-    else if(ISKING(move_a->piece)) return 1; 
-    else if(ISKING(move_b->piece)) return -1;
-    //else return move_b->piece - move_a->piece;
-    else return rand()%2 ? -1 : 1; // A bit of randomness in the sorting to help out on multithreaded diversity.
-    
 }
 
 double quiesce(bitboard* board, double alpha, double beta, int depth, void* accumulator, void* accumulatorTable, int accumulatorType)
@@ -123,37 +127,50 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, void* accu
     if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
 
-    move** captureMoves = generateMoveList(board, 1);
-    if(captureMoves != NULL)
+    //Final 5 layers are reserved for quiescent search and are filled in reverse order.
+    move moveList[256];
+    int entryCount = generateMoveList(moveList, board, 1);
+    if(entryCount)
     {
-        //Sorting
-        int index = 0;
-        while(captureMoves[index]) index++;
-        qsort_s(captureMoves, index, sizeof(move*), sortMoves, NULL);
-
-        index = 0;
-        while(captureMoves[index])
+        int moveScores[128] = {0};
+        for(int i = 0; i < entryCount; i++)
         {
-            move* currentMove = captureMoves[index];
+            move m = moveList[i];
+            if(m.capturedPiece) moveScores[i] = (0xF&m.capturedPiece) - (0xF&m.piece);
+            else moveScores[i] = (0xF&m.piece);
+        }
+
+        for(int i = 0; i < entryCount; i++)
+        {
+            int moveIndex = 0;
+            int maxScoreRemaining = INT32_MIN;
+            for(int j = 0; j < entryCount; j++)
+            {
+                if(moveScores[j] > maxScoreRemaining)
+                {
+                    moveIndex = j;
+                    maxScoreRemaining = moveScores[j];
+                }
+            }
+            moveScores[moveIndex] = INT32_MIN;
+            
+            move currentMove = moveList[moveIndex];
             if(!moveFromStruct(board, currentMove))
             {
-                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, &currentMove, 0, accumulator, accumulatorTable, accumulatorType);
                 double score = -quiesce(board, -beta, -alpha, depth - 1, accumulator, accumulatorTable, accumulatorType);
 
                 unmove(board);
-                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, &currentMove, 1, accumulator, accumulatorTable, accumulatorType);
 
                 if(score >= beta)
                 {
-                    freeMoveList(captureMoves);
                     return score;
                 }
                 if(score > best) best = score;
                 if(score > alpha) alpha = score;
             }
-            index++;
         }
-        freeMoveList(captureMoves);
     }
     return best;
 }
@@ -165,83 +182,6 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     #ifdef COUNT_NODES_VISITED 
     nodesVisited++;
     #endif
-
-    //Sygyzy table probing.
-    //Avoid spending time on this on leaf nodes.
-    if(depth > 0 && board->moveStackTop && board->moveStackTop->capturedPiece && __builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30))
-    {
-        uint32_t ep = board->enPassantSquare;
-        if(ep == -1) ep = 0;
-
-        bool turn = PYRRHIC_WHITE;
-        if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
-
-        int result = tb_probe_wdl(board->pieces_w, board->pieces_b, 
-                                    board->king_b|board->king_w, board->queen_b|board->queen_w, 
-                                    board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
-                                    board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
-                                    ep, turn);
-        
-        double score = 0.0;
-
-        if(result == TB_LOSS) score = -DBL_MAX;
-        else if(result == TB_BLESSED_LOSS || TB_DRAW || TB_CURSED_WIN) score = CONTEMPT_FACTOR_FIFTYMOVERULE;
-        else if(result == TB_WIN) score = DBL_MAX;
-
-        if(score >= beta) return beta;
-        else if(score > alpha) 
-        {
-            if(pv && depth && pv[0].endSquare == pv[0].startSquare) 
-            {
-                //If the pv table doesn't have an initialized move, 
-                //we need to give it one for the engine to return,
-                //which will require a deeper probe.
-
-                int hasRepeated = get_pos_table_value(board->ht, board);
-                if(hasRepeated > 1) hasRepeated = 1;
-
-                struct TbRootMoves moveResults = {0};
-
-                tb_probe_root_dtz(board->pieces_w, board->pieces_b, 
-                                                board->king_b|board->king_w, board->queen_b|board->queen_w, 
-                                                board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
-                                                board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
-                                                (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
-                                                
-                int bestScore = INT32_MIN;
-                int bestIndex = 0;
-                for(int i = 0; i < moveResults.size; i++)
-                {
-                    if(moveResults.moves[i].tbRank > bestScore)
-                    {
-                        bestScore = moveResults.moves[i].tbRank;
-                        bestIndex = i;
-                    }
-                }   
-
-                pv[pvIndex].endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
-                pv[pvIndex].startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
-                pv[pvIndex].flags = board->flags;
-                pv[pvIndex].prevEnPassantSquare = board->enPassantSquare;
-                pv[pvIndex].previousMovesSinceLastChange = board->movesSinceLastChange;
-                pv[pvIndex].piece = findPieceOnSquare(board, pv[pvIndex].startSquare);
-
-                if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = QUEEN;
-                else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = ROOK;
-                else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = BISHOP;
-                else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) pv[pvIndex].promoteTo = KNIGHT;
-
-                pv[pvIndex].capturedPiece = findPieceOnSquare(board, pv[pvIndex].endSquare);
-                if(pv[pvIndex].capturedPiece) pv[pvIndex].capturedPieceSquare = pv[pvIndex].endSquare;
-
-                pv[pvIndex].nextMove = NULL;
-
-                copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
-            }
-        }
-        return score;
-        
-    }
 
     //Transposition table
     table_entry_tt* old_tt_entry = NULL;
@@ -261,7 +201,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     table_entry_tt new_tt_entry = {
         .age = clock(),
         .evaluationDepth = depth,
-        .hashCode = getHashCode(board)
+        .hashCode = board->hashCode
     };
 
     if(depth == 0 || (timeLimit && clock() > *timeLimit) || board->victor) 
@@ -275,26 +215,41 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     
     double score = 0;
 
-    move** moveList = generateMoveList(board, 0);
-    if(moveList)
+    move moveList[256];
+    int entryCount = generateMoveList(moveList, board, 0);
+    if(entryCount)
     {
-        int index = 0;
-        while(moveList[index]) index++;
+        move* pvMove = NULL;
+        if(pv) pvMove = &pv[maxDepth - depth];
 
-        //Sort movelist with qsort_s. Pass the expected best move at this depth as the context.
-        move* context = NULL;
-        if(pv) context = &pv[maxDepth - depth];
-
-        qsort_s(moveList, index, sizeof(move*), sortMoves, context);
-        
-        index = 0;
-        double bestScore = -DBL_MAX;
-        while(moveList[index])
+        int moveScores[128] = {0};
+        for(int i = 0; i < entryCount; i++)
         {
-            if(!moveFromStruct(board, moveList[index]))
+            move m = moveList[i];
+            if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) moveScores[i] = INT32_MAX;
+            else if(m.capturedPiece) moveScores[i] =  (0xF&m.capturedPiece) - (0xF&m.piece);
+            else moveScores[i] = (0xF&m.piece);
+        }
+
+        double bestScore = -DBL_MAX;
+        for(int i = 0; i < entryCount; i++)
+        {
+            int moveIndex = 0;
+            int maxScoreRemaining = INT32_MIN;
+            for(int j = 0; j < entryCount; j++)
             {
-                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
-                if(index == 0)
+                if(moveScores[j] > maxScoreRemaining)
+                {
+                    moveIndex = j;
+                    maxScoreRemaining = moveScores[j];
+                }
+            }
+            moveScores[moveIndex] = INT32_MIN;
+
+            if(!moveFromStruct(board, moveList[moveIndex]))
+            {
+                updateMoveAccumulator(board, &moveList[moveIndex], 0, accumulator, accumulatorTable, accumulatorType);
+                if(i == 0)
                 {
                     score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
                 }
@@ -305,16 +260,15 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                     if (score > alpha && beta - alpha > 1) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
                 }
                 
-                unmove(board); //Gets freed with movelist.
-                updateAccumulatorFromTable(board, accumulator, accumulatorTable, accumulatorType);
+                unmove(board);
+                updateMoveAccumulator(board, &moveList[moveIndex], 1, accumulator, accumulatorTable, accumulatorType);
                 
                 if(score >= beta)
                 {
                     new_tt_entry.nodeType = NODE_TYPE_CUT;
                     new_tt_entry.evaluation = score;
-                    new_tt_entry.bestMove = *moveList[index];
+                    new_tt_entry.bestMove = moveList[moveIndex];
                     transposition_table_set(transpositionTable, new_tt_entry);
-                    freeMoveList(moveList);
                     return beta;
                 }
                 else if(score > bestScore)
@@ -325,21 +279,18 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                     {
                         new_tt_entry.nodeType = NODE_TYPE_PV;
                         new_tt_entry.evaluation = score;
-                        new_tt_entry.bestMove = *moveList[index];
+                        new_tt_entry.bestMove = moveList[moveIndex];
                         transposition_table_set(transpositionTable, new_tt_entry);
                         alpha = score;
                         if(pv) 
                         {
-                            pv[pvIndex] = *moveList[index];
+                            pv[pvIndex] = moveList[moveIndex];
                             copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
                         }
                     }
                 }
             }
-            
-            index++;
         }
-        freeMoveList(moveList);
 
         if(bestScore < alpha)
         {
@@ -382,7 +333,7 @@ DWORD WINAPI helperThreadFunction(LPVOID lpParam)
     return 0;
 }
 
-move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType)
+move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType)
 {
     #ifdef COUNT_NODES_VISITED
     nodesEvaluated = 0;
@@ -393,7 +344,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
     if(entries) //Book moves
     {
         move* bookMove = NULL;
-        if((bookMove = getBookMove(board))) return bookMove;
+        if((bookMove = getBookMove(board))) return *bookMove;
         else unloadBook();
     }
     else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.v
@@ -404,8 +355,18 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
         bool turn = PYRRHIC_WHITE;
         if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
 
-        int hasRepeated = get_pos_table_value(board->ht, board);
-        if(hasRepeated > 1) hasRepeated = 1;
+        int hasRepeated = 0;
+        
+        int index = board->repetitionIndex - 1;
+        uint64_t checkedVal = board->repetitionHashCodes[index];
+        for(index = index - 4; index >= 0; index -= 2)
+        {
+            if(checkedVal == board->repetitionHashCodes[index])
+            {
+                hasRepeated = 1;
+                break;
+            }
+        }
 
         struct TbRootMoves moveResults = {0};
 
@@ -429,23 +390,18 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
                 }
             }   
             
-            move* bestMove = CALLOC(1, sizeof(move));
-            bestMove->endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
-            bestMove->startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
-            bestMove->flags = board->flags;
-            bestMove->prevEnPassantSquare = board->enPassantSquare;
-            bestMove->previousMovesSinceLastChange = board->movesSinceLastChange;
-            bestMove->piece = findPieceOnSquare(board, bestMove->startSquare);
+            move bestMove = {0};
+            bestMove.endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
+            bestMove.startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
+            bestMove.piece = findPieceOnSquare(board, bestMove.startSquare);
 
-            if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = QUEEN;
-            else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = ROOK;
-            else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = BISHOP;
-            else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) bestMove->promoteTo = KNIGHT;
+            if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = QUEEN;
+            else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = ROOK;
+            else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = BISHOP;
+            else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = KNIGHT;
 
-            bestMove->capturedPiece = findPieceOnSquare(board, bestMove->endSquare);
-            if(bestMove->capturedPiece) bestMove->capturedPieceSquare = bestMove->endSquare;
-
-            bestMove->nextMove = NULL;
+            bestMove.capturedPiece = findPieceOnSquare(board, bestMove.endSquare);
+            if(bestMove.capturedPiece) bestMove.capturedPieceSquare = bestMove.endSquare;
 
             return bestMove;
         }
@@ -519,7 +475,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
         if(clock() > endTime) break;
-
         tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
@@ -528,7 +483,7 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
         {
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
-                copy_board(params[i].board, board, 1, 1);
+                copy_board(params[i].board, board, 1);
                 params[i].depth = currentDepth + (i%2);
                 *params[i].endTime = LONG_MAX;
                 params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
@@ -583,9 +538,6 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
                 }
             }
         }
-
-        
-        
         
         if(useHelperThreads)
         {
@@ -655,13 +607,15 @@ move* calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int n
         FREE(threadFloatRefreshTables);
     }
 
-    move* bestMove = CALLOC(1, sizeof(move));
-    memcpy(bestMove, &principalVariation[0], sizeof(move));
+    move bestMove = principalVariation[0];
 
-    if(bestMove->startSquare == bestMove->endSquare && bestMove->startSquare == 0)
+    if(bestMove.startSquare == bestMove.endSquare && bestMove.startSquare == 0)
     {
         DEBUG("Engine returned empty move.");
-        //if(printDebugMessages) for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
+        if(printDebugMessages) for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
+
+        //This isn't recoverable.
+        exit(EXIT_FAILURE);
     }
 
     #ifdef COUNT_NODES_VISITED 

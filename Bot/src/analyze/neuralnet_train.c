@@ -492,7 +492,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                     inputs[18] = FLIP_MASK(board->rook_w);
                     inputs[19] = FLIP_MASK(board->queen_w);
 
-                    if(getColumn(board->kingSquare_w) > 4)
+                    if(getColumn(board->kingSquare_w) > 3)
                     {
                         inputs[0] = mirrorBoard(inputs[0]);
                         inputs[1] = mirrorBoard(inputs[1]);
@@ -505,7 +505,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                         inputs[8] = mirrorBoard(inputs[8]);
                         inputs[9] = mirrorBoard(inputs[9]);
                     }
-                    if(getColumn(board->kingSquare_b) > 4)
+                    if(getColumn(board->kingSquare_b) > 3)
                     {
                         inputs[10] = mirrorBoard(inputs[10]);
                         inputs[11] = mirrorBoard(inputs[11]);

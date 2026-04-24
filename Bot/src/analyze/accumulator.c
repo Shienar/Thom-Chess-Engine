@@ -2,7 +2,6 @@
 #include "../debug.h"
 #include "../board/bitboard.h"
 #include "../board/moves.h"
-#include "../structs.h"
 #include "engine.h"
 #include <math.h>
 #include <float.h>
@@ -129,7 +128,7 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
     inputs[baseIndex_b + 8] = FLIP_MASK(board->rook_w);
     inputs[baseIndex_b + 9] = FLIP_MASK(board->queen_w);
 
-    if(getColumn(board->kingSquare_w) > 4)
+    if(getColumn(board->kingSquare_w) > 3)
     {
         inputs[baseIndex_w + 0] = mirrorBoard(inputs[baseIndex_w + 0]);
         inputs[baseIndex_w + 1] = mirrorBoard(inputs[baseIndex_w + 1]);
@@ -142,7 +141,7 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
         inputs[baseIndex_w + 8] = mirrorBoard(inputs[baseIndex_w + 8]);
         inputs[baseIndex_w + 9] = mirrorBoard(inputs[baseIndex_w + 9]);
     }
-    if(getColumn(board->kingSquare_b) > 4)
+    if(getColumn(board->kingSquare_b) > 3)
     {
         inputs[baseIndex_b + 0] = mirrorBoard(inputs[baseIndex_b + 0]);
         inputs[baseIndex_b + 1] = mirrorBoard(inputs[baseIndex_b + 1]);
@@ -195,6 +194,107 @@ void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorTyp
             calculateLayer_Floats(&inputArray[640], floatAccumulator->rawAccumulator[1], 640, ACCUMULATOR_NODES_PER_SIDE, trainingNNUE->weights1, extendedBaseIndex_b, trainingNNUE->weights1_bias, 0);
             memcpy(&floatAccumulator->accumulator[1], &floatAccumulator->rawAccumulator[1], ACCUMULATOR_NODES_PER_SIDE * sizeof(float));
             for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8) SIMD_SCReLU_Float(&floatAccumulator->accumulator[1][i], v_min, v_max, v_grad);
+        }
+    }
+}
+
+void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, void* accumulator, void* refreshTable, int accumulatorType)
+{
+    assert(accumulator);
+
+    if(ISKING(lastMove->piece)) updateAccumulatorFromTable(board, accumulator, refreshTable, accumulatorType);
+    
+    accumulator_playing* byteAccumulator = NULL;
+    accumulator_training* floatAccumulator = NULL;
+    if(accumulatorType == PLAYING) byteAccumulator = (accumulator_playing*) accumulator;
+    else floatAccumulator = (accumulator_training*) accumulator;
+
+    for(int i = 0; i < 2; i++)
+    {
+        int ksq, fromSq, toSq, pieceOffset = 0;
+        if(i == 0)
+        {
+            ksq = board->kingSquare_w;
+            if(shouldUndoMove)
+            {
+                toSq = lastMove->startSquare;
+                fromSq = lastMove->endSquare;
+            }
+            else
+            {
+                fromSq = lastMove->startSquare;
+                toSq = lastMove->endSquare;
+            }
+            pieceOffset = lastMove->piece;
+        }
+        else
+        {
+            ksq = FLIP_SQUARE(board->kingSquare_b);
+            if(shouldUndoMove)
+            {
+                toSq = FLIP_SQUARE(lastMove->startSquare);
+                fromSq = FLIP_SQUARE(lastMove->endSquare);
+            }
+            else
+            {
+                fromSq = FLIP_SQUARE(lastMove->startSquare);
+                toSq = FLIP_SQUARE(lastMove->endSquare);
+            }
+            pieceOffset = FLIP_COLOR(lastMove->piece);
+        }
+        
+        pieceOffset = ISBLACK(pieceOffset) ? ((pieceOffset&0xF) + 4) : ((pieceOffset&0xF) - 1); 
+        
+        int inputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (10 * kingBuckets[ksq]) + pieceOffset;
+        uint64_t xorMask = (1ull << fromSq) | (1ull << toSq);
+
+        if(byteAccumulator) byteAccumulator->inputNodes[inputNodeIndex]^=xorMask;
+        else floatAccumulator->inputNodes[inputNodeIndex]^=xorMask;
+
+        int fromIdx = (64 * ((10 * kingBuckets[ksq]) + pieceOffset)) + fromSq;
+        int toIdx   = (64 * ((10 * kingBuckets[ksq]) + pieceOffset)) + toSq;
+
+        int capIdx = -1;
+        if(lastMove->capturedPiece)
+        {
+            int capturedPieceOffset, capturedPieceSquare;
+            if(i == 0)
+            {
+                capturedPieceOffset = lastMove->capturedPiece;
+                capturedPieceSquare = lastMove->capturedPieceSquare;
+            }
+            else
+            {
+                capturedPieceOffset = FLIP_COLOR(lastMove->capturedPiece);
+                capturedPieceSquare = FLIP_SQUARE(lastMove->capturedPieceSquare);
+            }
+
+            capturedPieceOffset = ISBLACK(capturedPieceOffset) ? ((capturedPieceOffset&0xF) + 4) : ((capturedPieceOffset&0xF) - 1); 
+            int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (10 * kingBuckets[ksq]) + capturedPieceOffset;
+
+            if(byteAccumulator) byteAccumulator->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
+            else floatAccumulator->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
+
+            capIdx = (64 * ((10 * kingBuckets[ksq]) + capturedPieceOffset)) + capturedPieceSquare;
+        }
+
+        int isCapture = shouldUndoMove ? 1 : -1;
+
+        if(byteAccumulator)
+        {
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+            {
+                byteAccumulator->accumulator[i][j]+= playerNNUE->weights1[j][toIdx] - playerNNUE->weights1[j][fromIdx];
+                if(capIdx != -1) byteAccumulator->accumulator[i][j]+= (isCapture * playerNNUE->weights1[j][capIdx]);
+            }
+        }
+        else
+        {
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+            {
+                floatAccumulator->accumulator[i][j]+= trainingNNUE->weights1[j][toIdx] - trainingNNUE->weights1[j][fromIdx];
+                if(capIdx != -1) floatAccumulator->accumulator[i][j]+= (isCapture * trainingNNUE->weights1[j][capIdx]);
+            }
         }
     }
 }
@@ -271,7 +371,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
         accumBoard[8] = FLIP_MASK(accumulatorBoard->rook_w);
         accumBoard[9] = FLIP_MASK(accumulatorBoard->queen_w);
     }
-    if(getColumn(ksq) > 4)
+    if(getColumn(ksq) > 3)
     {
         for(int i = 0; i < 10; i++)
         {
@@ -375,7 +475,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     }
     
 
-    copy_board(accumulatorBoard, currentBoard, 0, 0);
+    copy_board(accumulatorBoard, currentBoard, 0);
 }
 
 void updateAccumulatorFromTable(bitboard* board, void* accumulator, void* refreshTable, int accumulatorType)
@@ -395,12 +495,12 @@ void updateAccumulatorFromTable(bitboard* board, void* accumulator, void* refres
         //Uninitialized bitboard in accumulator refresh table.
         if(byteTable->boards[0][kingBucket_w]->kingSquare_w == 0 && byteTable->boards[0][kingBucket_w]->kingSquare_b == 0)
         {
-            copy_board(byteTable->boards[0][kingBucket_w], board, 0, 0);
+            copy_board(byteTable->boards[0][kingBucket_w], board, 0);
             loadInputAccumulator(byteTable->boards[0][kingBucket_w], &byteTable->accumulators[kingBucket_w], accumulatorType, WHITE);
         }
         if(byteTable->boards[1][kingBucket_b]->kingSquare_w == 0 && byteTable->boards[1][kingBucket_b]->kingSquare_b == 0)
         {
-            copy_board(byteTable->boards[1][kingBucket_b], board, 0, 0);
+            copy_board(byteTable->boards[1][kingBucket_b], board, 0);
             loadInputAccumulator(byteTable->boards[1][kingBucket_b], &byteTable->accumulators[kingBucket_b], accumulatorType, BLACK);
         }
 
@@ -418,12 +518,12 @@ void updateAccumulatorFromTable(bitboard* board, void* accumulator, void* refres
         //Uninitialized bitboard in accumulator refresh table.
         if(floatTable->boards[0][kingBucket_w]->kingSquare_w == 0 && floatTable->boards[0][kingBucket_w]->kingSquare_b == 0)
         {
-            copy_board(floatTable->boards[0][kingBucket_w], board, 0, 0);
+            copy_board(floatTable->boards[0][kingBucket_w], board, 0);
             loadInputAccumulator(floatTable->boards[0][kingBucket_w], &floatTable->accumulators[kingBucket_w], accumulatorType, WHITE);
         }
         if(floatTable->boards[1][kingBucket_b]->kingSquare_w == 0 && floatTable->boards[1][kingBucket_b]->kingSquare_b == 0)
         {
-            copy_board(floatTable->boards[1][kingBucket_b], board, 0, 0);
+            copy_board(floatTable->boards[1][kingBucket_b], board, 0);
             loadInputAccumulator(floatTable->boards[1][kingBucket_b], &floatTable->accumulators[kingBucket_b], accumulatorType, BLACK);
         }
 
@@ -448,12 +548,12 @@ accumulator_playing_refreshTable* createPlayingRefreshTable()
             table->boards[i][j] = create_board();
             if(color == WHITE) 
             {
-                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_w, KING|WHITE);
+                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_w);
                 table->boards[i][j]->kingSquare_w = newKingSquare;
             }
             else
             {   
-                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_b, KING|BLACK);
+                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_b);
                 table->boards[i][j]->kingSquare_b = newKingSquare;
             }
 
@@ -475,12 +575,12 @@ accumulator_training_refreshTable* createTrainingRefreshTable()
             table->boards[i][j] = create_board();
             if(color == WHITE) 
             {
-                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_w, KING|WHITE);
+                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_w);
                 table->boards[i][j]->kingSquare_w = newKingSquare;
             }
             else
             {   
-                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_b, KING|BLACK);
+                board_clear_square(table->boards[i][j], table->boards[i][j]->kingSquare_b);
                 table->boards[i][j]->kingSquare_b = newKingSquare;
             }
 

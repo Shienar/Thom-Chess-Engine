@@ -3,7 +3,7 @@
 
 #include "hashtable.h"
 
-#define MAX_TABLE_SIZE 262144
+#define TT_TABLE_SIZE 4194304
 
 //The searched node's evaluation falls in the range of (alpha, beta)
 //The saved score is exact for the given depth.

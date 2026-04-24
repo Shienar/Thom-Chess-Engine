@@ -1,7 +1,7 @@
-#include "../structs.h"
 #include "../debug.h"
 #include "../board/bitboard.h"
 #include "../board/moves.h"
+#include "../hashtables/hashtable.h"
 #include <string.h>
 #include <math.h>
 
@@ -9,7 +9,7 @@ char getColumnChar(int x, int isSquare)
 {
     if(isSquare)
     {
-        return columnNames[getColumn(x)-1];
+        return columnNames[getColumn(x)];
     }
     else
     {
@@ -28,7 +28,7 @@ void getSquareName(int square, char* target)
     //Output example: e4
     char squareName[3] = {'\0'};
     squareName[0] = getColumnChar(square, 1);
-    squareName[1] = ('0' + getRow(square));
+    squareName[1] = ('1' + getRow(square));
     strncpy(target, squareName, 3);
 }
 
@@ -271,9 +271,11 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
     else board->enPassantSquare = -1;
 
-    if(board->ht) destroy_hashTable_pos(board->ht);
-    board->ht = create_hashTable_pos();
-    increment_table_value(board->ht, board);
+    board->hashCode = getHashCode(board);
+
+    memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
+    board->repetitionIndex = 0;
+    board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
 
 
 }
@@ -380,85 +382,80 @@ bitboard* create_board()
 
     //History
     board->moveStackTop = NULL;
-    board->ht = create_hashTable_pos();
 
     board->enPassantSquare = -1;
 
     //Other
     board->halfMoveCount = 0;
-    increment_table_value(board->ht, board);
+    board->hashCode = getHashCode(board);
+    
+    memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
+    board->repetitionIndex = 0;
+    board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
 
     return board;
 }
 
 void destroy_board(bitboard* board)
 {
-    destroy_hashTable_pos(board->ht);
     while(board->moveStackTop)
     {
-        move* tempMove = board->moveStackTop;
-        board->moveStackTop = board->moveStackTop->nextMove;
+        moveEntry* tempMove = board->moveStackTop;
+        board->moveStackTop = board->moveStackTop->nextEntry;
         FREE(tempMove);
     }
     FREE(board);
 }
 
-void copy_board(bitboard* dest, bitboard* source, int copyHT, int copyMoves)
+void copy_board(bitboard* dest, bitboard* source, int copyMoves)
 {
     assert(dest && source);
 
     //Make sure to free a preexisting move stack to avoid memory leaks.
     while(dest->moveStackTop)
     {
-        move* tempMove = dest->moveStackTop;
-        dest->moveStackTop = dest->moveStackTop->nextMove;
+        moveEntry* tempMove = dest->moveStackTop;
+        dest->moveStackTop = dest->moveStackTop->nextEntry;
         FREE(tempMove);
     }
-    destroy_hashTable_pos(dest->ht);
 
     memcpy(dest, source, sizeof(bitboard));
 
     //History: 
     if(copyMoves && source->moveStackTop)
     {
-        dest->moveStackTop = CALLOC(1, sizeof(move));
-        move* currentMove = source->moveStackTop;
-        memcpy(dest->moveStackTop, currentMove, sizeof(move));
-        dest->moveStackTop->nextMove = NULL;
-        move* currentCopy = dest->moveStackTop;
-        currentMove = currentMove->nextMove;
+        dest->moveStackTop = CALLOC(1, sizeof(moveEntry));
+        moveEntry* currentMove = source->moveStackTop;
+        *dest->moveStackTop = *currentMove;
+        dest->moveStackTop->nextEntry = NULL;
+        moveEntry* currentCopy = dest->moveStackTop;
+        currentMove = currentMove->nextEntry;
         while(currentMove)
         {
-            move* nextCopy= CALLOC(1, sizeof(move));
-            memcpy(nextCopy, currentMove, sizeof(move));
-            nextCopy->nextMove = NULL;
-            currentCopy->nextMove = nextCopy;
+            moveEntry* nextCopy= CALLOC(1, sizeof(moveEntry));
+            *nextCopy = *currentMove;
+            nextCopy->nextEntry = NULL;
+            currentCopy->nextEntry = nextCopy;
             currentCopy = nextCopy;
-            currentMove = currentMove->nextMove;
+            currentMove = currentMove->nextEntry;
         }
     }
     else
     {
         dest->moveStackTop = NULL;
     }
-    
-    //Copying hash tables is expensive and isn't always necessary.
-    if(copyHT) dest->ht = copy_hashTable_pos(source->ht);
-    else dest->ht = NULL;
 }
 
-//Will clear all piece tpyes if Least Significant Byte's value is out of range 1-6
-//Will clear all colors if 2nd LSByte's value is out of range 1-2
-void board_clear_square(bitboard* board, int square, int pieceType)
+void board_clear_square(bitboard* board, int square)
 {
     assert(board);
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Cannot clear square %d - out of bounds [0, 63]", square);
-        return;
-    } 
+    assert(square >= 0 && square <= 63);
     
+    int pieceType = findPieceOnSquare(board, square);
+    if(!pieceType) return;
+
     uint64_t applyMask = ~(1ull<<square);
+    board->hashCode ^= zobrist_keys[64 * (2 * ((pieceType&0xF) - 1) + ISWHITE(pieceType)) + square];
     if(ISWHITE(pieceType))
     {
         if(ISPAWN(pieceType))
@@ -475,6 +472,16 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISROOK(pieceType))
         {
+            if(KINGSIDE_CASTLE_WHITE(board->flags) && square == 7)
+            {
+                BAN_KINGCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[768];
+            }
+            else if(QUEENSIDE_CASTLE_WHITE(board->flags) && square == 0)
+            {
+                BAN_QUEENCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[769];
+            }
             board->rook_w&=applyMask;
         }
         else if(ISQUEEN(pieceType))
@@ -483,20 +490,18 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISKING(pieceType))
         {
-            board->king_w&=applyMask;
-        }
-        else
-        {
-            board->pawn_w&=applyMask;
             
-            board->bishop_w&=applyMask;
-            
-            board->knight_w&=applyMask;
-            
-            board->rook_w&=applyMask;
-            
-            board->queen_w&=applyMask;
-            
+            if(QUEENSIDE_CASTLE_WHITE(board->flags))
+            {
+                BAN_QUEENCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[769];
+            } 
+            if(KINGSIDE_CASTLE_WHITE(board->flags))
+            {
+                BAN_KINGCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[768];
+            }
+
             board->king_w&=applyMask;
         }
 
@@ -519,6 +524,16 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISROOK(pieceType))
         {
+            if(KINGSIDE_CASTLE_BLACK(board->flags) && square == 63)
+            {
+                BAN_KINGCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[770];
+            }
+            else if(QUEENSIDE_CASTLE_BLACK(board->flags) && square == 56)
+            {
+                BAN_QUEENCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[771];
+            }
             board->rook_b&=applyMask;
         }
         else if(ISQUEEN(pieceType))
@@ -527,20 +542,18 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISKING(pieceType))
         {
-            board->king_b&=applyMask;
-        }
-        else
-        {
-            board->pawn_b&=applyMask;
-            
-            board->bishop_b&=applyMask;
-            
-            board->knight_b&=applyMask;
-            
-            board->rook_b&=applyMask;
-            
-            board->queen_b&=applyMask;
-            
+            if(QUEENSIDE_CASTLE_BLACK(board->flags))
+            {
+                BAN_QUEENCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[771];
+                
+            }
+            if(KINGSIDE_CASTLE_BLACK(board->flags))
+            {
+                BAN_KINGCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[770];
+            }
+
             board->king_b&=applyMask;
         }
 
@@ -566,6 +579,27 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISROOK(pieceType))
         {
+            if(KINGSIDE_CASTLE_WHITE(board->flags) && square == 7)
+            {
+                BAN_KINGCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[768];
+            }
+            else if(QUEENSIDE_CASTLE_WHITE(board->flags) && square == 0)
+            {
+                BAN_QUEENCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[769];
+            }
+            else if(KINGSIDE_CASTLE_BLACK(board->flags) && square == 63)
+            {
+                BAN_KINGCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[770];
+            }
+            else if(QUEENSIDE_CASTLE_BLACK(board->flags) && square == 56)
+            {
+                BAN_QUEENCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[771];
+            }
+
             board->rook_w&=applyMask;
             board->rook_b&=applyMask;
         }
@@ -576,26 +610,29 @@ void board_clear_square(bitboard* board, int square, int pieceType)
         }
         else if(ISKING(pieceType))
         {
-            board->king_w&=applyMask;
-            board->king_b&=applyMask;
-        }
-        else
-        {
-            board->pawn_w&=applyMask;
-            board->pawn_b&=applyMask;
             
-            board->bishop_w&=applyMask;
-            board->bishop_b&=applyMask;
-            
-            board->knight_w&=applyMask;
-            board->knight_b&=applyMask;
-            
-            board->rook_w&=applyMask;
-            board->rook_b&=applyMask;
-            
-            board->queen_w&=applyMask;
-            board->queen_b&=applyMask;
-            
+            if(QUEENSIDE_CASTLE_WHITE(board->flags))
+            {
+                BAN_QUEENCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[769];
+            } 
+            if(KINGSIDE_CASTLE_WHITE(board->flags))
+            {
+                BAN_KINGCASTLE_W(board->flags);
+                board->hashCode ^= zobrist_keys[768];
+            }
+            if(QUEENSIDE_CASTLE_BLACK(board->flags))
+            {
+                BAN_QUEENCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[771];
+                
+            }
+            if(KINGSIDE_CASTLE_BLACK(board->flags))
+            {
+                BAN_KINGCASTLE_B(board->flags);
+                board->hashCode ^= zobrist_keys[770];
+            }
+
             board->king_w&=applyMask;
             board->king_b&=applyMask;
         }
@@ -610,17 +647,15 @@ void board_clear_square(bitboard* board, int square, int pieceType)
 void board_set(bitboard* board, int square, int piece)
 {
     assert(board);
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Cannot set square %d - out of bounds [0, 63]", square);
-        return;
-    }
+    assert(square >= 0 && square <= 63);
+    assert(piece);
 
     uint64_t applyMask = (1ull<<square);
 
     //Avoid duplicate pieces on a square.
-    board_clear_square(board, square, 0);
+    if(findPieceOnSquare(board, square)) board_clear_square(board, square);
 
+    board->hashCode ^= zobrist_keys[64 * (2 * ((piece&0xF) - 1) + ISWHITE(piece)) + square];
     if (ISWHITE(piece)) 
     {
         switch(piece&0xF)
@@ -686,7 +721,7 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
 {
     while (piece) {
         int square = __builtin_ctzll(piece);
-        boardArray[getRow(square) - 1][getColumn(square) - 1] = printChar;
+        boardArray[getRow(square)][getColumn(square)] = printChar;
         piece &= (piece - 1);
     }
 }
@@ -701,8 +736,8 @@ void board_print(bitboard* board, int printValues, int printHistory)
     int lastMoveEndSquare = -1;
     if(board->moveStackTop)
     {
-        lastMoveEndSquare = board->moveStackTop->endSquare;
-        lastMoveStartSquare = board->moveStackTop->startSquare;
+        lastMoveEndSquare = board->moveStackTop->m.endSquare;
+        lastMoveStartSquare = board->moveStackTop->m.startSquare;
     }
 
 
@@ -836,69 +871,74 @@ void bitmask_print(uint64_t mask, char fill)
 }
 
 
-int moves_push(bitboard* board, move* m)
+int moves_push(bitboard* board, move m)
 {
-    assert(board && m);
+    assert(board);
+
+    moveEntry* entry = CALLOC(1, sizeof(moveEntry));
+    entry->m = m;
+    entry->flags = board->flags;
+    entry->prevEnPassantSquare = board->enPassantSquare;
+    entry->previousMovesSinceLastChange = board->movesSinceLastChange;
 
     if(!board->moveStackTop)
     {
-        board->moveStackTop = m;
+        board->moveStackTop = entry;
     }
     else
     {
-        m->nextMove = board->moveStackTop;
-        board->moveStackTop = m;
+        entry->nextEntry = board->moveStackTop;
+        board->moveStackTop = entry;
     }
     return 0;
 }
 
-move* moves_pop(bitboard* board)
+moveEntry* moves_pop(bitboard* board)
 {
     assert(board);
 
-    move* tempMove = board->moveStackTop;
-    if(!tempMove) return NULL;
-    board->moveStackTop = board->moveStackTop->nextMove;
-    tempMove->nextMove = NULL;
-    return tempMove;
+    moveEntry* tempEntry = board->moveStackTop;
+    if(!tempEntry) return NULL;
+    board->moveStackTop = board->moveStackTop->nextEntry;
+    tempEntry->nextEntry = NULL;
+    return tempEntry;
 }
 
-move* createMove(int startSquare, int endSquare, int promoteTo, int piece, int capturedPiece, int capturedPieceSquare, bitboard* prevBoard)
-{
-    move* m = CALLOC(1, sizeof(move));
-    if(!m) return NULL;
 
-    m->startSquare = startSquare;
-    m->endSquare = endSquare;
-    m->promoteTo = promoteTo;
-    m->piece = piece;
-    m->capturedPiece = capturedPiece;
-    m->capturedPieceSquare = capturedPieceSquare;
-    m->flags = prevBoard->flags;
-    m->previousMovesSinceLastChange = prevBoard->movesSinceLastChange;
-    m->prevEnPassantSquare = prevBoard->enPassantSquare;
-    m->nextMove = NULL;
-    return m;
-}
-
-void recursivePrint(move* m)
+int containsRepetition(bitboard* board)
 {
-    if(m)
+    int index =board->repetitionIndex - 1;
+    int count = 1;
+    uint64_t checkedVal = board->repetitionHashCodes[index];
+    for(index = index - 4; index >= 0; index -= 2)
     {
-        recursivePrint(m->nextMove);
+        if(checkedVal == board->repetitionHashCodes[index])
+        {
+            count++;
+            if(count >= 3) return 1;
+        }
+    }
+    return 0;
+}
+
+void recursivePrint(moveEntry* entry)
+{
+    if(entry)
+    {
+        recursivePrint(entry->nextEntry);
 
         char startSquareName[3] = {'\0'};
         char endSquareName[3] = {'\0'};
-        getSquareName(m->startSquare, startSquareName);
-        getSquareName(m->endSquare, endSquareName);
+        getSquareName(entry->m.startSquare, startSquareName);
+        getSquareName(entry->m.endSquare, endSquareName);
 
         printf("%s%s", startSquareName, endSquareName);
-        if(m->promoteTo)
+        if(entry->m.promoteTo)
         {
-            if(ISKNIGHT(m->promoteTo)) printf("n");
-            else if(ISBISHOP(m->promoteTo)) printf("b");
-            else if(ISROOK(m->promoteTo)) printf("r");
-            else if(ISQUEEN(m->promoteTo)) printf("q");
+            if(ISKNIGHT(entry->m.promoteTo)) printf("n");
+            else if(ISBISHOP(entry->m.promoteTo)) printf("b");
+            else if(ISROOK(entry->m.promoteTo)) printf("r");
+            else if(ISQUEEN(entry->m.promoteTo)) printf("q");
         }
         printf(" ");
     }
