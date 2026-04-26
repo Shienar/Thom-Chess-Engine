@@ -20,9 +20,6 @@ CFLAGS += -O3
 THREADS ?= 8
 CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
-# Track nodes visited.
-# CFLAGS+= -DCOUNT_NODES_VISITED=1
-
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
 # gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt

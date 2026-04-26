@@ -17,7 +17,8 @@ typedef struct move {
     
     int8_t prevEnPassantSquare;
     uint8_t previousMovesSinceLastChange;
-    uint8_t prevFlags; 
+    uint8_t prevFlags;
+    int8_t repetitionIndex;
 } move;
 
 typedef struct table_entry_tt {
@@ -39,6 +40,7 @@ typedef struct hashtable_tt {
 //...
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
+#define MAX_PLY 32
 typedef struct bitboard {
     uint64_t pieces[PIECE_COUNT];
 
@@ -66,7 +68,7 @@ typedef struct bitboard {
 
     uint8_t movesSinceLastChange;
 
-    move history[512];
+    move history[MAX_PLY];
     uint8_t historyIndex;
     uint64_t repetitionHashCodes[128];
     uint8_t repetitionIndex;

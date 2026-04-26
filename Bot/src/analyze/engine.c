@@ -11,11 +11,6 @@
 
 int useHelperThreads = 1;
 
-#ifdef COUNT_NODES_VISITED
-int nodesEvaluated = 0;
-int nodesVisited = 0;
-#endif
-
 int perft(bitboard* board, int depth, int maxDepth, int verbose)
 {
     if(!depth) return 1;
@@ -45,9 +40,6 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
 
 double evaluate(bitboard* board, void* accumulator, int accumulatorType)
 {
-    #ifdef COUNT_NODES_VISITED 
-    nodesEvaluated++;
-    #endif
     assert(board);
     assert(accumulator);
 
@@ -59,9 +51,6 @@ double evaluate(bitboard* board, void* accumulator, int accumulatorType)
 
 double quiesce(bitboard* board, double alpha, double beta, int depth, void* accumulator, void* accumulatorTable, int accumulatorType)
 {
-    #ifdef COUNT_NODES_VISITED
-    nodesVisited++;
-    #endif
 
     if(board->victor)
     {
@@ -119,7 +108,7 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, void* accu
             int pieceScore = PIECE(m.piece);
             if(pieceScore == KING) pieceScore = 1;
             
-            if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = (PIECE(m.capturedPiece)) - pieceScore;
+            if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = 10 + (PIECE(m.capturedPiece)) - pieceScore;
             else moveScores[i] = pieceScore;
         }
 
@@ -162,10 +151,6 @@ void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = 
 
 double principalVariationSearch(bitboard* board, double alpha, double beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, void* accumulator, void* accumulatorTable, int accumulatorType)
 {
-    #ifdef COUNT_NODES_VISITED 
-    nodesVisited++;
-    #endif
-
     if(board->victor)
     {
         if(board->victor == VICTOR_WHITE)
@@ -244,7 +229,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
             if(pieceScore == KING) pieceScore = 1;
 
             if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) moveScores[i] = INT32_MAX;
-            else if(m.capturedPiece != EMPTY_PIECE) moveScores[i] =  (PIECE(m.capturedPiece)) - pieceScore;
+            else if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = 10 + (PIECE(m.capturedPiece)) - pieceScore;
             else moveScores[i] = pieceScore;
         }
 
@@ -352,11 +337,7 @@ DWORD WINAPI helperThreadFunction(LPVOID lpParam)
 
 move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int networkType)
 {
-    #ifdef COUNT_NODES_VISITED
-    nodesEvaluated = 0;
-    nodesVisited = 0;
-    clock_t startTime = clock();
-    #endif
+    board->historyIndex = 0;
 
     if(entries) //Book moves
     {
@@ -364,7 +345,7 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
         if((bookMove = getBookMove(board))) return *bookMove;
         else unloadBook();
     }
-    else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.v
+    else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.
     {
         uint32_t ep = board->enPassantSquare;
         if(ep == -1) ep = 0;
@@ -635,14 +616,6 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
         //This isn't recoverable.
         exit(EXIT_FAILURE);
     }
-
-    #ifdef COUNT_NODES_VISITED 
-    if(nodesEvaluated) {
-        float duration = (float)(clock()-startTime)/1000.0;
-        printf("\nEvaluated %d nodes in %.2lf seconds at %.4f NPS\n", nodesEvaluated, duration, (float)nodesEvaluated/duration);
-        printf("Visited %d nodes in %.2lf seconds at %.4f NPS\n", nodesVisited, duration, (float)nodesVisited/duration);
-    }
-    #endif
 
     free(principalVariation);
     principalVariation = NULL;

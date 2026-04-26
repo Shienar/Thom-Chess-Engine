@@ -359,7 +359,7 @@ bitboard* create_board()
     board->repetitionIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
     
-    memset(board->history, 0, 512 * sizeof(move));
+    memset(board->history, 0, MAX_PLY * sizeof(move));
     board->historyIndex = 0;
 
     return board;
@@ -374,7 +374,7 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
     }
 }
 
-void board_print(bitboard* board, int printValues, int printHistory)
+void board_print(bitboard* board, int printValues)
 {
     assert(board);
     
@@ -447,7 +447,6 @@ void board_print(bitboard* board, int printValues, int printHistory)
         printf(TEXT_NONE TEXT_BOLD"  |" TEXT_NONE "\n ");
     }
     printf(TEXT_BOLD "\t\t|                     |\n \t\t%% - a b c d e f g h - %%\n" TEXT_NONE);
-    if(printHistory) dumpMoves(board);
 }
 
 
@@ -552,26 +551,4 @@ int containsRepetition(bitboard* board)
         }
     }
     return 0;
-}
-
-void dumpMoves(bitboard* board)
-{
-    char startSquareName[3] = {'\0'};
-    char endSquareName[3] = {'\0'};
-    for(int index = 0; index < board->historyIndex; index++)
-    {
-        getSquareName(board->history[index].startSquare, startSquareName);
-        getSquareName(board->history[index].endSquare, endSquareName);
-
-        printf("%s%s", startSquareName, endSquareName);
-        if(board->history[index].promoteTo)
-        {
-            if(ISKNIGHT(board->history[index].promoteTo)) printf("n");
-            else if(ISBISHOP(board->history[index].promoteTo)) printf("b");
-            else if(ISROOK(board->history[index].promoteTo)) printf("r");
-            else if(ISQUEEN(board->history[index].promoteTo)) printf("q");
-        }
-        printf(" ");
-    }   
-    printf("\n");
 }

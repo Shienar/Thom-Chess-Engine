@@ -517,6 +517,7 @@ int movePiece(bitboard *board, move* m)
             break;
     }
     
+    m->repetitionIndex = board->repetitionIndex;
     moves_push(board, *m);
 
     if(ISROOK(m->capturedPiece))
@@ -551,6 +552,7 @@ int movePiece(bitboard *board, move* m)
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
     
+    if(m->capturedPiece != EMPTY_PIECE || ISPAWN(m->piece)) board->repetitionIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
 
     return 0;
@@ -747,13 +749,13 @@ move unmove(bitboard *board)
 {
     assert(board);
 
-    board->repetitionIndex--;
     move m = moves_pop(board);
     if(!m.startSquare && !m.endSquare)
     {
         DEBUG("No move history to undo.");
         return (move){0};
     }
+    board->repetitionIndex = m.repetitionIndex;
 
     if(m.promoteTo)
     {

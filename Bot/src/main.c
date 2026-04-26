@@ -10,13 +10,6 @@
 #include <string.h>
 #include <omp.h>
 
-/**
- * TODO:
- *  - Larger bitboard size seems to be causing stack memory issues in 
- *  some functions. Memory is silently breaking and causing inconsistent
- *  issues. This mainly happens in the calculateBestMove() function.
- * 
- */
 int main(int argc, char** argv)
 {
     /**
@@ -28,7 +21,6 @@ int main(int argc, char** argv)
     int onlyEngines = 0;
     int onlyHumans = 0;
     int maxTime = 3;
-    int printHistory = 0;
     int fenLineNumber = -1;
     int shouldTrain = 0;
     int useBook = 1; 
@@ -42,7 +34,6 @@ int main(int argc, char** argv)
             printf("--help\t\tPrints out this message\n");
             printf("--debug\t\tEnable debug messages\n");
             printf("-v\t\tVerbose board information\n");
-            printf("--history\tPrint's recent moves\n");
             printf("--black\t\tPlay as black\n");
             printf("--human\t\tHuman v human game\n");
             printf("--engine\t\tEngine v Engine game\n");
@@ -59,9 +50,8 @@ int main(int argc, char** argv)
         }
         else if(strcmp(argv[i], "-v") == 0) verbose = 1;
         else if(strcmp(argv[i], "--black") == 0) player_color = BLACK;
-        else if(strcmp(argv[i], "--depth") == 0) { i++; depth = min(atoi(argv[i]), MAX_DEPTH - 5); }
+        else if(strcmp(argv[i], "--depth") == 0) { i++; depth = min(atoi(argv[i]), MAX_PLY - 5); }
         else if(strcmp(argv[i], "--debug") == 0) enableDebugMessages();
-        else if(strcmp(argv[i], "--history") == 0) printHistory = 1;
         else if(strcmp(argv[i], "--human") == 0) { onlyHumans = 1; onlyEngines = 0; }
         else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
         else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atoi(argv[i]); }
@@ -146,7 +136,7 @@ int main(int argc, char** argv)
     char buffer[6] = {'\0'};
     int error = 0;
 
-    board_print(board, 0, printHistory);
+    board_print(board, 0);
 
     while(1)
     {
@@ -161,12 +151,12 @@ int main(int argc, char** argv)
             else if(buffer[0] == 'u')
             {
                 unmove(board);
-                board_print(board, verbose, printHistory);
+                board_print(board, verbose);
             }
             else
             {
                 error = moveFromString(board, buffer);
-                if(!error) board_print(board, verbose, printHistory);
+                if(!error) board_print(board, verbose);
             }
         }
         else
@@ -176,7 +166,7 @@ int main(int argc, char** argv)
                 move bestMove = calculateBestMove(board, depth, maxTime, PLAYING);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
-            board_print(board, verbose, printHistory);
+            board_print(board, verbose);
         }
         
         if(board->victor)

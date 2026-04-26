@@ -13,7 +13,7 @@
 
 //cosine annealing is done using timestamp in enqueueKernels()
 #define MIN_LR 1e-4f
-#define MAX_LR 3e-3f
+#define MAX_LR 1e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL 20
 #define MAX_INTERVALS 20

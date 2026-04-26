@@ -189,7 +189,7 @@ static inline void board_move_piece_quietly(bitboard* board, int from, int to)
 }
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
-void board_print(bitboard* board, int printValues, int printHistory);
+void board_print(bitboard* board, int printValues);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
 
@@ -214,6 +214,4 @@ static inline void createMove(move* m, int startSquare, int endSquare, int promo
 }
 
 int containsRepetition(bitboard* board);
-
-void dumpMoves(bitboard* board);
 #endif
