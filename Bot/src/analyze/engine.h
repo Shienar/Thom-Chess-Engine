@@ -1,7 +1,7 @@
 #ifndef ENGINE
 #define ENGINE
 
-#include "../structs.h"
+#include "../types.h"
 #include "../hashtables/transpositiontable.h"
 #include "neuralnet.h"
 #include "accumulator.h"

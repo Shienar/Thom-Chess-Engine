@@ -30,7 +30,7 @@ void loadBook()
     }
 
     entryCount/=sizeof(polyglot_book_entry);
-    entries = CALLOC(entryCount, sizeof(polyglot_book_entry));
+    entries = calloc(entryCount, sizeof(polyglot_book_entry));
 
     
     rewind(input);
@@ -46,7 +46,7 @@ void unloadBook()
     //printf("Unloading book...\n");
     if(entries)
     {
-        FREE(entries);
+        free(entries);
         entries = NULL;
     }
 }
@@ -56,8 +56,8 @@ move* getBookMove(bitboard* board)
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
-    move potentialMoves[64] = {0};
-    uint16_t moveWeights[64] = {0};
+    move potentialMoves[256] = {0};
+    uint16_t moveWeights[256] = {0};
     int moveCount = 0;
 
     for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
@@ -102,7 +102,7 @@ move* getBookMove(bitboard* board)
             if((tempMove->capturedPiece = findPieceOnSquare(board, endSquare))) tempMove->capturedPieceSquare = endSquare;
 
             moveCount++;
-            if(moveCount >= 64) break;
+            if(moveCount >= 256) break;
         }
     }
 
@@ -111,15 +111,17 @@ move* getBookMove(bitboard* board)
     uint32_t randomValue = ((rand()<<16)|rand())%totalWeight;
     int selectedIndex = 0;
 
-    for(int i = 0; i < moveCount; i++) {
-        if(randomValue < moveWeights[i]) {
+    for(int i = 0; i < moveCount; i++) 
+    {
+        if(randomValue < moveWeights[i]) 
+        {
             selectedIndex = i;
             break;
         }
         randomValue -= moveWeights[i];
     }
 
-    move* returnedMove = CALLOC(1, sizeof(move));
+    move* returnedMove = calloc(1, sizeof(move));
     *returnedMove = potentialMoves[selectedIndex];
 
     return returnedMove;

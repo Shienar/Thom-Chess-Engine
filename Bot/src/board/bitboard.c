@@ -5,29 +5,13 @@
 #include <string.h>
 #include <math.h>
 
-char getColumnChar(int x, int isSquare)
-{
-    if(isSquare)
-    {
-        return columnNames[getColumn(x)];
-    }
-    else
-    {
-        return columnNames[x-1];
-    }
-    
-}
-
 void getSquareName(int square, char* target)
 {
-    if(square < 0 || square > 63)
-    {
-        DEBUG("Square %d is out of bounds [0, 63]", square);
-        abort();
-    } 
+    assert(square >= 0 && square <= 63);
+    
     //Output example: e4
     char squareName[3] = {'\0'};
-    squareName[0] = getColumnChar(square, 1);
+    squareName[0] = columnNames[getColumn(square)];
     squareName[1] = ('1' + getRow(square));
     strncpy(target, squareName, 3);
 }
@@ -61,7 +45,7 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
             }
             
             int piece = findPieceOnSquare(board, row*8 + column);
-            if(piece)
+            if(piece != EMPTY_PIECE)
             {
                 char pieceChar = 0;
                 if(ISPAWN(piece)) pieceChar = 'p';
@@ -105,7 +89,7 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
 
 bitboard* create_board_from_fen(const char* fileName, int lineNumber)
 {
-    bitboard* board = CALLOC(1, sizeof(bitboard));
+    bitboard* board = calloc(1, sizeof(bitboard));
     load_fen_to_board(board, fileName, lineNumber);
     return board;
 }
@@ -137,18 +121,8 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
         curBoardString = strtok(NULL, "/"); 
     }
 
-    board->pawn_w = 0;
-    board->knight_w = 0;
-    board->bishop_w = 0;
-    board->rook_w = 0;
-    board->queen_w = 0;
-    board->king_w = 0;
-    board->pawn_b = 0;
-    board->knight_b = 0;
-    board->bishop_b = 0;
-    board->rook_b = 0;
-    board->queen_b = 0;
-    board->king_b = 0;
+    for(int sq = 0; sq < 64; sq++) board->pieceArr[sq] = EMPTY_PIECE;
+    for(int pc = 0; pc < PIECE_COUNT; pc++) board->pieces[pc] = 0;
 
     for(int row = 0; row < 8; row++)
     {
@@ -167,67 +141,66 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
                 else
                 {
                     int square = columnOffset + 8*row;
-                    uint64_t currentSquareMask = (1ull<<square);
                     if(currentChar == 'K')
                     {
-                        board->king_w|=currentSquareMask;
+                        board->pieces[WHITE_KING]|=singleBitMask(square);
                         board->kingSquare_w = square;
                         board->pieceArr[square] = KING|WHITE;
                     }
                     else if(currentChar == 'k')
                     {
-                        board->king_b|=currentSquareMask;
+                        board->pieces[BLACK_KING]|=singleBitMask(square);
                         board->kingSquare_b = columnOffset + 8*row;
                         board->pieceArr[square] = KING|BLACK;
                     }
                     else if(currentChar == 'Q') 
                     {
-                        board->queen_w|=currentSquareMask;
+                        board->pieces[WHITE_QUEEN]|=singleBitMask(square);
                         board->pieceArr[square] = QUEEN|WHITE;
                     }
                     else if(currentChar == 'q') 
                     {
-                        board->queen_b|=currentSquareMask;
+                        board->pieces[BLACK_QUEEN]|=singleBitMask(square);
                         board->pieceArr[square] = QUEEN|BLACK;
                     }
                     else if(currentChar == 'R') 
                     {
-                        board->rook_w|=currentSquareMask;
+                        board->pieces[WHITE_ROOK]|=singleBitMask(square);
                         board->pieceArr[square] = ROOK|WHITE;
                     }
                     else if(currentChar == 'r') 
                     {
-                        board->rook_b|=currentSquareMask;
+                        board->pieces[BLACK_ROOK]|=singleBitMask(square);
                         board->pieceArr[square] = ROOK|BLACK;
                     }
                     else if(currentChar == 'N') 
                     {
-                        board->knight_w|=currentSquareMask;
+                        board->pieces[WHITE_KNIGHT]|=singleBitMask(square);
                         board->pieceArr[square] = KNIGHT|WHITE;
                     }
                     else if(currentChar == 'n') 
                     {
-                        board->knight_b|=currentSquareMask;
+                        board->pieces[BLACK_KNIGHT]|=singleBitMask(square);
                         board->pieceArr[square] = KNIGHT|BLACK;
                     }
                     else if(currentChar == 'B') 
                     {
-                        board->bishop_w|=currentSquareMask;
+                        board->pieces[WHITE_BISHOP]|=singleBitMask(square);
                         board->pieceArr[square] = BISHOP|WHITE;
                     }
                     else if(currentChar == 'b') 
                     {
-                        board->bishop_b|=currentSquareMask;
+                        board->pieces[BLACK_BISHOP]|=singleBitMask(square);
                         board->pieceArr[square] = BISHOP|BLACK;
                     }
                     else if(currentChar == 'P') 
                     {
-                        board->pawn_w|=currentSquareMask;
+                        board->pieces[WHITE_PAWN]|=singleBitMask(square);
                         board->pieceArr[square] = PAWN|WHITE;
                     }
                     else if(currentChar == 'p') 
                     {
-                        board->pawn_b|=currentSquareMask;
+                        board->pieces[BLACK_PAWN]|=singleBitMask(square);
                         board->pieceArr[square] = PAWN|BLACK;
                     }
                     columnOffset++;
@@ -235,9 +208,9 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
             }
         }
     }
-    board->pieces_w = board->king_w|board->queen_w|board->rook_w|board->knight_w|board->bishop_w|board->pawn_w;
-    board->pieces_b = board->king_b|board->queen_b|board->rook_b|board->knight_b|board->bishop_b|board->pawn_b;
-    board->pieces_all = board->pieces_b|board->pieces_w;
+    for(int pc = 0; pc < PIECE_COUNT; pc+=2) board->pieces_side[WHITE] |= board->pieces[pc];
+    for(int pc = 1; pc < PIECE_COUNT; pc+=2) board->pieces_side[BLACK] |= board->pieces[pc];
+    board->pieces_all = board->pieces_side[BLACK]|board->pieces_side[WHITE];
 
     board->flags = 0;
     //Castling Rights
@@ -265,19 +238,18 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     board->movesSinceLastChange = halfMoveClock;
     board->halfMoveCount = fullMoveCount * 2;
 
-    //History can't get imported this way. Start from scratch.
-    board->moveStackTop = NULL;
     
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
     else board->enPassantSquare = -1;
 
     board->hashCode = getHashCode(board);
 
+    memset(board->history, 0, 512 * sizeof(move));
+    board->historyIndex = 0;
+
     memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
     board->repetitionIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
-
-
 }
 
 void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
@@ -326,395 +298,71 @@ void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
 //Resets the board to an opening position
 bitboard* create_board()
 {
-    bitboard* board = CALLOC(1, sizeof(bitboard));
+    bitboard* board = calloc(1, sizeof(bitboard));
 
-    board->pawn_w = 0x000000000000FF00;
-    board->pawn_b = 0x00FF000000000000;
+    board->pieces[WHITE_PAWN] = 0x000000000000FF00;
+    board->pieces[BLACK_PAWN] = 0x00FF000000000000;
     
-    board->bishop_w = 0x0000000000000024;
-    board->bishop_b = 0x2400000000000000;
+    board->pieces[WHITE_BISHOP] = 0x0000000000000024;
+    board->pieces[BLACK_BISHOP] = 0x2400000000000000;
     
-    board->knight_w = 0x0000000000000042;
-    board->knight_b = 0x4200000000000000;
+    board->pieces[WHITE_KNIGHT] = 0x0000000000000042;
+    board->pieces[BLACK_KNIGHT] = 0x4200000000000000;
     
-    board->rook_w = 0x0000000000000081;
-    board->rook_b = 0x8100000000000000;
+    board->pieces[WHITE_ROOK] = 0x0000000000000081;
+    board->pieces[BLACK_ROOK] = 0x8100000000000000;
     
-    board->queen_w = 0x0000000000000008;
-    board->queen_b = 0x0800000000000000;
+    board->pieces[WHITE_QUEEN] = 0x0000000000000008;
+    board->pieces[BLACK_QUEEN] = 0x0800000000000000;
     
-    board->king_w = 0x0000000000000010;
-    board->king_b = 0x1000000000000000;
+    board->pieces[WHITE_KING] = 0x0000000000000010;
+    board->pieces[BLACK_KING] = 0x1000000000000000;
 
     
-    board->pieces_w = 0x000000000000FFFF;
-    board->pieces_b = 0xFFFF000000000000;
+    board->pieces_side[WHITE] = 0x000000000000FFFF;
+    board->pieces_side[BLACK] = 0xFFFF000000000000;
     board->pieces_all = 0xFFFF00000000FFFF;
 
     board->kingSquare_b = 60;
     board->kingSquare_w  = 4;
 
-    board->pieceArr[0] = board->pieceArr[7] = WHITE|ROOK;
-    board->pieceArr[1] = board->pieceArr[6] = WHITE|KNIGHT;
-    board->pieceArr[2] = board->pieceArr[5] = WHITE|BISHOP;
-    board->pieceArr[3] = WHITE|QUEEN;
-    board->pieceArr[4] = WHITE|KING;
-    for(int i = 8; i < 16; i++) board->pieceArr[i] = WHITE|PAWN;
+    for(int sq = 16; sq < 56; sq++) board->pieceArr[sq] = EMPTY_PIECE;
+    board->pieceArr[0] = board->pieceArr[7] = WHITE_ROOK;
+    board->pieceArr[1] = board->pieceArr[6] = WHITE_KNIGHT;
+    board->pieceArr[2] = board->pieceArr[5] = WHITE_BISHOP;
+    board->pieceArr[3] = WHITE_QUEEN;
+    board->pieceArr[4] = WHITE_KING;
+    for(int i = 8; i < 16; i++) board->pieceArr[i] = WHITE_PAWN;
     
-    board->pieceArr[56] = board->pieceArr[63] = BLACK|ROOK;
-    board->pieceArr[57] = board->pieceArr[62] = BLACK|KNIGHT;
-    board->pieceArr[58] = board->pieceArr[61] = BLACK|BISHOP;
-    board->pieceArr[59] = BLACK|QUEEN;
-    board->pieceArr[60] = BLACK|KING;
-    for(int i = 48; i < 56; i++) board->pieceArr[i] = BLACK|PAWN;
+    board->pieceArr[56] = board->pieceArr[63] = BLACK_ROOK;
+    board->pieceArr[57] = board->pieceArr[62] = BLACK_KNIGHT;
+    board->pieceArr[58] = board->pieceArr[61] = BLACK_BISHOP;
+    board->pieceArr[59] = BLACK_QUEEN;
+    board->pieceArr[60] = BLACK_KING;
+    for(int i = 48; i < 56; i++) board->pieceArr[i] = BLACK_PAWN;
 
     //Castling Rights & Check
     board->flags = 0xF;
 
-    //Turn
     board->turn = WHITE;
 
-    //Checkmate
     board->victor = 0;
 
-    //50 move rule
     board->movesSinceLastChange = 0;
-
-    //History
-    board->moveStackTop = NULL;
 
     board->enPassantSquare = -1;
 
-    //Other
     board->halfMoveCount = 0;
     board->hashCode = getHashCode(board);
     
     memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
     board->repetitionIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
+    
+    memset(board->history, 0, 512 * sizeof(move));
+    board->historyIndex = 0;
 
     return board;
-}
-
-void destroy_board(bitboard* board)
-{
-    while(board->moveStackTop)
-    {
-        moveEntry* tempMove = board->moveStackTop;
-        board->moveStackTop = board->moveStackTop->nextEntry;
-        FREE(tempMove);
-    }
-    FREE(board);
-}
-
-void copy_board(bitboard* dest, bitboard* source, int copyMoves)
-{
-    assert(dest && source);
-
-    //Make sure to free a preexisting move stack to avoid memory leaks.
-    while(dest->moveStackTop)
-    {
-        moveEntry* tempMove = dest->moveStackTop;
-        dest->moveStackTop = dest->moveStackTop->nextEntry;
-        FREE(tempMove);
-    }
-
-    memcpy(dest, source, sizeof(bitboard));
-
-    //History: 
-    if(copyMoves && source->moveStackTop)
-    {
-        dest->moveStackTop = CALLOC(1, sizeof(moveEntry));
-        moveEntry* currentMove = source->moveStackTop;
-        *dest->moveStackTop = *currentMove;
-        dest->moveStackTop->nextEntry = NULL;
-        moveEntry* currentCopy = dest->moveStackTop;
-        currentMove = currentMove->nextEntry;
-        while(currentMove)
-        {
-            moveEntry* nextCopy= CALLOC(1, sizeof(moveEntry));
-            *nextCopy = *currentMove;
-            nextCopy->nextEntry = NULL;
-            currentCopy->nextEntry = nextCopy;
-            currentCopy = nextCopy;
-            currentMove = currentMove->nextEntry;
-        }
-    }
-    else
-    {
-        dest->moveStackTop = NULL;
-    }
-}
-
-void board_clear_square(bitboard* board, int square)
-{
-    assert(board);
-    assert(square >= 0 && square <= 63);
-    
-    int pieceType = findPieceOnSquare(board, square);
-    if(!pieceType) return;
-
-    uint64_t applyMask = ~(1ull<<square);
-    board->hashCode ^= zobrist_keys[64 * (2 * ((pieceType&0xF) - 1) + ISWHITE(pieceType)) + square];
-    if(ISWHITE(pieceType))
-    {
-        if(ISPAWN(pieceType))
-        {
-            board->pawn_w&=applyMask;
-        }
-        else if(ISBISHOP(pieceType))
-        {
-            board->bishop_w&=applyMask;
-        }
-        else if(ISKNIGHT(pieceType))
-        {
-            board->knight_w&=applyMask;
-        }
-        else if(ISROOK(pieceType))
-        {
-            if(KINGSIDE_CASTLE_WHITE(board->flags) && square == 7)
-            {
-                BAN_KINGCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[768];
-            }
-            else if(QUEENSIDE_CASTLE_WHITE(board->flags) && square == 0)
-            {
-                BAN_QUEENCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[769];
-            }
-            board->rook_w&=applyMask;
-        }
-        else if(ISQUEEN(pieceType))
-        {
-            board->queen_w&=applyMask;
-        }
-        else if(ISKING(pieceType))
-        {
-            
-            if(QUEENSIDE_CASTLE_WHITE(board->flags))
-            {
-                BAN_QUEENCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[769];
-            } 
-            if(KINGSIDE_CASTLE_WHITE(board->flags))
-            {
-                BAN_KINGCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[768];
-            }
-
-            board->king_w&=applyMask;
-        }
-
-        board->pieces_w&=applyMask;
-        board->pieces_all&=applyMask;
-    }
-    else if(ISBLACK(pieceType))
-    {
-        if(ISPAWN(pieceType))
-        {
-            board->pawn_b&=applyMask;
-        }
-        else if(ISBISHOP(pieceType))
-        {
-            board->bishop_b&=applyMask;
-        }
-        else if(ISKNIGHT(pieceType))
-        {
-            board->knight_b&=applyMask;
-        }
-        else if(ISROOK(pieceType))
-        {
-            if(KINGSIDE_CASTLE_BLACK(board->flags) && square == 63)
-            {
-                BAN_KINGCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[770];
-            }
-            else if(QUEENSIDE_CASTLE_BLACK(board->flags) && square == 56)
-            {
-                BAN_QUEENCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[771];
-            }
-            board->rook_b&=applyMask;
-        }
-        else if(ISQUEEN(pieceType))
-        {
-            board->queen_b&=applyMask;
-        }
-        else if(ISKING(pieceType))
-        {
-            if(QUEENSIDE_CASTLE_BLACK(board->flags))
-            {
-                BAN_QUEENCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[771];
-                
-            }
-            if(KINGSIDE_CASTLE_BLACK(board->flags))
-            {
-                BAN_KINGCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[770];
-            }
-
-            board->king_b&=applyMask;
-        }
-
-        board->pieces_b&=applyMask;
-        board->pieces_all&=applyMask;
-    }
-    else
-    {
-        if(ISPAWN(pieceType))
-        {
-            board->pawn_w&=applyMask;
-            board->pawn_b&=applyMask;
-        }
-        else if(ISBISHOP(pieceType))
-        {
-            board->bishop_w&=applyMask;
-            board->bishop_b&=applyMask;
-        }
-        else if(ISKNIGHT(pieceType))
-        {
-            board->knight_w&=applyMask;
-            board->knight_b&=applyMask;
-        }
-        else if(ISROOK(pieceType))
-        {
-            if(KINGSIDE_CASTLE_WHITE(board->flags) && square == 7)
-            {
-                BAN_KINGCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[768];
-            }
-            else if(QUEENSIDE_CASTLE_WHITE(board->flags) && square == 0)
-            {
-                BAN_QUEENCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[769];
-            }
-            else if(KINGSIDE_CASTLE_BLACK(board->flags) && square == 63)
-            {
-                BAN_KINGCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[770];
-            }
-            else if(QUEENSIDE_CASTLE_BLACK(board->flags) && square == 56)
-            {
-                BAN_QUEENCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[771];
-            }
-
-            board->rook_w&=applyMask;
-            board->rook_b&=applyMask;
-        }
-        else if(ISQUEEN(pieceType))
-        {
-            board->queen_w&=applyMask;
-            board->queen_b&=applyMask;
-        }
-        else if(ISKING(pieceType))
-        {
-            
-            if(QUEENSIDE_CASTLE_WHITE(board->flags))
-            {
-                BAN_QUEENCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[769];
-            } 
-            if(KINGSIDE_CASTLE_WHITE(board->flags))
-            {
-                BAN_KINGCASTLE_W(board->flags);
-                board->hashCode ^= zobrist_keys[768];
-            }
-            if(QUEENSIDE_CASTLE_BLACK(board->flags))
-            {
-                BAN_QUEENCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[771];
-                
-            }
-            if(KINGSIDE_CASTLE_BLACK(board->flags))
-            {
-                BAN_KINGCASTLE_B(board->flags);
-                board->hashCode ^= zobrist_keys[770];
-            }
-
-            board->king_w&=applyMask;
-            board->king_b&=applyMask;
-        }
-
-        board->pieces_w&=applyMask;
-        board->pieces_b&=applyMask;
-        board->pieces_all&=applyMask;
-    }
-    board->pieceArr[square] = 0;
-}
-
-void board_set(bitboard* board, int square, int piece)
-{
-    assert(board);
-    assert(square >= 0 && square <= 63);
-    assert(piece);
-
-    uint64_t applyMask = (1ull<<square);
-
-    //Avoid duplicate pieces on a square.
-    if(findPieceOnSquare(board, square)) board_clear_square(board, square);
-
-    board->hashCode ^= zobrist_keys[64 * (2 * ((piece&0xF) - 1) + ISWHITE(piece)) + square];
-    if (ISWHITE(piece)) 
-    {
-        switch(piece&0xF)
-        {
-            case PAWN:
-                board->pawn_w|=applyMask;
-                break;
-            case KNIGHT:
-                board->knight_w|=applyMask;
-                break;
-            case BISHOP:
-                board->bishop_w|=applyMask;
-                break;
-            case ROOK:
-                board->rook_w|=applyMask;
-                break;
-            case QUEEN:
-                board->queen_w|=applyMask;
-                break;
-            case KING:
-                board->king_w|=applyMask;
-                break;
-            default:
-                return;
-        }
-        board->pieces_w|=applyMask;
-        board->pieces_all|=applyMask;
-    }
-    else if (ISBLACK(piece))
-    {
-        switch(piece&0xF)
-        {
-            case PAWN:
-                board->pawn_b|=applyMask;
-                break;
-            case KNIGHT:
-                board->knight_b|=applyMask;
-                break;
-            case BISHOP:
-                board->bishop_b|=applyMask;
-                break;
-            case ROOK:
-                board->rook_b|=applyMask;
-                break;
-            case QUEEN:
-                board->queen_b|=applyMask;
-                break;
-            case KING:
-                board->king_b|=applyMask;
-                break;
-            default:
-                return;
-        }   
-        board->pieces_b|=applyMask;
-        board->pieces_all|=applyMask;
-    }
-    else return;
-    
-    board->pieceArr[square] = piece;
 }
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
@@ -734,33 +382,33 @@ void board_print(bitboard* board, int printValues, int printHistory)
 
     int lastMoveStartSquare = -1;
     int lastMoveEndSquare = -1;
-    if(board->moveStackTop)
+    if(board->historyIndex > 0)
     {
-        lastMoveEndSquare = board->moveStackTop->m.endSquare;
-        lastMoveStartSquare = board->moveStackTop->m.startSquare;
+        lastMoveEndSquare = board->history[board->historyIndex - 1].endSquare;
+        lastMoveStartSquare = board->history[board->historyIndex - 1].startSquare;
     }
 
 
     //8 rows x (8 columns of spaces + null terminator)
     char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
 
-    piece_print(boardArray, board->pawn_w, 'p');
-    piece_print(boardArray, board->pawn_b, 'P');
+    piece_print(boardArray, board->pieces[WHITE_PAWN], 'p');
+    piece_print(boardArray, board->pieces[BLACK_PAWN], 'P');
 
-    piece_print(boardArray, board->rook_w, 'r');
-    piece_print(boardArray, board->rook_b, 'R');
+    piece_print(boardArray, board->pieces[WHITE_ROOK], 'r');
+    piece_print(boardArray, board->pieces[BLACK_ROOK], 'R');
 
-    piece_print(boardArray, board->knight_w, 'n');
-    piece_print(boardArray, board->knight_b, 'N');
+    piece_print(boardArray, board->pieces[WHITE_KNIGHT], 'n');
+    piece_print(boardArray, board->pieces[BLACK_KNIGHT], 'N');
 
-    piece_print(boardArray, board->bishop_w, 'b');
-    piece_print(boardArray, board->bishop_b, 'B');
+    piece_print(boardArray, board->pieces[WHITE_BISHOP], 'b');
+    piece_print(boardArray, board->pieces[BLACK_BISHOP], 'B');
 
-    piece_print(boardArray, board->queen_w, 'q');
-    piece_print(boardArray, board->queen_b, 'Q');
+    piece_print(boardArray, board->pieces[WHITE_QUEEN], 'q');
+    piece_print(boardArray, board->pieces[BLACK_QUEEN], 'Q');
 
-    piece_print(boardArray, board->king_w, 'k');
-    piece_print(boardArray, board->king_b, 'K');
+    piece_print(boardArray, board->pieces[WHITE_KING], 'k');
+    piece_print(boardArray, board->pieces[BLACK_KING], 'K');
 
     printf("\n");
     printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
@@ -808,13 +456,13 @@ void values_print(bitboard* board)
     assert(board);
 
     printf("ALL: %016llx\n", board->pieces_all);
-    printf("WHITE/BLACK: %016llx | %016llx\n", board->pieces_w, board->pieces_b);
-    if(board->pawn_w || board->pawn_b) printf("PAWN: %016llx | %016llx\n", board->pawn_w, board->pawn_b);
-    if(board->knight_w || board->knight_b) printf("KNIGHT: %016llx | %016llx\n", board->knight_w, board->knight_b);
-    if(board->bishop_w || board->bishop_b) printf("BISHOP: %016llx | %016llx\n", board->bishop_w, board->bishop_b);
-    if(board->rook_w || board->rook_b) printf("ROOK: %016llx | %016llx\n", board->rook_w, board->rook_b);
-    if(board->queen_w || board->queen_b) printf("QUEEN: %016llx | %016llx\n", board->queen_w, board->queen_b);
-    printf("KING: %016llx | %016llx\n\t(%d) (%d)\n", board->king_w, board->king_b, board->kingSquare_w, board->kingSquare_b);
+    printf("WHITE/BLACK: %016llx | %016llx\n", board->pieces_side[WHITE], board->pieces_side[BLACK]);
+    if(board->pieces[WHITE_PAWN] || board->pieces[BLACK_PAWN]) printf("PAWN: %016llx | %016llx\n", board->pieces[WHITE_PAWN], board->pieces[BLACK_PAWN]);
+    if(board->pieces[WHITE_KNIGHT] || board->pieces[BLACK_KNIGHT]) printf("KNIGHT: %016llx | %016llx\n", board->pieces[WHITE_KNIGHT], board->pieces[BLACK_KNIGHT]);
+    if(board->pieces[WHITE_BISHOP] || board->pieces[BLACK_BISHOP]) printf("BISHOP: %016llx | %016llx\n", board->pieces[WHITE_BISHOP], board->pieces[BLACK_BISHOP]);
+    if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016llx | %016llx\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
+    if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016llx | %016llx\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
+    printf("KING: %016llx | %016llx\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare_w, board->kingSquare_b);
 
     if(board->flags&0xF)
     {
@@ -875,39 +523,24 @@ int moves_push(bitboard* board, move m)
 {
     assert(board);
 
-    moveEntry* entry = CALLOC(1, sizeof(moveEntry));
-    entry->m = m;
-    entry->flags = board->flags;
-    entry->prevEnPassantSquare = board->enPassantSquare;
-    entry->previousMovesSinceLastChange = board->movesSinceLastChange;
+    board->history[board->historyIndex++] = m;
 
-    if(!board->moveStackTop)
-    {
-        board->moveStackTop = entry;
-    }
-    else
-    {
-        entry->nextEntry = board->moveStackTop;
-        board->moveStackTop = entry;
-    }
-    return 0;
+    return board->historyIndex;
 }
 
-moveEntry* moves_pop(bitboard* board)
+move moves_pop(bitboard* board)
 {
     assert(board);
 
-    moveEntry* tempEntry = board->moveStackTop;
-    if(!tempEntry) return NULL;
-    board->moveStackTop = board->moveStackTop->nextEntry;
-    tempEntry->nextEntry = NULL;
-    return tempEntry;
+    if(board->historyIndex == 0) return (move){0};
+
+    return board->history[--board->historyIndex];
 }
 
 
 int containsRepetition(bitboard* board)
 {
-    int index =board->repetitionIndex - 1;
+    int index = board->repetitionIndex - 1;
     int count = 1;
     uint64_t checkedVal = board->repetitionHashCodes[index];
     for(index = index - 4; index >= 0; index -= 2)
@@ -921,31 +554,24 @@ int containsRepetition(bitboard* board)
     return 0;
 }
 
-void recursivePrint(moveEntry* entry)
-{
-    if(entry)
-    {
-        recursivePrint(entry->nextEntry);
-
-        char startSquareName[3] = {'\0'};
-        char endSquareName[3] = {'\0'};
-        getSquareName(entry->m.startSquare, startSquareName);
-        getSquareName(entry->m.endSquare, endSquareName);
-
-        printf("%s%s", startSquareName, endSquareName);
-        if(entry->m.promoteTo)
-        {
-            if(ISKNIGHT(entry->m.promoteTo)) printf("n");
-            else if(ISBISHOP(entry->m.promoteTo)) printf("b");
-            else if(ISROOK(entry->m.promoteTo)) printf("r");
-            else if(ISQUEEN(entry->m.promoteTo)) printf("q");
-        }
-        printf(" ");
-    }
-}
-
 void dumpMoves(bitboard* board)
 {
-    recursivePrint(board->moveStackTop);
+    char startSquareName[3] = {'\0'};
+    char endSquareName[3] = {'\0'};
+    for(int index = 0; index < board->historyIndex; index++)
+    {
+        getSquareName(board->history[index].startSquare, startSquareName);
+        getSquareName(board->history[index].endSquare, endSquareName);
+
+        printf("%s%s", startSquareName, endSquareName);
+        if(board->history[index].promoteTo)
+        {
+            if(ISKNIGHT(board->history[index].promoteTo)) printf("n");
+            else if(ISBISHOP(board->history[index].promoteTo)) printf("b");
+            else if(ISROOK(board->history[index].promoteTo)) printf("r");
+            else if(ISQUEEN(board->history[index].promoteTo)) printf("q");
+        }
+        printf(" ");
+    }   
     printf("\n");
 }

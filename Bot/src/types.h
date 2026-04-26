@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <time.h>
 
+//Avoid the 1ull << x calls.
+#define singleBitMask(x) (1ull << (x))
+
 typedef struct move {
     int8_t startSquare;
     int8_t endSquare;
@@ -11,26 +14,18 @@ typedef struct move {
     int8_t promoteTo;
     int8_t capturedPiece;
     int8_t capturedPieceSquare; //Not always the same as endsquare because of en passant
-} move;
-
-typedef struct moveEntry {
-    move m;
     
     int8_t prevEnPassantSquare;
-    int previousMovesSinceLastChange;
-    
-    //Flags from the previous board state.
-    int flags; 
-    struct moveEntry* nextEntry;
-
-} moveEntry;
+    uint8_t previousMovesSinceLastChange;
+    uint8_t prevFlags; 
+} move;
 
 typedef struct table_entry_tt {
     uint64_t hashCode;
     clock_t age;
     double evaluation;
-    int evaluationDepth;
-    int nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
+    uint8_t evaluationDepth;
+    int8_t nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
     move bestMove;
     uint8_t checkSum;
 } table_entry_tt;
@@ -41,39 +36,19 @@ typedef struct hashtable_tt {
 } hashtable_tt;
 
 //a1 = 0, h1 = 7
-//a2 = 8, h2 = 15
-//a3 = 16, h3 = 23
-//a4 = 24, h4 = 31
-//a5 = 32, h5 = 39
-//a6 = 40, h6 = 47
-//a7 = 48, h7 = 55
+//...
 //a8 = 56, h8 = 63
+#define PIECE_COUNT 12
 typedef struct bitboard {
-    uint64_t pawn_w;
-    uint64_t knight_w;
-    uint64_t bishop_w;
-    uint64_t rook_w;
-    uint64_t queen_w;
-    
-    uint64_t pawn_b;
-    uint64_t knight_b;
-    uint64_t bishop_b;
-    uint64_t rook_b;
-    uint64_t queen_b;
+    uint64_t pieces[PIECE_COUNT];
 
-    uint64_t king_w;
-    uint64_t king_b;
-
-    uint64_t pieces_w;
-    uint64_t pieces_b;
+    uint64_t pieces_side[2];
     uint64_t pieces_all;
 
-    //Constantly referenced for check checking. 0-63
-    int kingSquare_b;
-    int kingSquare_w;
-
-    //Fast lookups of "What piece is on square X"
     uint8_t pieceArr[64];
+    uint8_t kingSquare_b;
+    uint8_t kingSquare_w;
+
 
     /**
      * flags&1 == canKingsideCastle_w
@@ -83,28 +58,25 @@ typedef struct bitboard {
      * flags&16 == in_check_w
      * flags&32 == in_check_b
      */ 
-    int flags;
+    uint8_t flags;
 
-    //Turn
-    int turn;
+    uint8_t turn;
 
-    //Checkmate
-    int victor;
+    uint8_t victor;
 
-    //50 move rule
-    int movesSinceLastChange;
+    uint8_t movesSinceLastChange;
 
-    //History
-    moveEntry* moveStackTop;
+    move history[512];
+    uint8_t historyIndex;
     uint64_t repetitionHashCodes[128];
     uint8_t repetitionIndex;
 
     //A pawn can capture to this square.
     //[0,63] OR -1 if empty.
-    int enPassantSquare;
+    int8_t enPassantSquare;
 
     //Other
-    int halfMoveCount;
+    uint16_t halfMoveCount;
 
     uint64_t hashCode;
 } bitboard;
@@ -113,7 +85,7 @@ typedef struct magic {
     uint64_t mask;
     uint64_t magic;
     uint64_t* attacks;
-    int shiftOffset;
+    int8_t shiftOffset;
 } magic;
 
 #define INPUT_BITS 20480

@@ -12,7 +12,7 @@ network_weights_playing* playerNNUE = NULL;
 
 void load_playingWeights()
 {
-    if(!playerNNUE) playerNNUE = CALLOC(1, sizeof(network_weights_training));
+    if(!playerNNUE) playerNNUE = calloc(1, sizeof(network_weights_playing));
 
     FILE* input = fopen("import/NNUE_Player.bin", "rb");
     if(input)
@@ -33,7 +33,7 @@ void load_playingWeights()
             quantizeWeights(trainingNNUE, playerNNUE);
             save_trainingWeights();
 
-            FREE(trainingNNUE);
+            free(trainingNNUE);
             trainingNNUE = NULL;
         }
     }

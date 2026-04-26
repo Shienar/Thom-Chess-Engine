@@ -11,8 +11,10 @@
 #include <omp.h>
 
 /**
- * Bugs:
- *  - occasional repetition table errors caused by inconsistent moving / unmoving.
+ * TODO:
+ *  - Larger bitboard size seems to be causing stack memory issues in 
+ *  some functions. Memory is silently breaking and causing inconsistent
+ *  issues. This mainly happens in the calculateBestMove() function.
  * 
  */
 int main(int argc, char** argv)
@@ -39,7 +41,6 @@ int main(int argc, char** argv)
             printf("\n\n");
             printf("--help\t\tPrints out this message\n");
             printf("--debug\t\tEnable debug messages\n");
-            printf("--leaks\t\tTrack memory leaks. Heavily reduces performance\n");
             printf("-v\t\tVerbose board information\n");
             printf("--history\tPrint's recent moves\n");
             printf("--black\t\tPlay as black\n");
@@ -60,7 +61,6 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--black") == 0) player_color = BLACK;
         else if(strcmp(argv[i], "--depth") == 0) { i++; depth = min(atoi(argv[i]), MAX_DEPTH - 5); }
         else if(strcmp(argv[i], "--debug") == 0) enableDebugMessages();
-        else if(strcmp(argv[i], "--leaks") == 0) enableLeakTracking();
         else if(strcmp(argv[i], "--history") == 0) printHistory = 1;
         else if(strcmp(argv[i], "--human") == 0) { onlyHumans = 1; onlyEngines = 0; }
         else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
@@ -73,9 +73,8 @@ int main(int argc, char** argv)
             load_playingWeights(); 
             quantizeWeights(trainingNNUE, playerNNUE);
             save_playingWeights(); 
-            FREE(trainingNNUE);
-            FREE(playerNNUE);
-            dump_allocations();
+            free(trainingNNUE);
+            free(playerNNUE);
             exit(0);
         }
         else if(strcmp(argv[i], "--perft") == 0) shouldPerft = 1;
@@ -86,6 +85,7 @@ int main(int argc, char** argv)
     srand(time(NULL));
 
     initMagics();
+    initZobristPieceKeys();
     initPawnAttacks();
     initKnightMoveTable();
     initKingMoveTable();
@@ -93,7 +93,7 @@ int main(int argc, char** argv)
     if(shouldTrain)
     {
         load_trainingWeights();
-        trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        trainingAccumulator = calloc(1, sizeof(accumulator_training));
 
         train(saveEveryNBlocks, shouldTrain, 1e-3, trainingAccumulator);
         
@@ -103,10 +103,9 @@ int main(int argc, char** argv)
         quantizeWeights(trainingNNUE, playerNNUE);
         save_playingWeights();
 
-        FREE(trainingNNUE);
-        FREE(playerNNUE);
+        free(trainingNNUE);
+        free(playerNNUE);
 
-        dump_allocations();
         exit(0);
     }
 
@@ -114,11 +113,7 @@ int main(int argc, char** argv)
     if(fenLineNumber > 0)
     {
         board = create_board_from_fen("import/FEN.txt", fenLineNumber);
-        if(!board)
-        {
-            dump_allocations();
-            exit(1);
-        }
+        if(!board) exit(1);
     }
     else board = create_board();
 
@@ -132,7 +127,7 @@ int main(int argc, char** argv)
         double NPS = result / seconds;
 
         printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-        destroy_board(board);
+        free(board);
         exit(0);
     }
 
@@ -142,7 +137,7 @@ int main(int argc, char** argv)
     {
         transpositionTable = create_hashTable_tt();
         load_playingWeights();
-        playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+        playerAccumulator = calloc(1, sizeof(accumulator_playing));
         playingRefreshTable = createPlayingRefreshTable();
         loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
         tb_init("./sygyzy/");
@@ -165,8 +160,7 @@ int main(int argc, char** argv)
             }
             else if(buffer[0] == 'u')
             {
-                moveEntry* tempMove = unmove(board);
-                if(tempMove) FREE(tempMove);
+                unmove(board);
                 board_print(board, verbose, printHistory);
             }
             else
@@ -185,36 +179,38 @@ int main(int argc, char** argv)
             board_print(board, verbose, printHistory);
         }
         
-        if(board->victor == WHITE)
+        if(board->victor)
         {
-            printf("White wins!\n\n");
-            break;
-        }
-        else if(board->victor == BLACK)
-        {
-            printf("Black wins!\n\n");
-            break;
-        }
-        else if (ISDRAW(board->victor))
-        {
-            printf("Draw!");
-            if(board->victor&STALEMATED_WHITE) printf(" (White stalemated)\n\n");
-            else if(board->victor&STALEMATED_BLACK) printf(" (Black stalemated)\n\n");
-            else if(board->victor&THREEFOLD) printf(" (Threefold Repetition)\n\n");
-            else if(board->victor&FIFTYMOVERULE) printf(" (50-move rule)\n\n");
-            else if(board->victor&INSUFFICIENT_MATERIAL) printf(" (Insufficient Material)\n\n");
-            break;
+            if(board->victor == VICTOR_WHITE)
+            {
+                printf("White wins!\n\n");
+                break;
+            }
+            else if(board->victor == VICTOR_BLACK)
+            {
+                printf("Black wins!\n\n");
+                break;
+            }
+            else
+            {
+                printf("Draw!");
+                if(board->victor == VICTOR_DRAW_STALEMATE_WHITE) printf(" (White stalemated)\n\n");
+                else if(board->victor == VICTOR_DRAW_STALEMATE_BLACK) printf(" (Black stalemated)\n\n");
+                else if(board->victor == VICTOR_DRAW_THREEFOLD) printf(" (Threefold Repetition)\n\n");
+                else if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) printf(" (50-move rule)\n\n");
+                else if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) printf(" (Insufficient Material)\n\n");
+                break;
+            }
         }
     }
 
     if(!onlyHumans)
     {
-        FREE(playerNNUE);
-        FREE(playerAccumulator);
+        free(playerNNUE);
+        free(playerAccumulator);
         destroyRefreshTable(playingRefreshTable, PLAYING);
         destroy_hashTable_tt(transpositionTable);
         tb_free();
     }
-    destroy_board(board);
-    dump_allocations();
+    free(board);
 }

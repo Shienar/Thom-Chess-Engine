@@ -27,9 +27,10 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     {
         if(!moveFromStruct(board, moveList[index]))
         {
-            int branchNodes = perft(board, depth - 1, maxDepth, verbose);
+            int branchNodes = perft(board, depth - 1, maxDepth, 0);
             nodes += branchNodes;
-            if (verbose && depth == maxDepth) {
+            if (verbose) 
+            {
                 char fromSquare[3] = {'\0'};
                 char toSquare[3] = {'\0'};
                 getSquareName(moveList[index].startSquare, fromSquare);
@@ -50,33 +51,6 @@ double evaluate(bitboard* board, void* accumulator, int accumulatorType)
     assert(board);
     assert(accumulator);
 
-    if(ISDRAW(board->victor)) 
-    {
-        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
-        int scale;
-        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
-        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
-        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
-
-        if(board->victor&STALEMATED_WHITE || board->victor&STALEMATED_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
-        if(board->victor&THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
-        if(board->victor&FIFTYMOVERULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
-        if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
-
-        DEBUG("Unhandled draw condition.");
-        return 0.0;
-    }
-    else if(board->victor == WHITE) 
-    {
-        if(board->turn == WHITE) return INT8_MAX + 2;
-        else return INT8_MIN - 1;
-    }
-    else if(board->victor == BLACK) 
-    {
-        if(board->turn == BLACK) return INT8_MAX + 2;
-        else return -INT8_MIN - 1;
-    }
-
     if(accumulatorType == TRAINING) return (double) forwardPropagate_Float(board->turn, (accumulator_training*) accumulator, 1);
     else if(accumulatorType == PLAYING) return (double) forwardPropagate_Int(board->turn, (accumulator_playing*) accumulator, 1);
     
@@ -89,28 +63,34 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, void* accu
     nodesVisited++;
     #endif
 
-    if(board->victor == WHITE) 
+    if(board->victor)
     {
-        if(board->turn == WHITE) return INT64_MAX;
-        else return INT64_MIN;
-    }
-    if(board->victor == BLACK) 
-    {
-        if(board->turn == BLACK) return INT64_MAX;
-        else return INT64_MIN;
-    }
-    if(ISDRAW(board->victor)) 
-    {
-        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
-        int scale;
-        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
-        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
-        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
+        if(board->victor == VICTOR_WHITE)
+        {
+            if(board->turn == WHITE) return INT8_MAX + 2;
+            else return INT8_MIN - 1;
+        }
+        else if(board->victor == VICTOR_BLACK)
+        {
+            if(board->turn == BLACK) return INT8_MAX + 2;
+            else return -INT8_MIN - 1;
+        }
+        else
+        {
+            //Draws are less desirable in the early/middlegame and more desirable in the lategame.
+            int scale;
+            if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
+            else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
+            else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
 
-        if(board->victor&STALEMATED_WHITE || board->victor&STALEMATED_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
-        if(board->victor&THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
-        if(board->victor&FIFTYMOVERULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
-        if(board->victor&INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+            if(board->victor == VICTOR_DRAW_STALEMATE_WHITE || board->victor == VICTOR_DRAW_STALEMATE_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
+            if(board->victor == VICTOR_DRAW_THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
+            if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
+            if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+
+            DEBUG("Unhandled draw condition.");
+            return 0.0;
+        }
     }
 
     double best;
@@ -127,17 +107,20 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, void* accu
     if(depth == 0 || best >= beta) return best;
     if(best > alpha) alpha = best;
 
-    //Final 5 layers are reserved for quiescent search and are filled in reverse order.
     move moveList[256];
     int entryCount = generateMoveList(moveList, board, 1);
     if(entryCount)
     {
-        int moveScores[128] = {0};
+        int moveScores[256] = {0};
         for(int i = 0; i < entryCount; i++)
         {
             move m = moveList[i];
-            if(m.capturedPiece) moveScores[i] = (0xF&m.capturedPiece) - (0xF&m.piece);
-            else moveScores[i] = (0xF&m.piece);
+
+            int pieceScore = PIECE(m.piece);
+            if(pieceScore == KING) pieceScore = 1;
+            
+            if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = (PIECE(m.capturedPiece)) - pieceScore;
+            else moveScores[i] = pieceScore;
         }
 
         for(int i = 0; i < entryCount; i++)
@@ -157,11 +140,11 @@ double quiesce(bitboard* board, double alpha, double beta, int depth, void* accu
             move currentMove = moveList[moveIndex];
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, &currentMove, 0, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, currentMove, 0, accumulator, accumulatorTable, accumulatorType);
                 double score = -quiesce(board, -beta, -alpha, depth - 1, accumulator, accumulatorTable, accumulatorType);
 
                 unmove(board);
-                updateMoveAccumulator(board, &currentMove, 1, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, currentMove, 1, accumulator, accumulatorTable, accumulatorType);
 
                 if(score >= beta)
                 {
@@ -182,6 +165,36 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
     #ifdef COUNT_NODES_VISITED 
     nodesVisited++;
     #endif
+
+    if(board->victor)
+    {
+        if(board->victor == VICTOR_WHITE)
+        {
+            if(board->turn == WHITE) return INT8_MAX + 2;
+            else return INT8_MIN - 1;
+        }
+        else if(board->victor == VICTOR_BLACK)
+        {
+            if(board->turn == BLACK) return INT8_MAX + 2;
+            else return -INT8_MIN - 1;
+        }
+        else
+        {
+            //Draws are less desirable in the early/middlegame and more desirable in the lategame.
+            int scale;
+            if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
+            else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
+            else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
+
+            if(board->victor == VICTOR_DRAW_STALEMATE_WHITE || board->victor == VICTOR_DRAW_STALEMATE_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
+            if(board->victor == VICTOR_DRAW_THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
+            if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
+            if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+
+            DEBUG("Unhandled draw condition.");
+            return 0.0;
+        }
+    }
 
     //Transposition table
     table_entry_tt* old_tt_entry = NULL;
@@ -226,9 +239,13 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
         for(int i = 0; i < entryCount; i++)
         {
             move m = moveList[i];
+ 
+            int pieceScore = PIECE(m.piece);
+            if(pieceScore == KING) pieceScore = 1;
+
             if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) moveScores[i] = INT32_MAX;
-            else if(m.capturedPiece) moveScores[i] =  (0xF&m.capturedPiece) - (0xF&m.piece);
-            else moveScores[i] = (0xF&m.piece);
+            else if(m.capturedPiece != EMPTY_PIECE) moveScores[i] =  (PIECE(m.capturedPiece)) - pieceScore;
+            else moveScores[i] = pieceScore;
         }
 
         double bestScore = -DBL_MAX;
@@ -248,7 +265,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
 
             if(!moveFromStruct(board, moveList[moveIndex]))
             {
-                updateMoveAccumulator(board, &moveList[moveIndex], 0, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, moveList[moveIndex], 0, accumulator, accumulatorTable, accumulatorType);
                 if(i == 0)
                 {
                     score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, accumulator, accumulatorTable, accumulatorType);
@@ -261,7 +278,7 @@ double principalVariationSearch(bitboard* board, double alpha, double beta, int 
                 }
                 
                 unmove(board);
-                updateMoveAccumulator(board, &moveList[moveIndex], 1, accumulator, accumulatorTable, accumulatorType);
+                updateMoveAccumulator(board, moveList[moveIndex], 1, accumulator, accumulatorTable, accumulatorType);
                 
                 if(score >= beta)
                 {
@@ -370,10 +387,10 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
 
         struct TbRootMoves moveResults = {0};
 
-        int result = tb_probe_root_dtz(board->pieces_w, board->pieces_b, 
-                                        board->king_b|board->king_w, board->queen_b|board->queen_w, 
-                                        board->rook_b|board->rook_w, board->bishop_b|board->bishop_w,
-                                        board->knight_b|board->knight_w, board->pawn_b|board->pawn_w,
+        int result = tb_probe_root_dtz(board->pieces_side[WHITE], board->pieces_side[BLACK], 
+                                        board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
+                                        board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
+                                        board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
                                         (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
         
         if(!result) DEBUG("Failed to probe sygyzy.");
@@ -407,7 +424,7 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
         }
     }
 
-    move* principalVariation = CALLOC(maxDepth, sizeof(move));
+    move* principalVariation = calloc(maxDepth, sizeof(move));
     move* tempPVTable = NULL;
 
     clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
@@ -418,7 +435,7 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
 
     clock_t terminateFlags[HELPER_THREAD_COUNT] = {LONG_MAX}; //These are passed as end times for the thread searches. Cancel threads by setting values to 0.
     double threadScores[HELPER_THREAD_COUNT] = {0};
-    bitboard threadBoards[HELPER_THREAD_COUNT] = {0};
+    bitboard *threadBoards = calloc(HELPER_THREAD_COUNT, sizeof(bitboard));
     for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
     {
         params[i].pvTable = NULL;
@@ -436,12 +453,12 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
     if(playerNNUE)
     {
         accumulator = playerAccumulator;
-        if(!accumulator) accumulator = playerAccumulator = CALLOC(1, sizeof(accumulator_playing));
+        if(!accumulator) accumulator = playerAccumulator = calloc(1, sizeof(accumulator_playing));
         accumulatorTable = playingRefreshTable;
         if(!accumulatorTable) accumulatorTable = playingRefreshTable = createPlayingRefreshTable();
         
-        threadByteAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
-        threadByteRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_playing_refreshTable*));
+        threadByteAccumulators = calloc(HELPER_THREAD_COUNT, sizeof(accumulator_playing));
+        threadByteRefreshTables = calloc(HELPER_THREAD_COUNT, sizeof(accumulator_playing_refreshTable*));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
             threadByteRefreshTables[i] = createPlayingRefreshTable();
@@ -453,12 +470,12 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
     else if(trainingNNUE)
     {
         accumulator = trainingAccumulator;
-        if(!accumulator) accumulator = trainingAccumulator = CALLOC(1, sizeof(accumulator_training));
+        if(!accumulator) accumulator = trainingAccumulator = calloc(1, sizeof(accumulator_training));
         accumulatorTable = trainingRefreshTable;
         if(!accumulatorTable) accumulatorTable = trainingRefreshTable = createTrainingRefreshTable();
         
-        threadFloatAccumulators = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training));
-        threadFloatRefreshTables = CALLOC(HELPER_THREAD_COUNT, sizeof(accumulator_training_refreshTable*));
+        threadFloatAccumulators = calloc(HELPER_THREAD_COUNT, sizeof(accumulator_training));
+        threadFloatRefreshTables = calloc(HELPER_THREAD_COUNT, sizeof(accumulator_training_refreshTable*));
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
             threadFloatRefreshTables[i] = createTrainingRefreshTable();
@@ -475,7 +492,7 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
         if(clock() > endTime) break;
-        tempPVTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+        tempPVTable = calloc(0.5*currentDepth*(currentDepth + 1), sizeof(move));
         copyNMoves(tempPVTable, principalVariation, currentDepth);
 
         //Initialize helper threadss
@@ -483,10 +500,10 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
         {
             for(int i = 0; i < HELPER_THREAD_COUNT; i++)
             {
-                copy_board(params[i].board, board, 1);
+                memcpy(params[i].board, board, sizeof(bitboard));
                 params[i].depth = currentDepth + (i%2);
                 *params[i].endTime = LONG_MAX;
-                params[i].pvTable = CALLOC(0.5*currentDepth*(currentDepth + 1), sizeof(move));
+                params[i].pvTable = calloc(0.5*currentDepth*(currentDepth + 1), sizeof(move));
                 copyNMoves(params[i].pvTable, principalVariation, currentDepth);
 
                 helperThreads[i] = CreateThread(NULL, 0, helperThreadFunction, &params[i], 0, &helperThreadID[i]);
@@ -583,28 +600,29 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
 
         if(tempPVTable[0].startSquare != tempPVTable[0].endSquare) copyNMoves(principalVariation, tempPVTable, currentDepth);
 
-        FREE(tempPVTable);
+        free(tempPVTable);
         tempPVTable = NULL;
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
         {
-            FREE(params[i].pvTable);
+            free(params[i].pvTable);
             params[i].pvTable = NULL;
         }
     }
 
-    if(tempPVTable) FREE(tempPVTable);
+    free(threadBoards);
+    if(tempPVTable) free(tempPVTable);
 
     if(playerNNUE)
     {
-        FREE(threadByteAccumulators);
+        free(threadByteAccumulators);
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) destroyRefreshTable(threadByteRefreshTables[i], PLAYING);
-        FREE(threadByteRefreshTables);
+        free(threadByteRefreshTables);
     }
     else if(trainingNNUE)
     {
-        FREE(threadFloatAccumulators);
+        free(threadFloatAccumulators);
         for(int i = 0; i < HELPER_THREAD_COUNT; i++) destroyRefreshTable(threadFloatRefreshTables[i], TRAINING);
-        FREE(threadFloatRefreshTables);
+        free(threadFloatRefreshTables);
     }
 
     move bestMove = principalVariation[0];
@@ -626,7 +644,7 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds, int ne
     }
     #endif
 
-    FREE(principalVariation);
+    free(principalVariation);
     principalVariation = NULL;
 
     return bestMove;

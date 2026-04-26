@@ -25,8 +25,8 @@ CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
-# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -PgetBookMove -b > output.txt
-CFLAGS += -pg -no-pie
+# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
+# CFLAGS += -pg -no-pie
 
 all: clean $(TARGET)
 
@@ -34,4 +34,4 @@ $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES) $(LIBS)
 
 clean:
-	rm -f $(TARGET) *~ leaks.txt
+	rm -f $(TARGET)

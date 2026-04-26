@@ -5,11 +5,7 @@
 
 /**
  * - Indexes 0-767 are for piece-square values.
- *  - Index = 64 * piece type * row + file
- *      - row/file are 0-7
- *          - My functions return 1-8. Subtract 1 from them.
- *      - Piece Types can be translated with my enums using the following formula:
- *          - 2*(ENUM - 1) + 1 * ISWHITE(piece)
+ *  - Index = 64 * piece type + square
  * - Index 768 = white can kingside castle
  * - Index 769 = white can queenside castle
  * - Index 770 = black can kingside castle
@@ -217,6 +213,39 @@ const uint64_t zobrist_keys[781] = {
    0xF8D626AAAF278509ull,
 };
 
+uint64_t zobrist_piece_keys[PIECE_COUNT][64];
+/**
+ * - Indexes 0-767 are for piece-square values.
+ *  - Index = 64 * piece type + square
+ *      - Piece types follow polyglot's convention:
+                black pawn    0
+                white pawn    1
+                black knight  2
+                white knight  3
+                black bishop  4
+                white bishop  5
+                black rook    6
+                white rook    7
+                black queen   8
+                white queen   9
+                black king   10
+                white king   11
+ *      - I convert them to my convention by xor'ing them by one,
+ *      mapping them to the zobrist_piece_keys table that I will
+ *      be using.
+ * 
+ */
+void initZobristPieceKeys()
+{
+    for(int piece = 0; piece < PIECE_COUNT; piece++)
+    {
+        for(int square = 0; square < 64; square++)
+        {
+            zobrist_piece_keys[piece][square] = zobrist_keys[64 * (piece^1) + square];
+        }
+    }
+}
+
 uint64_t getEnPassantHash(bitboard* board)
 {
     if (board->enPassantSquare == -1) return 0;
@@ -227,16 +256,16 @@ uint64_t getEnPassantHash(bitboard* board)
 
     int capturedPawnSquare = (epRow == 5) ? epSquare + 8 : epSquare - 8;
 
-    if (getColumn(capturedPawnSquare) > 0) borderingPawnMask |= (1ull << (capturedPawnSquare - 1));
-    if (getColumn(capturedPawnSquare) < 7) borderingPawnMask |= (1ull << (capturedPawnSquare + 1));
+    if (getColumn(capturedPawnSquare) > 0) borderingPawnMask |= singleBitMask(capturedPawnSquare - 1);
+    if (getColumn(capturedPawnSquare) < 7) borderingPawnMask |= singleBitMask(capturedPawnSquare + 1);
 
     if (epRow == 5) 
     {
-        if (borderingPawnMask & board->pawn_w) return zobrist_keys[772 + getColumn(epSquare)]; 
+        if (borderingPawnMask & board->pieces[WHITE_PAWN]) return zobrist_keys[772 + getColumn(epSquare)]; 
     } 
     else
     {
-        if (borderingPawnMask & board->pawn_b) return zobrist_keys[772 + getColumn(epSquare)];
+        if (borderingPawnMask & board->pieces[BLACK_PAWN]) return zobrist_keys[772 + getColumn(epSquare)];
     }
 
     return 0;
@@ -256,7 +285,7 @@ uint64_t getHashCode(bitboard* board)
 
         piece = findPieceOnSquare(board, square);
 
-        if(piece)  returnValue^=zobrist_keys[64 * ((2 * ((piece&0xF) - 1)) + ISWHITE(piece)) + (8*(getRow(square))) + (getColumn(square))];
+        if(piece != EMPTY_PIECE)  returnValue^=zobrist_piece_keys[piece][square];
 
         mask&=(mask - 1);
     }

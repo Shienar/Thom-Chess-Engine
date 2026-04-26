@@ -1,7 +1,7 @@
 #ifndef ACCUMULATOR
 #define ACCUMULATOR
 
-#include "../structs.h"
+#include "../types.h"
 #include "neuralnet.h"
 
 #define TRAINING 1
@@ -35,7 +35,7 @@ void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLaye
 void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorType, int color);
 
 
-void updateMoveAccumulator(bitboard* board, move* lastMove, int shouldUndoMove, void* accumulator, void* refreshTable, int accumulatorType);
+void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, void* accumulator, void* refreshTable, int accumulatorType);
 
 // Updates an accumulator & board until it reaches the same state as the currentboard.
 // Both boards must have the same kingsquares.

@@ -1,20 +1,21 @@
 #include "transpositiontable.h"
 #include "../debug.h"
+#include "../board/bitboard.h"
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;
 
 hashtable_tt* create_hashTable_tt()
 {
-    hashtable_tt* newTable = CALLOC(1, sizeof(hashtable_tt));
+    hashtable_tt* newTable = calloc(1, sizeof(hashtable_tt));
     if(!newTable) return NULL;
 
     newTable->capacity = TT_TABLE_SIZE;
 
-    newTable->array = CALLOC(newTable->capacity, sizeof(table_entry_tt));
+    newTable->array = calloc(newTable->capacity, sizeof(table_entry_tt));
     if(!newTable->array)
     {
-        FREE(newTable);
+        free(newTable);
         return NULL;
     }
 
@@ -24,8 +25,8 @@ hashtable_tt* create_hashTable_tt()
 void destroy_hashTable_tt(hashtable_tt* ht)
 {
     if(!ht) return;
-    if(ht->array) FREE(ht->array);
-    FREE(ht);
+    if(ht->array) free(ht->array);
+    free(ht);
 }
 
 uint8_t generateChecksum(table_entry_tt* entry)

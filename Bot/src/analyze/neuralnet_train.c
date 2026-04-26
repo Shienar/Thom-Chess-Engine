@@ -9,12 +9,8 @@
 #include "omp.h"
 
 network_weights_training* trainingNNUE = NULL;
-float num_consecutive_increases = 0; //increases in loss / MSE are bad
-float num_consecutive_decreases = 0;
 
-/**
- * Box-Muller transform.
- */
+//Box-Muller transform.
 void sampleNormalDistribution(float* dest, double standardDeviation) 
 {
     double u1; 
@@ -24,7 +20,7 @@ void sampleNormalDistribution(float* dest, double standardDeviation)
 
 void load_trainingWeights()
 {
-    if(!trainingNNUE) trainingNNUE = CALLOC(1, sizeof(network_weights_training));
+    if(!trainingNNUE) trainingNNUE = calloc(1, sizeof(network_weights_training));
 
     FILE* input = fopen("import/NNUE_Training.bin", "rb");
     if(input)
@@ -406,7 +402,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
     assert(floatAccumulator);
         
 
-    int* blockNumbers = CALLOC(FILE_COUNT, sizeof(int));
+    int* blockNumbers = calloc(FILE_COUNT, sizeof(int));
     for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
 
     short* activeInputs_A = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
@@ -470,27 +466,27 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
 
                     uint64_t inputs[20] = {0};
 
-                    inputs[0] = board->pawn_w;
-                    inputs[1] = board->knight_w;
-                    inputs[2] = board->bishop_w;
-                    inputs[3] = board->rook_w;
-                    inputs[4] = board->queen_w;
-                    inputs[5] = board->pawn_b;
-                    inputs[6] = board->knight_b;
-                    inputs[7] = board->bishop_b;
-                    inputs[8] = board->rook_b;
-                    inputs[9] = board->queen_b;
+                    inputs[0] = board->pieces[WHITE_PAWN];
+                    inputs[1] = board->pieces[WHITE_KNIGHT];
+                    inputs[2] = board->pieces[WHITE_BISHOP];
+                    inputs[3] = board->pieces[WHITE_ROOK];
+                    inputs[4] = board->pieces[WHITE_QUEEN];
+                    inputs[5] = board->pieces[BLACK_PAWN];
+                    inputs[6] = board->pieces[BLACK_KNIGHT];
+                    inputs[7] = board->pieces[BLACK_BISHOP];
+                    inputs[8] = board->pieces[BLACK_ROOK];
+                    inputs[9] = board->pieces[BLACK_QUEEN];
 
-                    inputs[10] = FLIP_MASK(board->pawn_b);
-                    inputs[11] = FLIP_MASK(board->knight_b);
-                    inputs[12] = FLIP_MASK(board->bishop_b);
-                    inputs[13] = FLIP_MASK(board->rook_b);
-                    inputs[14] = FLIP_MASK(board->queen_b);
-                    inputs[15] = FLIP_MASK(board->pawn_w);
-                    inputs[16] = FLIP_MASK(board->knight_w);
-                    inputs[17] = FLIP_MASK(board->bishop_w);
-                    inputs[18] = FLIP_MASK(board->rook_w);
-                    inputs[19] = FLIP_MASK(board->queen_w);
+                    inputs[10] = FLIP_MASK(board->pieces[BLACK_PAWN]);
+                    inputs[11] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+                    inputs[12] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+                    inputs[13] = FLIP_MASK(board->pieces[BLACK_ROOK]);
+                    inputs[14] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+                    inputs[15] = FLIP_MASK(board->pieces[WHITE_PAWN]);
+                    inputs[16] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+                    inputs[17] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+                    inputs[18] = FLIP_MASK(board->pieces[WHITE_ROOK]);
+                    inputs[19] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
 
                     if(getColumn(board->kingSquare_w) > 3)
                     {
@@ -545,7 +541,7 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
                         }
                     }
                 }
-                destroy_board(board);
+                free(board);
             }
 
             double sumSquaredError = 0.0;
@@ -574,11 +570,11 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError, accum
         save_trainingWeights();
     } while((totalSumSquaredError/(MINIBATCH_SIZE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
 
-    FREE(blockNumbers);
-    FREE(activeInputs_A);
-    FREE(expectedOutputs_A);
-    FREE(activeInputs_B);
-    FREE(expectedOutputs_B);
+    free(blockNumbers);
+    free(activeInputs_A);
+    free(expectedOutputs_A);
+    free(activeInputs_B);
+    free(expectedOutputs_B);
 
     freeOpenCL();
 }
