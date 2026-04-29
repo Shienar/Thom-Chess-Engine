@@ -105,10 +105,13 @@ extern int kingBuckets[64];
 extern int kingBucketMap[KING_BUCKETS];
 
 /**
- * Weights are stored as w[output][input] to make SIMD possible.
+ * Weights are stored as w[output][input] to make SIMD possible for the hidden layers.
+ * 
+ * The sparse input layer is stored as w[input][output] instead since we are jumping
+ * to the few active inputs.
  */
 typedef struct network_weights_training {
-    float weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
+    float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
     float weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
     float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
@@ -118,39 +121,21 @@ typedef struct network_weights_training {
     float weights4_bias;
 } network_weights_training;
 typedef struct network_weights_playing {
-    int8_t weights1[ACCUMULATOR_NODES_PER_SIDE][HALF_INPUT_BITS];
-    int8_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE]; 
     int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
-    int8_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
+    int32_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
     int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
-    int8_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
+    int32_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
-    int8_t weights4_bias;
+    int32_t weights4_bias;
 } network_weights_playing;
 
-
-typedef struct accumulator_training {
-    //Incrementally updates.
+typedef struct accumulator {
     uint64_t inputNodes[320];
-    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
-
-    float h2[SECOND_HIDDEN_LAYER_NODES];
-    float h3[THIRD_HIDDEN_LAYER_NODES];
-    float outputNode;
-
-    //Raw values used for SCReLU derivative.
-    // (input nodes are already [0,1] & outputNode isnt't activated)
-    float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //efficiently updateable
-    float rawH2[SECOND_HIDDEN_LAYER_NODES];
-    float rawH3[THIRD_HIDDEN_LAYER_NODES];
-
-} accumulator_training;
-
-typedef struct accumulator_playing {
-    uint64_t inputNodes[320];
-    int8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //[0][i] = white; [1][i] = black;
-    int8_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
-} accumulator_playing;
+    uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
+    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
+} accumulator;
 
 /**
  * Each accumulator is truly two entries, one for each half
@@ -164,13 +149,9 @@ typedef struct accumulator_playing {
  * Black accumulators:
  *  - accumulators[i].accumulator[1]
  */
-typedef struct accumulator_playing_refreshTable {
+typedef struct accumulatorRefreshTable {
     bitboard* boards[2][KING_BUCKETS];
-    accumulator_playing accumulators[KING_BUCKETS];
-} accumulator_playing_refreshTable;
-typedef struct accumulator_training_refreshTable {
-    bitboard* boards[2][KING_BUCKETS];
-    accumulator_training accumulators[KING_BUCKETS];
-} accumulator_training_refreshTable;
+    accumulator accumulators[KING_BUCKETS];
+} accumulatorRefreshTable;
 
 #endif

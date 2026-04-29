@@ -11,13 +11,17 @@
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
-//cosine annealing is done using timestamp in enqueueKernels()
-#define MIN_LR 1e-4f
-#define MAX_LR 1e-6f
+/**
+ * cosine annealing is done using timestamp in enqueueKernels()
+ * LR linearly increases from INITIAL_LR to MAX_LR during WARMUP_PERIOD
+ */
+#define MAX_LR 7.5e-4f
+#define MIN_LR 1e-5f
+#define WARMUP_PERIOD 300
+#define INITIAL_LR 1e-8
 #define INTERVAL_SCALE 1.5f
-#define FIRST_INTERVAL 20
-#define MAX_INTERVALS 20
-
+#define FIRST_INTERVAL 500
+#define MAX_INTERVALS 15
 typedef struct {
     cl_platform_id platform;
     cl_device_id device;

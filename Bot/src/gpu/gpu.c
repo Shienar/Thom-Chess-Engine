@@ -161,18 +161,9 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     opencl_mem.v_bias3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.v_bias4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float), NULL, NULL);
 
-    float* transposedWeight = NULL;
-    transposedWeight = calloc(HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE, sizeof(float));
-    for (int i = 0; i < HALF_INPUT_BITS; i++) {
-        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) {
-            // CPU [output][input] -> GPU [input][output]
-            transposedWeight[i * ACCUMULATOR_NODES_PER_SIDE + j] = trainingNNUE->weights1[j][i];
-        }
-    }
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights1, CL_TRUE, 0, HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)transposedWeight, 0, NULL, NULL);
-    free(transposedWeight);
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights1, CL_TRUE, 0, HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)trainingNNUE->weights1, 0, NULL, NULL);
     
-    transposedWeight = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
+    float* transposedWeight = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
     for (int i = 0; i < ACCUMULATOR_NODES; i++) {
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) {
             // CPU [output][input] -> GPU [input][output]
@@ -426,12 +417,19 @@ void freeOpenCL()
 void enqueueKernels(int bufferSide, double* outputSSE)
 {
     //cosine annealing
-    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
-    if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
+    if(timestamp < WARMUP_PERIOD)
     {
-        cosineTimestamp = 0;
-        cosineIntervalLength*=INTERVAL_SCALE;
-        intervalCount++;
+        lr = INITIAL_LR + (MAX_LR - INITIAL_LR) * (timestamp / WARMUP_PERIOD);
+    }
+    else
+    {
+        lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
+        if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
+        {
+            cosineTimestamp = 0;
+            cosineIntervalLength*=INTERVAL_SCALE;
+            intervalCount++;
+        }
     }
 
     if(bufferSide == INPUT_GROUP_A)
@@ -532,19 +530,11 @@ void enqueueKernels(int bufferSide, double* outputSSE)
 
 void getWeights(network_weights_training* weights)
 {
-    float* transposedWeights1 = calloc(HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE, sizeof(float));
     float* transposedWeights2 = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
     float* transposedWeights3 = calloc(SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES, sizeof(float));
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights1, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, transposedWeights1, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights1, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, weights->weights1, 0, NULL, NULL);
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights2, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, transposedWeights2, 0, NULL, NULL);
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights3, CL_TRUE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, transposedWeights3, 0, NULL, NULL);
-    
-    for (int i = 0; i < HALF_INPUT_BITS; i++) {
-        for (int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++) {
-            //GPU [input][output] -> CPU [output][input]
-            weights->weights1[j][i] = transposedWeights1[i * ACCUMULATOR_NODES_PER_SIDE + j];
-        }
-    }
     
     for (int i = 0; i < ACCUMULATOR_NODES; i++) {
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) {
@@ -560,7 +550,6 @@ void getWeights(network_weights_training* weights)
         }
     }
     
-    free(transposedWeights1);
     free(transposedWeights2);
     free(transposedWeights3);
     

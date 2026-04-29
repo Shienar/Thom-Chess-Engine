@@ -83,9 +83,8 @@ int main(int argc, char** argv)
     if(shouldTrain)
     {
         load_trainingWeights();
-        trainingAccumulator = calloc(1, sizeof(accumulator_training));
 
-        train(saveEveryNBlocks, shouldTrain, 1e-3, trainingAccumulator);
+        train(saveEveryNBlocks, shouldTrain, 1e-3);
         
         save_trainingWeights();
 
@@ -127,9 +126,9 @@ int main(int argc, char** argv)
     {
         transpositionTable = create_hashTable_tt();
         load_playingWeights();
-        playerAccumulator = calloc(1, sizeof(accumulator_playing));
+        playerAccumulator = calloc(1, sizeof(accumulator));
         playingRefreshTable = createPlayingRefreshTable();
-        loadInputAccumulator(board, playerAccumulator, PLAYING, WHITE|BLACK);
+        loadInputAccumulator(board, playerAccumulator, WHITE|BLACK);
         tb_init("./sygyzy/");
     }
 
@@ -163,7 +162,7 @@ int main(int argc, char** argv)
         {   
             do
             {
-                move bestMove = calculateBestMove(board, depth, maxTime, PLAYING);
+                move bestMove = calculateBestMove(board, depth, maxTime);
                 error = moveFromStruct(board, bestMove);
             }while(error != 0);
             board_print(board, verbose);
@@ -198,7 +197,7 @@ int main(int argc, char** argv)
     {
         free(playerNNUE);
         free(playerAccumulator);
-        destroyRefreshTable(playingRefreshTable, PLAYING);
+        destroyRefreshTable(playingRefreshTable);
         destroy_hashTable_tt(transpositionTable);
         tb_free();
     }

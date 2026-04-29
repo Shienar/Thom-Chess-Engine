@@ -4,9 +4,6 @@
 #include "../types.h"
 #include "neuralnet.h"
 
-#define TRAINING 1
-#define PLAYING 2
-
 #define MIRROR_SQUARE(x) x^=7
 
 //https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
@@ -22,30 +19,27 @@ static inline uint64_t mirrorBoard(uint64_t x)
 }
 
 //Main thread accumulators
-extern accumulator_training* trainingAccumulator;
-extern accumulator_playing* playerAccumulator;
-extern accumulator_training_refreshTable* trainingRefreshTable;
-extern accumulator_playing_refreshTable* playingRefreshTable;
+extern accumulator* playerAccumulator;
+extern accumulatorRefreshTable* playingRefreshTable;
 
-void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLayerCompact_b, void* output, int outputType);
+void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLayerCompact_b, int8_t* inputLayerBytes);
 
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
  */
-void loadInputAccumulator(bitboard* board, void* accumulator, int accumulatorType, int color);
+void loadInputAccumulator(bitboard* board, accumulator* acc, int color);
 
 
-void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, void* accumulator, void* refreshTable, int accumulatorType);
+void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, accumulator* acc,  accumulatorRefreshTable* refreshTable);
 
 // Updates an accumulator & board until it reaches the same state as the currentboard.
 // Both boards must have the same kingsquares.
-void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, void* accumulator, int accumulatorType, int color);
+void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, accumulator* acc, int color);
 
-void updateAccumulatorFromTable(bitboard* currentBoard, void* accumulator, void* refreshTable, int accumulatorType);
+void updateAccumulatorFromTable(bitboard* currentBoard, accumulator* acc,  accumulatorRefreshTable* refreshTable);
 
-accumulator_playing_refreshTable* createPlayingRefreshTable();
-accumulator_training_refreshTable* createTrainingRefreshTable();
+accumulatorRefreshTable* createPlayingRefreshTable();
 
-void destroyRefreshTable(void* table, int accumulatorType);
+void destroyRefreshTable(accumulatorRefreshTable* refreshTable);
 
 #endif

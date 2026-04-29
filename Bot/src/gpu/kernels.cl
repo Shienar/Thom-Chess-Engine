@@ -13,7 +13,8 @@
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
 #define ADAM_WEIGHT_DECAY 1e-2
-#define LEAK_FACTOR 0.2f
+#define LEAK_FACTOR 0.01f
+#define EVAL_SCALE 400.0f
 
 /******* UTIL *******/
 
@@ -27,6 +28,21 @@ inline float screlu_leaky(float x)
 inline float screlu_leaky_derivative(float x)
 {
     return ((x <= 0.0 || x >= 1.0) ? (LEAK_FACTOR) : (2.0*native_sqrt(x)));
+}
+
+inline float crelu_leaky(float x)
+{
+    return ((x <= 0.0f) ? LEAK_FACTOR * x : ((x >= 1.0f) ? 1.0f + LEAK_FACTOR * (x - 1.0f) : x));
+}
+
+inline float crelu_leaky_derivative(float x)
+{
+    return ((x <= 0.0f || x >= 1.0f) ? (LEAK_FACTOR) : 1.0f);
+}
+
+inline float sigmoid(float x)
+{
+    return 1.0f / (1.0f + exp(-x));
 }
 
 //From https://streamhpc.com/blog/2016-02-09/atomic-operations-for-floats-in-opencl-improved/
@@ -115,7 +131,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         {
             sum += shared[inputIndex] * h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID];
         }
-        sum = screlu_leaky(sum);
+        sum = crelu_leaky(sum);
 
 
         shared[localID] = sum; //faster retrieval for use in this function.
@@ -132,7 +148,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         {
             sum += shared[inputIndex] * h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID];
         }
-        sum = screlu_leaky(sum);
+        sum = crelu_leaky(sum);
         
         shared[localID] = sum;
         h3_output[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = sum;
@@ -159,7 +175,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
 
     if(localID == 0) 
     {
-        outputs[batchIndex] = shared[0] + *output_bias;
+        outputs[batchIndex] = sigmoid((shared[0] + *output_bias) / (EVAL_SCALE));
     }
 }
 
@@ -190,9 +206,11 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     if(localID == 0) 
     {
         d4 = outputNodes[batchIndex] - expectedOutputs[batchIndex];
+
+        shared_sse[0] = (d4 * d4);
+        d4 *= (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative.
         delta4[batchIndex] = d4;
         shared_delta[0] = d4;
-        shared_sse[0] = (d4 * d4);
     } 
     else shared_sse[localID] = 0.0;
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -202,7 +220,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = d4 * weights4[localID] * screlu_leaky_derivative(h3_val);
+        float d3 = d4 * weights4[localID] * crelu_leaky_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
         shared_delta[localID] = d3;
     }
@@ -217,7 +235,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
             sum += shared_delta[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
         }
         float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
-        float d2 = sum * screlu_leaky_derivative(h2_val);
+        float d2 = sum * crelu_leaky_derivative(h2_val);
         delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = d2;
         shared_delta[localID] = d2;
     }

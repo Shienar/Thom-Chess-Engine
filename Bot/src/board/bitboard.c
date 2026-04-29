@@ -244,7 +244,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
 
     board->hashCode = getHashCode(board);
 
-    memset(board->history, 0, 512 * sizeof(move));
+    memset(board->history, 0, MAX_PLY * sizeof(move));
     board->historyIndex = 0;
 
     memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
