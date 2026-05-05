@@ -9,12 +9,17 @@
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_LAYER_NODES 1
+
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-2
+#define ADAM_WEIGHT_DECAY 1e-5 
+
 #define LEAK_FACTOR 0.01f
+
 #define EVAL_SCALE 400.0f
+
+#define LOOKAHEAD_ALPHA 0.5f
 
 /******* UTIL *******/
 
@@ -211,6 +216,8 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         d4 *= (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative.
         delta4[batchIndex] = d4;
         shared_delta[0] = d4;
+
+        //if(batchIndex < 3) printf("\nExpected %f, Received %f", expectedOutputs[batchIndex], outputNodes[batchIndex]);
     } 
     else shared_sse[localID] = 0.0;
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -366,7 +373,7 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
         float finalBiasGradient = 0.0f;
         for(int i = 0; i < 64; i++) {
             finalWeightGradient += shared_weight[localID][i];
-            if(inputNodeIndex == 0) finalBiasGradient += shared_weight[localID][i];
+            if(inputNodeIndex == 0) finalBiasGradient += shared_bias[localID][i];
         }
         AtomicAddFloat(&gradient2_Sum[inputNodeIndex * 32 + localID], finalWeightGradient);
         if(inputNodeIndex == 0) AtomicAddFloat(&bias2_Sum[localID], finalBiasGradient);
@@ -417,7 +424,8 @@ __kernel void adamW(__global float* weights,
                     __global float* secondMoment,
                     float learningRate,
                     float biasCorrection1,
-                    float biasCorrection2)
+                    float biasCorrection2,
+                    float rectificationTerm)
 {
     // Flattened array of weights.
     int i = get_global_id(0);
@@ -428,33 +436,63 @@ __kernel void adamW(__global float* weights,
     secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad;
 
     float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1);
-    float correctedSecondMoment = secondMoment[i] / (1.0f - biasCorrection2);
+    if(rectificationTerm > 0.0)
+    {
+        float denominator = sqrt(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON;
+        weights[i] -= learningRate * rectificationTerm * (correctedFirstMoment / denominator);
+    } 
+    else 
+    {
+        weights[i] -= learningRate * correctedFirstMoment;
+    }
 
-    weights[i] -= learningRate * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
     weights[i] -= learningRate * ADAM_WEIGHT_DECAY * weights[i];
 }
 
 //0.475 ms on sparse input layer.
 __kernel void lazyAdam(__global float* weights,
+                    __global int* timestamps,
                     __global float* gradientSum,
                     __global float* firstMoment,
                     __global float* secondMoment,
                     float learningRate,
-                    float biasCorrection1,
-                    float biasCorrection2)
+                    float rho_inf)
 {
     // Flattened array of weights.
     int i = get_global_id(0);
 
     float grad = gradientSum[i] / MINIBATCH_SIZE;
-    if(!grad) return; //saves about 0.1ms since its a very sparse input.
+    
+    if(!grad) return; //saves about 0.1ms despite branching since its a very sparse input.
+
+    int t = timestamps[i]++;
 
     firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad;
     secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad;
 
-    float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1);
-    float correctedSecondMoment = secondMoment[i] / (1.0f - biasCorrection2);
+    timestamps[i]++;
+    float b1 = pown(ADAM_BETA1, timestamps[i]);
+    float b2 = pown(ADAM_BETA2, timestamps[i]);
+    float correctedFirstMoment = firstMoment[i] / (1.0f - b1);
+ 
+    float rho_timestamp = rho_inf - (2.0f * t * b2) / (1.0f - b2);
 
-    weights[i] -= learningRate * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
+    if (rho_timestamp > 5.0) 
+    {
+        float rectificationTerm = sqrt(((rho_timestamp - 4.0f) * (rho_timestamp - 2.0f) * rho_inf) / ((rho_inf - 4.0f) * (rho_inf - 2.0f) * rho_timestamp));
+        
+        float correctedSecondMoment = secondMoment[i] / (1.0f - b2);
+        weights[i] -= learningRate * rectificationTerm * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
+    } 
+    else weights[i] -= learningRate * correctedFirstMoment;
+    
     weights[i] -= learningRate * ADAM_WEIGHT_DECAY * weights[i];
+}
+
+__kernel void lookahead_update(__global float* fast_weights, __global float* slow_weights)
+{
+    int i = get_global_id(0);
+    
+    slow_weights[i] += LOOKAHEAD_ALPHA * (fast_weights[i] - slow_weights[i]);
+    fast_weights[i] = slow_weights[i];
 }

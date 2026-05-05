@@ -18,7 +18,8 @@ openCLContext opencl_context = {
     .calculateGradient3 = NULL,
     .calculateGradient2 = NULL,
     .calculateGradient1_A = NULL,
-    .calculateGradient1_B = NULL
+    .calculateGradient1_B = NULL,
+    .lookahead = NULL
 };
 
 openCLKernelMemory opencl_mem = {NULL};
@@ -29,6 +30,9 @@ int64_t cosineIntervalLength;
 uint64_t cosineTimestamp;
 uint64_t timestamp;
 int intervalCount;
+float rho_inf = (2 / (1.0 - ADAM_BETA2)) - 1;
+float rho_timestamp = 0.0;
+cl_float rectificationTerm = 0.0;
 char* getKernelFunctions()
 {
     FILE* input = fopen("./src/gpu/kernels.cl", "rb"); 
@@ -97,6 +101,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     opencl_context.calculateGradient1_B = clCreateKernel(opencl_context.program, "calculateGradient1", &err);
     opencl_context.adamw = clCreateKernel(opencl_context.program, "adamW", &err);
     opencl_context.lazyadam = clCreateKernel(opencl_context.program, "lazyAdam", &err);
+    opencl_context.lookahead = clCreateKernel(opencl_context.program, "lookahead_update", &err);
 
     
     opencl_mem.activeInputs_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, MINIBATCH_SIZE * 64 * sizeof(short), host_activeInputs_A, NULL);
@@ -105,15 +110,25 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     opencl_mem.activeInputs_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, MINIBATCH_SIZE * 64 * sizeof(short), host_activeInputs_B, NULL);
     opencl_mem.expectedOutput_B = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, MINIBATCH_SIZE * sizeof(float), host_expectedOutputs_B, NULL);
 
-    opencl_mem.weights1 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
-    opencl_mem.weights2 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, NULL, NULL);
-    opencl_mem.weights3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
-    opencl_mem.weights4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.weights1_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
+    opencl_mem.weights2_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, NULL, NULL);
+    opencl_mem.weights3_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.weights4_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
 
-    opencl_mem.bias1 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, NULL, NULL);
-    opencl_mem.bias2 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
-    opencl_mem.bias3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
-    opencl_mem.bias4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float), NULL, NULL);
+    opencl_mem.bias1_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, NULL, NULL);
+    opencl_mem.bias2_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.bias3_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.bias4_fast = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float), NULL, NULL);
+    
+    opencl_mem.weights1_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
+    opencl_mem.weights2_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, NULL, NULL);
+    opencl_mem.weights3_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.weights4_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
+
+    opencl_mem.bias1_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, NULL, NULL);
+    opencl_mem.bias2_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.bias3_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
+    opencl_mem.bias4_slow = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float), NULL, NULL);
 
     opencl_mem.accumulatorOutput = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, MINIBATCH_SIZE * sizeof(float) * ACCUMULATOR_NODES, NULL, NULL);
     opencl_mem.h2Output = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, MINIBATCH_SIZE * sizeof(float) * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
@@ -161,8 +176,13 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     opencl_mem.v_bias3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.v_bias4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float), NULL, NULL);
 
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights1, CL_TRUE, 0, HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)trainingNNUE->weights1, 0, NULL, NULL);
-    
+    int zero_d = 0;
+    opencl_mem.sparseTimestamps = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(int) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.sparseTimestamps, &zero_d, sizeof(int), 0, sizeof(int) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
+
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights1_slow, CL_TRUE, 0, HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)trainingNNUE->weights1, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.weights1_slow, opencl_mem.weights1_fast, 0, 0, HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), 0, NULL, NULL);
+
     float* transposedWeight = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
     for (int i = 0; i < ACCUMULATOR_NODES; i++) {
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) {
@@ -170,7 +190,8 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
             transposedWeight[i * SECOND_HIDDEN_LAYER_NODES + j] = trainingNNUE->weights2[j][i];
         }
     }
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights2, CL_TRUE, 0, ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES * sizeof(float), (void*)transposedWeight, 0, NULL, NULL);
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights2_slow, CL_TRUE, 0, ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES * sizeof(float), (void*)transposedWeight, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.weights2_slow, opencl_mem.weights2_fast, 0, 0, ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
     free(transposedWeight);
     
     transposedWeight = calloc(SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES, sizeof(float));
@@ -180,57 +201,65 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
             transposedWeight[i * THIRD_HIDDEN_LAYER_NODES + j] = trainingNNUE->weights3[j][i];
         }
     }
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights3, CL_TRUE, 0, SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)transposedWeight, 0, NULL, NULL);
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights3_slow, CL_TRUE, 0, SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)transposedWeight, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.weights3_slow, opencl_mem.weights3_fast, 0, 0, SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
     free(transposedWeight);
     
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights4, CL_TRUE, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights4, 0, NULL, NULL);
-
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.weights4_slow, CL_TRUE, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights4, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.weights4_slow, opencl_mem.weights4_fast, 0, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
     
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias1, CL_TRUE, 0, ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)&trainingNNUE->weights1_bias, 0, NULL, NULL);
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias2, CL_TRUE, 0, SECOND_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights2_bias, 0, NULL, NULL);
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias3, CL_TRUE, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights3_bias, 0, NULL, NULL);
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias4, CL_TRUE, 0, OUTPUT_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights4_bias, 0, NULL, NULL);
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias1_slow, CL_TRUE, 0, ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)&trainingNNUE->weights1_bias, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.bias1_slow, opencl_mem.bias1_fast, 0, 0, ACCUMULATOR_NODES_PER_SIDE * sizeof(float), 0, NULL, NULL);
+
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias2_slow, CL_TRUE, 0, SECOND_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights2_bias, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.bias2_slow, opencl_mem.bias2_fast, 0, 0, SECOND_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
+
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias3_slow, CL_TRUE, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights3_bias, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.bias3_slow, opencl_mem.bias3_fast, 0, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
+
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.bias4_slow, CL_TRUE, 0, OUTPUT_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights4_bias, 0, NULL, NULL);
+    clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.bias4_slow, opencl_mem.bias4_fast, 0, 0, OUTPUT_LAYER_NODES * sizeof(float), 0, NULL, NULL);
     
-    float zero = 0.0f;
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights1, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights2, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights3, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights4, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    float zero_f = 0.0f;
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights1, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights2, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights3, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_weights4, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
 
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias1, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias2, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias3, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias4, &zero, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias1, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias2, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias3, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.m_bias4, &zero_f, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
 
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights1, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights2, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights3, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights4, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights1, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights2, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights3, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_weights4, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
 
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias1, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias2, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias3, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias4, &zero, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias1, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias2, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias3, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.v_bias4, &zero_f, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
 
     clSetKernelArg(opencl_context.calculateAccumulator_A, 0, sizeof(cl_mem), &opencl_mem.activeInputs_A);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 1, sizeof(cl_mem), &opencl_mem.weights1);
-    clSetKernelArg(opencl_context.calculateAccumulator_A, 2, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 1, sizeof(cl_mem), &opencl_mem.weights1_fast);
+    clSetKernelArg(opencl_context.calculateAccumulator_A, 2, sizeof(cl_mem), &opencl_mem.bias1_fast);
     clSetKernelArg(opencl_context.calculateAccumulator_A, 3, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
     
     clSetKernelArg(opencl_context.calculateAccumulator_B, 0, sizeof(cl_mem), &opencl_mem.activeInputs_B);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 1, sizeof(cl_mem), &opencl_mem.weights1);
-    clSetKernelArg(opencl_context.calculateAccumulator_B, 2, sizeof(cl_mem), &opencl_mem.bias1);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 1, sizeof(cl_mem), &opencl_mem.weights1_fast);
+    clSetKernelArg(opencl_context.calculateAccumulator_B, 2, sizeof(cl_mem), &opencl_mem.bias1_fast);
     clSetKernelArg(opencl_context.calculateAccumulator_B, 3, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
 
     clSetKernelArg(opencl_context.forwardPropagate, 0, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
-    clSetKernelArg(opencl_context.forwardPropagate, 1, sizeof(cl_mem), &opencl_mem.weights2);
-    clSetKernelArg(opencl_context.forwardPropagate, 2, sizeof(cl_mem), &opencl_mem.bias2);
+    clSetKernelArg(opencl_context.forwardPropagate, 1, sizeof(cl_mem), &opencl_mem.weights2_fast);
+    clSetKernelArg(opencl_context.forwardPropagate, 2, sizeof(cl_mem), &opencl_mem.bias2_fast);
     clSetKernelArg(opencl_context.forwardPropagate, 3, sizeof(cl_mem), &opencl_mem.h2Output);
-    clSetKernelArg(opencl_context.forwardPropagate, 4, sizeof(cl_mem), &opencl_mem.weights3);
-    clSetKernelArg(opencl_context.forwardPropagate, 5, sizeof(cl_mem), &opencl_mem.bias3);
+    clSetKernelArg(opencl_context.forwardPropagate, 4, sizeof(cl_mem), &opencl_mem.weights3_fast);
+    clSetKernelArg(opencl_context.forwardPropagate, 5, sizeof(cl_mem), &opencl_mem.bias3_fast);
     clSetKernelArg(opencl_context.forwardPropagate, 6, sizeof(cl_mem), &opencl_mem.h3Output);
-    clSetKernelArg(opencl_context.forwardPropagate, 7, sizeof(cl_mem), &opencl_mem.weights4);
-    clSetKernelArg(opencl_context.forwardPropagate, 8, sizeof(cl_mem), &opencl_mem.bias4);
+    clSetKernelArg(opencl_context.forwardPropagate, 7, sizeof(cl_mem), &opencl_mem.weights4_fast);
+    clSetKernelArg(opencl_context.forwardPropagate, 8, sizeof(cl_mem), &opencl_mem.bias4_fast);
     clSetKernelArg(opencl_context.forwardPropagate, 9, sizeof(cl_mem), &opencl_mem.finalOutput);
     
     clSetKernelArg(opencl_context.backpropagate_A, 0, sizeof(cl_mem), &opencl_mem.finalOutput);
@@ -238,9 +267,9 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     clSetKernelArg(opencl_context.backpropagate_A, 2, sizeof(cl_mem), &opencl_mem.h3Output);
     clSetKernelArg(opencl_context.backpropagate_A, 3, sizeof(cl_mem), &opencl_mem.h2Output);
     clSetKernelArg(opencl_context.backpropagate_A, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
-    clSetKernelArg(opencl_context.backpropagate_A, 5, sizeof(cl_mem), &opencl_mem.weights4);
-    clSetKernelArg(opencl_context.backpropagate_A, 6, sizeof(cl_mem), &opencl_mem.weights3);
-    clSetKernelArg(opencl_context.backpropagate_A, 7, sizeof(cl_mem), &opencl_mem.weights2);
+    clSetKernelArg(opencl_context.backpropagate_A, 5, sizeof(cl_mem), &opencl_mem.weights4_fast);
+    clSetKernelArg(opencl_context.backpropagate_A, 6, sizeof(cl_mem), &opencl_mem.weights3_fast);
+    clSetKernelArg(opencl_context.backpropagate_A, 7, sizeof(cl_mem), &opencl_mem.weights2_fast);
     clSetKernelArg(opencl_context.backpropagate_A, 8, sizeof(cl_mem), &opencl_mem.delta4);
     clSetKernelArg(opencl_context.backpropagate_A, 9, sizeof(cl_mem), &opencl_mem.delta3);
     clSetKernelArg(opencl_context.backpropagate_A, 10, sizeof(cl_mem), &opencl_mem.delta2);
@@ -252,9 +281,9 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     clSetKernelArg(opencl_context.backpropagate_B, 2, sizeof(cl_mem), &opencl_mem.h3Output);
     clSetKernelArg(opencl_context.backpropagate_B, 3, sizeof(cl_mem), &opencl_mem.h2Output);
     clSetKernelArg(opencl_context.backpropagate_B, 4, sizeof(cl_mem), &opencl_mem.accumulatorOutput);
-    clSetKernelArg(opencl_context.backpropagate_B, 5, sizeof(cl_mem), &opencl_mem.weights4);
-    clSetKernelArg(opencl_context.backpropagate_B, 6, sizeof(cl_mem), &opencl_mem.weights3);
-    clSetKernelArg(opencl_context.backpropagate_B, 7, sizeof(cl_mem), &opencl_mem.weights2);
+    clSetKernelArg(opencl_context.backpropagate_B, 5, sizeof(cl_mem), &opencl_mem.weights4_fast);
+    clSetKernelArg(opencl_context.backpropagate_B, 6, sizeof(cl_mem), &opencl_mem.weights3_fast);
+    clSetKernelArg(opencl_context.backpropagate_B, 7, sizeof(cl_mem), &opencl_mem.weights2_fast);
     clSetKernelArg(opencl_context.backpropagate_B, 8, sizeof(cl_mem), &opencl_mem.delta4);
     clSetKernelArg(opencl_context.backpropagate_B, 9, sizeof(cl_mem), &opencl_mem.delta3);
     clSetKernelArg(opencl_context.backpropagate_B, 10, sizeof(cl_mem), &opencl_mem.delta2);
@@ -295,14 +324,22 @@ void freeOpenCL()
     clReleaseMemObject(opencl_mem.expectedOutput_A);
     clReleaseMemObject(opencl_mem.activeInputs_B);
     clReleaseMemObject(opencl_mem.expectedOutput_B);
-    clReleaseMemObject(opencl_mem.weights1);
-    clReleaseMemObject(opencl_mem.weights2);
-    clReleaseMemObject(opencl_mem.weights3);
-    clReleaseMemObject(opencl_mem.weights4);
-    clReleaseMemObject(opencl_mem.bias1);
-    clReleaseMemObject(opencl_mem.bias2);
-    clReleaseMemObject(opencl_mem.bias3);
-    clReleaseMemObject(opencl_mem.bias4);
+    clReleaseMemObject(opencl_mem.weights1_fast);
+    clReleaseMemObject(opencl_mem.weights2_fast);
+    clReleaseMemObject(opencl_mem.weights3_fast);
+    clReleaseMemObject(opencl_mem.weights4_fast);
+    clReleaseMemObject(opencl_mem.bias1_fast);
+    clReleaseMemObject(opencl_mem.bias2_fast);
+    clReleaseMemObject(opencl_mem.bias3_fast);
+    clReleaseMemObject(opencl_mem.bias4_fast);
+    clReleaseMemObject(opencl_mem.weights1_slow);
+    clReleaseMemObject(opencl_mem.weights2_slow);
+    clReleaseMemObject(opencl_mem.weights3_slow);
+    clReleaseMemObject(opencl_mem.weights4_slow);
+    clReleaseMemObject(opencl_mem.bias1_slow);
+    clReleaseMemObject(opencl_mem.bias2_slow);
+    clReleaseMemObject(opencl_mem.bias3_slow);
+    clReleaseMemObject(opencl_mem.bias4_slow);
     clReleaseMemObject(opencl_mem.accumulatorOutput);
     clReleaseMemObject(opencl_mem.h2Output);
     clReleaseMemObject(opencl_mem.h3Output);
@@ -336,6 +373,7 @@ void freeOpenCL()
     clReleaseMemObject(opencl_mem.v_bias2);
     clReleaseMemObject(opencl_mem.v_bias3);
     clReleaseMemObject(opencl_mem.v_bias4);
+    clReleaseMemObject(opencl_mem.sparseTimestamps);
 
     if (opencl_context.calculateAccumulator_A)  
     {
@@ -397,6 +435,11 @@ void freeOpenCL()
         clReleaseKernel(opencl_context.lazyadam);
         opencl_context.lazyadam = NULL;
     }
+    if (opencl_context.lookahead)  
+    {
+        clReleaseKernel(opencl_context.lookahead);
+        opencl_context.lookahead = NULL;
+    }
     if (opencl_context.program) 
     {
         clReleaseProgram(opencl_context.program);
@@ -417,20 +460,14 @@ void freeOpenCL()
 void enqueueKernels(int bufferSide, double* outputSSE)
 {
     //cosine annealing
-    if(timestamp < WARMUP_PERIOD)
+    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
+    if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
     {
-        lr = INITIAL_LR + (MAX_LR - INITIAL_LR) * (timestamp / WARMUP_PERIOD);
+        cosineTimestamp = 0;
+        cosineIntervalLength*=INTERVAL_SCALE;
+        intervalCount++;
     }
-    else
-    {
-        lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
-        if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
-        {
-            cosineTimestamp = 0;
-            cosineIntervalLength*=INTERVAL_SCALE;
-            intervalCount++;
-        }
-    }
+    
 
     if(bufferSide == INPUT_GROUP_A)
     {
@@ -450,19 +487,19 @@ void enqueueKernels(int bufferSide, double* outputSSE)
 
     }
 
-    float zero = 0.0f;
-    double zero_d = 0.0;
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.sumsquarederror, &zero_d, sizeof(double), 0, sizeof(double), 0, NULL, NULL);
+    float zero_f = 0.0f;
+    double zero_lf = 0.0;
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.sumsquarederror, &zero_lf, sizeof(double), 0, sizeof(double), 0, NULL, NULL);
 
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient1Sum, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient2Sum, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient3Sum, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient4Sum, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient1Sum, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient2Sum, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient3Sum, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradient4Sum, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
     
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias1Sum, &zero, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias2Sum, &zero, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias3Sum, &zero, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias4Sum, &zero, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias1Sum, &zero_f, sizeof(float), 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias2Sum, &zero_f, sizeof(float), 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias3Sum, &zero_f, sizeof(float), 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.gradientBias4Sum, &zero_f, sizeof(float), 0, sizeof(float), 0, NULL, NULL);
     
     //cl_event perf;
     //cl_ulong start, end;
@@ -504,6 +541,9 @@ void enqueueKernels(int bufferSide, double* outputSSE)
     timestamp++;
     cl_float biasCorrection1 = pow(ADAM_BETA1, timestamp);
     cl_float biasCorrection2 = pow(ADAM_BETA2, timestamp);
+    rho_timestamp = rho_inf - (2.0f * timestamp * biasCorrection2) / (1.0f - biasCorrection2);
+    if (rho_timestamp > 5.0f) rectificationTerm = sqrt(((rho_timestamp - 4.0f) * (rho_timestamp - 2.0f) * rho_inf) / ((rho_inf - 4.0f) * (rho_inf - 2.0f) * rho_timestamp));
+    else rectificationTerm = 0.0f;
 
     size_t weight1Size = HALF_INPUT_BITS * ACCUMULATOR_NODES_PER_SIDE;
     size_t weight2Size = ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES;
@@ -515,15 +555,28 @@ void enqueueKernels(int bufferSide, double* outputSSE)
     size_t bias3Size = THIRD_HIDDEN_LAYER_NODES;
     size_t bias4Size = OUTPUT_LAYER_NODES;
 
-    ENQUEUE_LAZY_ADAM(opencl_mem.weights1, opencl_mem.gradient1Sum, opencl_mem.m_weights1, opencl_mem.v_weights1, weight1Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.weights2, opencl_mem.gradient2Sum, opencl_mem.m_weights2, opencl_mem.v_weights2, weight2Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.weights3, opencl_mem.gradient3Sum, opencl_mem.m_weights3, opencl_mem.v_weights3, weight3Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.weights4, opencl_mem.gradient4Sum, opencl_mem.m_weights4, opencl_mem.v_weights4, weight4Size, lr, biasCorrection1, biasCorrection2);
+    ENQUEUE_LAZY_ADAM(opencl_mem.weights1_fast, opencl_mem.sparseTimestamps, opencl_mem.gradient1Sum, opencl_mem.m_weights1, opencl_mem.v_weights1, weight1Size, lr, rho_inf);
+    ENQUEUE_ADAMW(opencl_mem.weights2_fast, opencl_mem.gradient2Sum, opencl_mem.m_weights2, opencl_mem.v_weights2, weight2Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+    ENQUEUE_ADAMW(opencl_mem.weights3_fast, opencl_mem.gradient3Sum, opencl_mem.m_weights3, opencl_mem.v_weights3, weight3Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+    ENQUEUE_ADAMW(opencl_mem.weights4_fast, opencl_mem.gradient4Sum, opencl_mem.m_weights4, opencl_mem.v_weights4, weight4Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
 
-    ENQUEUE_ADAMW(opencl_mem.bias1, opencl_mem.gradientBias1Sum, opencl_mem.m_bias1, opencl_mem.v_bias1, bias1Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.bias2, opencl_mem.gradientBias2Sum, opencl_mem.m_bias2, opencl_mem.v_bias2, bias2Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.bias3, opencl_mem.gradientBias3Sum, opencl_mem.m_bias3, opencl_mem.v_bias3, bias3Size, lr, biasCorrection1, biasCorrection2);
-    ENQUEUE_ADAMW(opencl_mem.bias4, opencl_mem.gradientBias4Sum, opencl_mem.m_bias4, opencl_mem.v_bias4, bias4Size, lr, biasCorrection1, biasCorrection2);
+    ENQUEUE_ADAMW(opencl_mem.bias1_fast, opencl_mem.gradientBias1Sum, opencl_mem.m_bias1, opencl_mem.v_bias1, bias1Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+    ENQUEUE_ADAMW(opencl_mem.bias2_fast, opencl_mem.gradientBias2Sum, opencl_mem.m_bias2, opencl_mem.v_bias2, bias2Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+    ENQUEUE_ADAMW(opencl_mem.bias3_fast, opencl_mem.gradientBias3Sum, opencl_mem.m_bias3, opencl_mem.v_bias3, bias3Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+    ENQUEUE_ADAMW(opencl_mem.bias4_fast, opencl_mem.gradientBias4Sum, opencl_mem.m_bias4, opencl_mem.v_bias4, bias4Size, lr, biasCorrection1, biasCorrection2, rectificationTerm);
+
+    if(timestamp % LOOKAHEAD_RANGE == 0)
+    {
+        LOOKAHEAD_UPDATE(opencl_mem.weights1_fast, opencl_mem.weights1_slow, weight1Size);
+        LOOKAHEAD_UPDATE(opencl_mem.weights2_fast, opencl_mem.weights2_slow, weight2Size);
+        LOOKAHEAD_UPDATE(opencl_mem.weights3_fast, opencl_mem.weights3_slow, weight3Size);
+        LOOKAHEAD_UPDATE(opencl_mem.weights4_fast, opencl_mem.weights4_slow, weight4Size);
+
+        LOOKAHEAD_UPDATE(opencl_mem.bias1_fast, opencl_mem.bias1_slow, bias1Size);
+        LOOKAHEAD_UPDATE(opencl_mem.bias2_fast, opencl_mem.bias2_slow, bias2Size);
+        LOOKAHEAD_UPDATE(opencl_mem.bias3_fast, opencl_mem.bias3_slow, bias3Size);
+        LOOKAHEAD_UPDATE(opencl_mem.bias4_fast, opencl_mem.bias4_slow, bias4Size);
+    }
 
     clFlush(opencl_context.queue);
 }
@@ -532,9 +585,9 @@ void getWeights(network_weights_training* weights)
 {
     float* transposedWeights2 = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
     float* transposedWeights3 = calloc(SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES, sizeof(float));
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights1, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, weights->weights1, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights2, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, transposedWeights2, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights3, CL_TRUE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, transposedWeights3, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights1_slow, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, weights->weights1, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights2_slow, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES * ACCUMULATOR_NODES, transposedWeights2, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights3_slow, CL_TRUE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES * SECOND_HIDDEN_LAYER_NODES, transposedWeights3, 0, NULL, NULL);
     
     for (int i = 0; i < ACCUMULATOR_NODES; i++) {
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) {
@@ -553,9 +606,9 @@ void getWeights(network_weights_training* weights)
     free(transposedWeights2);
     free(transposedWeights3);
     
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights4, CL_FALSE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, weights->weights4, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias1, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, weights->weights1_bias, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias2, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, weights->weights2_bias, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias3, CL_FALSE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, weights->weights3_bias, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias4, CL_TRUE, 0, sizeof(float), &weights->weights4_bias, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.weights4_slow, CL_FALSE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, weights->weights4, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias1_slow, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, weights->weights1_bias, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias2_slow, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, weights->weights2_bias, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias3_slow, CL_FALSE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, weights->weights3_bias, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.bias4_slow, CL_TRUE, 0, sizeof(float), &weights->weights4_bias, 0, NULL, NULL);
 }

@@ -21,7 +21,7 @@
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384
-#define FILE_COUNT 30518
+#define MINIBATCHES_PER_EPOCH 6104 // Roughly 100 million positions.
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
@@ -41,10 +41,26 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
 int32_t forwardPropagate(int turn, accumulator* acc);
 
 /**
- * Adaptive Moment Estimation 
+ * Ranger
+ *      - https://arxiv.org/pdf/2106.13731
+ * 
+ *  - Adaptive Moment Estimation 
+ *          - https://arxiv.org/abs/1412.6980v8
  *  - Weight Decay
- *  - Sparse adjustments on input layer.
- * https://arxiv.org/abs/1412.6980v8
+ *  - RAdam
+ *          - https://arxiv.org/pdf/1908.03265
+ *  - Lookahead
+ *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf (TODO - read)
  */
 void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError);
+
+#pragma pack(push, 1) // no padding
+typedef struct {
+    uint64_t occupancy;   // Bitboard of all pieces
+    uint8_t  pieces[16];  // 4-bits per piece (bits then low bits)
+    uint8_t  flags;  // LSB=Turn, bits 1,2,3 for Win/Loss/Draw
+    int16_t  evaluation;  // Score
+} CompactPosition;
+#pragma pack(pop)
+
 #endif

@@ -124,37 +124,95 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     outputBytes->weights4_bias = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias * QA * QB * QB * QB)), INT32_MIN);
 }
 
-void shuffle(int* arr, int count)
+void loadTrainingData(CompactPosition data, bitboard* board, float* expectedOutput)
+{
+
+    // bit 0 = turn
+    // bit 1 = win for side to move
+    // bit 2 = loss for side to move
+    // bit 3 = draw
+    board->turn = data.flags & 1;
+
+    float result = 0.5;
+    if(data.flags & 2) result = 1.0;
+    else if(data.flags & 4) result = 0.0; 
+    *expectedOutput = LAMBDA * (SIGMOID(data.evaluation / EVAL_SCALE)) + (1.0f - LAMBDA) * result;
+
+    //Clear board (HalfKP only cares about piece positions)
+    memset(board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
+    memset(board->pieces, 0, 12 * sizeof(uint64_t));
+    memset(board->pieces_side, 0, 2 * sizeof(uint64_t));
+    board->pieces_all = 0;
+
+    uint64_t mask = data.occupancy;
+    int offset = 0;
+    while(mask)
+    {
+        int sq = __builtin_ctzll(mask);
+        int byteIndex = offset / 2;
+        int piece = data.pieces[byteIndex];
+        if(offset % 2) piece = piece&0xF;
+        else piece >>= 4;
+
+        uint64_t sqMask = (1ull << sq);
+        board->pieces_all |= sqMask;
+        board->pieces_side[COLOR(piece)] |= sqMask;
+        board->pieces[piece] |= sqMask;
+
+        if(ISKING(piece))
+        {
+            if(ISBLACK(piece)) board->kingSquare_b = sq;
+            else board->kingSquare_w = sq;
+        }
+
+        offset++;
+        mask &= (mask - 1);
+    }
+}
+
+void shuffle_long(uint64_t* arr, int count)
 {
     for(int i = count-1; i > 0; i--)
     {
         int j = rand()%i;
-        int temp = arr[i];
+        uint64_t temp = arr[i];
         arr[i] = arr[j];
         arr[j] = temp;
     }
 }
 
-void loadTrainingData(char* inputLine, bitboard* board, float* expectedOutput)
+void shuffle_struct(CompactPosition* arr, int count)
 {
-    char* ptr = NULL;
-    char* FEN_String = strtok_s(inputLine, "|", &ptr);
-    char* eval_String = strtok_s(NULL, "|", &ptr);
-    char* result_String = strtok_s(NULL, "|", &ptr);
-
-    float eval = 0.0f;
-    float result = 0.0f;
-    sscanf(eval_String, "%f", &eval);
-    sscanf(result_String, "%f\n", &result);
-    *expectedOutput = LAMBDA * (SIGMOID(eval / EVAL_SCALE)) + (1.0f - LAMBDA) * result;
-    load_fen_string_to_board(board, FEN_String);
+    for(int i = count-1; i > 0; i--)
+    {
+        int j = rand()%i;
+        CompactPosition temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
 }
 
 void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
 {
+    FILE* trainingDataFile = fopen("./import/trainingData.bin", "rb");
+    if(!trainingDataFile)
+    {
+        DEBUG("\nFailed to open training data file.");
+        exit(EXIT_FAILURE);
+    }
+    _fseeki64(trainingDataFile, 0, SEEK_END);
+    uint64_t file_size = _ftelli64(trainingDataFile);
+    rewind(trainingDataFile);
 
-    int* blockNumbers = calloc(FILE_COUNT, sizeof(int));
-    for(int i = 0; i < FILE_COUNT; i++)  blockNumbers[i] = i + 1;
+    uint64_t positionCount = file_size / sizeof(CompactPosition);
+
+    //Used to skip to random position in the .bin file.
+    int blockCount = positionCount /  (MINIBATCH_SIZE * 8);
+    uint64_t* blockIndices = calloc(blockCount,  sizeof(uint64_t));
+    for (int i = 0; i < blockCount; i++) 
+    {
+        blockIndices[i] = (MINIBATCH_SIZE * 8) * i * sizeof(CompactPosition);
+    }
 
     short* activeInputs_A = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
     float* expectedOutputs_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
@@ -168,36 +226,26 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
 
     double totalSumSquaredError = 0.0; //accumulated value per iteration
 
-    char fileName[40] = {'\0'};
-    char inputStrings[MINIBATCH_SIZE][105] = {'\0'};
+    //Read data for next 8 minibatches, then shuffle data amongst them.
+    CompactPosition* batchData = calloc(8 * MINIBATCH_SIZE, sizeof(CompactPosition));
 
     do{
-        shuffle(blockNumbers, FILE_COUNT);
         totalSumSquaredError = 0.0;
 
-        for(int blockIndex = 0; blockIndex < FILE_COUNT; blockIndex++)
+        shuffle_long(blockIndices, blockCount);
+        for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {
-            int inputGroup = INPUT_GROUP(blockIndex);
-            sprintf(fileName, "./training/trainingData_%d.txt", blockNumbers[blockIndex]);
-            FILE* trainingData = fopen(fileName, "r");
-            if(!trainingData)
+            if(minibatchNumber % 8 == 0)
             {
-                DEBUG("\nFailed to open file: %s\n", fileName);
-                continue;
+                _fseeki64(trainingDataFile, blockIndices[minibatchNumber / 8], SEEK_SET);
+                fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE * 8, trainingDataFile);
+                shuffle_struct(batchData, MINIBATCH_SIZE * 8);
             }
-            if(inputGroup == INPUT_GROUP_A)
-            {
-                memset(activeInputs_A, 0, 64 * MINIBATCH_SIZE * sizeof(short));
-            }
-            else
-            {
-                memset(activeInputs_B, 0, 64 * MINIBATCH_SIZE * sizeof(short));
-            }
+            CompactPosition* myBatchData = &batchData[MINIBATCH_SIZE * (minibatchNumber % 8)];
 
-            int count = 0;
-            while(count < MINIBATCH_SIZE && fgets(inputStrings[count++], 105, trainingData));
-            
-            fclose(trainingData);
+            int inputGroup = INPUT_GROUP(minibatchNumber);
+            if(inputGroup == INPUT_GROUP_A) memset(activeInputs_A, 0, 64 * MINIBATCH_SIZE * sizeof(short));
+            else memset(activeInputs_B, 0, 64 * MINIBATCH_SIZE * sizeof(short));
 
             #pragma omp parallel
             {
@@ -206,14 +254,8 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
                 #pragma omp for schedule(static)
                 for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
                 {
-                     if(inputGroup == INPUT_GROUP_A) 
-                    {
-                        loadTrainingData(inputStrings[entryNumber], board, &expectedOutputs_A[entryNumber]);
-                    }
-                    else 
-                    {
-                        loadTrainingData(inputStrings[entryNumber], board, &expectedOutputs_B[entryNumber]);
-                    }
+                    if(inputGroup == INPUT_GROUP_A)  loadTrainingData(myBatchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
+                    else loadTrainingData(myBatchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
 
                     uint64_t inputs[20] = {0};
 
@@ -266,14 +308,19 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
                         inputs[19] = mirrorBoard(inputs[19]);
                     }
 
-                    for(int side = 0; side < 2; side++)
+                    for(int color = 0; color < 2; color++)
                     {
-                        int baseIndex = (side == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
-                        
+                        int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
+
                         int trackedInputs = 0;
+
+                        //First half matches side to move.
+                        // side = 0 if color matches board->turn
+                        int side = (color != board->turn);
+                        
                         for(int piece = 0; piece < 10; piece++)
                         {
-                            uint64_t mask = inputs[10 * side + piece];
+                            uint64_t mask = inputs[10 * color + piece];
                             while(mask)
                             {
                                 if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
@@ -305,9 +352,9 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
             totalSumSquaredError+=sumSquaredError;
 
 
-            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", blockIndex + 1, FILE_COUNT, sumSquaredError / MINIBATCH_SIZE);
+            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, sumSquaredError / MINIBATCH_SIZE);
             
-            if(saveEveryNBlocks && blockIndex > 0 && blockIndex%saveEveryNBlocks == 0) 
+            if(saveEveryNBlocks && minibatchNumber > 0 && minibatchNumber%saveEveryNBlocks == 0) 
             {
                 getWeights(trainingNNUE);
                 save_trainingWeights();
@@ -315,13 +362,16 @@ void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError)
         }
         totalIterations++;
         
-        printf("\33[2K\rIteration %d MSE = %e\n", totalIterations, totalSumSquaredError/(MINIBATCH_SIZE * FILE_COUNT));
+        printf("\33[2K\rEpoch %d MSE = %e\n", totalIterations, totalSumSquaredError/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH));
 
         getWeights(trainingNNUE);
         save_trainingWeights();
-    } while((totalSumSquaredError/(MINIBATCH_SIZE * FILE_COUNT)) > maxAllowedError && totalIterations < maxIterations);
+    } while((totalSumSquaredError/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH)) > maxAllowedError && totalIterations < maxIterations);
 
-    free(blockNumbers);
+    
+    fclose(trainingDataFile);
+    free(blockIndices);
+    free(batchData);
     free(activeInputs_A);
     free(expectedOutputs_A);
     free(activeInputs_B);

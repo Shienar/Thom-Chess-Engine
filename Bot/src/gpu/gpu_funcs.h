@@ -15,13 +15,12 @@
  * cosine annealing is done using timestamp in enqueueKernels()
  * LR linearly increases from INITIAL_LR to MAX_LR during WARMUP_PERIOD
  */
-#define MAX_LR 7.5e-4f
-#define MIN_LR 1e-5f
-#define WARMUP_PERIOD 300
-#define INITIAL_LR 1e-8
+#define MAX_LR 5e-4f
+#define MIN_LR 5e-5f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL 500
 #define MAX_INTERVALS 15
+#define LOOKAHEAD_RANGE 10
 typedef struct {
     cl_platform_id platform;
     cl_device_id device;
@@ -42,6 +41,7 @@ typedef struct {
     cl_kernel calculateGradient1_B;
     cl_kernel adamw;
     cl_kernel lazyadam;
+    cl_kernel lookahead;
 } openCLContext;
 
 typedef struct {
@@ -51,15 +51,25 @@ typedef struct {
     cl_mem activeInputs_B;
     cl_mem expectedOutput_B;
 
-    cl_mem weights1;
-    cl_mem weights2;
-    cl_mem weights3;
-    cl_mem weights4;
+    cl_mem weights1_fast;
+    cl_mem weights2_fast;
+    cl_mem weights3_fast;
+    cl_mem weights4_fast;
 
-    cl_mem bias1;
-    cl_mem bias2;
-    cl_mem bias3;
-    cl_mem bias4;
+    cl_mem bias1_fast;
+    cl_mem bias2_fast;
+    cl_mem bias3_fast;
+    cl_mem bias4_fast;
+    
+    cl_mem weights1_slow;
+    cl_mem weights2_slow;
+    cl_mem weights3_slow;
+    cl_mem weights4_slow;
+
+    cl_mem bias1_slow;
+    cl_mem bias2_slow;
+    cl_mem bias3_slow;
+    cl_mem bias4_slow;
     
     cl_mem accumulatorOutput;
     cl_mem h2Output;
@@ -105,6 +115,8 @@ typedef struct {
     cl_mem v_bias3;
     cl_mem v_bias4;
 
+    cl_mem sparseTimestamps;
+
 } openCLKernelMemory;
 
 
@@ -116,7 +128,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
                                                         short* host_activeInputs_B, float* host_expectedOutputs_B);
 void freeOpenCL();
 
-#define ENQUEUE_ADAMW(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \
+#define ENQUEUE_ADAMW(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2, rectificationTerm) \
     clSetKernelArg(opencl_context.adamw, 0, sizeof(cl_mem), &weights); \
     clSetKernelArg(opencl_context.adamw, 1, sizeof(cl_mem), &gradient); \
     clSetKernelArg(opencl_context.adamw, 2, sizeof(cl_mem), &firstMoment); \
@@ -124,49 +136,23 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.adamw, 4, sizeof(cl_float), &learningRate); \
     clSetKernelArg(opencl_context.adamw, 5, sizeof(cl_float), &biasCorrection1); \
     clSetKernelArg(opencl_context.adamw, 6, sizeof(cl_float), &biasCorrection2); \
+    clSetKernelArg(opencl_context.adamw, 7, sizeof(cl_float), &rectificationTerm); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.adamw, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-#define ENQUEUE_LAZY_ADAM(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \
+#define ENQUEUE_LAZY_ADAM(weights, t, gradient, firstMoment, secondMoment, size, learningRate, rho_inf) \
     clSetKernelArg(opencl_context.lazyadam, 0, sizeof(cl_mem), &weights); \
-    clSetKernelArg(opencl_context.lazyadam, 1, sizeof(cl_mem), &gradient); \
-    clSetKernelArg(opencl_context.lazyadam, 2, sizeof(cl_mem), &firstMoment); \
-    clSetKernelArg(opencl_context.lazyadam, 3, sizeof(cl_mem), &secondMoment); \
-    clSetKernelArg(opencl_context.lazyadam, 4, sizeof(cl_float), &learningRate); \
-    clSetKernelArg(opencl_context.lazyadam, 5, sizeof(cl_float), &biasCorrection1); \
-    clSetKernelArg(opencl_context.lazyadam, 6, sizeof(cl_float), &biasCorrection2); \
+    clSetKernelArg(opencl_context.lazyadam, 1, sizeof(cl_mem), &t); \
+    clSetKernelArg(opencl_context.lazyadam, 2, sizeof(cl_mem), &gradient); \
+    clSetKernelArg(opencl_context.lazyadam, 3, sizeof(cl_mem), &firstMoment); \
+    clSetKernelArg(opencl_context.lazyadam, 4, sizeof(cl_mem), &secondMoment); \
+    clSetKernelArg(opencl_context.lazyadam, 5, sizeof(cl_float), &learningRate); \
+    clSetKernelArg(opencl_context.lazyadam, 6, sizeof(cl_float), &rho_inf); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.lazyadam, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-    
-#define ENQUEUE_ADAMW_DEBUG(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \
-    clSetKernelArg(opencl_context.adamw, 0, sizeof(cl_mem), &weights); \
-    clSetKernelArg(opencl_context.adamw, 1, sizeof(cl_mem), &gradient); \
-    clSetKernelArg(opencl_context.adamw, 2, sizeof(cl_mem), &firstMoment); \
-    clSetKernelArg(opencl_context.adamw, 3, sizeof(cl_mem), &secondMoment); \
-    clSetKernelArg(opencl_context.adamw, 4, sizeof(cl_float), &learningRate); \
-    clSetKernelArg(opencl_context.adamw, 5, sizeof(cl_float), &biasCorrection1); \
-    clSetKernelArg(opencl_context.adamw, 6, sizeof(cl_float), &biasCorrection2); \
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.adamw, 1, NULL, &size, NULL, 0, NULL, &perf); \
-    clWaitForEvents(1, &perf); \
-    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL); \
-    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL); \
-    printf("ADAMW Calculation Time: %0.3f ms\n", (double)(end - start) / 1000000.0); \
-    clReleaseEvent(perf);
-
-    
-#define ENQUEUE_LAZY_ADAM_DEBUG(weights, gradient, firstMoment, secondMoment, size, learningRate, biasCorrection1, biasCorrection2) \
-    clSetKernelArg(opencl_context.lazyadam, 0, sizeof(cl_mem), &weights); \
-    clSetKernelArg(opencl_context.lazyadam, 1, sizeof(cl_mem), &gradient); \
-    clSetKernelArg(opencl_context.lazyadam, 2, sizeof(cl_mem), &firstMoment); \
-    clSetKernelArg(opencl_context.lazyadam, 3, sizeof(cl_mem), &secondMoment); \
-    clSetKernelArg(opencl_context.lazyadam, 4, sizeof(cl_float), &learningRate); \
-    clSetKernelArg(opencl_context.lazyadam, 5, sizeof(cl_float), &biasCorrection1); \
-    clSetKernelArg(opencl_context.lazyadam, 6, sizeof(cl_float), &biasCorrection2); \
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.lazyadam, 1, NULL, &size, NULL, 0, NULL, &perf); \
-    clWaitForEvents(1, &perf); \
-    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL); \
-    clGetEventProfilingInfo(perf, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL); \
-    printf("\nLazy Adam Calculation Time: %0.3f ms\n", (double)(end - start) / 1000000.0); \
-    clReleaseEvent(perf);
+#define LOOKAHEAD_UPDATE(fastWeights, slowWeights, size) \
+    clSetKernelArg(opencl_context.lookahead, 0, sizeof(cl_mem), &fastWeights); \
+    clSetKernelArg(opencl_context.lookahead, 1, sizeof(cl_mem), &slowWeights); \
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.lookahead, 1, NULL, &size, NULL, 0, NULL, NULL);
 
 void enqueueKernels(int bufferSide, double* outputSSE);
 void getWeights(network_weights_training* weights);

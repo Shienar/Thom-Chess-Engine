@@ -14,7 +14,7 @@ OBJFILES += src/gpu/*.c
 CFLAGS += -DNDEBUG
 
 # Speedup, harder debugging.
-CFLAGS += -O3
+# CFLAGS += -O3
 
 # Thread count
 THREADS ?= 8
@@ -31,4 +31,4 @@ $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES) $(LIBS)
 
 clean:
-	rm -f $(TARGET)
+	rm $(TARGET)
