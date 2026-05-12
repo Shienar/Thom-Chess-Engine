@@ -181,7 +181,11 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
     assert(acc);
     assert(refreshTable);
 
-    if(ISKING(lastMove.piece)) updateAccumulatorFromTable(board, acc, refreshTable);
+    if(ISKING(lastMove.piece)) 
+    {
+        updateAccumulatorFromTable(board, acc, refreshTable);
+        return;
+    }
 
     for(int i = 0; i < 2; i++)
     {
@@ -228,7 +232,7 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
         int toIdx   = (64 * ((10 * kingBuckets[ksq]) + pieceOffset)) + toSq;
 
         int capIdx = -1;
-        if(lastMove.capturedPiece)
+        if(lastMove.capturedPiece != EMPTY_PIECE)
         {
             int capturedPieceOffset, capturedPieceSquare;
             if(i == 0)
@@ -243,7 +247,7 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
             }
 
             assert(!ISKING(lastMove.capturedPiece));
-            capturedPieceOffset = ISWHITE(pieceOffset) ? PIECE(capturedPieceOffset) / 2 :  5 + PIECE(capturedPieceOffset) / 2;
+            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  5 + PIECE(capturedPieceOffset) / 2;
             int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (10 * kingBuckets[ksq]) + capturedPieceOffset;
 
             acc->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);

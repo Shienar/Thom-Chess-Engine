@@ -22,6 +22,7 @@
 
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // Roughly 100 million positions.
+#define MINIBATCHES_PER_SHUFFLE_BLOCK 32
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
@@ -52,7 +53,7 @@ int32_t forwardPropagate(int turn, accumulator* acc);
  *  - Lookahead
  *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf (TODO - read)
  */
-void train(int saveEveryNBlocks, int maxIterations, float maxAllowedError);
+void train( int maxIterations, float maxAllowedError);
 
 #pragma pack(push, 1) // no padding
 typedef struct {

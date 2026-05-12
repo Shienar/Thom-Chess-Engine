@@ -13,13 +13,12 @@
 
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
- * LR linearly increases from INITIAL_LR to MAX_LR during WARMUP_PERIOD
  */
-#define MAX_LR 5e-4f
-#define MIN_LR 5e-5f
+#define MAX_LR 2.5e-4f
+#define MIN_LR 8e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL 500
-#define MAX_INTERVALS 15
+#define MAX_INTERVALS 20
 #define LOOKAHEAD_RANGE 10
 typedef struct {
     cl_platform_id platform;
@@ -154,7 +153,7 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.lookahead, 1, sizeof(cl_mem), &slowWeights); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.lookahead, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-void enqueueKernels(int bufferSide, double* outputSSE);
+void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop);
 void getWeights(network_weights_training* weights);
 
 #endif

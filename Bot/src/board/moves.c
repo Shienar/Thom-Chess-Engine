@@ -534,7 +534,7 @@ int movePiece(bitboard *board, move* m)
     }
 
     //50 move rule counting
-    if(ISPAWN(m->piece) || m->capturedPiece) board->movesSinceLastChange = 0;
+    if(ISPAWN(m->piece) || m->capturedPiece != EMPTY_PIECE) board->movesSinceLastChange = 0;
     else board->movesSinceLastChange++;
     board->halfMoveCount++;
 

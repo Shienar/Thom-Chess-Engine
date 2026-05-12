@@ -481,6 +481,7 @@ void values_print(bitboard* board)
         printf("\n");
     }
 
+    printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->movesSinceLastChange);
     if(board->enPassantSquare != -1) printf("En passant square: %d\n", board->enPassantSquare);
 }
 

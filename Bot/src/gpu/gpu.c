@@ -457,7 +457,7 @@ void freeOpenCL()
     }
 }
 
-void enqueueKernels(int bufferSide, double* outputSSE)
+void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
 {
     //cosine annealing
     lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
@@ -519,6 +519,8 @@ void enqueueKernels(int bufferSide, double* outputSSE)
     else clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.backpropagate_B, 2, NULL, calcDeltaSize, calcDeltaSize_Local, 0, NULL, NULL);
     
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.sumsquarederror, CL_FALSE, 0, sizeof(double), outputSSE, 0, NULL, &readEvent);
+
+    if(!doBackprop) return;
 
     size_t calcGrad4Size[2] = { 32, 64 };
     size_t calcGrad4Size_Local[2]  = { 1, 64 };

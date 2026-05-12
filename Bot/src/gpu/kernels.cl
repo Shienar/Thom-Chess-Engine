@@ -13,7 +13,7 @@
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-5 
+#define ADAM_WEIGHT_DECAY 1e-3
 
 #define LEAK_FACTOR 0.01f
 
@@ -217,7 +217,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         delta4[batchIndex] = d4;
         shared_delta[0] = d4;
 
-        //if(batchIndex < 3) printf("\nExpected %f, Received %f", expectedOutputs[batchIndex], outputNodes[batchIndex]);
+        //if(batchIndex < 10) printf("\nExpected %f, Received %f", expectedOutputs[batchIndex], outputNodes[batchIndex]);
     } 
     else shared_sse[localID] = 0.0;
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -249,7 +249,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     barrier(CLK_LOCAL_MEM_FENCE);
 
     //delta 1
-    //512 delta / 64 threads = 8 deltas per
+    //1024 delta / 64 threads = 8 deltas per
     for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=64) 
     {
         float sum = 0.0f;
@@ -397,7 +397,7 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
     barrier(CLK_LOCAL_MEM_FENCE);
 
 
-    //Process all 256 nodes in chunks of 64
+    //Process all 512 nodes in chunks of 64
     for (int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64) 
     {
         float d1_w = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];

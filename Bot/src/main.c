@@ -24,7 +24,6 @@ int main(int argc, char** argv)
     int fenLineNumber = -1;
     int shouldTrain = 0;
     int useBook = 1; 
-    int saveEveryNBlocks = 10;
     int shouldPerft = 0;
     for(int i = 1; i < argc; i++)
     {
@@ -42,7 +41,7 @@ int main(int argc, char** argv)
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
             printf("--nobook\t\tPrevents loading an opening book\n");
             printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
-            printf("--train\t\ttrains the neural network. Pass in iteration count and how often you want to save.\n");
+            printf("--train\t\ttrains the neural network. Pass in iteration count.\n");
             printf("--singlethread\t\tDisables helper threads.\n");
             printf("--perft\t\tMove generation performance test.\n");
             printf("\n\n");
@@ -56,7 +55,7 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
         else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atoi(argv[i]); }
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
-        else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); i++; saveEveryNBlocks = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
         else if(strcmp(argv[i], "--init") == 0) { 
             load_trainingWeights();
@@ -84,7 +83,7 @@ int main(int argc, char** argv)
     {
         load_trainingWeights();
 
-        train(saveEveryNBlocks, shouldTrain, 1e-3);
+        train(shouldTrain, 1e-3);
         
         save_trainingWeights();
 
