@@ -230,7 +230,6 @@ void train(int maxIterations, float maxAllowedError)
     //Read data for next few minibatches, then shuffle data amongst them.
     CompactPosition* batchData = calloc(MINIBATCHES_PER_SHUFFLE_BLOCK * MINIBATCH_SIZE, sizeof(CompactPosition));
 
-    
     FILE* validationData = fopen("./import/validationData.bin", "rb");
 
     _fseeki64(validationData, 0, SEEK_END);
@@ -256,8 +255,6 @@ void train(int maxIterations, float maxAllowedError)
             CompactPosition* myBatchData = &batchData[MINIBATCH_SIZE * (minibatchNumber % MINIBATCHES_PER_SHUFFLE_BLOCK)];
 
             inputGroup = INPUT_GROUP(minibatchNumber);
-            if(inputGroup == INPUT_GROUP_A) memset(activeInputs_A, 0, 64 * MINIBATCH_SIZE * sizeof(short));
-            else memset(activeInputs_B, 0, 64 * MINIBATCH_SIZE * sizeof(short));
 
             #pragma omp parallel
             {
@@ -355,14 +352,12 @@ void train(int maxIterations, float maxAllowedError)
             }
 
             double sumSquaredError = 0.0;
+
             enqueueKernels(inputGroup, &sumSquaredError, 1);
-
             clWaitForEvents(1, &readEvent);
-
             clReleaseEvent(readEvent);
-
+            
             totalSumSquaredError+=sumSquaredError;
-
 
             printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, sumSquaredError / MINIBATCH_SIZE);
         }
@@ -376,8 +371,6 @@ void train(int maxIterations, float maxAllowedError)
         {
             fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
             inputGroup ^= 1;
-            if(inputGroup == INPUT_GROUP_A) memset(activeInputs_A, 0, 64 * MINIBATCH_SIZE * sizeof(short));
-            else memset(activeInputs_B, 0, 64 * MINIBATCH_SIZE * sizeof(short));
 
             #pragma omp parallel
             {
@@ -471,6 +464,7 @@ void train(int maxIterations, float maxAllowedError)
                         }
                     }
                 }
+                
                 free(board);
             }
         
@@ -507,10 +501,10 @@ void train(int maxIterations, float maxAllowedError)
     fclose(validationData);
     free(blockIndices);
     free(batchData);
-    free(activeInputs_A);
-    free(expectedOutputs_A);
-    free(activeInputs_B);
-    free(expectedOutputs_B);
+    _aligned_free(activeInputs_A);
+    _aligned_free(expectedOutputs_A);
+    _aligned_free(activeInputs_B);
+    _aligned_free(expectedOutputs_B);
 
     freeOpenCL();
 }

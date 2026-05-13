@@ -20,6 +20,9 @@ CFLAGS += -DNDEBUG
 THREADS ?= 8
 CFLAGS += -DHELPER_THREAD_COUNT=$(THREADS)
 
+# Kernel profiling, no ping-pong buffers.
+# CFLAGS += -DPERFT_KERNELS
+
 # Extra CFLAGS for gprof analysis.
 # Need to run the executable first to generate gmon.out file.
 # gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
