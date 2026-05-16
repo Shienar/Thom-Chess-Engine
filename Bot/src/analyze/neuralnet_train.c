@@ -237,13 +237,131 @@ void train(int maxIterations, float maxAllowedError)
     validationEntries -= (validationEntries % MINIBATCH_SIZE);
     int validationBlocks = validationEntries / MINIBATCH_SIZE;
     double validationMSE = 0.0;
-    double minimumMSE = DBL_MAX;
+    rewind(validationData);
+
+    int inputGroup = INPUT_GROUP_A;
+
+    for(int i = 0; i < validationBlocks; i++)
+    {
+        fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
+        inputGroup ^= 1;
+
+        #pragma omp parallel
+        {
+            bitboard* board = create_board();
+            
+            #pragma omp for schedule(static)
+            for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
+            {
+                if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
+                else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
+
+                uint64_t inputs[20] = {0};
+
+                inputs[0] = board->pieces[WHITE_PAWN];
+                inputs[1] = board->pieces[WHITE_KNIGHT];
+                inputs[2] = board->pieces[WHITE_BISHOP];
+                inputs[3] = board->pieces[WHITE_ROOK];
+                inputs[4] = board->pieces[WHITE_QUEEN];
+                inputs[5] = board->pieces[BLACK_PAWN];
+                inputs[6] = board->pieces[BLACK_KNIGHT];
+                inputs[7] = board->pieces[BLACK_BISHOP];
+                inputs[8] = board->pieces[BLACK_ROOK];
+                inputs[9] = board->pieces[BLACK_QUEEN];
+
+                inputs[10] = FLIP_MASK(board->pieces[BLACK_PAWN]);
+                inputs[11] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+                inputs[12] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+                inputs[13] = FLIP_MASK(board->pieces[BLACK_ROOK]);
+                inputs[14] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+                inputs[15] = FLIP_MASK(board->pieces[WHITE_PAWN]);
+                inputs[16] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+                inputs[17] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+                inputs[18] = FLIP_MASK(board->pieces[WHITE_ROOK]);
+                inputs[19] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
+
+                if(getColumn(board->kingSquare_w) > 3)
+                {
+                    inputs[0] = mirrorBoard(inputs[0]);
+                    inputs[1] = mirrorBoard(inputs[1]);
+                    inputs[2] = mirrorBoard(inputs[2]);
+                    inputs[3] = mirrorBoard(inputs[3]);
+                    inputs[4] = mirrorBoard(inputs[4]);
+                    inputs[5] = mirrorBoard(inputs[5]);
+                    inputs[6] = mirrorBoard(inputs[6]);
+                    inputs[7] = mirrorBoard(inputs[7]);
+                    inputs[8] = mirrorBoard(inputs[8]);
+                    inputs[9] = mirrorBoard(inputs[9]);
+                }
+                if(getColumn(board->kingSquare_b) > 3)
+                {
+                    inputs[10] = mirrorBoard(inputs[10]);
+                    inputs[11] = mirrorBoard(inputs[11]);
+                    inputs[12] = mirrorBoard(inputs[12]);
+                    inputs[13] = mirrorBoard(inputs[13]);
+                    inputs[14] = mirrorBoard(inputs[14]);
+                    inputs[15] = mirrorBoard(inputs[15]);
+                    inputs[16] = mirrorBoard(inputs[16]);
+                    inputs[17] = mirrorBoard(inputs[17]);
+                    inputs[18] = mirrorBoard(inputs[18]);
+                    inputs[19] = mirrorBoard(inputs[19]);
+                }
+
+                for(int color = 0; color < 2; color++)
+                {
+                    int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * 640 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 640;
+
+                    int trackedInputs = 0;
+
+                    //First half matches side to move.
+                    // side = 0 if color matches board->turn
+                    int side = (color != board->turn);
+                    
+                    for(int piece = 0; piece < 10; piece++)
+                    {
+                        uint64_t mask = inputs[10 * color + piece];
+                        while(mask)
+                        {
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            trackedInputs++;
+                            mask&=(mask - 1);
+                        }
+                    }
+                    
+                    //-1 padding
+                    while(trackedInputs < 32)
+                    {
+                        if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
+                        else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
+                        trackedInputs++;
+                    }
+                }
+            }
+            
+            free(board);
+        }
+    
+        double tempSSE = 0.0;
+        enqueueKernels(inputGroup, &tempSSE, 0);
+
+        clWaitForEvents(1, &readEvent);
+
+        clReleaseEvent(readEvent);
+
+        validationMSE+=tempSSE;
+    }
+
+    validationMSE /= validationEntries;
+    double minimumMSE = validationMSE;
+
+    //Yellow text
+    printf("Initial Validation MSE = \033[0;33m%e\033[0m\n", validationMSE);
 
     do{
         totalSumSquaredError = 0.0;
 
         shuffle_long(blockIndices, blockCount);
-        int inputGroup;
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {
             if(minibatchNumber % MINIBATCHES_PER_SHUFFLE_BLOCK == 0)
@@ -254,7 +372,7 @@ void train(int maxIterations, float maxAllowedError)
             }
             CompactPosition* myBatchData = &batchData[MINIBATCH_SIZE * (minibatchNumber % MINIBATCHES_PER_SHUFFLE_BLOCK)];
 
-            inputGroup = INPUT_GROUP(minibatchNumber);
+            inputGroup ^= 1;
 
             #pragma omp parallel
             {

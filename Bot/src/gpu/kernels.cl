@@ -53,34 +53,36 @@ inline float sigmoid(float x)
 //From https://streamhpc.com/blog/2016-02-09/atomic-operations-for-floats-in-opencl-improved/
 inline void AtomicAddFloat(volatile __global float* source, const float operand )
 {
-    union { unsigned int intVal; float floatVal; } newVal;
-    union { unsigned int intVal; float floatVal; } prevVal;
+    union { unsigned int intVal; float floatVal; } newVal, prevVal, currentVal;
+    currentVal.floatVal = *source;
     do {
-        prevVal.floatVal = *source;
+        prevVal.floatVal = currentVal.floatVal;
         newVal.floatVal = prevVal.floatVal + operand;
+        currentVal.intVal = atomic_cmpxchg( (volatile __global unsigned int*)source, prevVal.intVal, newVal.intVal ); // if source == prev, source = new
     }
-    while (atomic_cmpxchg( (volatile __global unsigned int*)source, prevVal.intVal, newVal.intVal ) != prevVal.intVal);
+    while (currentVal.intVal != prevVal.intVal);
 }
 inline void AtomicAddFloatLocal(volatile __local float* source, const float operand )
 {
-    union { unsigned int intVal; float floatVal; } newVal;
-    union { unsigned int intVal; float floatVal; } prevVal;
+    union { unsigned int intVal; float floatVal; } newVal, prevVal, currentVal;
+    currentVal.floatVal = *source;
     do {
-        prevVal.floatVal = *source;
+        prevVal.floatVal = currentVal.floatVal;
         newVal.floatVal = prevVal.floatVal + operand;
+        currentVal.intVal = atomic_cmpxchg( (volatile __local unsigned int*)source, prevVal.intVal, newVal.intVal ); // if source == prev, source = new
     }
-    while (atomic_cmpxchg( (volatile __local unsigned int*)source, prevVal.intVal, newVal.intVal ) != prevVal.intVal);
+    while (currentVal.intVal != prevVal.intVal);
 }
 inline void AtomicAddDouble(volatile __global double* source, const double operand)
 {
-    union { ulong u64; double f64; } newVal;
-    union { ulong u64; double f64; } prevVal;
-    
+    union { ulong u64; double f64; } newVal, prevVal, currentVal;
+    currentVal.f64 = *source;
     do {
-        prevVal.f64 = *source;
+        prevVal.f64 = currentVal.f64;
         newVal.f64 = prevVal.f64 + operand;
+        currentVal.u64 = atom_cmpxchg( (volatile __global ulong*)source, (ulong) prevVal.u64, (ulong) newVal.u64 ); // if source == prev, source = new
     }
-    while (atom_cmpxchg((volatile __global ulong*)source, prevVal.u64, newVal.u64) != prevVal.u64);
+    while (currentVal.u64 != prevVal.u64);
 }
 
 /******* Forward Propagation *******/
@@ -219,7 +221,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         d4 = outputNodes[batchIndex] - expectedOutputs[batchIndex];
 
         sse = (d4 * d4);
-        d4 *= (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative.
+        d4 *= 2.0f * (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative, MSE derivative.
         delta4[batchIndex] = d4;
         shared_delta[0] = d4;
 
@@ -249,6 +251,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
         float d2 = sum * crelu_leaky_derivative(h2_val);
         delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = d2;
+        barrier(CLK_LOCAL_MEM_FENCE);
         shared_delta[localID] = d2;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
@@ -349,13 +352,13 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     //16,384 total threads in global group. One per nonbias weight.
     //256 threads in one group, sharing local data and loading together.
     //row == 0 thread calculates bias for their output column.
-    int col = get_global_id(0); // 0 to 31 
-    int row = get_global_id(1); // 0 to 511
-    int tileX = get_local_id(0); //0 to 15
-    int tileY = get_local_id(1); //0 to 15
+    int col = get_global_id(0); // 0 to 31. Two column groups
+    int row = get_global_id(1); // 0 to 511. 32 row groups
+    int tileX = get_local_id(0); //0 to 15 (local col)
+    int tileY = get_local_id(1); //0 to 15 (local row)
 
-    __local float tile_h1[16][16];
-    __local float tile_delta2[16][16];
+    __local float tile_h1[16][16]; // batch index x row/inputs
+    __local float tile_delta2[16][16]; // batch index x column/outputs
 
     float accumulator = 0.0f;
     float biasAccumulator = 0.0f; 
@@ -363,14 +366,14 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     for (int batchIndex = 0; batchIndex < MINIBATCH_SIZE; batchIndex+=16) 
     {
         // load into local memory
-        tile_h1[tileX][tileY] = h1[(batchIndex + tileX) * ACCUMULATOR_NODES + row];
-        tile_delta2[tileX][tileY] = delta2[(batchIndex + tileX) * 32 + col];
+        tile_h1[tileY][tileX] = h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row];
+        tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
         barrier(CLK_LOCAL_MEM_FENCE);
 
-        for (int k = 0; k < 16; k++)  
+        for (int batchOffset = 0; batchOffset < 16; batchOffset++)  
         {
-            accumulator += tile_h1[tileY][k] * tile_delta2[k][tileX];
-            if(row == 0) biasAccumulator += tile_delta2[k][tileX];
+            accumulator += tile_h1[batchOffset][tileY] * tile_delta2[batchOffset][tileX];
+            if(row == 0) biasAccumulator += tile_delta2[batchOffset][tileX];
         }
         
         barrier(CLK_LOCAL_MEM_FENCE);

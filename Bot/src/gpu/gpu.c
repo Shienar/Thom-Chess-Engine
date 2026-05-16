@@ -1,8 +1,5 @@
 #include "gpu_funcs.h"
 
-//The link below contains a lot of good info on this topic.
-//https://ics-websites.science.uu.nl/docs/vakken/mov/2019/files/OptmzdSummary%20-%20lecture4%20-%20OpenCL.pdf 
-
 openCLContext opencl_context = {
     .platform = 0,
     .device = 0,
@@ -20,7 +17,7 @@ int64_t cosineIntervalLength;
 uint64_t cosineTimestamp;
 uint64_t timestamp;
 int intervalCount;
-float rho_inf = (2 / (1.0 - ADAM_BETA2)) - 1;
+float rho_inf = (2.0 / (1.0 - ADAM_BETA2)) - 1.0;
 float rho_timestamp = 0.0;
 cl_float rectificationTerm = 0.0;
 cl_float biasCorrection1 = 1.0;
@@ -75,7 +72,8 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     free(kernelSource);
     kernelSource = NULL;
 
-    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, NULL, NULL, NULL);
+    //err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, NULL, NULL, NULL); 
+    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, "-g", NULL, NULL);
     
     if (err)
     {
@@ -351,7 +349,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
 
 void freeOpenCL()
 {
-    for (int i = 0; i < 14; i++) 
+    for (int i = 0; i < 13; i++) 
     {
         if (opencl_context.kernels.arr[i]) 
         {
@@ -390,16 +388,16 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     
     if(bufferSide == INPUT_GROUP_A)
     {
-        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.activeInputs_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * 64 * sizeof(short), 0, NULL, NULL, NULL);
-        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.expectedOutput_A, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * sizeof(float), 0, NULL, NULL, NULL);
+        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.activeInputs_A, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * 64 * sizeof(short), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.expectedOutput_A, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * sizeof(float), 0, NULL, NULL, NULL);
 
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.mem.activeInputs_A, ptr1, 0, NULL, NULL);
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.mem.expectedOutput_A, ptr2, 0, NULL, NULL);
     }
     else if(bufferSide == INPUT_GROUP_B)
     {
-        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.activeInputs_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * 64 * sizeof(short), 0, NULL, NULL, NULL);
-        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.expectedOutput_B, CL_FALSE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * sizeof(float), 0, NULL, NULL, NULL);
+        void* ptr1 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.activeInputs_B, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * 64 * sizeof(short), 0, NULL, NULL, NULL);
+        void* ptr2 = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.expectedOutput_B, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * sizeof(float), 0, NULL, NULL, NULL);
 
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.mem.activeInputs_B, ptr1, 0, NULL, NULL);
         clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.mem.expectedOutput_B, ptr2, 0, NULL, NULL);
@@ -442,7 +440,7 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     size_t calcGrad3Size_Local[2]  = { 64, 1 }; 
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateGradient3, 2, NULL, calcGrad3Size, calcGrad3Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad3));
 
-    size_t calcGrad2Size[2] = { 32, ACCUMULATOR_NODES };
+    size_t calcGrad2Size[2] = { SECOND_HIDDEN_LAYER_NODES, ACCUMULATOR_NODES };
     size_t calcGrad2Size_Local[2] = { 16, 16 }; 
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateGradient2, 2, NULL, calcGrad2Size, calcGrad2Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad2));
 
@@ -453,8 +451,8 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
                             2, NULL, calcGrad1Size, calcGrad1Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad1));
 
     timestamp++;
-    biasCorrection1 = pow(ADAM_BETA1, timestamp);
-    biasCorrection2 = pow(ADAM_BETA2, timestamp);
+    biasCorrection1 = powf(ADAM_BETA1, timestamp);
+    biasCorrection2 = powf(ADAM_BETA2, timestamp);
     rho_timestamp = rho_inf - (2.0f * timestamp * biasCorrection2) / (1.0f - biasCorrection2);
     if (rho_timestamp > 5.0f) rectificationTerm = sqrt(((rho_timestamp - 4.0f) * (rho_timestamp - 2.0f) * rho_inf) / ((rho_inf - 4.0f) * (rho_inf - 2.0f) * rho_timestamp));
     else rectificationTerm = 0.0f;
@@ -469,14 +467,14 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     size_t bias3Size = THIRD_HIDDEN_LAYER_NODES;
     size_t bias4Size = OUTPUT_LAYER_NODES;
 
-    ENQUEUE_LAZY_ADAM(opencl_mem.mem.weights1_fast, opencl_mem.mem.sparseTimestamps, opencl_mem.mem.gradient1Sum, opencl_mem.mem.m_weights1, opencl_mem.mem.v_weights1, weight1Size, lr, rho_inf, event_w1);
-
     size_t fused_global_size = ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES;
     clSetKernelArg(opencl_context.kernels.adamw, 28, sizeof(cl_float), &lr);
     clSetKernelArg(opencl_context.kernels.adamw, 29, sizeof(cl_float), &biasCorrection1);
     clSetKernelArg(opencl_context.kernels.adamw, 30, sizeof(cl_float), &biasCorrection2);
     clSetKernelArg(opencl_context.kernels.adamw, 31, sizeof(cl_float), &rectificationTerm);
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.adamw, 1, NULL, &fused_global_size, NULL, 0, NULL, ENQUEUE_EVENT(event_dense));
+
+    ENQUEUE_LAZY_ADAM(opencl_mem.mem.weights1_fast, opencl_mem.mem.sparseTimestamps, opencl_mem.mem.gradient1Sum, opencl_mem.mem.m_weights1, opencl_mem.mem.v_weights1, weight1Size, lr, rho_inf, event_w1);
 
     if(timestamp % LOOKAHEAD_RANGE == 0)
     {
