@@ -90,8 +90,8 @@ typedef struct magic {
     int8_t shiftOffset;
 } magic;
 
-#define INPUT_BITS 20480
-#define HALF_INPUT_BITS 10240
+#define INPUT_BITS 24576
+#define HALF_INPUT_BITS 12288
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE 256
 #define SECOND_HIDDEN_LAYER_NODES 32
@@ -99,7 +99,7 @@ typedef struct magic {
 #define OUTPUT_LAYER_NODES 1
 
 #define KING_BUCKETS 16
-#define BITBOARDS_PER_INPUT_SIDE 160 //1 bitboard for each of the ten pieces for each king bucket.
+#define BITBOARDS_PER_INPUT_SIDE 192 //1 bitboard for each of the twelve pieces for each king bucket.
 
 extern int kingBuckets[64];
 extern int kingBucketMap[KING_BUCKETS];
@@ -132,7 +132,7 @@ typedef struct network_weights_playing {
 } network_weights_playing;
 
 typedef struct accumulator {
-    uint64_t inputNodes[320];
+    uint64_t inputNodes[384];
     uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
     int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;

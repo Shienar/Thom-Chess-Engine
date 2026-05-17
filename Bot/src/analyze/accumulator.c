@@ -47,10 +47,10 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingB
     {
         __m256i v_output = _mm256_loadu_si256((__m256i*)&weights->weights1_bias[outputIndex]);
 
-        for(int piece = 0; piece < 10; piece++)
+        for(int piece = 0; piece < 12; piece++)
         {
-            uint64_t pieceMask = inputNodes[kingBucket * 10 + piece];
-            int baseIndex = kingBucket * 640 + (piece * 64);
+            uint64_t pieceMask = inputNodes[kingBucket * 12 + piece];
+            int baseIndex = kingBucket * 768 + (piece * 64);
             while(pieceMask)
             {
                 int featureIndex =  baseIndex + __builtin_ctzll(pieceMask);
@@ -110,58 +110,49 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
     
     uint64_t* inputs = acc->inputNodes;
 
-    memset(inputs, 0, 320*sizeof(uint64_t));
+    memset(inputs, 0, 384*sizeof(uint64_t));
 
-    int baseIndex_w = 10*kingBuckets[board->kingSquare_w];
-    int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + 10*kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+    int baseIndex_w = 12*kingBuckets[board->kingSquare_w];
+    int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + 12*kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
 
-    inputs[baseIndex_w + 0] = board->pieces[WHITE_PAWN];
-    inputs[baseIndex_w + 1] = board->pieces[WHITE_KNIGHT];
-    inputs[baseIndex_w + 2] = board->pieces[WHITE_BISHOP];
-    inputs[baseIndex_w + 3] = board->pieces[WHITE_ROOK];
-    inputs[baseIndex_w + 4] = board->pieces[WHITE_QUEEN];
-    inputs[baseIndex_w + 5] = board->pieces[BLACK_PAWN];
-    inputs[baseIndex_w + 6] = board->pieces[BLACK_KNIGHT];
-    inputs[baseIndex_w + 7] = board->pieces[BLACK_BISHOP];
-    inputs[baseIndex_w + 8] = board->pieces[BLACK_ROOK];
-    inputs[baseIndex_w + 9] = board->pieces[BLACK_QUEEN];
+    inputs[baseIndex_w + 0]  = board->pieces[WHITE_PAWN];
+    inputs[baseIndex_w + 1]  = board->pieces[WHITE_KNIGHT];
+    inputs[baseIndex_w + 2]  = board->pieces[WHITE_BISHOP];
+    inputs[baseIndex_w + 3]  = board->pieces[WHITE_ROOK];
+    inputs[baseIndex_w + 4]  = board->pieces[WHITE_QUEEN];
+    inputs[baseIndex_w + 5]  = board->pieces[WHITE_KING];
+    inputs[baseIndex_w + 6]  = board->pieces[BLACK_PAWN];
+    inputs[baseIndex_w + 7]  = board->pieces[BLACK_KNIGHT];
+    inputs[baseIndex_w + 8]  = board->pieces[BLACK_BISHOP];
+    inputs[baseIndex_w + 9]  = board->pieces[BLACK_ROOK];
+    inputs[baseIndex_w + 10] = board->pieces[BLACK_QUEEN];
+    inputs[baseIndex_w + 11] = board->pieces[BLACK_KING];
 
-    inputs[baseIndex_b + 0] = FLIP_MASK(board->pieces[BLACK_PAWN]);
-    inputs[baseIndex_b + 1] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
-    inputs[baseIndex_b + 2] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
-    inputs[baseIndex_b + 3] = FLIP_MASK(board->pieces[BLACK_ROOK]);
-    inputs[baseIndex_b + 4] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
-    inputs[baseIndex_b + 5] = FLIP_MASK(board->pieces[WHITE_PAWN]);
-    inputs[baseIndex_b + 6] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
-    inputs[baseIndex_b + 7] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
-    inputs[baseIndex_b + 8] = FLIP_MASK(board->pieces[WHITE_ROOK]);
-    inputs[baseIndex_b + 9] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
+    inputs[baseIndex_b + 0]  = FLIP_MASK(board->pieces[BLACK_PAWN]);
+    inputs[baseIndex_b + 1]  = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+    inputs[baseIndex_b + 2]  = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+    inputs[baseIndex_b + 3]  = FLIP_MASK(board->pieces[BLACK_ROOK]);
+    inputs[baseIndex_b + 4]  = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+    inputs[baseIndex_b + 5]  = FLIP_MASK(board->pieces[BLACK_KING]);
+    inputs[baseIndex_b + 6]  = FLIP_MASK(board->pieces[WHITE_PAWN]);
+    inputs[baseIndex_b + 7]  = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+    inputs[baseIndex_b + 8]  = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+    inputs[baseIndex_b + 9]  = FLIP_MASK(board->pieces[WHITE_ROOK]);
+    inputs[baseIndex_b + 10] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
+    inputs[baseIndex_b + 11] = FLIP_MASK(board->pieces[WHITE_KING]);
 
     if(getColumn(board->kingSquare_w) > 3)
     {
-        inputs[baseIndex_w + 0] = mirrorBoard(inputs[baseIndex_w + 0]);
-        inputs[baseIndex_w + 1] = mirrorBoard(inputs[baseIndex_w + 1]);
-        inputs[baseIndex_w + 2] = mirrorBoard(inputs[baseIndex_w + 2]);
-        inputs[baseIndex_w + 3] = mirrorBoard(inputs[baseIndex_w + 3]);
-        inputs[baseIndex_w + 4] = mirrorBoard(inputs[baseIndex_w + 4]);
-        inputs[baseIndex_w + 5] = mirrorBoard(inputs[baseIndex_w + 5]);
-        inputs[baseIndex_w + 6] = mirrorBoard(inputs[baseIndex_w + 6]);
-        inputs[baseIndex_w + 7] = mirrorBoard(inputs[baseIndex_w + 7]);
-        inputs[baseIndex_w + 8] = mirrorBoard(inputs[baseIndex_w + 8]);
-        inputs[baseIndex_w + 9] = mirrorBoard(inputs[baseIndex_w + 9]);
+        for (int p = 0; p < 12; p++) 
+        {
+            inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
+        }
     }
     if(getColumn(board->kingSquare_b) > 3)
     {
-        inputs[baseIndex_b + 0] = mirrorBoard(inputs[baseIndex_b + 0]);
-        inputs[baseIndex_b + 1] = mirrorBoard(inputs[baseIndex_b + 1]);
-        inputs[baseIndex_b + 2] = mirrorBoard(inputs[baseIndex_b + 2]);
-        inputs[baseIndex_b + 3] = mirrorBoard(inputs[baseIndex_b + 3]);
-        inputs[baseIndex_b + 4] = mirrorBoard(inputs[baseIndex_b + 4]);
-        inputs[baseIndex_b + 5] = mirrorBoard(inputs[baseIndex_b + 5]);
-        inputs[baseIndex_b + 6] = mirrorBoard(inputs[baseIndex_b + 6]);
-        inputs[baseIndex_b + 7] = mirrorBoard(inputs[baseIndex_b + 7]);
-        inputs[baseIndex_b + 8] = mirrorBoard(inputs[baseIndex_b + 8]);
-        inputs[baseIndex_b + 9] = mirrorBoard(inputs[baseIndex_b + 9]);
+        for (int p = 0; p < 12; p++) {
+            inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
+        }
     }
 
     if(ISWHITE(color)) 
@@ -221,15 +212,22 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
             pieceOffset = FLIP_COLOR(lastMove.piece);
         }
         
-        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  5 + PIECE(pieceOffset) / 2;
+        //mirroring
+        if(getColumn(ksq) > 3)
+        {
+            fromSq ^= 7;
+            toSq ^= 7;
+        }
+
+        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  6 + PIECE(pieceOffset) / 2;
         
-        int inputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (10 * kingBuckets[ksq]) + pieceOffset;
+        int inputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (12 * kingBuckets[ksq]) + pieceOffset;
         uint64_t xorMask = singleBitMask(fromSq) | singleBitMask(toSq);
 
         acc->inputNodes[inputNodeIndex]^=xorMask;
 
-        int fromIdx = (64 * ((10 * kingBuckets[ksq]) + pieceOffset)) + fromSq;
-        int toIdx   = (64 * ((10 * kingBuckets[ksq]) + pieceOffset)) + toSq;
+        int fromIdx = (64 * ((12 * kingBuckets[ksq]) + pieceOffset)) + fromSq;
+        int toIdx   = (64 * ((12 * kingBuckets[ksq]) + pieceOffset)) + toSq;
 
         int capIdx = -1;
         if(lastMove.capturedPiece != EMPTY_PIECE)
@@ -245,22 +243,28 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
                 capturedPieceOffset = FLIP_COLOR(lastMove.capturedPiece);
                 capturedPieceSquare = FLIP_SQUARE(lastMove.capturedPieceSquare);
             }
+            
+            //mirroring
+            if(getColumn(ksq) > 3)
+            {
+                capturedPieceSquare ^= 7;
+            }
 
             assert(!ISKING(lastMove.capturedPiece));
-            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  5 + PIECE(capturedPieceOffset) / 2;
-            int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (10 * kingBuckets[ksq]) + capturedPieceOffset;
+            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  6 + PIECE(capturedPieceOffset) / 2;
+            int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * i) + (12 * kingBuckets[ksq]) + capturedPieceOffset;
 
             acc->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
 
-            capIdx = (64 * ((10 * kingBuckets[ksq]) + capturedPieceOffset)) + capturedPieceSquare;
+            capIdx = (64 * ((12 * kingBuckets[ksq]) + capturedPieceOffset)) + capturedPieceSquare;
         }
 
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
         {
-            __m256i v_acc = _mm256_add_epi16(_mm256_loadu_si256((__m256i*)&acc->accumulator[i][j]), _mm256_sub_epi16(_mm256_loadu_si256((__m256i*)&playerNNUE->weights1[toIdx][j]), 
+            __m256i v_acc = _mm256_add_epi16(_mm256_loadu_si256((__m256i*)&acc->rawAccumulator[i][j]), _mm256_sub_epi16(_mm256_loadu_si256((__m256i*)&playerNNUE->weights1[toIdx][j]), 
                                                                                             _mm256_loadu_si256((__m256i*)&playerNNUE->weights1[fromIdx][j])));
             
-            _mm256_storeu_si256((__m256i*)&acc->accumulator[i][j], v_acc);
+            _mm256_storeu_si256((__m256i*)&acc->rawAccumulator[i][j], v_acc);
         }
         if(capIdx != -1)
         {
@@ -295,58 +299,86 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     assert(((ISBLACK(color) && kingBuckets[currentBoard->kingSquare_b] == kingBuckets[accumulatorBoard->kingSquare_b]) || 
                 (ISWHITE(color) && kingBuckets[currentBoard->kingSquare_w] == kingBuckets[accumulatorBoard->kingSquare_w])));
 
-    uint64_t curBoard[10] = {0};
-    uint64_t accumBoard[10] = {0};
+    uint64_t curBoard[12] = {0};
+    uint64_t accumBoard[12] = {0};
 
     int ksq;
     if(ISWHITE(color))
     {
         ksq = accumulatorBoard->kingSquare_w;
+        
+        
+        curBoard[0]  = currentBoard->pieces[WHITE_PAWN];
+        curBoard[1]  = currentBoard->pieces[WHITE_KNIGHT];
+        curBoard[2]  = currentBoard->pieces[WHITE_BISHOP];
+        curBoard[3]  = currentBoard->pieces[WHITE_ROOK];
+        curBoard[4]  = currentBoard->pieces[WHITE_QUEEN];
+        curBoard[5]  = currentBoard->pieces[WHITE_KING];
+        curBoard[6]  = currentBoard->pieces[BLACK_PAWN];
+        curBoard[7]  = currentBoard->pieces[BLACK_KNIGHT];
+        curBoard[8]  = currentBoard->pieces[BLACK_BISHOP];
+        curBoard[9]  = currentBoard->pieces[BLACK_ROOK];
+        curBoard[10] = currentBoard->pieces[BLACK_QUEEN];
+        curBoard[11] = currentBoard->pieces[BLACK_KING];
 
-        memcpy(curBoard, currentBoard->pieces, 10 * sizeof(uint64_t));
-        memcpy(accumBoard, accumulatorBoard->pieces, 10 * sizeof(uint64_t));
+        accumBoard[0]  = accumulatorBoard->pieces[BLACK_PAWN];
+        accumBoard[1]  = accumulatorBoard->pieces[BLACK_KNIGHT];
+        accumBoard[2]  = accumulatorBoard->pieces[BLACK_BISHOP];
+        accumBoard[3]  = accumulatorBoard->pieces[BLACK_ROOK];
+        accumBoard[4]  = accumulatorBoard->pieces[BLACK_QUEEN];
+        accumBoard[5]  = accumulatorBoard->pieces[BLACK_KING];
+        accumBoard[6]  = accumulatorBoard->pieces[WHITE_PAWN];
+        accumBoard[7]  = accumulatorBoard->pieces[WHITE_KNIGHT];
+        accumBoard[8]  = accumulatorBoard->pieces[WHITE_BISHOP];
+        accumBoard[9]  = accumulatorBoard->pieces[WHITE_ROOK];
+        accumBoard[10] = accumulatorBoard->pieces[WHITE_QUEEN];
+        accumBoard[11] = accumulatorBoard->pieces[WHITE_KING];
     }
     else
     {
         ksq = FLIP_SQUARE(accumulatorBoard->kingSquare_b);
 
-        curBoard[0] = FLIP_MASK(currentBoard->pieces[BLACK_PAWN]);
-        curBoard[1] = FLIP_MASK(currentBoard->pieces[BLACK_KNIGHT]);
-        curBoard[2] = FLIP_MASK(currentBoard->pieces[BLACK_BISHOP]);
-        curBoard[3] = FLIP_MASK(currentBoard->pieces[BLACK_ROOK]);
-        curBoard[4] = FLIP_MASK(currentBoard->pieces[BLACK_QUEEN]);
-        curBoard[5] = FLIP_MASK(currentBoard->pieces[WHITE_PAWN]);
-        curBoard[6] = FLIP_MASK(currentBoard->pieces[WHITE_KNIGHT]);
-        curBoard[7] = FLIP_MASK(currentBoard->pieces[WHITE_BISHOP]);
-        curBoard[8] = FLIP_MASK(currentBoard->pieces[WHITE_ROOK]);
-        curBoard[9] = FLIP_MASK(currentBoard->pieces[WHITE_QUEEN]);
+        curBoard[0]  = FLIP_MASK(currentBoard->pieces[BLACK_PAWN]);
+        curBoard[1]  = FLIP_MASK(currentBoard->pieces[BLACK_KNIGHT]);
+        curBoard[2]  = FLIP_MASK(currentBoard->pieces[BLACK_BISHOP]);
+        curBoard[3]  = FLIP_MASK(currentBoard->pieces[BLACK_ROOK]);
+        curBoard[4]  = FLIP_MASK(currentBoard->pieces[BLACK_QUEEN]);
+        curBoard[5]  = FLIP_MASK(currentBoard->pieces[BLACK_KING]);
+        curBoard[6]  = FLIP_MASK(currentBoard->pieces[WHITE_PAWN]);
+        curBoard[7]  = FLIP_MASK(currentBoard->pieces[WHITE_KNIGHT]);
+        curBoard[8]  = FLIP_MASK(currentBoard->pieces[WHITE_BISHOP]);
+        curBoard[9]  = FLIP_MASK(currentBoard->pieces[WHITE_ROOK]);
+        curBoard[10] = FLIP_MASK(currentBoard->pieces[WHITE_QUEEN]);
+        curBoard[11] = FLIP_MASK(currentBoard->pieces[WHITE_KING]);
 
-        accumBoard[0] = FLIP_MASK(accumulatorBoard->pieces[BLACK_PAWN]);
-        accumBoard[1] = FLIP_MASK(accumulatorBoard->pieces[BLACK_KNIGHT]);
-        accumBoard[2] = FLIP_MASK(accumulatorBoard->pieces[BLACK_BISHOP]);
-        accumBoard[3] = FLIP_MASK(accumulatorBoard->pieces[BLACK_ROOK]);
-        accumBoard[4] = FLIP_MASK(accumulatorBoard->pieces[BLACK_QUEEN]);
-        accumBoard[5] = FLIP_MASK(accumulatorBoard->pieces[WHITE_PAWN]);
-        accumBoard[6] = FLIP_MASK(accumulatorBoard->pieces[WHITE_KNIGHT]);
-        accumBoard[7] = FLIP_MASK(accumulatorBoard->pieces[WHITE_BISHOP]);
-        accumBoard[8] = FLIP_MASK(accumulatorBoard->pieces[WHITE_ROOK]);
-        accumBoard[9] = FLIP_MASK(accumulatorBoard->pieces[WHITE_QUEEN]);
+        accumBoard[0]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_PAWN]);
+        accumBoard[1]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_KNIGHT]);
+        accumBoard[2]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_BISHOP]);
+        accumBoard[3]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_ROOK]);
+        accumBoard[4]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_QUEEN]);
+        accumBoard[5]  = FLIP_MASK(accumulatorBoard->pieces[BLACK_KING]);
+        accumBoard[6]  = FLIP_MASK(accumulatorBoard->pieces[WHITE_PAWN]);
+        accumBoard[7]  = FLIP_MASK(accumulatorBoard->pieces[WHITE_KNIGHT]);
+        accumBoard[8]  = FLIP_MASK(accumulatorBoard->pieces[WHITE_BISHOP]);
+        accumBoard[9]  = FLIP_MASK(accumulatorBoard->pieces[WHITE_ROOK]);
+        accumBoard[10] = FLIP_MASK(accumulatorBoard->pieces[WHITE_QUEEN]);
+        accumBoard[11] = FLIP_MASK(accumulatorBoard->pieces[WHITE_KING]);
     }
     if(getColumn(ksq) > 3)
     {
-        for(int i = 0; i < 10; i++)
+        for(int i = 0; i < 12; i++)
         {
             curBoard[i] = mirrorBoard(curBoard[i]);
             accumBoard[i] = mirrorBoard(accumBoard[i]);
         }
     }
 
-    for(int piece = 0; piece < 10; piece++)
+    for(int piece = 0; piece < 12; piece++)
     {
         uint64_t difference = curBoard[piece]^accumBoard[piece];
 
         //Input node updates
-        int inputNodeIndex = (10 * kingBuckets[ksq]) + piece;
+        int inputNodeIndex = (12 * kingBuckets[ksq]) + piece;
         if(ISBLACK(color)) inputNodeIndex+=BITBOARDS_PER_INPUT_SIDE;
 
         acc->inputNodes[inputNodeIndex]^=difference;
@@ -355,8 +387,8 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
         {
             int square = __builtin_ctzll(difference);
 
-            int featureIndex_Black = (64 * (10 * kingBuckets[ksq] + piece)) + square;
-            int featureIndex_White = (64 * (10 * kingBuckets[ksq] + piece)) + square;
+            int featureIndex_Black = (64 * (12 * kingBuckets[ksq] + piece)) + square;
+            int featureIndex_White = (64 * (12 * kingBuckets[ksq] + piece)) + square;
 
             char wasAdded = curBoard[piece]&singleBitMask(square) ? 1 : 0;
 

@@ -13,7 +13,7 @@
 #define ADAM_BETA1 0.9
 #define ADAM_BETA2 0.999
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-3
+#define ADAM_WEIGHT_DECAY 1e-4
 
 #define LEAK_FACTOR 0.01f
 
@@ -498,8 +498,6 @@ __kernel void lazyAdam(__global float* weights,
         weights[i] -= learningRate * rectificationTerm * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
     } 
     else weights[i] -= learningRate * correctedFirstMoment;
-    
-    weights[i] -= learningRate * ADAM_WEIGHT_DECAY * weights[i];
 
     gradientSum[i] = 0.0f; 
 }
