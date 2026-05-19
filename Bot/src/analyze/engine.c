@@ -43,7 +43,7 @@ double evaluate(bitboard* board, accumulator* acc)
     assert(board);
     assert(acc);
 
-    return (double) forwardPropagate(board->turn, acc);
+    return (double) forwardPropagate(board->turn, acc, __builtin_popcountll(board->pieces_all));
 }
 
 double quiesce(bitboard* board, double alpha, double beta, int depth, accumulator* acc, accumulatorRefreshTable* refreshTable)

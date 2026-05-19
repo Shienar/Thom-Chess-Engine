@@ -96,7 +96,7 @@ typedef struct magic {
 #define ACCUMULATOR_NODES_PER_SIDE 256
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
-#define OUTPUT_LAYER_NODES 1
+#define OUTPUT_BUCKETS 8
 
 #define KING_BUCKETS 16
 #define BITBOARDS_PER_INPUT_SIDE 192 //1 bitboard for each of the twelve pieces for each king bucket.
@@ -109,6 +109,11 @@ extern int kingBucketMap[KING_BUCKETS];
  * 
  * The sparse input layer is stored as w[input][output] instead since we are jumping
  * to the few active inputs.
+ * 
+ * The directWeights connect the raw accumulator [(us + them) / 2] to an output node.
+ * Only one output node gets calculated at a time.
+ * 
+ * Output bucket: 0-7, calculated with (piece count - 1) / 4
  */
 typedef struct network_weights_training {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
@@ -118,7 +123,8 @@ typedef struct network_weights_training {
     float weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     float weights4[THIRD_HIDDEN_LAYER_NODES];
-    float weights4_bias;
+    float directWeights[OUTPUT_BUCKETS][ACCUMULATOR_NODES_PER_SIDE];
+    float weights4_bias[OUTPUT_BUCKETS];
 } network_weights_training;
 typedef struct network_weights_playing {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
@@ -128,7 +134,8 @@ typedef struct network_weights_playing {
     int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     int32_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
-    int32_t weights4_bias;
+    int16_t directWeights[OUTPUT_BUCKETS][ACCUMULATOR_NODES_PER_SIDE];
+    int32_t weights4_bias[OUTPUT_BUCKETS];
 } network_weights_playing;
 
 typedef struct accumulator {

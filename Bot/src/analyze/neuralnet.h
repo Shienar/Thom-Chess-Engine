@@ -39,7 +39,7 @@ void save_playingWeights();
 
 void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes);
 
-int32_t forwardPropagate(int turn, accumulator* acc);
+int32_t forwardPropagate(int turn, accumulator* acc, int pieceCount);
 
 /**
  * Ranger

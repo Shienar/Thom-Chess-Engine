@@ -118,19 +118,16 @@ void calculateHiddenLayer(uint8_t* inputValues, uint8_t* outputValues, int numIn
     }
 }
 
-int calculateOutputLayer(uint8_t* inputValues, int8_t weights[THIRD_HIDDEN_LAYER_NODES], int32_t bias)
+int calculateOutputLayer(uint8_t* h3, int16_t rawAverageAccumulator[ACCUMULATOR_NODES_PER_SIDE], int8_t weights[THIRD_HIDDEN_LAYER_NODES], int32_t bias, int16_t directWeights[ACCUMULATOR_NODES_PER_SIDE])
 {
     int sum = 0;
     __m256i v_one = _mm256_set1_epi16(1);
+    __m256i v_output = _mm256_setzero_si256(); 
 
-    __m256i v_output = _mm256_setzero_si256(); //si256 = 256-bit signed integer.
-
-    //All layer lengths are divisible by 32 so no overflow.
+    //standard path
     for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=32)
     {
-        __m256i v_inputBatch = _mm256_loadu_si256((__m256i const*) &inputValues[inputIndex]);
-
-        //Weights are an array of float w[INPUT NODES]
+        __m256i v_inputBatch = _mm256_loadu_si256((__m256i const*) &h3[inputIndex]);
         __m256i v_weightsBatch = _mm256_loadu_si256((__m256i const*) &weights[inputIndex]);
 
         //Multiply inputs by weights.
@@ -138,9 +135,17 @@ int calculateOutputLayer(uint8_t* inputValues, int8_t weights[THIRD_HIDDEN_LAYER
         //Extend to 32-bit results, sum neighboring values.
         __m256i v_tempProduct1 = _mm256_madd_epi16(_mm256_maddubs_epi16(v_inputBatch, v_weightsBatch), v_one);
         
-        //Add temp products to intermediate registers.
         v_output = _mm256_add_epi32(v_output, v_tempProduct1);
     }
+
+    //direct path
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=16)
+    {
+        v_output = _mm256_add_epi32(v_output, 
+                                    _mm256_madd_epi16(_mm256_loadu_si256((const __m256i*)&rawAverageAccumulator[i]), 
+                                                      _mm256_loadu_si256((const __m256i*)&directWeights[i])));
+    }
+
 
     sum = horizontalSIMDSum(v_output) + bias;
 
@@ -150,8 +155,11 @@ int calculateOutputLayer(uint8_t* inputValues, int8_t weights[THIRD_HIDDEN_LAYER
     return sum;
 }
 
-int32_t forwardPropagate(int turn, accumulator* acc)
+int32_t forwardPropagate(int turn, accumulator* acc, int pieceCount)
 {
+    int bucket = (pieceCount - 1) / 4;
+
+    //create perspective-aligned accumulator (us/them)
     uint8_t tempAccumulator[ACCUMULATOR_NODES];
     if(ISWHITE(turn))
     {
@@ -163,6 +171,15 @@ int32_t forwardPropagate(int turn, accumulator* acc)
         memcpy(&tempAccumulator[0], &acc->accumulator[BLACK][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
         memcpy(&tempAccumulator[1], &acc->accumulator[WHITE][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
     }
+    
+    int16_t rawAverageAccumulator[ACCUMULATOR_NODES_PER_SIDE];
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=16)
+    {
+        _mm256_storeu_si256((__m256i*)&rawAverageAccumulator[i], 
+                            _mm256_srli_epi16(_mm256_add_epi16(_mm256_loadu_si256((const __m256i*)&tempAccumulator[i]), 
+                                                               _mm256_loadu_si256((const __m256i*)&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE + i])),
+                                              1));
+    }
 
     uint8_t h2[SECOND_HIDDEN_LAYER_NODES];
     calculateHiddenLayer(tempAccumulator, h2, ACCUMULATOR_NODES, SECOND_HIDDEN_LAYER_NODES, playerNNUE->weights2, playerNNUE->weights2_bias);
@@ -170,5 +187,5 @@ int32_t forwardPropagate(int turn, accumulator* acc)
     uint8_t h3[THIRD_HIDDEN_LAYER_NODES];
     calculateHiddenLayer(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias);
 
-    return calculateOutputLayer(h3, playerNNUE->weights4, playerNNUE->weights4_bias);
+    return calculateOutputLayer(h3, rawAverageAccumulator, playerNNUE->weights4, playerNNUE->weights4_bias[bucket], playerNNUE->directWeights[bucket]);
 }

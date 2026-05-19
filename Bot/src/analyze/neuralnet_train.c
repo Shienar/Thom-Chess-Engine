@@ -68,21 +68,25 @@ void load_trainingWeights()
         {
             sampleNormalDistribution(&trainingNNUE->weights4[i], standardDeviation);
         }
-        trainingNNUE->weights4_bias = 0.0;
+        
+        standardDeviation = sqrt(2.0 / 256.0);
+        for(int i = 0; i < OUTPUT_BUCKETS; i++) 
+        {
+            trainingNNUE->weights4_bias[i] = 0.0;
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+            {
+                sampleNormalDistribution(&trainingNNUE->directWeights[i][j], standardDeviation);
+            }
+        }
+
     }
 }
 
 void save_trainingWeights()
 {
     FILE* output = fopen("import/NNUE_Training.bin", "wb");
-    if(output)
-    {
-        fwrite(trainingNNUE, sizeof(network_weights_training), 1, output);
-    }
-    else
-    {
-        DEBUG("Failed to write neural network to file.");
-    }
+    if(output) fwrite(trainingNNUE, sizeof(network_weights_training), 1, output);
+    else DEBUG("Failed to write neural network to file.");
     fclose(output);
 }
 
@@ -99,6 +103,14 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
         }
     }
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->weights1_bias[i] * QA)), INT16_MIN);
+
+    for(int i = 0; i < OUTPUT_BUCKETS; i++)
+    {
+        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+        {
+            outputBytes->directWeights[i][j] = (int16_t) max(min(INT8_MAX, lroundf(inputFloats->directWeights[i][j] * QA)), INT8_MIN);
+        }
+    }
 
     for(int i = 0; i < ACCUMULATOR_NODES; i++)
     {
@@ -121,7 +133,7 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     {
         outputBytes->weights4[i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights4[i] * QB)), INT8_MIN);
     }
-    outputBytes->weights4_bias = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias * QA * QB * QB * QB)), INT32_MIN);
+    for(int i = 0; i < OUTPUT_BUCKETS; i++) outputBytes->weights4_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias[i] * QA * QB * QB * QB)), INT32_MIN);
 }
 
 void loadTrainingData(CompactPosition data, bitboard* board, float* expectedOutput)
@@ -217,11 +229,13 @@ void train(int maxIterations, float maxAllowedError)
 
     short* activeInputs_A = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
     float* expectedOutputs_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
+    char* outputBuckets_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(char), 4096);
     
     short* activeInputs_B = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
     float* expectedOutputs_B = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
+    char* outputBuckets_B = _aligned_malloc(MINIBATCH_SIZE * sizeof(char), 4096);
     
-    initOpenCL(trainingNNUE, activeInputs_A, expectedOutputs_A, activeInputs_B, expectedOutputs_B);
+    initOpenCL(trainingNNUE, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
     int totalIterations = 0;
 
@@ -314,6 +328,10 @@ void train(int maxIterations, float maxAllowedError)
                             mask&=(mask - 1);
                         }
                     }
+
+                    
+                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
+                    else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
                     
                     //-1 padding
                     while(trackedInputs < 32)
@@ -429,6 +447,9 @@ void train(int maxIterations, float maxAllowedError)
                             }
                         }
                         
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
+                        else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
+                        
                         //-1 padding
                         while(trackedInputs < 32)
                         {
@@ -532,6 +553,9 @@ void train(int maxIterations, float maxAllowedError)
                             }
                         }
                         
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
+                        else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
+
                         //-1 padding
                         while(trackedInputs < 32)
                         {
@@ -580,8 +604,10 @@ void train(int maxIterations, float maxAllowedError)
     free(batchData);
     _aligned_free(activeInputs_A);
     _aligned_free(expectedOutputs_A);
+    _aligned_free(outputBuckets_A);
     _aligned_free(activeInputs_B);
     _aligned_free(expectedOutputs_B);
+    _aligned_free(outputBuckets_B);
 
     freeOpenCL();
 }
