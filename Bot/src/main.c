@@ -127,7 +127,8 @@ int main(int argc, char** argv)
         load_playingWeights();
         playerAccumulator = calloc(1, sizeof(accumulator));
         playingRefreshTable = createPlayingRefreshTable();
-        loadInputAccumulator(board, playerAccumulator, WHITE|BLACK);
+        loadInputAccumulator(board, playerAccumulator, WHITE);
+        loadInputAccumulator(board, playerAccumulator, BLACK);
         tb_init("./sygyzy/");
     }
 

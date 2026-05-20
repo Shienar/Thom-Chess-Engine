@@ -22,7 +22,7 @@
 
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // Roughly 100 million positions.
-#define MINIBATCHES_PER_SHUFFLE_BLOCK 32
+#define MINIBATCHES_PER_SHUFFLE_BLOCK 64
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)

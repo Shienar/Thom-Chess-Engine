@@ -164,21 +164,20 @@ int32_t forwardPropagate(int turn, accumulator* acc, int pieceCount)
     if(ISWHITE(turn))
     {
         memcpy(&tempAccumulator[0], &acc->accumulator[WHITE][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
-        memcpy(&tempAccumulator[1], &acc->accumulator[BLACK][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
+        memcpy(&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE], &acc->accumulator[BLACK][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
     }
     else
     {
         memcpy(&tempAccumulator[0], &acc->accumulator[BLACK][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
-        memcpy(&tempAccumulator[1], &acc->accumulator[WHITE][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
+        memcpy(&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE], &acc->accumulator[WHITE][0], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
     }
     
     int16_t rawAverageAccumulator[ACCUMULATOR_NODES_PER_SIDE];
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=16)
     {
-        _mm256_storeu_si256((__m256i*)&rawAverageAccumulator[i], 
-                            _mm256_srli_epi16(_mm256_add_epi16(_mm256_loadu_si256((const __m256i*)&tempAccumulator[i]), 
-                                                               _mm256_loadu_si256((const __m256i*)&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE + i])),
-                                              1));
+        __m256i v_avg = _mm256_srai_epi16(_mm256_add_epi16(_mm256_loadu_si256((const __m256i*)&acc->rawAccumulator[0][i]), 
+                                                           _mm256_loadu_si256((const __m256i*)&acc->rawAccumulator[1][i])), 1);
+        _mm256_storeu_si256((__m256i*)&rawAverageAccumulator[i], v_avg);
     }
 
     uint8_t h2[SECOND_HIDDEN_LAYER_NODES];

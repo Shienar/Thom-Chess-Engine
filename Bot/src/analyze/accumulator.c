@@ -82,6 +82,7 @@ void activateAccumulator(int16_t* rawValues, uint8_t* activatedValues)
         
         //Shift right 8 to keep in uint8_t range.
         v_first = _mm256_packus_epi32(_mm256_srli_epi32(v_first_lower_sq, 8), _mm256_srli_epi32(v_first_upper_sq, 8));
+        v_first = _mm256_permute4x64_epi64(v_first, _MM_SHUFFLE(3, 1, 2, 0));
 
         //second group.
         __m256i v_second =_mm256_max_epi16(_mm256_min_epi16(_mm256_loadu_si256((__m256i*)&rawValues[i + 16]), v_max), v_min);
@@ -92,6 +93,8 @@ void activateAccumulator(int16_t* rawValues, uint8_t* activatedValues)
                                           _mm256_cvtepi16_epi32(_mm256_extracti128_si256(v_second, 1)));
         
         v_second = _mm256_packus_epi32(_mm256_srli_epi32(v_second_lower_sq, 8), _mm256_srli_epi32(v_second_upper_sq, 8));
+        v_second = _mm256_permute4x64_epi64(v_second, _MM_SHUFFLE(3, 1, 2, 0));
+
 
         //Pack 2 x 16 16-bit -> 1 x 32 8-bit
         __m256i v_final = _mm256_packus_epi16(v_first, v_second);

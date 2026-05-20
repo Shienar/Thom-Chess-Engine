@@ -108,7 +108,7 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            outputBytes->directWeights[i][j] = (int16_t) max(min(INT8_MAX, lroundf(inputFloats->directWeights[i][j] * QA)), INT8_MIN);
+            outputBytes->directWeights[i][j] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->directWeights[i][j] * QA * QB * QB * QB)), INT16_MIN);
         }
     }
 
@@ -219,7 +219,7 @@ void train(int maxIterations, float maxAllowedError)
     uint64_t positionCount = file_size / sizeof(CompactPosition);
 
     //Used to skip to random position in the .bin file.
-    //The division in blockcount effectively truncates extraneous positions that don't fit within a full MINIBATCH_SIZE * 8 block.
+    //The division in blockcount effectively truncates extraneous positions that don't fit within a full MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK block.
     int blockCount = positionCount /  (MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK);
     uint64_t* blockIndices = calloc(blockCount,  sizeof(uint64_t));
     for (int i = 0; i < blockCount; i++) 

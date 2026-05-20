@@ -207,7 +207,7 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.mem.weights4_slow, CL_TRUE, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), (void*)&trainingNNUE->weights4, 0, NULL, NULL);
     clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.mem.weights4_slow, opencl_mem.mem.weights4_fast, 0, 0, THIRD_HIDDEN_LAYER_NODES * sizeof(float), 0, NULL, NULL);
     
-    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.mem.directweights_fast, CL_TRUE, 0, OUTPUT_BUCKETS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)&trainingNNUE->directWeights, 0, NULL, NULL);
+    clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.mem.directweights_slow, CL_TRUE, 0, OUTPUT_BUCKETS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)&trainingNNUE->directWeights, 0, NULL, NULL);
     clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.mem.directweights_slow, opencl_mem.mem.directweights_fast, 0, 0, OUTPUT_BUCKETS * ACCUMULATOR_NODES_PER_SIDE * sizeof(float), 0, NULL, NULL);
     
     clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.mem.bias1_slow, CL_TRUE, 0, ACCUMULATOR_NODES_PER_SIDE * sizeof(float), (void*)&trainingNNUE->weights1_bias, 0, NULL, NULL);
