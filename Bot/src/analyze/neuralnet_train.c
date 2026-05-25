@@ -104,11 +104,12 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
     }
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputBytes->weights1_bias[i] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->weights1_bias[i] * QA)), INT16_MIN);
 
+    //Connects the raw accumulator, which isn't right-shifted or squared.
     for(int i = 0; i < OUTPUT_BUCKETS; i++)
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            outputBytes->directWeights[i][j] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->directWeights[i][j] * QA * QB * QB * QB)), INT16_MIN);
+            outputBytes->directWeights[i][j] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->directWeights[i][j] * QA * QB)), INT16_MIN);
         }
     }
 
@@ -127,13 +128,13 @@ void quantizeWeights(network_weights_training* inputFloats, network_weights_play
             outputBytes->weights3[j][i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights3[j][i] * QB)), INT8_MIN);
         }
     }
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights3_bias[i] * QA * QB * QB)), INT32_MIN);
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputBytes->weights3_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights3_bias[i] * QA * QB)), INT32_MIN);
     
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
     {
         outputBytes->weights4[i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights4[i] * QB)), INT8_MIN);
     }
-    for(int i = 0; i < OUTPUT_BUCKETS; i++) outputBytes->weights4_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias[i] * QA * QB * QB * QB)), INT32_MIN);
+    for(int i = 0; i < OUTPUT_BUCKETS; i++) outputBytes->weights4_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias[i] * QA * QB)), INT32_MIN);
 }
 
 void loadTrainingData(CompactPosition data, bitboard* board, float* expectedOutput)

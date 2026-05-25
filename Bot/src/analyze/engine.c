@@ -571,8 +571,13 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
 
     if(bestMove.startSquare == bestMove.endSquare && bestMove.startSquare == 0)
     {
-        DEBUG("Engine returned empty move.");
-        if(printDebugMessages) for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
+        if(printDebugMessages) 
+        {
+            char FEN[100] = { '\0' };
+            export_fen_from_board(board, FEN);
+            DEBUG("Engine returned empty move on %s", FEN);
+            for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
+        }
 
         //This isn't recoverable.
         exit(EXIT_FAILURE);

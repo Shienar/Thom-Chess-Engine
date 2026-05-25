@@ -1,1 +1,2 @@
-1k6/2q5/8/8/5N2/5BK1/8/4r3 w - - 0 1
+; returns empty move near mating line.
+8/8/8/7p/1R5P/k1K2pP1/2B5/5Q2 w  - 1 81

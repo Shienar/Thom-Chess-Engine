@@ -72,8 +72,8 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     free(kernelSource);
     kernelSource = NULL;
 
-    //err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, NULL, NULL, NULL); 
-    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, "-g", NULL, NULL);
+    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, NULL, NULL, NULL); 
+    //err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, "-g", NULL, NULL);
     
     if (err)
     {
@@ -138,7 +138,6 @@ int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_
     opencl_mem.mem.delta2 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * MINIBATCH_SIZE * SECOND_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.mem.delta1 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * MINIBATCH_SIZE * ACCUMULATOR_NODES, NULL, NULL);
 
-    
     opencl_mem.mem.gradient1Sum = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
     opencl_mem.mem.gradientBias1Sum = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, NULL, NULL);
 
@@ -552,5 +551,5 @@ void getWeights(network_weights_training* weights)
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.bias1_slow, CL_FALSE, 0, sizeof(float) * ACCUMULATOR_NODES_PER_SIDE, weights->weights1_bias, 0, NULL, NULL);
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.bias2_slow, CL_FALSE, 0, sizeof(float) * SECOND_HIDDEN_LAYER_NODES, weights->weights2_bias, 0, NULL, NULL);
     clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.bias3_slow, CL_FALSE, 0, sizeof(float) * THIRD_HIDDEN_LAYER_NODES, weights->weights3_bias, 0, NULL, NULL);
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.bias4_slow, CL_TRUE, 0, sizeof(float), &weights->weights4_bias, 0, NULL, NULL);
+    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.bias4_slow, CL_TRUE, 0, sizeof(float) * OUTPUT_BUCKETS, &weights->weights4_bias, 0, NULL, NULL);
 }

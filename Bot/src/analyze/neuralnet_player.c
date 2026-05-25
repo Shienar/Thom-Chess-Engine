@@ -186,5 +186,8 @@ int32_t forwardPropagate(int turn, accumulator* acc, int pieceCount)
     uint8_t h3[THIRD_HIDDEN_LAYER_NODES];
     calculateHiddenLayer(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, playerNNUE->weights3, playerNNUE->weights3_bias);
 
-    return calculateOutputLayer(h3, rawAverageAccumulator, playerNNUE->weights4, playerNNUE->weights4_bias[bucket], playerNNUE->directWeights[bucket]);
+    int output = calculateOutputLayer(h3, rawAverageAccumulator, playerNNUE->weights4, playerNNUE->weights4_bias[bucket], playerNNUE->directWeights[bucket]);
+    output >>= 8; //Scale it down for aspiration window.
+    //printf("%d\n", output);
+    return output;
 }

@@ -10,6 +10,15 @@
 #include <string.h>
 #include <omp.h>
 
+/**
+ * Bug list:
+ * 
+ * board->victor gets incorrectly assigned.
+ *  - White wins! when white gets checkmated by black.
+ *  - No victor assigned when a player gets mated or stalemated.
+ * 
+ */
+
 int main(int argc, char** argv)
 {
     /**

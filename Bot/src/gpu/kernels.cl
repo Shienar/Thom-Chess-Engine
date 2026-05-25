@@ -15,32 +15,38 @@
 #define ADAM_EPSILON 1e-8
 #define ADAM_WEIGHT_DECAY 1e-4
 
-#define LEAK_FACTOR 0.01f
-
 #define EVAL_SCALE 400.0f
 
 #define LOOKAHEAD_ALPHA 0.5f
 
 /******* UTIL *******/
 
-inline float screlu_leaky(float x)
+//Leaky activation functions produce lower MSE, but they do not quantize well.
+
+inline float screlu(float x)
 {
-    return ((x <= 0.0f) ? LEAK_FACTOR * x : ((x >= 1.0f) ? 1.0f + LEAK_FACTOR * (x - 1.0f) : x*x));
+    float y = clamp(x, 0.0f, 1.0f);
+    return y * y;
+} 
+
+inline float screlu_derivative(float x)
+{
+    return (((x > 0.0f) & (x < 1.0f)) ? (2.0f*x) : 0.0f );
 }
 
-inline float screlu_leaky_derivative(float x)
+inline float crelu(float x)
 {
-    return ((x <= 0.0 || x >= 1.0) ? (LEAK_FACTOR) : (2.0*x));
+    return clamp(x, 0.0f, 1.0f);
 }
 
-inline float crelu_leaky(float x)
+inline float crelu_derivative(float x)
 {
-    return ((x <= 0.0f) ? LEAK_FACTOR * x : ((x >= 1.0f) ? 1.0f + LEAK_FACTOR * (x - 1.0f) : x));
+    return (float) ((x > 0.0f) & (x < 1.0f));
 }
 
-inline float crelu_leaky_derivative(float x)
+inline float fake_quantize(float value, float scale, float min_bound, float max_bound) 
 {
-    return ((x <= 0.0f || x >= 1.0f) ? (LEAK_FACTOR) : 1.0f);
+    return clamp(rint(value * scale), min_bound, max_bound) / scale;
 }
 
 inline float sigmoid(float x)
@@ -143,7 +149,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
     __local float shared[ACCUMULATOR_NODES];
     for(int i = localID; i < ACCUMULATOR_NODES; i+= 64)
     {
-        shared[i] = screlu_leaky(accumulatorOutput[batchIndex * ACCUMULATOR_NODES + i]);
+        shared[i] = screlu(accumulatorOutput[batchIndex * ACCUMULATOR_NODES + i]);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -156,7 +162,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         {
             sum += shared[inputIndex] * h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID];
         }
-        sum = crelu_leaky(sum);
+        sum = crelu(sum);
 
 
         shared[localID] = sum; //faster retrieval for use in this function.
@@ -173,7 +179,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         {
             sum += shared[inputIndex] * h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID];
         }
-        sum = crelu_leaky(sum);
+        sum = crelu(sum);
         
         shared[localID] = sum;
         h3_output[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = sum;
@@ -249,7 +255,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = d4 * weights4[localID] * crelu_leaky_derivative(h3_val);
+        float d3 = d4 * weights4[localID] * crelu_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
         shared_delta[localID] = d3;
     }
@@ -264,7 +270,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
             sum += shared_delta[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
         }
         float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
-        float d2 = sum * crelu_leaky_derivative(h2_val);
+        float d2 = sum * crelu_derivative(h2_val);
         delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = d2;
         shared_delta[localID] = d2;
     }
@@ -279,7 +285,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         {
             sum += shared_delta[outputIndex] * weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
         }
-        delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_leaky_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
+        delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
     }
 
     //SSE accumulation
@@ -438,7 +444,7 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     for (int batchIndex = 0; batchIndex < MINIBATCH_SIZE; batchIndex+=16) 
     {
         // load into local memory
-        tile_h1[tileY][tileX] = screlu_leaky(h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row]);
+        tile_h1[tileY][tileX] = screlu(h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row]);
         tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -479,16 +485,16 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
     //Process all 512 nodes in chunks of 64
     for (int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64) 
     {
-        float d1_w = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];
-        float d1_b = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex];
+        float d1_us = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];
+        float d1_them = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex];
 
-        AtomicAddFloat(&bias1_Sum[outIndex], d1_b + d1_w);
+        AtomicAddFloat(&bias1_Sum[outIndex], d1_them + d1_us);
 
         int f = 0;
         while(sharedFeatures[f] != -1 && f < 32)
         {
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_w);
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_b);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_us);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_them);
             f++;
         }
     }
@@ -512,6 +518,24 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
         weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
         gradientSum[i] = 0.0f; \
     }
+    
+#define UPDATE_ADAMW_CLAMP(weight, gradientSum, firstMoment, secondMoment, size) \
+    if (i < size) \
+    { \
+        float grad = gradientSum[i] / MINIBATCH_SIZE; \
+        firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad; \
+        secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad; \
+        float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1); \
+        if(rectificationTerm > 0.0f) { \
+            float denominator = sqrt(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON; \
+            weight[i] -= lr * rectificationTerm * (correctedFirstMoment / denominator); \
+        } else { \
+            weight[i] -= lr * correctedFirstMoment; \
+        } \
+        weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
+        clamp(weight[i], -1.984375f, 1.984375f); \
+        gradientSum[i] = 0.0f; \
+    }
 
 //~0.006 ms
 __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, __global float* v2,
@@ -527,11 +551,11 @@ __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, 
     int i = get_global_id(0);
 
     //Update weights and biases in descending order based on size
-    UPDATE_ADAMW(w2, g2, m2, v2, 16384); // 512 * 32
+    UPDATE_ADAMW_CLAMP(w2, g2, m2, v2, 16384); // 512 * 32
     UPDATE_ADAMW(dir, gdir, mdir, vdir, 2048);  // 256 * 8
-    UPDATE_ADAMW(w3, g3, m3, v3, 1024);  // 32 * 32
+    UPDATE_ADAMW_CLAMP(w3, g3, m3, v3, 1024);  // 32 * 32
     UPDATE_ADAMW(b1, gb1, mb1, vb1, 256); // 256
-    UPDATE_ADAMW(w4, g4, m4, v4, 32);    // 32 * 1
+    UPDATE_ADAMW_CLAMP(w4, g4, m4, v4, 32);    // 32 * 1
     UPDATE_ADAMW(b2, gb2, mb2, vb2, 32);  // 32
     UPDATE_ADAMW(b3, gb3, mb3, vb3, 32);  // 32
     UPDATE_ADAMW(b4, gb4, mb4, vb4, 8);   // 8

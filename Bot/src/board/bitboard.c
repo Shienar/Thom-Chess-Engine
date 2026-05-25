@@ -60,8 +60,8 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
             }
             else
             {
-                if(columnIndex == 0) rows[row][columnIndex] = '1';
-                if(rows[row][columnIndex - 1] >= '1' && rows[row][columnIndex - 1] <= '7') rows[row][columnIndex - 1]++;
+                if(columnIndex == 0 || (columnIndex > 0 && rows[row][columnIndex - 1] >= 'A' && rows[row][columnIndex - 1] <= 'z')) rows[row][columnIndex] = '1';
+                else if(rows[row][columnIndex - 1] >= '1' && rows[row][columnIndex - 1] <= '7') rows[row][columnIndex - 1]++;
             }
         }
     }

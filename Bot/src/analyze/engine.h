@@ -25,9 +25,8 @@ extern int useHelperThreads;
 #define HELPER_THREAD_COUNT 8
 #endif
 
-//Score are in the range of [-64, 64]
-#define INITIAL_ASPIRATION_MARGIN 10.0
-#define MAXIMUM_ASPIRATION_MARGIN 40.0
+#define INITIAL_ASPIRATION_MARGIN 32.0
+#define MAXIMUM_ASPIRATION_MARGIN 600.0
 #define ASPIRATION_MARGIN_MULT_FACTOR 2.0
 
 int perft(bitboard* board, int depth, int maxDepth, int verbose);
