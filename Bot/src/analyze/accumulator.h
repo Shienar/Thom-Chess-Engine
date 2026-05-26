@@ -22,8 +22,6 @@ static inline uint64_t mirrorBoard(uint64_t x)
 extern accumulator* playerAccumulator;
 extern accumulatorRefreshTable* playingRefreshTable;
 
-void extractInputLayerToArray(uint64_t* inputLayerCompact_w, uint64_t* inputLayerCompact_b, int8_t* inputLayerBytes);
-
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
  */
@@ -38,7 +36,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
 
 void updateAccumulatorFromTable(bitboard* currentBoard, accumulator* acc,  accumulatorRefreshTable* refreshTable);
 
-accumulatorRefreshTable* createPlayingRefreshTable();
+accumulatorRefreshTable* createRefreshTable();
 
 void destroyRefreshTable(accumulatorRefreshTable* refreshTable);
 

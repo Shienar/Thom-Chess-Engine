@@ -115,7 +115,7 @@ extern int kingBucketMap[KING_BUCKETS];
  * 
  * Output bucket: 0-7, calculated with (piece count - 1) / 4
  */
-typedef struct network_weights_training {
+typedef struct network_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
     float weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
@@ -125,23 +125,12 @@ typedef struct network_weights_training {
     float weights4[THIRD_HIDDEN_LAYER_NODES];
     float directWeights[OUTPUT_BUCKETS][ACCUMULATOR_NODES_PER_SIDE];
     float weights4_bias[OUTPUT_BUCKETS];
-} network_weights_training;
-typedef struct network_weights_playing {
-    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
-    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE]; 
-    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
-    int32_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
-    int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
-    int32_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
-    int8_t weights4[THIRD_HIDDEN_LAYER_NODES];
-    int16_t directWeights[OUTPUT_BUCKETS][ACCUMULATOR_NODES_PER_SIDE];
-    int32_t weights4_bias[OUTPUT_BUCKETS];
-} network_weights_playing;
+} network_weights;
 
 typedef struct accumulator {
     uint64_t inputNodes[384];
-    uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
-    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
+    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
+    float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
 
 /**

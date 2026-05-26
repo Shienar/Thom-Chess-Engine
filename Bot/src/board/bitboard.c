@@ -69,6 +69,7 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
     char activeColor = (ISWHITE(board->turn)) ? 'w' : 'b';
     
     char castlingRights[5] = {'\0'};
+    castlingRights[0] = '-';
     int writeIndex = 0;
     if(KINGSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'K'; writeIndex++;}
     if(QUEENSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'Q'; writeIndex++;}

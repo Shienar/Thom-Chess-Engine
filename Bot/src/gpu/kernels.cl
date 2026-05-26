@@ -21,8 +21,6 @@
 
 /******* UTIL *******/
 
-//Leaky activation functions produce lower MSE, but they do not quantize well.
-
 inline float screlu(float x)
 {
     float y = clamp(x, 0.0f, 1.0f);
@@ -42,11 +40,6 @@ inline float crelu(float x)
 inline float crelu_derivative(float x)
 {
     return (float) ((x > 0.0f) & (x < 1.0f));
-}
-
-inline float fake_quantize(float value, float scale, float min_bound, float max_bound) 
-{
-    return clamp(rint(value * scale), min_bound, max_bound) / scale;
 }
 
 inline float sigmoid(float x)
@@ -518,24 +511,6 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
         weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
         gradientSum[i] = 0.0f; \
     }
-    
-#define UPDATE_ADAMW_CLAMP(weight, gradientSum, firstMoment, secondMoment, size) \
-    if (i < size) \
-    { \
-        float grad = gradientSum[i] / MINIBATCH_SIZE; \
-        firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad; \
-        secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad; \
-        float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1); \
-        if(rectificationTerm > 0.0f) { \
-            float denominator = sqrt(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON; \
-            weight[i] -= lr * rectificationTerm * (correctedFirstMoment / denominator); \
-        } else { \
-            weight[i] -= lr * correctedFirstMoment; \
-        } \
-        weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
-        clamp(weight[i], -1.984375f, 1.984375f); \
-        gradientSum[i] = 0.0f; \
-    }
 
 //~0.006 ms
 __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, __global float* v2,
@@ -549,15 +524,14 @@ __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, 
                     float lr, float biasCorrection1, float biasCorrection2, float rectificationTerm) 
 {
     int i = get_global_id(0);
-
-    //Update weights and biases in descending order based on size
-    UPDATE_ADAMW_CLAMP(w2, g2, m2, v2, 16384); // 512 * 32
+    
+    UPDATE_ADAMW(w2, g2, m2, v2, 16384); // 512 * 32
     UPDATE_ADAMW(dir, gdir, mdir, vdir, 2048);  // 256 * 8
-    UPDATE_ADAMW_CLAMP(w3, g3, m3, v3, 1024);  // 32 * 32
+    UPDATE_ADAMW(w3, g3, m3, v3, 1024);  // 32 * 32
     UPDATE_ADAMW(b1, gb1, mb1, vb1, 256); // 256
-    UPDATE_ADAMW_CLAMP(w4, g4, m4, v4, 32);    // 32 * 1
     UPDATE_ADAMW(b2, gb2, mb2, vb2, 32);  // 32
     UPDATE_ADAMW(b3, gb3, mb3, vb3, 32);  // 32
+    UPDATE_ADAMW(w4, g4, m4, v4, 32);    // 32 * 1
     UPDATE_ADAMW(b4, gb4, mb4, vb4, 8);   // 8
     
 }

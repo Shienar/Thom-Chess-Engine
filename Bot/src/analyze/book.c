@@ -56,8 +56,8 @@ move* getBookMove(bitboard* board)
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
-    move potentialMoves[256] = {0};
-    uint16_t moveWeights[256] = {0};
+    move potentialMoves[512] = {0};
+    uint16_t moveWeights[512] = {0};
     int moveCount = 0;
 
     for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
@@ -102,7 +102,7 @@ move* getBookMove(bitboard* board)
             if((tempMove->capturedPiece = findPieceOnSquare(board, endSquare))) tempMove->capturedPieceSquare = endSquare;
 
             moveCount++;
-            if(moveCount >= 256) break;
+            if(moveCount >= 512) break;
         }
     }
 

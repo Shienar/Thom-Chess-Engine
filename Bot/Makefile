@@ -34,4 +34,4 @@ $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES) $(LIBS)
 
 clean:
-	rm $(TARGET)
+	rm -f $(TARGET)

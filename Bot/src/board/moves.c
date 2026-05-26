@@ -698,12 +698,12 @@ int moveFromStruct(bitboard* board, move m)
         {
             if(board->turn == WHITE)
             {
-                if(IS_IN_CHECK_W(board->flags)) board->victor = BLACK;
+                if(IS_IN_CHECK_W(board->flags)) board->victor = VICTOR_BLACK;
                 else board->victor = VICTOR_DRAW_STALEMATE_WHITE;
             }
             else
             {
-                if(IS_IN_CHECK_B(board->flags)) board->victor = WHITE;
+                if(IS_IN_CHECK_B(board->flags)) board->victor = VICTOR_WHITE;
                 else board->victor = VICTOR_DRAW_STALEMATE_BLACK;
             }
         }

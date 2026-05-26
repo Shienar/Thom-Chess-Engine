@@ -10,15 +10,6 @@
 #include <string.h>
 #include <omp.h>
 
-/**
- * Bug list:
- * 
- * board->victor gets incorrectly assigned.
- *  - White wins! when white gets checkmated by black.
- *  - No victor assigned when a player gets mated or stalemated.
- * 
- */
-
 int main(int argc, char** argv)
 {
     /**
@@ -49,7 +40,7 @@ int main(int argc, char** argv)
             printf("--time\t\tSpecify maximum computation time per turn in seconds.\n");
             printf("--fen\t\tLoad a fen position from file. Specify the line number\n");
             printf("--nobook\t\tPrevents loading an opening book\n");
-            printf("--init\t\tInitializes a new neural network if there is none and exits immediately afterwards.\n");
+            printf("--netinfo\t\tPrints information about the network's weights.\n");
             printf("--train\t\ttrains the neural network. Pass in iteration count.\n");
             printf("--singlethread\t\tDisables helper threads.\n");
             printf("--perft\t\tMove generation performance test.\n");
@@ -64,17 +55,9 @@ int main(int argc, char** argv)
         else if(strcmp(argv[i], "--engine") == 0) { onlyHumans = 0; onlyEngines = 1; }
         else if(strcmp(argv[i], "--time") == 0) { i++; maxTime = atoi(argv[i]); }
         else if(strcmp(argv[i], "--fen") == 0) { i++; fenLineNumber = atoi(argv[i]); }
+        else if(strcmp(argv[i], "--netinfo") == 0) { loadWeights(); print_network_statistics(); exit(EXIT_SUCCESS); }
         else if(strcmp(argv[i], "--train") == 0) { i++; shouldTrain = atoi(argv[i]); }
         else if(strcmp(argv[i], "--nobook") == 0) useBook = 0;
-        else if(strcmp(argv[i], "--init") == 0) { 
-            load_trainingWeights();
-            load_playingWeights(); 
-            quantizeWeights(trainingNNUE, playerNNUE);
-            save_playingWeights(); 
-            free(trainingNNUE);
-            free(playerNNUE);
-            exit(0);
-        }
         else if(strcmp(argv[i], "--perft") == 0) shouldPerft = 1;
         else if(strcmp(argv[i], "--singlethread") == 0) useHelperThreads = 0;
     }
@@ -87,22 +70,13 @@ int main(int argc, char** argv)
     initPawnAttacks();
     initKnightMoveTable();
     initKingMoveTable();
+    loadWeights();
 
     if(shouldTrain)
     {
-        load_trainingWeights();
-
         train(shouldTrain, 1e-3);
-        
-        save_trainingWeights();
-
-        load_playingWeights();
-        quantizeWeights(trainingNNUE, playerNNUE);
-        save_playingWeights();
-
-        free(trainingNNUE);
-        free(playerNNUE);
-
+        saveWeights();
+        free(nnue_weights);
         exit(0);
     }
 
@@ -133,9 +107,8 @@ int main(int argc, char** argv)
     if(!onlyHumans) 
     {
         transpositionTable = create_hashTable_tt();
-        load_playingWeights();
         playerAccumulator = calloc(1, sizeof(accumulator));
-        playingRefreshTable = createPlayingRefreshTable();
+        playingRefreshTable = createRefreshTable();
         loadInputAccumulator(board, playerAccumulator, WHITE);
         loadInputAccumulator(board, playerAccumulator, BLACK);
         tb_init("./sygyzy/");
@@ -204,7 +177,7 @@ int main(int argc, char** argv)
 
     if(!onlyHumans)
     {
-        free(playerNNUE);
+        free(nnue_weights);
         free(playerAccumulator);
         destroyRefreshTable(playingRefreshTable);
         destroy_hashTable_tt(transpositionTable);

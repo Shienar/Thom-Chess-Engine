@@ -1,2 +1,7 @@
-; returns empty move near mating line.
-8/8/8/7p/1R5P/k1K2pP1/2B5/5Q2 w  - 1 81
+; returns empty move.
+7k/4Np2/p1r1pP1p/1pp5/4B1p1/7P/P1PR1PPK/8 b  - 7 38
+4k2r/1p1n1p2/p2p2pb/N2Pp2p/7P/2qB1P2/PP1B2P1/2KR3R w k - 1 26
+
+; attempt mate without sygyzy
+8/2K5/5q2/2k5/8/8/pppppppp/rrrrrrrr b - - 0 1
+1K6/5q2/1k6/8/8/8/pppppppp/rrrrrrrr w - - 3 3

@@ -21,7 +21,7 @@
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
  */
-#define MAX_LR 2.5e-4f
+#define MAX_LR 2,5e-4f
 #define MIN_LR 1e-5f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL 500
@@ -148,7 +148,7 @@ extern openCLContext opencl_context;
 extern openCLKernelMemory opencl_mem;
 extern cl_event readEvent;
 
-int initOpenCL(network_weights_training* trainingNNUE, short* host_activeInputs_A, float* host_expectedOutputs_A, char* host_outputBucket_A,
+int initOpenCL(network_weights* nnue_weights, short* host_activeInputs_A, float* host_expectedOutputs_A, char* host_outputBucket_A,
                                                         short* host_activeInputs_B, float* host_expectedOutputs_B, char* host_outputBucket_B);
 void freeOpenCL();
 
@@ -168,6 +168,6 @@ void freeOpenCL();
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.lookahead, 1, NULL, &size, NULL, 0, NULL, NULL);
 
 void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop);
-void getWeights(network_weights_training* weights);
+void getWeights(network_weights* weights);
 
 #endif

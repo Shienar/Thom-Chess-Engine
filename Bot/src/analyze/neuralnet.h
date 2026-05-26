@@ -6,9 +6,6 @@
 #include <immintrin.h>
 #include "../board/bitboard.h"
 
-#define QA 255
-#define QB 64
-
 #define PI 3.141592653589793
 
 #define ADAM_BETA1 0.9
@@ -22,24 +19,21 @@
 
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // Roughly 100 million positions.
-#define MINIBATCHES_PER_SHUFFLE_BLOCK 64
+#define MINIBATCHES_PER_SHUFFLE_BLOCK 256
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
-extern network_weights_playing* playerNNUE;
-extern network_weights_training* trainingNNUE;
+extern network_weights* nnue_weights;
 
 /* Binary  file storage. */
-void load_trainingWeights();
-void save_trainingWeights();
- 
-void load_playingWeights();
-void save_playingWeights();
+void loadWeights();
+void saveWeights();
 
-void quantizeWeights(network_weights_training* inputFloats, network_weights_playing* outputBytes);
+//https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+void print_network_statistics();
 
-int32_t forwardPropagate(int turn, accumulator* acc, int pieceCount);
+float forwardPropagate(int turn, accumulator* acc, int pieceCount);
 
 /**
  * Ranger
