@@ -88,13 +88,6 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
                                                             (int)board->halfMoveCount/2);
 }
 
-bitboard* create_board_from_fen(const char* fileName, int lineNumber)
-{
-    bitboard* board = calloc(1, sizeof(bitboard));
-    load_fen_to_board(board, fileName, lineNumber);
-    return board;
-}
-
 void load_fen_string_to_board(bitboard* board, const char* fenString)
 {
     assert(board);
@@ -114,16 +107,18 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
         &halfMoveClock,
         &fullMoveCount);
 
-    char* curBoardString = strtok(fullBoardString, "/");
+    char* strtok_ptr = NULL;
+    char* curBoardString = _strtok(fullBoardString, "/", &strtok_ptr);
     int curIndex = 7;
     while(curBoardString && curIndex >= 0)
     {
         boardStrings[curIndex--] = curBoardString;
-        curBoardString = strtok(NULL, "/"); 
+        curBoardString = _strtok(NULL, "/", &strtok_ptr); 
     }
 
     for(int sq = 0; sq < 64; sq++) board->pieceArr[sq] = EMPTY_PIECE;
     for(int pc = 0; pc < PIECE_COUNT; pc++) board->pieces[pc] = 0;
+    for(int side = 0; side < 2; side++) board->pieces_side[side] = 0;
 
     for(int row = 0; row < 8; row++)
     {
@@ -251,49 +246,6 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
     board->repetitionIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
-}
-
-void load_fen_to_board(bitboard* board, const char* fileName, int lineNumber)
-{
-    assert(board);
-
-    FILE* inputFile = fopen(fileName, "r");
-    if(!inputFile)
-    {
-        DEBUG("Failed to open file %s", fileName);
-        board->victor = -1;
-        return;
-    }
-    
-    int currentLine = 1;
-    char FEN[100] = {'\0'};
-    while(fgets(FEN, 100, inputFile))
-    {
-        if(currentLine == lineNumber) break;
-        currentLine++;
-    }
-    fclose(inputFile);
-    
-    if(FEN[0] == '\0')
-    {
-        DEBUG("Failed to read from file \"import/FEN.txt\"");
-        board->victor = -1;
-        return;
-    }
-    else if(FEN[0] == ';')
-    {
-        DEBUG("Target FEN line is a comment.");
-        board->victor = -1;
-        return;
-    }
-    else if(FEN[0] == ' ' || FEN[0] == '\n')
-    {
-        DEBUG("Target FEN line is whitespace.");
-        board->victor = -1;
-        return;
-    }
-
-    load_fen_string_to_board(board, (const char*) FEN);
 }
 
 //Resets the board to an opening position
@@ -455,14 +407,14 @@ void values_print(bitboard* board)
 {
     assert(board);
 
-    printf("ALL: %016llx\n", board->pieces_all);
-    printf("WHITE/BLACK: %016llx | %016llx\n", board->pieces_side[WHITE], board->pieces_side[BLACK]);
-    if(board->pieces[WHITE_PAWN] || board->pieces[BLACK_PAWN]) printf("PAWN: %016llx | %016llx\n", board->pieces[WHITE_PAWN], board->pieces[BLACK_PAWN]);
-    if(board->pieces[WHITE_KNIGHT] || board->pieces[BLACK_KNIGHT]) printf("KNIGHT: %016llx | %016llx\n", board->pieces[WHITE_KNIGHT], board->pieces[BLACK_KNIGHT]);
-    if(board->pieces[WHITE_BISHOP] || board->pieces[BLACK_BISHOP]) printf("BISHOP: %016llx | %016llx\n", board->pieces[WHITE_BISHOP], board->pieces[BLACK_BISHOP]);
-    if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016llx | %016llx\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
-    if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016llx | %016llx\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
-    printf("KING: %016llx | %016llx\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare_w, board->kingSquare_b);
+    printf("ALL: %016" PRIx64 "\n", board->pieces_all);
+    printf("WHITE/BLACK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces_side[WHITE], board->pieces_side[BLACK]);
+    if(board->pieces[WHITE_PAWN] || board->pieces[BLACK_PAWN]) printf("PAWN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_PAWN], board->pieces[BLACK_PAWN]);
+    if(board->pieces[WHITE_KNIGHT] || board->pieces[BLACK_KNIGHT]) printf("KNIGHT: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_KNIGHT], board->pieces[BLACK_KNIGHT]);
+    if(board->pieces[WHITE_BISHOP] || board->pieces[BLACK_BISHOP]) printf("BISHOP: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_BISHOP], board->pieces[BLACK_BISHOP]);
+    if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
+    if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
+    printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare_w, board->kingSquare_b);
 
     if(board->flags&0xF)
     {
@@ -491,7 +443,7 @@ void bitmask_print(uint64_t mask, char fill)
 {
     char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
     piece_print(boardArray, mask, fill);
-    printf("\nMask: %016llx\n", mask);
+    printf("\nMask: %016" PRIx64 "\n", mask);
     printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
     for(int row = 7; row >= 0; row--)
     {

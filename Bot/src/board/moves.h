@@ -29,6 +29,9 @@
 #define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & NOT_A_FILE) |  ((epMask >> 9) & NOT_H_FILE)) & board->pieces[WHITE_PAWN])
 #define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & NOT_H_FILE) |  ((epMask << 9) & NOT_A_FILE)) & board->pieces[BLACK_PAWN])
 
+//A zero'd out move will have all values set to zero.
+#define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
+
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
 int isThreatened(bitboard* board, int square, int squareColor);
@@ -44,7 +47,7 @@ uint64_t kingMoves(bitboard* board, int square, int color);
 
 int movePiece(bitboard *board, move* m);
 int moveFromStruct(bitboard* board, move m);
-int moveFromString(bitboard* board, char* str);
+move getStructFromString(bitboard* board, char* str);
 
 move unmove(bitboard *board);
 

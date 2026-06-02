@@ -137,6 +137,9 @@ static size_t file_size(FD fd) {
 #endif
 }
 
+int sygyzyProbeLimit = 5;
+int sygyzyProbeDepth = 6;
+
 static LOCK_T tbMutex;
 static int initialized = 0;
 static int numPaths = 0;
@@ -793,8 +796,8 @@ finished:
 void tb_free(void)
 {
   tb_init("");
-  free(pieceEntry);
-  free(pawnEntry);
+  if(pieceEntry) free(pieceEntry);
+  if(pawnEntry) free(pawnEntry);
   pieceEntry = NULL;
   pawnEntry = NULL;
 }

@@ -20,13 +20,19 @@
 
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
+ * 
+ * Uninitialized weights get trained with a max LR of 1e-4, but I lower 
+ * this if I'm continuing to train existing weights.
  */
-#define MAX_LR 2,5e-4f
-#define MIN_LR 1e-5f
+#define MAX_LR 2.5e-6f
+#define MIN_LR 2.5e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL 500
 #define MAX_INTERVALS 20
 #define LOOKAHEAD_RANGE 10
+
+#define KERNEL_COUNT 10
+#define MEM_COUNT 56
 typedef struct {
     cl_platform_id platform;
     cl_device_id device;
@@ -42,7 +48,6 @@ typedef struct {
             cl_kernel calculateAccumulator;
             cl_kernel forwardPropagate;
             cl_kernel backpropagate;
-            cl_kernel calculateGradientDirect;
             cl_kernel calculateGradient4;
             cl_kernel calculateGradient3;
             cl_kernel calculateGradient2;
@@ -51,7 +56,7 @@ typedef struct {
             cl_kernel lazyadam;
             cl_kernel lookahead;
         };
-        cl_kernel arr[11];
+        cl_kernel arr[KERNEL_COUNT];
     } kernels;
 } openCLContext;
 
@@ -72,7 +77,6 @@ typedef struct {
             cl_mem weights2_fast;
             cl_mem weights3_fast;
             cl_mem weights4_fast;
-            cl_mem directweights_fast;
 
             cl_mem bias1_fast;
             cl_mem bias2_fast;
@@ -83,7 +87,6 @@ typedef struct {
             cl_mem weights2_slow;
             cl_mem weights3_slow;
             cl_mem weights4_slow;
-            cl_mem directweights_slow;
 
             cl_mem bias1_slow;
             cl_mem bias2_slow;
@@ -106,7 +109,6 @@ typedef struct {
             cl_mem gradient2Sum;
             cl_mem gradient3Sum;
             cl_mem gradient4Sum;
-            cl_mem gradientDirectSum;
 
             cl_mem gradientBias1Sum;
             cl_mem gradientBias2Sum;
@@ -118,7 +120,6 @@ typedef struct {
             cl_mem m_weights2;
             cl_mem m_weights3;
             cl_mem m_weights4;
-            cl_mem m_directWeights;
 
             cl_mem m_bias1;
             cl_mem m_bias2;
@@ -130,7 +131,6 @@ typedef struct {
             cl_mem v_weights2;
             cl_mem v_weights3;
             cl_mem v_weights4;
-            cl_mem v_directWeights;
 
             cl_mem v_bias1;
             cl_mem v_bias2;
@@ -139,7 +139,7 @@ typedef struct {
 
             cl_mem sparseTimestamps;
         };
-        cl_mem arr[61];
+        cl_mem arr[MEM_COUNT];
     } mem;
 
 } openCLKernelMemory;
@@ -148,8 +148,8 @@ extern openCLContext opencl_context;
 extern openCLKernelMemory opencl_mem;
 extern cl_event readEvent;
 
-int initOpenCL(network_weights* nnue_weights, short* host_activeInputs_A, float* host_expectedOutputs_A, char* host_outputBucket_A,
-                                                        short* host_activeInputs_B, float* host_expectedOutputs_B, char* host_outputBucket_B);
+int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expected_A, char* h_output_A,
+                                                        short* h_active_B, float* h_expected_B, char* h_output_B);
 void freeOpenCL();
 
 #define ENQUEUE_LAZY_ADAM(weights, t, gradient, firstMoment, secondMoment, size, learningRate, rho_inf, event) \

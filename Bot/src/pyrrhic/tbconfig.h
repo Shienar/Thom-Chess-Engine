@@ -53,3 +53,10 @@
 #define PYRRHIC_ROOK_ATTACKS(sq, occ)    (rookMoves(0, occ, sq))
 #define PYRRHIC_QUEEN_ATTACKS(sq, occ)   (queenMoves(0, occ, sq))
 #define PYRRHIC_KING_ATTACKS(sq)         (pyrrhicKingAttacks(sq))
+
+#define MIN_PROBE_LIMIT 3
+#define MAX_PROBE_LIMIT 7
+#define MIN_PROBE_DEPTH 6
+#define MAX_PROBE_DEPTH 32
+extern int sygyzyProbeLimit;
+extern int sygyzyProbeDepth;

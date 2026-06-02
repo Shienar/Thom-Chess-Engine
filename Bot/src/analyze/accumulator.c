@@ -6,6 +6,7 @@
 #include <math.h>
 #include <float.h>
 #include <immintrin.h>
+#include <string.h>
 
 accumulator* playerAccumulator = NULL;
 accumulatorRefreshTable* playingRefreshTable = NULL;
@@ -455,7 +456,7 @@ accumulatorRefreshTable* createRefreshTable()
 
 void destroyRefreshTable(accumulatorRefreshTable* refreshTable)
 {
-    assert(refreshTable);
+    if(!refreshTable) return;
 
     for(int i = 0; i < 2; i++)
     {

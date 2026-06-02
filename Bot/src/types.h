@@ -2,6 +2,7 @@
 #define ENGINESTRUCTS
 
 #include <stdint.h>
+#include <limits.h>
 #include <time.h>
 
 //Avoid the 1ull << x calls.
@@ -25,7 +26,7 @@ typedef struct table_entry_tt {
     uint64_t hashCode;
     clock_t age;
     double evaluation;
-    uint8_t evaluationDepth;
+    uint8_t ply;
     int8_t nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
     move bestMove;
     uint8_t checkSum;
@@ -41,6 +42,7 @@ typedef struct hashtable_tt {
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
 #define MAX_PLY 32
+#define MAX_PV_SIZE 528
 typedef struct bitboard {
     uint64_t pieces[PIECE_COUNT];
 
@@ -110,9 +112,6 @@ extern int kingBucketMap[KING_BUCKETS];
  * The sparse input layer is stored as w[input][output] instead since we are jumping
  * to the few active inputs.
  * 
- * The directWeights connect the raw accumulator [(us + them) / 2] to an output node.
- * Only one output node gets calculated at a time.
- * 
  * Output bucket: 0-7, calculated with (piece count - 1) / 4
  */
 typedef struct network_weights {
@@ -122,8 +121,7 @@ typedef struct network_weights {
     float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
     float weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
-    float weights4[THIRD_HIDDEN_LAYER_NODES];
-    float directWeights[OUTPUT_BUCKETS][ACCUMULATOR_NODES_PER_SIDE];
+    float weights4[OUTPUT_BUCKETS][THIRD_HIDDEN_LAYER_NODES];
     float weights4_bias[OUTPUT_BUCKETS];
 } network_weights;
 
@@ -149,5 +147,19 @@ typedef struct accumulatorRefreshTable {
     bitboard* boards[2][KING_BUCKETS];
     accumulator accumulators[KING_BUCKETS];
 } accumulatorRefreshTable;
+
+typedef struct searchThreadContext {
+    int isPonder;
+    int depth;
+    int maxNodes;
+    int countedNodes;
+    float* score;
+    bitboard* board;
+    clock_t* endTime;
+    accumulator* accumulator;
+    accumulatorRefreshTable* accumulatorTable;
+    move searchedMoves[16]; //search only these at depth 1
+    move pvTable[MAX_PV_SIZE];
+} searchThreadContext;
 
 #endif

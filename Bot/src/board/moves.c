@@ -7,7 +7,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
 {
     if(board->victor) 
     {
-        DEBUG("Cannot generate moves for terminated game; Victor=x%02x", board->victor);
+        DEBUG_ERROR("Cannot generate moves for terminated game; Victor=x%02x", board->victor);
         return 0;
     }
 
@@ -512,7 +512,7 @@ int movePiece(bitboard *board, move* m)
             else if(m->startSquare - m->endSquare == -2) board_move_piece_quietly(board, m->startSquare + 3, m->endSquare - 1);
             break;
         default:
-            DEBUG("Attempted to move invalid piece type.");
+            DEBUG_ERROR("Attempted to move invalid piece type.");
             return -1;
             break;
     }
@@ -558,7 +558,9 @@ int movePiece(bitboard *board, move* m)
     return 0;
 }
 
-int moveFromString(bitboard* board, char* str)
+
+
+move getStructFromString(bitboard* board, char* str)
 {
     //String format: [2 char - startsquare][2 char - endsquare][1 char - promotion (q, n, r, b)]
     char start[3] = {'\0'};
@@ -572,8 +574,8 @@ int moveFromString(bitboard* board, char* str)
     int piece = findPieceOnSquare(board, startSquare);
     if(piece == EMPTY_PIECE)
     {
-        DEBUG("Could not find piece on start square.");
-        return -1;
+        DEBUG_ERROR("Could not find piece on start square.");
+        return (move){0};
     }
 
     int promoteTo = 0;
@@ -597,6 +599,7 @@ int moveFromString(bitboard* board, char* str)
 
     move m = {0};
     createMove(&m, startSquare, endSquare, promoteTo, piece, board);
+
     move moveList[256];
     int count = generateMoveList(moveList, board, 0);
     int isPotentialMove = 0;
@@ -612,36 +615,10 @@ int moveFromString(bitboard* board, char* str)
     if(!isPotentialMove)
     {
         printf("Piece move is not legal.\n");
-        return -1;
+        return (move){0};
     }
-
-    if(board->victor)
-    {
-        DEBUG("Cannot move from terminal gamestate; Victor=x%02x", board->victor);
-        return -1;
-    }
-    else if(ISBLACK(m.piece) && board->turn == WHITE)
-    {
-        DEBUG("Attempted to move black piece on white's turn. (%d->%d)", m.startSquare, m.endSquare);
-        return -1;
-    }
-    else if(ISWHITE(m.piece) && board->turn == BLACK)
-    {
-        DEBUG("Attempted to move white piece on black's turn. (%d->%d)", m.startSquare, m.endSquare);
-        return -1;
-    }
-    else if(m.startSquare < 0 || m.startSquare > 63 || m.endSquare < 0 || m.endSquare > 63)
-    {
-        DEBUG("Piece cannot move out of bounds (%d -> %d).", m.startSquare, m.endSquare);
-        return -1;
-    }
-    else if(m.startSquare == m.endSquare)
-    {
-        DEBUG("Piece cannot move in place on square %d.", m.startSquare);
-        return -1;
-    }
-
-    return moveFromStruct(board, m);
+    
+    return m;
 }
 
 int moveFromStruct(bitboard* board, move m)
@@ -651,11 +628,11 @@ int moveFromStruct(bitboard* board, move m)
     assert(!ISBLACK(m.piece) || board->turn != WHITE);
     assert(!ISWHITE(m.piece) || board->turn != BLACK);
     assert(m.startSquare >= 0 && m.startSquare <= 63 && m.endSquare >= 0 && m.endSquare <= 63);
-    assert(m.startSquare != m.endSquare);
+    assert(IS_VALID_MOVE(m));
 
     if(movePiece(board, &m) != 0) 
     {
-        DEBUG("Failed to move piece from struct.");
+        DEBUG_ERROR("Failed to move piece from struct.");
         return -1;
     }
     
@@ -752,7 +729,7 @@ move unmove(bitboard *board)
     move m = moves_pop(board);
     if(!m.startSquare && !m.endSquare)
     {
-        DEBUG("No move history to undo.");
+        DEBUG_ERROR("No move history to undo.");
         return (move){0};
     }
     board->repetitionIndex = m.repetitionIndex;

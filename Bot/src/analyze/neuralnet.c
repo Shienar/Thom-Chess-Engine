@@ -4,9 +4,9 @@
 #include "../board/moves.h"
 #include "engine.h"
 #include <float.h>
-#include <windows.h>
 #include "../gpu/gpu_funcs.h"
 #include "omp.h"
+#include <string.h>
 
 network_weights* nnue_weights = NULL;
 
@@ -14,14 +14,17 @@ network_weights* nnue_weights = NULL;
 //Box-Muller transform.
 void sampleNormalDistribution(float* dest, double standardDeviation) 
 {
-    double u1; 
-    do { u1 = (double)rand() / (double) RAND_MAX; } while(u1 == 0);
-    *dest = standardDeviation * sqrt(-2.0 * log(u1)) * cos(2 * PI *  (double)rand()/(double)RAND_MAX);
+    do{
+        double u1; 
+        do { u1 = (double)rand() / (double) RAND_MAX; } while(u1 == 0);
+        *dest = standardDeviation * sqrt(-2.0 * log(u1)) * cos(2 * PI *  (double)rand()/(double)RAND_MAX);
+    }while(*dest == 0.0f);
 }
 
 void loadWeights()
 {
-    if(!nnue_weights) nnue_weights = calloc(1, sizeof(network_weights));
+    if(nnue_weights) return;
+    nnue_weights = calloc(1, sizeof(network_weights));
 
     FILE* input = fopen("import/weights.nnue", "rb");
     if(input)
@@ -31,8 +34,10 @@ void loadWeights()
     }
     else
     {
-        DEBUG("Failed to load neural network from file.\n");
+        DEBUG_ERROR("Failed to load neural network from file.\n");
 
+
+        //Biases get left at 0.0 from calloc.
 
         double standardDeviation = sqrt(2.0/30.0);
         
@@ -43,7 +48,6 @@ void loadWeights()
                 sampleNormalDistribution(&nnue_weights->weights1[i][j], standardDeviation);
             }
         }
-        for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) nnue_weights->weights1_bias[i] = 0.0;
 
         standardDeviation = sqrt(2.0 / 512.0);
         for(int i = 0; i < ACCUMULATOR_NODES; i++)
@@ -53,7 +57,6 @@ void loadWeights()
                 sampleNormalDistribution(&nnue_weights->weights2[j][i], standardDeviation);
             }
         }
-        for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) nnue_weights->weights2_bias[i] = 0.0;
 
         standardDeviation = sqrt(2.0 / 32.0);
         for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
@@ -63,23 +66,14 @@ void loadWeights()
                 sampleNormalDistribution(&nnue_weights->weights3[j][i], standardDeviation);
             }
         }
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) nnue_weights->weights3_bias[i] = 0.0;
 
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
+        for(int b = 0; b < OUTPUT_BUCKETS; b++)
         {
-            sampleNormalDistribution(&nnue_weights->weights4[i], standardDeviation);
-        }
-        
-        standardDeviation = sqrt(2.0 / 256.0);
-        for(int i = 0; i < OUTPUT_BUCKETS; i++) 
-        {
-            nnue_weights->weights4_bias[i] = 0.0;
-            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+            for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
             {
-                sampleNormalDistribution(&nnue_weights->directWeights[i][j], standardDeviation);
+                sampleNormalDistribution(&nnue_weights->weights4[b][i], standardDeviation);
             }
         }
-
     }
 }
 
@@ -87,7 +81,7 @@ void saveWeights()
 {
     FILE* output = fopen("import/weights.nnue", "wb");
     if(output) fwrite(nnue_weights, sizeof(network_weights), 1, output);
-    else DEBUG("Failed to write neural network to file.");
+    else DEBUG_ERROR("Failed to write neural network to file.");
     fclose(output);
 }
 
@@ -145,15 +139,15 @@ void print_weight_stats(const char* name, const float* data, size_t size)
     double abs_variance = (size > 1) ? abs_M2 / (size - 1) : 0.0;
 
     printf("===============================\n");
-    printf("%s (Count: %llu)\n", name, size);
+    printf("%s (Count: %" PRIu64 ")\n", name, size);
     printf("-------------------------------\n");
     printf("  Raw Min:        %11.6f | Abs Min:      %11.6f\n", min_val, abs_min);
     printf("  Raw Max:        %11.6f | Abs Max:      %11.6f\n", max_val, abs_max);
     printf("  Raw Mean:       %11.6f | Abs Mean:     %11.6f\n", mean, abs_mean);
     printf("  Raw Variance:   %11.6f | Abs Variance: %11.6f\n", variance, abs_variance);
-    if(nanCount) printf("  NaNs: %llu\n", nanCount);
-    if(zeroCount) printf("  Zeros: %llu\n", zeroCount);
-    if(infinityCount) printf("  Infinities: %llu\n", infinityCount);
+    if(nanCount) printf("  NaNs: %" PRIu64 "\n", nanCount);
+    if(zeroCount) printf("  Zeros: %" PRIu64 "\n", zeroCount);
+    if(infinityCount) printf("  Infinities: %" PRIu64 "\n", infinityCount);
 }
 
 void print_network_statistics() 
@@ -166,8 +160,7 @@ void print_network_statistics()
     print_weight_stats("weights2_bias", nnue_weights->weights2_bias,sizeof(nnue_weights->weights2_bias) / sizeof(float));
     print_weight_stats("weights3", &nnue_weights->weights3[0][0], sizeof(nnue_weights->weights3) / sizeof(float));
     print_weight_stats("weights3_bias",nnue_weights->weights3_bias, sizeof(nnue_weights->weights3_bias) / sizeof(float));
-    print_weight_stats("weights4", nnue_weights->weights4, sizeof(nnue_weights->weights4) / sizeof(float));
-    print_weight_stats("directWeights", &nnue_weights->directWeights[0][0], sizeof(nnue_weights->directWeights) / sizeof(float));
+    print_weight_stats("weights4", &nnue_weights->weights4[0][0], sizeof(nnue_weights->weights4) / sizeof(float));
     print_weight_stats("weights4_bias", nnue_weights->weights4_bias, sizeof(nnue_weights->weights4_bias) / sizeof(float));
 }
 
@@ -214,18 +207,17 @@ void calculateHiddenLayer(float* inputValues, float* outputValues, int numInputs
         totalSum3 = horizontalSIMDSum(v_output3) + biasWeights[outputIndex + 2];
         totalSum4 = horizontalSIMDSum(v_output4) + biasWeights[outputIndex + 3];
         
-        outputValues[outputIndex + 0] = max(min(totalSum1, 1.0f), 0.0f);
-        outputValues[outputIndex + 1] = max(min(totalSum2, 1.0f), 0.0f);
-        outputValues[outputIndex + 2] = max(min(totalSum3, 1.0f), 0.0f);
-        outputValues[outputIndex + 3] = max(min(totalSum4, 1.0f), 0.0f);
+        outputValues[outputIndex + 0] = _max(_min(totalSum1, 1.0f), 0.0f);
+        outputValues[outputIndex + 1] = _max(_min(totalSum2, 1.0f), 0.0f);
+        outputValues[outputIndex + 2] = _max(_min(totalSum3, 1.0f), 0.0f);
+        outputValues[outputIndex + 3] = _max(_min(totalSum4, 1.0f), 0.0f);
     }
 }
 
-float calculateOutputLayer(float* h3, float rawAverageAccumulator[ACCUMULATOR_NODES_PER_SIDE], float weights[THIRD_HIDDEN_LAYER_NODES], float bias, float directWeights[ACCUMULATOR_NODES_PER_SIDE])
+float calculateOutputLayer(float* h3, float weights[THIRD_HIDDEN_LAYER_NODES], float bias)
 {
     __m256 v_output = _mm256_setzero_ps(); 
 
-    //standard path
     for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=8)
     {
         v_output = _mm256_fmadd_ps(_mm256_loadu_ps(&h3[inputIndex]), 
@@ -233,13 +225,6 @@ float calculateOutputLayer(float* h3, float rawAverageAccumulator[ACCUMULATOR_NO
                                     v_output);
     }
 
-    //direct path
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8)
-    {
-        v_output = _mm256_fmadd_ps(_mm256_loadu_ps(&rawAverageAccumulator[i]), 
-                                    _mm256_loadu_ps(&directWeights[i]), 
-                                    v_output);
-    }
     
     return horizontalSIMDSum(v_output) + bias;
 }
@@ -248,7 +233,7 @@ float forwardPropagate(int turn, accumulator* acc, int pieceCount)
 {
     int bucket = (pieceCount - 1) / 4;
 
-    //create perspective-aligned accumulator (us/them)
+    //create perspective-aligned accumulator (us vs them)
     float tempAccumulator[ACCUMULATOR_NODES];
     if(ISWHITE(turn))
     {
@@ -260,16 +245,6 @@ float forwardPropagate(int turn, accumulator* acc, int pieceCount)
         memcpy(&tempAccumulator[0], &acc->accumulator[BLACK][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
         memcpy(&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE], &acc->accumulator[WHITE][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
     }
-    
-    float rawAverageAccumulator[ACCUMULATOR_NODES_PER_SIDE];
-    const __m256 v_half = _mm256_set1_ps(0.5f);
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i+=8)
-    {
-        __m256 v_avg = _mm256_mul_ps(_mm256_add_ps(_mm256_loadu_ps(&acc->rawAccumulator[0][i]), 
-                                                    _mm256_loadu_ps(&acc->rawAccumulator[1][i])), 
-                                     v_half);
-        _mm256_storeu_ps(&rawAverageAccumulator[i], v_avg);
-    }
 
     float h2[SECOND_HIDDEN_LAYER_NODES];
     calculateHiddenLayer(tempAccumulator, h2, ACCUMULATOR_NODES, SECOND_HIDDEN_LAYER_NODES, nnue_weights->weights2, nnue_weights->weights2_bias);
@@ -277,7 +252,7 @@ float forwardPropagate(int turn, accumulator* acc, int pieceCount)
     float h3[THIRD_HIDDEN_LAYER_NODES];
     calculateHiddenLayer(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, nnue_weights->weights3, nnue_weights->weights3_bias);
 
-    return calculateOutputLayer(h3, rawAverageAccumulator, nnue_weights->weights4, nnue_weights->weights4_bias[bucket], nnue_weights->directWeights[bucket]);
+    return calculateOutputLayer(h3, nnue_weights->weights4[bucket], nnue_weights->weights4_bias[bucket]);
 }
 
 /*** Training Weights ***/
@@ -339,47 +314,37 @@ void shuffle_long(uint64_t* arr, int count)
     }
 }
 
-void shuffle_struct(CompactPosition* arr, int count)
-{
-    for(int i = count-1; i > 0; i--)
-    {
-        int j = rand()%i;
-        CompactPosition temp = arr[i];
-        arr[i] = arr[j];
-        arr[j] = temp;
-    }
-}
-
 void train(int maxIterations, float maxAllowedError)
 {
     FILE* trainingDataFile = fopen("./import/trainingData.bin", "rb");
     if(!trainingDataFile)
     {
-        DEBUG("\nFailed to open training data file.");
+        DEBUG_ERROR("\nFailed to open training data file.");
         exit(EXIT_FAILURE);
     }
-    _fseeki64(trainingDataFile, 0, SEEK_END);
-    uint64_t file_size = _ftelli64(trainingDataFile);
+    fseek_64(trainingDataFile, 0, SEEK_END);
+    uint64_t file_size = ftell_64(trainingDataFile);
     rewind(trainingDataFile);
 
     uint64_t positionCount = file_size / sizeof(CompactPosition);
 
     //Used to skip to random position in the .bin file.
     //The division in blockcount effectively truncates extraneous positions that don't fit within a full MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK block.
-    int blockCount = positionCount /  (MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK);
+    int blockCount = positionCount /  (MINIBATCH_SIZE * FEN_SKIP);
     uint64_t* blockIndices = calloc(blockCount,  sizeof(uint64_t));
     for (int i = 0; i < blockCount; i++) 
     {
-        blockIndices[i] = (MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK) * i * sizeof(CompactPosition);
+        blockIndices[i] = (MINIBATCH_SIZE * FEN_SKIP) * i * sizeof(CompactPosition);
     }
 
-    short* activeInputs_A = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
-    float* expectedOutputs_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
-    char* outputBuckets_A = _aligned_malloc(MINIBATCH_SIZE * sizeof(char), 4096);
+    //Aligned declarations
+    align_alloc(short*, activeInputs_A, 64 * MINIBATCH_SIZE * sizeof(short), 4096);
+    align_alloc(float*, expectedOutputs_A, MINIBATCH_SIZE * sizeof(float), 4096);
+    align_alloc(char*, outputBuckets_A, 64 * MINIBATCH_SIZE * sizeof(char), 4096);
     
-    short* activeInputs_B = _aligned_malloc(64 * MINIBATCH_SIZE * sizeof(short), 4096); 
-    float* expectedOutputs_B = _aligned_malloc(MINIBATCH_SIZE * sizeof(float), 4096);
-    char* outputBuckets_B = _aligned_malloc(MINIBATCH_SIZE * sizeof(char), 4096);
+    align_alloc(short*, activeInputs_B, 64 * MINIBATCH_SIZE * sizeof(short), 4096);
+    align_alloc(float*, expectedOutputs_B, MINIBATCH_SIZE * sizeof(float), 4096);
+    align_alloc(char*, outputBuckets_B, 64 * MINIBATCH_SIZE * sizeof(char), 4096);
     
     initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
@@ -388,12 +353,13 @@ void train(int maxIterations, float maxAllowedError)
     double totalSumSquaredError = 0.0; //accumulated value per iteration
 
     //Read data for next few minibatches, then shuffle data amongst them.
-    CompactPosition* batchData = calloc(MINIBATCHES_PER_SHUFFLE_BLOCK * MINIBATCH_SIZE, sizeof(CompactPosition));
+    CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
+    CompactPosition* unsortedData = calloc(MINIBATCH_SIZE * FEN_SKIP, sizeof(CompactPosition));
 
     FILE* validationData = fopen("./import/validationData.bin", "rb");
 
-    _fseeki64(validationData, 0, SEEK_END);
-    int validationEntries = _ftelli64(validationData) / sizeof(CompactPosition);
+    fseek_64(validationData, 0, SEEK_END);
+    int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);
     validationEntries -= (validationEntries % MINIBATCH_SIZE);
     int validationBlocks = validationEntries / MINIBATCH_SIZE;
     double validationMSE = 0.0;
@@ -513,14 +479,19 @@ void train(int maxIterations, float maxAllowedError)
 
         shuffle_long(blockIndices, blockCount);
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
-        {
-            if(minibatchNumber % MINIBATCHES_PER_SHUFFLE_BLOCK == 0)
+        {    
+
+            int offset = minibatchNumber%FEN_SKIP;
+            if(offset == 0)
             {
-                _fseeki64(trainingDataFile, blockIndices[minibatchNumber / MINIBATCHES_PER_SHUFFLE_BLOCK], SEEK_SET);
-                fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK, trainingDataFile);
-                shuffle_struct(batchData, MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK);
+                fseek_64(trainingDataFile, blockIndices[minibatchNumber], SEEK_SET);
+                fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
             }
-            CompactPosition* myBatchData = &batchData[MINIBATCH_SIZE * (minibatchNumber % MINIBATCHES_PER_SHUFFLE_BLOCK)];
+
+            for(int i = 0; i < MINIBATCH_SIZE; i++)
+            {
+                batchData[i] = unsortedData[offset + i * FEN_SKIP];
+            }
 
             inputGroup ^= 1;
 
@@ -531,8 +502,8 @@ void train(int maxIterations, float maxAllowedError)
                 #pragma omp for schedule(static)
                 for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
                 {
-                    if(inputGroup == INPUT_GROUP_A)  loadTrainingData(myBatchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
-                    else loadTrainingData(myBatchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
+                    if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
+                    else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
 
                     uint64_t inputs[24] = {0};
 
@@ -748,12 +719,13 @@ void train(int maxIterations, float maxAllowedError)
     fclose(validationData);
     free(blockIndices);
     free(batchData);
-    _aligned_free(activeInputs_A);
-    _aligned_free(expectedOutputs_A);
-    _aligned_free(outputBuckets_A);
-    _aligned_free(activeInputs_B);
-    _aligned_free(expectedOutputs_B);
-    _aligned_free(outputBuckets_B);
+    free(unsortedData);
+    align_free(activeInputs_A);
+    align_free(expectedOutputs_A);
+    align_free(outputBuckets_A);
+    align_free(activeInputs_B);
+    align_free(expectedOutputs_B);
+    align_free(outputBuckets_B);
 
     freeOpenCL();
 }

@@ -8,8 +8,9 @@
 #include <float.h>
 #include <math.h>
 
-
-int useHelperThreads = 1;
+int threadCount = 8;
+int enablePonder = 0;
+int isCalculating = 0;
 
 int perft(bitboard* board, int depth, int maxDepth, int verbose)
 {
@@ -38,60 +39,159 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     return nodes;
 }
 
-float evaluate(bitboard* board, accumulator* acc)
+float evaluateEndstate(bitboard* board, int ply)
 {
-    assert(board);
-    assert(acc);
+    assert(board->victor);
 
-    return forwardPropagate(board->turn, acc, __builtin_popcountll(board->pieces_all));
+    if(board->victor == VICTOR_WHITE)
+    {
+        return (board->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+    }
+    else if(board->victor == VICTOR_BLACK)
+    {
+        return (board->turn == BLACK) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+    }
+    else
+    {
+        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
+        int scale;
+        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
+        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
+        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
+
+        if(board->victor == VICTOR_DRAW_STALEMATE_WHITE || board->victor == VICTOR_DRAW_STALEMATE_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
+        if(board->victor == VICTOR_DRAW_THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
+        if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
+        if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
+
+        DEBUG_ERROR("Unhandled draw condition.");
+        return 0.0;
+    }
 }
 
-float quiesce(bitboard* board, float alpha, float beta, int depth, accumulator* acc, accumulatorRefreshTable* refreshTable)
+move getSygyzyMove(bitboard* board)
 {
+    //3-n man sygyzy endgame with no castling rights.
+    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (board->flags&0x30)) return (move){0}; 
+
+    uint32_t ep = board->enPassantSquare;
+    if(ep == -1) ep = 0;
+
+    bool turn = PYRRHIC_WHITE;
+    if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
+
+    bool hasRepeated = false;
+    
+    int index = board->repetitionIndex - 1;
+    uint64_t checkedVal = board->repetitionHashCodes[index];
+    for(index = index - 4; index >= 0; index -= 2)
+    {
+        if(checkedVal == board->repetitionHashCodes[index])
+        {
+            hasRepeated = true;
+            break;
+        }
+    }
+
+    struct TbRootMoves moveResults = {0};
+
+    int result = tb_probe_root_dtz(board->pieces_side[WHITE], board->pieces_side[BLACK], 
+                                    board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
+                                    board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
+                                    board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
+                                    (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
+    
+    if(result)
+    {
+        int bestScore = INT32_MIN;
+        int bestIndex = 0;
+        for(int i = 0; i < moveResults.size; i++)
+        {
+            if(moveResults.moves[i].tbRank > bestScore)
+            {
+                bestScore = moveResults.moves[i].tbRank;
+                bestIndex = i;
+            }
+        }   
+        
+        move bestMove = {0};
+        bestMove.endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
+        bestMove.startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
+        bestMove.piece = findPieceOnSquare(board, bestMove.startSquare);
+
+        if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = QUEEN;
+        else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = ROOK;
+        else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = BISHOP;
+        else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = KNIGHT;
+
+        bestMove.capturedPiece = findPieceOnSquare(board, bestMove.endSquare);
+        if(bestMove.capturedPiece) bestMove.capturedPieceSquare = bestMove.endSquare;
+
+        return bestMove;
+    }
+
+    DEBUG_ERROR("Failed to probe sygyzy.");
+    return (move){0}; 
+}
+
+//Return -1.0f on error. Valid results are SCORE_WIN, -SCORE_WIN, 0
+float getSygyzyResult(bitboard* board)
+{
+    //3-n man sygyzy endgame with no castling rights.
+    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (board->flags&0x30)) return 0;
+
+    uint32_t ep = board->enPassantSquare;
+    if(ep == -1) ep = 0;
+
+    bool turn = PYRRHIC_WHITE;
+    if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
+
+    int result = tb_probe_wdl(board->pieces_side[WHITE], board->pieces_side[BLACK], 
+                                    board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
+                                    board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
+                                    board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
+                                    ep, turn);
+    switch(result)
+    {
+        case TB_LOSS:
+            return -SCORE_WIN;
+        case TB_WIN:
+            return SCORE_WIN;
+        case TB_BLESSED_LOSS:
+        case TB_CURSED_WIN:
+        case TB_DRAW:
+            return 0.0f;
+        default:
+            return -1.0f;
+    }
+}
+
+float quiesce(THREAD_PARAM param, float alpha, float beta, int ply)
+{
+    searchThreadContext* context = (searchThreadContext*)param;
+    context->countedNodes++;
+
+    bitboard* board = context->board;
 
     if(board->victor)
     {
-        if(board->victor == VICTOR_WHITE)
-        {
-            if(board->turn == WHITE) return (SCORE_WIN - depth);
-            else return -(SCORE_WIN - depth);
-        }
-        else if(board->victor == VICTOR_BLACK)
-        {
-            if(board->turn == BLACK) return (SCORE_WIN - depth);
-            else return -(SCORE_WIN - depth);
-        }
-        else
-        {
-            //Draws are less desirable in the early/middlegame and more desirable in the lategame.
-            int scale;
-            if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
-            else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
-            else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
-
-            if(board->victor == VICTOR_DRAW_STALEMATE_WHITE || board->victor == VICTOR_DRAW_STALEMATE_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
-            if(board->victor == VICTOR_DRAW_THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
-            if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
-            if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
-
-            DEBUG("Unhandled draw condition.");
-            return 0.0;
-        }
+        evaluateEndstate(board, ply);
     }
 
-    float best;
     table_entry_tt* entry = transposition_table_get(board, transpositionTable);
-    if(entry &&
-        (entry->nodeType == NODE_TYPE_PV ||
-        (entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) ||
-        (entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta))) 
+    if(entry)
     {
-        best = entry->evaluation;
+        if (entry->nodeType == NODE_TYPE_PV) return entry->evaluation;
+        if (entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) return alpha;
+        if (entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
     }
-    else best = evaluate(board, acc);
+     
+    float best = forwardPropagate(board->turn, context->accumulator, __builtin_popcountll(board->pieces_all));
 
-    if(depth == 0 || best >= beta) return best;
+    if(best >= beta) return best;
     if(best > alpha) alpha = best;
+
+    if(ply >= MAX_PLY) return best;
 
     move moveList[256];
     int entryCount = generateMoveList(moveList, board, 1);
@@ -126,11 +226,11 @@ float quiesce(bitboard* board, float alpha, float beta, int depth, accumulator* 
             move currentMove = moveList[moveIndex];
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, currentMove, 0, acc, refreshTable);
-                float score = -quiesce(board, -beta, -alpha, depth - 1, acc, refreshTable);
+                updateMoveAccumulator(board, currentMove, 0, context->accumulator, context->accumulatorTable);
+                float score = -quiesce(param, -beta, -alpha, ply + 1);
 
                 unmove(board);
-                updateMoveAccumulator(board, currentMove, 1, acc, refreshTable);
+                updateMoveAccumulator(board, currentMove, 1, context->accumulator, context->accumulatorTable);
 
                 if(score >= beta)
                 {
@@ -146,12 +246,29 @@ float quiesce(bitboard* board, float alpha, float beta, int depth, accumulator* 
 
 void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
 
-float principalVariationSearch(bitboard* board, float alpha, float beta, int maxDepth, int depth, move* pv, int pvIndex, clock_t* timeLimit, accumulator* acc, accumulatorRefreshTable* refreshTable)
+float principalVariationSearch(THREAD_PARAM param, float alpha, float beta, int maxDepth, int depth, int pvIndex)
 {
+    searchThreadContext* context = (searchThreadContext*)param;
+    context->countedNodes++;
+    bitboard* board = context->board;
+    int ply = maxDepth - depth;
+
+    //Sygyzy
+    if(depth >= sygyzyProbeDepth)
+    {
+        int result = getSygyzyResult(context->board);
+        if(result != -1.0f) 
+        {
+            //We aren't saving a pv move, but 
+            //this isn't the root node.
+            return result;
+        }
+    }
+
     //Transposition table
     table_entry_tt* old_tt_entry = NULL;
     if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
-        old_tt_entry->evaluationDepth >= depth &&
+        old_tt_entry->ply >= ply &&
             (old_tt_entry->nodeType == NODE_TYPE_PV ||
             (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
             (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
@@ -165,29 +282,44 @@ float principalVariationSearch(bitboard* board, float alpha, float beta, int max
 
     table_entry_tt new_tt_entry = {
         .age = clock(),
-        .evaluationDepth = depth,
+        .ply = ply,
         .hashCode = board->hashCode
     };
 
-    if(depth == 0 || (timeLimit && clock() > *timeLimit) || board->victor) 
+    if(depth == 0 || (context->endTime && clock() > *context->endTime) || board->victor) 
     {
-        new_tt_entry.nodeType = NODE_TYPE_PV;
-        new_tt_entry.evaluation = quiesce(board, alpha, beta, 5, acc, refreshTable);
+        new_tt_entry.evaluation = quiesce(param, alpha, beta, ply);
+
+        if(new_tt_entry.evaluation <= alpha) new_tt_entry.nodeType = NODE_TYPE_ALL;
+        if(new_tt_entry.evaluation >= beta) new_tt_entry.nodeType = NODE_TYPE_CUT;
+        else new_tt_entry.nodeType = NODE_TYPE_PV;
+       
         //We aren't saving a bestmnove.
+
         transposition_table_set(transpositionTable, new_tt_entry);
         return new_tt_entry.evaluation;
     }
     
     float score = 0;
 
+    int entryCount = 0;
     move moveList[256];
-    int entryCount = generateMoveList(moveList, board, 0);
+    if(ply == 0)
+    {
+        for(int i = 0; i < 16; i++)
+        {
+            if(IS_VALID_MOVE(context->searchedMoves[i])) entryCount++;
+            else break;
+        }
+        if(entryCount) memcpy(moveList, context->searchedMoves, entryCount * sizeof(move));
+        else entryCount = generateMoveList(moveList, board, 0);
+    }
+    else entryCount = generateMoveList(moveList, board, 0);
     if(entryCount)
     {
-        move* pvMove = NULL;
-        if(pv) pvMove = &pv[maxDepth - depth];
+        move* pvMove = &context->pvTable[ply];
 
-        int moveScores[128] = {0};
+        int moveScores[256] = {0};
         for(int i = 0; i < entryCount; i++)
         {
             move m = moveList[i];
@@ -217,20 +349,20 @@ float principalVariationSearch(bitboard* board, float alpha, float beta, int max
 
             if(!moveFromStruct(board, moveList[moveIndex]))
             {
-                updateMoveAccumulator(board, moveList[moveIndex], 0, acc, refreshTable);
+                updateMoveAccumulator(board, moveList[moveIndex], 0, context->accumulator, context->accumulatorTable);
                 if(i == 0)
                 {
-                    score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, acc, refreshTable);
+                    score = -principalVariationSearch(param, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
                 }
                 else
                 {
-                    score = -principalVariationSearch(board, -alpha - 1, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, acc, refreshTable);
+                    score = -principalVariationSearch(param, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
                     //Re-search PV node
-                    if (score > alpha && beta - alpha > 1) score = -principalVariationSearch(board, -beta, -alpha, maxDepth, depth - 1, pv, pvIndex + depth, timeLimit, acc, refreshTable);
+                    if (score > alpha && beta - alpha > 1) score = -principalVariationSearch(param, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
                 }
                 
                 unmove(board);
-                updateMoveAccumulator(board, moveList[moveIndex], 1, acc, refreshTable);
+                updateMoveAccumulator(board, moveList[moveIndex], 1, context->accumulator, context->accumulatorTable);
                 
                 if(score >= beta)
                 {
@@ -251,11 +383,8 @@ float principalVariationSearch(bitboard* board, float alpha, float beta, int max
                         new_tt_entry.bestMove = moveList[moveIndex];
                         transposition_table_set(transpositionTable, new_tt_entry);
                         alpha = score;
-                        if(pv) 
-                        {
-                            pv[pvIndex] = moveList[moveIndex];
-                            copyNMoves(&pv[pvIndex + 1], &pv[pvIndex + depth], depth - 1);
-                        }
+                        context->pvTable[pvIndex] = moveList[moveIndex];
+                        copyNMoves(&context->pvTable[pvIndex + 1], &context->pvTable[pvIndex + depth], depth - 1);
                     }
                 }
             }
@@ -272,231 +401,209 @@ float principalVariationSearch(bitboard* board, float alpha, float beta, int max
     return alpha;
 }
 
-typedef struct searchThreadData {
-    float alpha;
-    float beta;
-    int depth;
-    bitboard* board;
-    clock_t* endTime;
-    move* pvTable;
-    float* score;
-    accumulator* accumulator;
-    accumulatorRefreshTable* accumulatorTable;
-} searchThreadData;
-
-DWORD WINAPI helperThreadFunction(LPVOID lpParam)
+void printResultingMoves(move bestMove, move ponderMove, int isPonder)
 {
-    searchThreadData* data = (searchThreadData*)lpParam;
-                
-    updateAccumulatorFromTable(data->board, data->accumulator, data->accumulatorTable);
+    char startSq[3];
+    char endSq[3];
+    int startSquare = bestMove.startSquare;
+    int endSquare = bestMove.endSquare;
+
+    getSquareName(startSquare, startSq);
+    getSquareName(endSquare, endSq);
+
+    printf("bestmove %s%s", startSq, endSq);
+
+    if(enablePonder && IS_VALID_MOVE(ponderMove))
+    {
+        startSquare = ponderMove.startSquare;
+        endSquare = ponderMove.endSquare;
+
+        getSquareName(startSquare, startSq);
+        getSquareName(endSquare, endSq);
+
+        printf(" ponder %s%s", startSq, endSq);
+    }
+
+    printf("\n");
+    fflush(stdout);
+}
+
+void aspiration_window(THREAD_PARAM param)
+{
+    searchThreadContext* context = (searchThreadContext*)param;
+    bitboard* board = context->board;
+    int currentDepth = context->depth;
+    clock_t* endTime = context->endTime;
+    accumulator* acc = context->accumulator;
+    accumulatorRefreshTable* accumulatorTable = context->accumulatorTable;
+    
+    if(context->depth < MIN_ASPIRATION_DEPTH)
+    {
+        updateAccumulatorFromTable(board, context->accumulator, context->accumulatorTable);
+        *context->score = principalVariationSearch(param, -FLT_MAX, FLT_MAX, currentDepth, currentDepth, 0);
+    }
+    else
+    {
+
+        float aspiration_margin = INITIAL_ASPIRATION_MARGIN;
+        float alpha = *context->score - aspiration_margin;
+        float beta = *context->score + aspiration_margin;
+        while(1)
+        {
+            if(clock() > *endTime) break;
+
+            updateAccumulatorFromTable(board, acc, accumulatorTable);
+            float score = principalVariationSearch(param, alpha, beta, currentDepth, currentDepth, 0);
+
+            if(score <= alpha)
+            {
+                alpha-= aspiration_margin;
+                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
+            }
+            else if(score >= beta)
+            {
+                beta+= aspiration_margin;
+                aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
+            }
+            else
+            {
+                *context->score = score;
+                break;
+            }
+
+            if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
+            {
+                alpha = -FLT_MAX;
+                beta = FLT_MAX;
+            }
+        }
+    }
+}
+
+THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
+{
+    searchThreadContext* context = (searchThreadContext*)param;
+    updateAccumulatorFromTable(context->board, context->accumulator, context->accumulatorTable);
 
     //Always fully evaluate at depth 1:
-    *data->score = principalVariationSearch(data->board, -FLT_MAX, FLT_MAX, 1, 1, data->pvTable, 0, NULL, data->accumulator, data->accumulatorTable);
+    clock_t temp = *context->endTime;
+    *context->endTime = LONG_MAX;
+    *context->score = principalVariationSearch(param, -FLT_MAX, FLT_MAX, 1, 1, 0);
+    *context->endTime = temp;
 
-    while(*data->endTime != 0)
-    {
-        updateAccumulatorFromTable(data->board, data->accumulator, data->accumulatorTable);
-        *data->score = principalVariationSearch(data->board, data->alpha, data->beta, data->depth, data->depth, data->pvTable, 0, data->endTime, data->accumulator, data->accumulatorTable);
-    }
+    while(*context->endTime != 0) aspiration_window(param);
+
     return 0;
 }
 
-move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
+THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 {
+    searchThreadContext* context = (searchThreadContext*)param;
+    
+    int maxDepth = context->depth;
+    clock_t *endTime = context->endTime;
+    
+    move bestMove, ponderMove = (move){0};
+    int helperThreadCount = threadCount - 1;
+
+    bitboard* board = context->board;
     board->historyIndex = 0;
 
-    if(entries) //Book moves
+    //Book moves
+    if(entries)
     {
-        move* bookMove = NULL;
-        if((bookMove = getBookMove(board))) return *bookMove;
+        move bookMove = getBookMove(board);
+        if(IS_VALID_MOVE(bookMove)) { printResultingMoves(bookMove, (move){0}, context->isPonder); isCalculating = 0; return 0; }
         else unloadBook();
     }
-    else if(__builtin_popcountll(board->pieces_all) <= 5 && !(board->flags&0x30)) //3-5man sygyzy endgame with no castling rights.
-    {
-        uint32_t ep = board->enPassantSquare;
-        if(ep == -1) ep = 0;
-
-        bool turn = PYRRHIC_WHITE;
-        if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
-
-        int hasRepeated = 0;
-        
-        int index = board->repetitionIndex - 1;
-        uint64_t checkedVal = board->repetitionHashCodes[index];
-        for(index = index - 4; index >= 0; index -= 2)
-        {
-            if(checkedVal == board->repetitionHashCodes[index])
-            {
-                hasRepeated = 1;
-                break;
-            }
-        }
-
-        struct TbRootMoves moveResults = {0};
-
-        int result = tb_probe_root_dtz(board->pieces_side[WHITE], board->pieces_side[BLACK], 
-                                        board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
-                                        board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
-                                        board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
-                                        (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
-        
-        if(!result) DEBUG("Failed to probe sygyzy.");
-        else
-        {
-            int bestScore = INT32_MIN;
-            int bestIndex = 0;
-            for(int i = 0; i < moveResults.size; i++)
-            {
-                if(moveResults.moves[i].tbRank > bestScore)
-                {
-                    bestScore = moveResults.moves[i].tbRank;
-                    bestIndex = i;
-                }
-            }   
-            
-            move bestMove = {0};
-            bestMove.endSquare = PYRRHIC_MOVE_TO(moveResults.moves[bestIndex].move);
-            bestMove.startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[bestIndex].move);
-            bestMove.piece = findPieceOnSquare(board, bestMove.startSquare);
-
-            if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = QUEEN;
-            else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = ROOK;
-            else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = BISHOP;
-            else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[bestIndex].move)) bestMove.promoteTo = KNIGHT;
-
-            bestMove.capturedPiece = findPieceOnSquare(board, bestMove.endSquare);
-            if(bestMove.capturedPiece) bestMove.capturedPieceSquare = bestMove.endSquare;
-
-            return bestMove;
-        }
-    }
-
-    move* principalVariation = calloc(maxDepth, sizeof(move));
-    move* tempPVTable = NULL;
-
-    clock_t endTime = clock() + CLOCKS_PER_SEC*maxTimeSeconds;
-
-    HANDLE helperThreads[HELPER_THREAD_COUNT] = {0};
-    DWORD helperThreadID[HELPER_THREAD_COUNT] = {0};
-    searchThreadData params[HELPER_THREAD_COUNT] = {0};
-
-    clock_t terminateFlags[HELPER_THREAD_COUNT] = {LONG_MAX}; //These are passed as end times for the thread searches. Cancel threads by setting values to 0.
-    float threadScores[HELPER_THREAD_COUNT] = {0};
-    bitboard *threadBoards = calloc(HELPER_THREAD_COUNT, sizeof(bitboard));
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
-    {
-        params[i].pvTable = NULL;
-        params[i].board = &threadBoards[i];
-        params[i].score = &threadScores[i];
-        params[i].endTime = &terminateFlags[i];
-    }
+    
+    //Sygyzy
+    bestMove = getSygyzyMove(board);
+    if(IS_VALID_MOVE(bestMove)){ printResultingMoves(bestMove, (move){0}, context->isPonder); isCalculating = 0; return 0; }
 
     accumulator* acc = playerAccumulator;
-    if(!acc) acc = playerAccumulator = calloc(1, sizeof(accumulator));
-
     accumulatorRefreshTable* accumulatorTable = playingRefreshTable;
-    if(!accumulatorTable) accumulatorTable = playingRefreshTable = createRefreshTable();
-    
-    accumulator* threadAccumulators = calloc(HELPER_THREAD_COUNT, sizeof(accumulator));
-    accumulatorRefreshTable** threadRefreshTables = calloc(HELPER_THREAD_COUNT, sizeof(accumulatorRefreshTable*));
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+
+    THREADTYPE *helperThreads = NULL;
+    searchThreadContext* helperThreadContext = NULL;
+    clock_t* terminateFlags = NULL;
+    float* threadScores = NULL;
+    bitboard* threadBoards = NULL;
+    accumulator* threadAccumulators = NULL;
+    accumulatorRefreshTable** threadRefreshTables = NULL;
+    if(helperThreadCount)
     {
-        threadRefreshTables[i] = createRefreshTable();
-        params[i].accumulatorTable = threadRefreshTables[i];
-        params[i].accumulator = &threadAccumulators[i];
+        helperThreads = calloc(threadCount - 1, sizeof(THREADTYPE));
+        helperThreadContext = calloc(threadCount - 1, sizeof(searchThreadContext));
+        terminateFlags = calloc(threadCount - 1, sizeof(clock_t));
+        threadScores = calloc(threadCount - 1, sizeof(float));
+        threadBoards = calloc(threadCount - 1, sizeof(bitboard));
+        threadAccumulators = calloc(threadCount - 1, sizeof(accumulator));
+        threadRefreshTables = calloc(threadCount - 1, sizeof(accumulatorRefreshTable*));
+        
+        for(int i = 0; i < threadCount - 1; i++) 
+        {
+            helperThreadContext[i].board = &threadBoards[i];
+            helperThreadContext[i].score = &threadScores[i];
+            helperThreadContext[i].endTime = &terminateFlags[i];
+
+            threadRefreshTables[i] = createRefreshTable();
+            helperThreadContext[i].accumulatorTable = threadRefreshTables[i];
+            helperThreadContext[i].accumulator = &threadAccumulators[i];
+
+            memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16*sizeof(move));
+        }
     }
+
+    context->countedNodes = 0;
 
     //Always fully evaluate at depth 1:
     updateAccumulatorFromTable(board, acc, accumulatorTable);
-    float aspiration_expectedValue = principalVariationSearch(board, -FLT_MAX, FLT_MAX, 1, 1, principalVariation, 0, NULL, acc, accumulatorTable);
+    clock_t temp = *context->endTime;
+    *context->endTime = LONG_MAX;
+    *context->score = principalVariationSearch(param, -FLT_MAX, FLT_MAX, 1, 1, 0);
+    *context->endTime = temp;
 
     for(int currentDepth = 2; currentDepth <= maxDepth; currentDepth++)
     {
-        if(clock() > endTime) break;
-        tempPVTable = calloc(0.5*currentDepth*(currentDepth + 1), sizeof(move));
-        copyNMoves(tempPVTable, principalVariation, currentDepth);
+        if(clock() > *endTime || context->countedNodes > context->maxNodes) break;
 
-        //Initialize helper threadss
-        if(useHelperThreads)
+        //Initialize helper threads
+        if(helperThreadCount)
         {
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++)
+            for(int i = 0; i < threadCount - 1; i++)
             {
-                memcpy(params[i].board, board, sizeof(bitboard));
-                params[i].depth = currentDepth + (i%3);
-                *params[i].endTime = LONG_MAX;
-                params[i].pvTable = calloc(0.5*params[i].depth*(params[i].depth + 1), sizeof(move));
-                copyNMoves(params[i].pvTable, principalVariation, currentDepth);
+                memcpy(helperThreadContext[i].board, board, sizeof(bitboard));
+                helperThreadContext[i].depth = _min(currentDepth + (i%3), MAX_PLY);
 
-                helperThreads[i] = CreateThread(NULL, 0, helperThreadFunction, &params[i], 0, &helperThreadID[i]);
+                THREAD_START(helperThreads[i], helperThreadFunction, &helperThreadContext[i]);
             }
         }
         
-
-
         //Aspiration Window Loop
-        //Avoid for lower depths.
-        if(currentDepth < 5)
-        {
-            updateAccumulatorFromTable(board, acc, accumulatorTable);
-            aspiration_expectedValue = principalVariationSearch(board, -FLT_MAX, FLT_MAX, currentDepth, currentDepth, tempPVTable, 0, &endTime, acc, accumulatorTable);
-        }
-        else
-        {
-
-            float aspiration_margin = INITIAL_ASPIRATION_MARGIN;
-            float alpha = aspiration_expectedValue - aspiration_margin;
-            float beta = aspiration_expectedValue + aspiration_margin;
-            while(1)
-            {
-                if(clock() > endTime) break;
-
-                updateAccumulatorFromTable(board, acc, accumulatorTable);
-                float score = principalVariationSearch(board, alpha, beta, currentDepth, currentDepth, tempPVTable, 0, &endTime, acc, accumulatorTable);
-
-                if(score <= alpha)
-                {
-                    alpha-= aspiration_margin;
-                    aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
-                }
-                else if(score >= beta)
-                {
-                    beta+= aspiration_margin;
-                    aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
-                }
-                else
-                {
-                    aspiration_expectedValue = score;
-                    break;
-                }
-
-                if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
-                {
-                    alpha = -FLT_MAX;
-                    beta = FLT_MAX;
-                }
-            }
-        }
+        aspiration_window(param);
         
-        if(useHelperThreads)
+        if(helperThreadCount)
         {
             //Stop helper threads
-            memset(terminateFlags, 0, HELPER_THREAD_COUNT * sizeof(clock_t));
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+            memset(terminateFlags, 0, (threadCount - 1) * sizeof(clock_t));
+            for(int i = 0; i < threadCount - 1; i++) 
             {
-                WaitForSingleObject(helperThreads[i], INFINITE);
-                CloseHandle(helperThreads[i]);
+                THREAD_WAIT(helperThreads[i]);
+                context->countedNodes += helperThreadContext[i].countedNodes;
+                helperThreadContext[i].countedNodes = 0;
             }
         
             //Move voting
-            float worstScore = aspiration_expectedValue;
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++)  worstScore = min(*params[i].score, worstScore);
+            float worstScore = *context->score;
+            for(int i = 0; i < helperThreadCount; i++)  worstScore = _min(*helperThreadContext[i].score, worstScore);
 
-            int mainThreadVote = (aspiration_expectedValue - worstScore + 1) * currentDepth;
+            int mainThreadVote = (*context->score - worstScore + 1) * currentDepth;
             int totalVoteWeights = mainThreadVote;
-            int votes[HELPER_THREAD_COUNT] = {0.0};
-            for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
+            int *votes = calloc(helperThreadCount, sizeof(int));
+            for(int i = 0; i < helperThreadCount; i++) 
             {
-                votes[i] = (*params[i].score - worstScore + 1) * params[i].depth;
+                votes[i] = (*helperThreadContext[i].score - worstScore + 1) * helperThreadContext[i].depth;
                 totalVoteWeights+= votes[i];
             }
 
@@ -504,52 +611,40 @@ move calculateBestMove(bitboard* board, int maxDepth, int maxTimeSeconds)
             if(totalVoteWeights >= mainThreadVote)
             {
                 int8_t threadIndex;
-                for(threadIndex = 0; threadIndex < HELPER_THREAD_COUNT - 1; threadIndex++)
+                for(threadIndex = 0; threadIndex < helperThreadCount - 1; threadIndex++)
                 {
                     if(totalVoteWeights < mainThreadVote) break;
                     else mainThreadVote += votes[threadIndex];
                 }
 
-                copyNMoves(tempPVTable, params[threadIndex].pvTable, currentDepth);
+                memcpy(context->pvTable, helperThreadContext[threadIndex].pvTable, 0.5 * currentDepth * (currentDepth + 1) * sizeof(move));
             }
+            free(votes);
         }
 
-        if(tempPVTable[0].startSquare != tempPVTable[0].endSquare) copyNMoves(principalVariation, tempPVTable, currentDepth);
-
-        free(tempPVTable);
-        tempPVTable = NULL;
-        for(int i = 0; i < HELPER_THREAD_COUNT; i++) 
-        {
-            free(params[i].pvTable);
-            params[i].pvTable = NULL;
-        }
+        bestMove = context->pvTable[0];
+        ponderMove = context->pvTable[1];
     }
 
     free(threadBoards);
-    if(tempPVTable) free(tempPVTable);
+    free(helperThreads);
+    free(helperThreadContext);
+    free(terminateFlags);
+    free(threadScores);
 
     free(threadAccumulators);
-    for(int i = 0; i < HELPER_THREAD_COUNT; i++) destroyRefreshTable(threadRefreshTables[i]);
+    for(int i = 0; i < helperThreadCount; i++) destroyRefreshTable(threadRefreshTables[i]);
     free(threadRefreshTables);
 
-    move bestMove = principalVariation[0];
-
-    if(bestMove.startSquare == bestMove.endSquare && bestMove.startSquare == 0)
+    if(!IS_VALID_MOVE(bestMove) && bestMove.startSquare == 0)
     {
-        if(printDebugMessages) 
-        {
-            char FEN[100] = { '\0' };
-            export_fen_from_board(board, FEN);
-            DEBUG("Engine returned empty move on %s", FEN);
-            for(int i = 0; i < maxDepth; i++) printf("\tpv[%d] = %d->%d\n", i, principalVariation[i].startSquare, principalVariation[i].endSquare);
-        }
-
-        //This isn't recoverable.
-        exit(EXIT_FAILURE);
+        char FEN[100] = { '\0' };
+        export_fen_from_board(board, FEN);
+        DEBUG_ERROR("Engine returned empty move on %s", FEN);
+        for(int i = 0; i < maxDepth; i++) DEBUG_INFO("\tpv[%d] = %d->%d", i, context->pvTable[i].startSquare, context->pvTable[i].endSquare);
     }
 
-    free(principalVariation);
-    principalVariation = NULL;
-
-    return bestMove;
+    printResultingMoves(bestMove, ponderMove, context->isPonder);
+    isCalculating = 0;
+    return 0;
 }

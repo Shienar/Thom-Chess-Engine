@@ -9,12 +9,12 @@ polyglot_book_entry *entries = NULL;
 
 void loadBook()
 {
-    printf("Loading opening book...\n");
+    if(entries) return;
+    DEBUG_INFO("Loading opening book...");
     FILE* input = fopen("import/komodo.bin", "rb");
     if(!input)
     {
-        DEBUG("Failed to read book file.");
-        fclose(input);
+        DEBUG_ERROR("Failed to read book file.");
         return;
     }
 
@@ -24,7 +24,7 @@ void loadBook()
 
     if(!entryCount)
     {
-        DEBUG("Opening book is empty.");
+        DEBUG_ERROR("Opening book is empty.");
         fclose(input);
         return;
     }
@@ -37,21 +37,21 @@ void loadBook()
 
     size_t readItems = fread(entries, sizeof(polyglot_book_entry), entryCount, input);
 
-    printf("%lld/%lld entries imported.\n", entryCount, readItems);
+    DEBUG_INFO("%lld/%lld entries imported.", entryCount, readItems);
     fclose(input);
 }
 
 void unloadBook()
 {
-    //printf("Unloading book...\n");
     if(entries)
     {
+        DEBUG_INFO("Unloading book...");
         free(entries);
         entries = NULL;
     }
 }
 
-move* getBookMove(bitboard* board)
+move getBookMove(bitboard* board)
 {
     uint64_t polyglotKey = board->hashCode;
     
@@ -62,7 +62,7 @@ move* getBookMove(bitboard* board)
 
     for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
     {
-        if(polyglotKey == _byteswap_uint64(entry->hashKey))
+        if(polyglotKey == __builtin_bswap64(entry->hashKey))
         {
             /** Bits:
              *  0,1,2               to file
@@ -77,14 +77,14 @@ move* getBookMove(bitboard* board)
              *  - 3 = Rook
              *  - 4 = Queen
              */
-            uint16_t moveBits = _byteswap_ushort(entry->move);
+            uint16_t moveBits = __builtin_bswap16(entry->move);
             
             int endSquare = (moveBits&0x7) + 8*((moveBits&0x38)>>3);
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
             int promoteTo = ((moveBits&0x7000)>>12) + 1;
             
             move* tempMove = &potentialMoves[moveCount];
-            moveWeights[moveCount] = _byteswap_ushort(entry->weight);
+            moveWeights[moveCount] = __builtin_bswap16(entry->weight);
             totalWeight+= moveWeights[moveCount];
 
             tempMove->promoteTo = promoteTo;
@@ -106,7 +106,7 @@ move* getBookMove(bitboard* board)
         }
     }
 
-    if(moveCount == 0) return NULL;
+    if(moveCount == 0) return (move){0};
 
     uint32_t randomValue = ((rand()<<16)|rand())%totalWeight;
     int selectedIndex = 0;
@@ -121,9 +121,5 @@ move* getBookMove(bitboard* board)
         randomValue -= moveWeights[i];
     }
 
-    move* returnedMove = calloc(1, sizeof(move));
-    *returnedMove = potentialMoves[selectedIndex];
-
-    return returnedMove;
-    
+    return potentialMoves[selectedIndex];
 }

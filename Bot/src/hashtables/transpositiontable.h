@@ -3,7 +3,7 @@
 
 #include "hashtable.h"
 
-#define TT_TABLE_SIZE 4194304
+extern uint64_t tt_size_entries;
 
 //The searched node's evaluation falls in the range of (alpha, beta)
 //The saved score is exact for the given depth.
@@ -29,8 +29,12 @@ hashtable_tt* create_hashTable_tt();
  */
 void destroy_hashTable_tt(hashtable_tt* ht);
 
+void clear_tt(hashtable_tt* tt);
+
 table_entry_tt* transposition_table_get(struct bitboard* board, hashtable_tt* tt);
 
 void transposition_table_set(hashtable_tt* tt, table_entry_tt entry);
+
+void clear_tt(hashtable_tt* tt);
 
 #endif

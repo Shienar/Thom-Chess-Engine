@@ -8,18 +8,20 @@
 
 #define PI 3.141592653589793
 
-#define ADAM_BETA1 0.9
-#define ADAM_BETA2 0.999
-#define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-3
+#define ADAM_BETA1 0.9f
+#define ADAM_BETA2 0.999f
+#define ADAM_EPSILON 1e-8f
+#define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
 #define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384
-#define MINIBATCHES_PER_EPOCH 6104 // Roughly 100 million positions.
-#define MINIBATCHES_PER_SHUFFLE_BLOCK 256
+#define MINIBATCHES_PER_EPOCH 6104 // 6,104 * 16,384 = 100,007,936
+
+//Every FEN_SKIPth entry is saved. Offsets are set to minibatchNumber%FEN_SKIP
+#define FEN_SKIP 25
 
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)

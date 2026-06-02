@@ -10,10 +10,10 @@
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_BUCKETS 1
 
-#define ADAM_BETA1 0.9
-#define ADAM_BETA2 0.999
-#define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-4
+#define ADAM_BETA1 0.9f
+#define ADAM_BETA2 0.999f
+#define ADAM_EPSILON 1e-15f
+#define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
 
@@ -84,7 +84,7 @@ inline void AtomicAddDouble(volatile __global double* source, const double opera
 
 /******* Forward Propagation *******/
 
-//~ 3.2 ms
+//~ 3.5 ms
 __kernel void calculateAccumulator(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
                                     __global const float* weights,          //shared
                                     __global const float* bias,             //shared
@@ -114,12 +114,12 @@ __kernel void calculateAccumulator(__global const short* activeInputs,       //c
     output[globalId] = sum;  
 }
 
-//~0.73 ms
+//~0.77 ms
 __kernel void forwardPropagate(__global const float* accumulatorOutput,
                                 __global float* h2_weights, __global float* h2_bias, __global float* h2_output,
                                 __global float* h3_weights, __global float* h3_bias, __global float* h3_output,
                                 __global float* output_weights, __global float* output_bias, 
-                                __global float* directWeights, __global char* outputBuckets,
+                                __global char* outputBuckets,
                                 __global float* outputs)
 {
     int batchIndex = get_global_id(0);
@@ -127,22 +127,14 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
 
     int bucket = (int)outputBuckets[batchIndex];
     int bucketOffset = bucket * ACCUMULATOR_NODES_PER_SIDE;
-    float linearSum = 0.0;
     int baseIndex = batchIndex * ACCUMULATOR_NODES;
-
-    #pragma unroll
-    for(int i = 0; i < 4; i++)
-    {
-        int node = localID + 64 * i;
-        linearSum += (0.5 * (accumulatorOutput[baseIndex + node] + accumulatorOutput[baseIndex + ACCUMULATOR_NODES_PER_SIDE + node])) * directWeights[bucketOffset + node];
-    }
 
     //each local thread contributes to loading part of the input.
     //this same array will get reused later on, even if its too big to store outputs for h2/h3
     __local float shared[ACCUMULATOR_NODES];
     for(int i = localID; i < ACCUMULATOR_NODES; i+= 64)
     {
-        shared[i] = screlu(accumulatorOutput[batchIndex * ACCUMULATOR_NODES + i]);
+        shared[i] = screlu(accumulatorOutput[baseIndex + i]);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -184,22 +176,14 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
     sum = 0.0;
     if (localID < THIRD_HIDDEN_LAYER_NODES) 
     {
-        shared[localID] = shared[localID] * output_weights[localID];
+        shared[localID] = shared[localID] * output_weights[bucket * THIRD_HIDDEN_LAYER_NODES + localID];
     }
-    shared[32 + localID] = linearSum; // 64 linear sums to be reduced.
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // Parallel Reduction for the third layer -> output layer.
     for(int stride = 16; stride > 0; stride /= 2) 
     {
         if(localID < stride) shared[localID] += shared[localID + stride];
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-    // Parallel reduction for the linear -> output layer.
-    for(int stride = 32; stride > 0; stride /= 2) 
-    {
-        if(localID < stride) shared[32 + localID] += shared[32 + localID + stride];
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
@@ -220,6 +204,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
                             __global float* delta3,
                             __global float* delta2,
                             __global float* delta1,
+                            __global const char* outputBuckets,
                             __global double* sumSquaredError)
 {
     int batchIndex = get_global_id(0) / get_local_size(0);
@@ -227,6 +212,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
 
     __local float shared_delta[32]; 
     __local double sse;
+    __local char bucket;
 
     //delta4
     float d4 = 0.0f;
@@ -238,6 +224,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
         d4 *= 2.0f * (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative, MSE derivative.
         delta4[batchIndex] = d4;
         shared_delta[0] = d4;
+        bucket = outputBuckets[batchIndex];
 
         //if(batchIndex < 10) printf("\nExpected %f, Received %f", expectedOutputs[batchIndex], outputNodes[batchIndex]);
     } 
@@ -248,7 +235,7 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = d4 * weights4[localID] * crelu_derivative(h3_val);
+        float d3 = d4 * weights4[bucket * THIRD_HIDDEN_LAYER_NODES + localID] * crelu_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
         shared_delta[localID] = d3;
     }
@@ -287,78 +274,36 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
 
 /******* Calculate & Accumulate Edge Weight Gradients *******/
 
-//~2 ms
-__kernel void calculateGradientDirect(__global const float* delta4,
-                                        __global const float* h1,
-                                        __global const char* outputBuckets,
-                                        __global float* directGradient_Sum)
-{
-    int nodeIndex = get_global_id(0); // 0 to 255
-    int localID   = get_local_id(1);  // 0 to 63
-
-
-    float directWeightGrad[8] = { 0.0f };
-
-    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex += 64) 
-    {
-        int base_idx = batchIndex * ACCUMULATOR_NODES;
-        directWeightGrad[outputBuckets[batchIndex]] += delta4[batchIndex] * (h1[base_idx + nodeIndex] + h1[base_idx + 256 + nodeIndex]) * 0.5f;
-    }
-    
-    __local float shared[8][64];
-
-    #pragma unroll
-    for (int b = 0; b < 8; b++) {
-        shared[b][localID] = directWeightGrad[b];
-    }
-    barrier(CLK_LOCAL_MEM_FENCE);
-
-    for (int stride = 32; stride > 0; stride /= 2) {
-        if (localID < stride) 
-        {
-            #pragma unroll
-            for (int b = 0; b < 8; b++) shared[b][localID] += shared[b][localID + stride];
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-    if (localID == 0) 
-    {
-        #pragma unroll
-        for (int b = 0; b < 8; b++) directGradient_Sum[(b * 256) + nodeIndex] += shared[b][0];
-    }
-}
-
 //0.5 ms
 __kernel void calculateGradient4(__global const float* delta4, //1 per batch sample
                                     __global const float* h3, //THIRD_HIDDEN_LAYER_NODES per batch sample
-                                    __global float* gradient4_Sum, //THIRD_HIDDEN_LAYER_NODES shared
-                                    __global float* bias4_Sum, //8 shareds
+                                    __global float* gradient4_Sum, //THIRD_HIDDEN_LAYER_NODES * OUTPUT_BUCKETS shared
+                                    __global float* bias4_Sum, //8 shared
                                     __global const char* outputBuckets) //MINIBATCH_SIZE
 {
     int weightIndex = get_global_id(0); //0-31
     int localID = get_local_id(1); //0-63
     int localSize = get_local_size(1); //64
 
-    float partialSum = 0.0;
+    float partialSum[8] = { 0.0 };
     float partialBiasSum[8] = { 0.0 }; //Only managed by the threads with weightIndex == 0.
 
     for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex+=localSize) 
     {
-        partialSum += delta4[batchIndex] * h3[THIRD_HIDDEN_LAYER_NODES * batchIndex + weightIndex];
-        if(weightIndex == 0) 
-        {
-            partialBiasSum[outputBuckets[batchIndex]] += delta4[batchIndex];
-        }
+        char bucket = outputBuckets[batchIndex];
+        float d4 = delta4[batchIndex];
+
+        partialSum[bucket] += d4 * h3[THIRD_HIDDEN_LAYER_NODES * batchIndex + weightIndex];
+        if(weightIndex == 0) partialBiasSum[bucket] += d4;
     }
 
-    __local float tempSum[64];
+    __local float tempSum[8][64];
     __local float tempBias[8][64];
-    tempSum[localID] = partialSum;
-    if(weightIndex == 0) 
+    #pragma unroll
+    for(int b = 0; b < 8; b++) 
     {
-        #pragma unroll
-        for(int b = 0; b < 8; b++) tempBias[b][localID] = partialBiasSum[b];
+        tempSum[b][localID] = partialSum[b];
+        if(weightIndex == 0) tempBias[b][localID] = partialBiasSum[b];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -366,11 +311,11 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
     {
         if(localID < stride)
         {
-            tempSum[localID] += tempSum[localID + stride];
-            if(weightIndex == 0) 
+            #pragma unroll
+            for(int b = 0; b < 8; b++) 
             {
-                #pragma unroll
-                for(int b = 0; b < 8; b++) tempBias[b][localID] += tempBias[b][localID + stride];
+                tempSum[b][localID] += tempSum[b][localID + stride];
+                if(weightIndex == 0)  tempBias[b][localID] += tempBias[b][localID + stride];
             }
         }
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -378,11 +323,11 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
 
     if(localID == 0)
     {
-        AtomicAddFloat(&gradient4_Sum[weightIndex], tempSum[0]);
-        if(weightIndex == 0) 
+        #pragma unroll
+        for(int b = 0; b < 8; b++) 
         {
-            #pragma unroll
-            for(int b = 0; b < 8; b++) AtomicAddFloat(&bias4_Sum[b], tempBias[b][0]);
+            AtomicAddFloat(&gradient4_Sum[b * THIRD_HIDDEN_LAYER_NODES + weightIndex], tempSum[b][0]);
+            if(weightIndex == 0) AtomicAddFloat(&bias4_Sum[b], tempBias[b][0]);
         }
     }
 }
@@ -413,7 +358,7 @@ __kernel void calculateGradient3(__global const float* delta3, //THIRD_HIDDEN_LA
     if(inIndex == 0) bias3_Sum[outIndex] += partialBiasSum;
 }
 
-//~1.1ms
+//~0.85ms
 __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_LAYER_NODES per batch sample
                                 __global const float* h1, //ACCUMULATOR_NODES per batch sample
                                 __global float* gradient2_Sum, //ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES shared
@@ -437,7 +382,8 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     for (int batchIndex = 0; batchIndex < MINIBATCH_SIZE; batchIndex+=16) 
     {
         // load into local memory
-        tile_h1[tileY][tileX] = screlu(h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row]);
+        // the extra activation here is faster than storing it activated and using native_sqrt() in the derivative function.
+        tile_h1[tileY][tileX] = screlu(h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row]); 
         tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
         barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -458,7 +404,7 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     }
 }
 
-//~4-5ms. Drops only to 3.7ms if you treat atmoicadd as nonatomic add.
+//~5ms. Drops only to 4.3ms if you treat atmoicadd as nonatomic add; there's just a lot of weights here.
 __kernel void calculateGradient1(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
                                     __global const float* delta1, // ACCUMULATOR_NODES per batch sample
                                     __global float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
@@ -516,7 +462,6 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
 __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, __global float* v2,
                     __global float* w3, __global float* g3, __global float* m3, __global float* v3,
                     __global float* w4, __global float* g4, __global float* m4, __global float* v4,
-                    __global float* dir, __global float* gdir, __global float* mdir, __global float* vdir,
                     __global float* b1, __global float* gb1, __global float* mb1, __global float* vb1,
                     __global float* b2, __global float* gb2, __global float* mb2, __global float* vb2,
                     __global float* b3, __global float* gb3, __global float* mb3, __global float* vb3,
@@ -524,19 +469,18 @@ __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, 
                     float lr, float biasCorrection1, float biasCorrection2, float rectificationTerm) 
 {
     int i = get_global_id(0);
-    
+
     UPDATE_ADAMW(w2, g2, m2, v2, 16384); // 512 * 32
-    UPDATE_ADAMW(dir, gdir, mdir, vdir, 2048);  // 256 * 8
     UPDATE_ADAMW(w3, g3, m3, v3, 1024);  // 32 * 32
-    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256); // 256
-    UPDATE_ADAMW(b2, gb2, mb2, vb2, 32);  // 32
-    UPDATE_ADAMW(b3, gb3, mb3, vb3, 32);  // 32
-    UPDATE_ADAMW(w4, g4, m4, v4, 32);    // 32 * 1
-    UPDATE_ADAMW(b4, gb4, mb4, vb4, 8);   // 8
+    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256);
+    UPDATE_ADAMW(b2, gb2, mb2, vb2, 32);
+    UPDATE_ADAMW(b3, gb3, mb3, vb3, 32);
+    UPDATE_ADAMW(w4, g4, m4, v4, 32);
+    UPDATE_ADAMW(b4, gb4, mb4, vb4, 8);
     
 }
 
-//0.5ms on sparse input layer. Would be 3.4ms with pown instead of native_powr
+//0.7ms on sparse input layer. Would be 3.4ms with pown instead of native_powr
 __kernel void lazyAdam(__global float* weights,
                     __global int* timestamps,
                     __global float* gradientSum,
@@ -547,7 +491,6 @@ __kernel void lazyAdam(__global float* weights,
 {
     // Flattened array of weights.
     int i = get_global_id(0);
-
     float grad = gradientSum[i] / MINIBATCH_SIZE;
     
     if(!grad) return;
@@ -570,7 +513,6 @@ __kernel void lazyAdam(__global float* weights,
         weights[i] -= learningRate * rectificationTerm * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
     } 
     else weights[i] -= learningRate * correctedFirstMoment;
-
     gradientSum[i] = 0.0f; 
 }
 

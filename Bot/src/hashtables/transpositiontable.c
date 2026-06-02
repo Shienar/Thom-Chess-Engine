@@ -4,13 +4,14 @@
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;
+uint64_t tt_size_entries = (1024 * 1024 * 16) / sizeof(table_entry_tt);
 
 hashtable_tt* create_hashTable_tt()
 {
     hashtable_tt* newTable = calloc(1, sizeof(hashtable_tt));
     if(!newTable) return NULL;
 
-    newTable->capacity = TT_TABLE_SIZE;
+    newTable->capacity = tt_size_entries;
 
     newTable->array = calloc(newTable->capacity, sizeof(table_entry_tt));
     if(!newTable->array)
@@ -27,6 +28,12 @@ void destroy_hashTable_tt(hashtable_tt* ht)
     if(!ht) return;
     if(ht->array) free(ht->array);
     free(ht);
+}
+
+
+void clear_tt(hashtable_tt* tt)
+{
+    if(tt && tt->array) memset(tt->array, 0, tt->capacity * sizeof(table_entry_tt));
 }
 
 uint8_t generateChecksum(table_entry_tt* entry)
@@ -65,7 +72,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
     if(tt->array[index].hashCode == entry.hashCode && tt->array[index].checkSum == entry.checkSum)
     {
         //Update
-        if(entry.evaluationDepth > tt->array[index].evaluationDepth || (entry.nodeType == NODE_TYPE_PV && entry.nodeType != tt->array[index].nodeType)) tt->array[index] = entry;
+        if(entry.ply > tt->array[index].ply || (entry.nodeType == NODE_TYPE_PV && entry.nodeType != tt->array[index].nodeType)) tt->array[index] = entry;
         return;
     }
 

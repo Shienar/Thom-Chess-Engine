@@ -1,3 +1,5 @@
 .vscode/
 trainingData.bin
 validationData.bin
+*.exe
+*.log
