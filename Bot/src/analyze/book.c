@@ -10,7 +10,6 @@ polyglot_book_entry *entries = NULL;
 void loadBook()
 {
     if(entries) return;
-    DEBUG_INFO("Loading opening book...");
     FILE* input = fopen("import/komodo.bin", "rb");
     if(!input)
     {
@@ -37,7 +36,7 @@ void loadBook()
 
     size_t readItems = fread(entries, sizeof(polyglot_book_entry), entryCount, input);
 
-    DEBUG_INFO("%lld/%lld entries imported.", entryCount, readItems);
+    if(entryCount < readItems) DEBUG_ERROR("%lld/%lld entries imported.", entryCount, readItems);
     fclose(input);
 }
 
@@ -45,7 +44,6 @@ void unloadBook()
 {
     if(entries)
     {
-        DEBUG_INFO("Unloading book...");
         free(entries);
         entries = NULL;
     }
@@ -108,7 +106,8 @@ move getBookMove(bitboard* board)
 
     if(moveCount == 0) return (move){0};
 
-    uint32_t randomValue = ((rand()<<16)|rand())%totalWeight;
+    uint32_t randomValue = (((uint32_t)rand()) & 0xFFFF) | ((((uint32_t)rand()) & 0xFFFF) << 16);
+    randomValue = randomValue%totalWeight;
     int selectedIndex = 0;
 
     for(int i = 0; i < moveCount; i++) 

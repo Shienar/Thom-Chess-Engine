@@ -160,6 +160,7 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
     if(localID < THIRD_HIDDEN_LAYER_NODES)
     {
         sum = h3_bias[localID];
+        #pragma unroll
         for (int inputIndex = 0; inputIndex < SECOND_HIDDEN_LAYER_NODES; inputIndex++) 
         {
             sum += shared[inputIndex] * h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID];
@@ -187,12 +188,15 @@ __kernel void forwardPropagate(__global const float* accumulatorOutput,
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
-    if(localID == 0)  outputs[batchIndex] = sigmoid((shared[0] + shared[32] + output_bias[bucket]) / (EVAL_SCALE));
+    if(localID == 0)  
+    {
+        outputs[batchIndex] = sigmoid((shared[0] + output_bias[bucket]) / (EVAL_SCALE));
+    }
 }
 
 /******* Backpropagation (Delta calculations) *******/
 
-//~2.8 ms
+//~2.25 ms
 __kernel void backpropagate( __global const float* outputNodes, __global const float* expectedOutputs,
                             __global const float* h3, 
                             __global const float* h2,
@@ -205,39 +209,42 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
                             __global float* delta2,
                             __global float* delta1,
                             __global const char* outputBuckets,
-                            __global double* sumSquaredError)
+                            __global double* loss)
 {
-    int batchIndex = get_global_id(0) / get_local_size(0);
-    int localID = get_local_id(0);
+    int batchIndex = get_group_id(0); //0-16383
+    int localID = get_local_id(0); //0-255
 
-    __local float shared_delta[32]; 
-    __local double sse;
+    __local float shared_d4;
+    __local float shared_d3[32];
+    __local float shared_d2[32]; 
     __local char bucket;
 
     //delta4
-    float d4 = 0.0f;
     if(localID == 0) 
     {
-        d4 = outputNodes[batchIndex] - expectedOutputs[batchIndex];
+        float output = outputNodes[batchIndex];
+        float expected = expectedOutputs[batchIndex];
 
-        sse = (d4 * d4);
-        d4 *= 2.0f * (outputNodes[batchIndex] * (1.0f - outputNodes[batchIndex])); //sigmoid derivative, MSE derivative.
-        delta4[batchIndex] = d4;
-        shared_delta[0] = d4;
+        shared_d4 = output - expected;
+        
+        loss[batchIndex] = (double) (shared_d4 * shared_d4);
+        shared_d4 *= (output * (1.0f - output)); //sigmoid derivative
+
+        delta4[batchIndex] = shared_d4;
+
         bucket = outputBuckets[batchIndex];
 
-        //if(batchIndex < 10) printf("\nExpected %f, Received %f", expectedOutputs[batchIndex], outputNodes[batchIndex]);
+        //if(batchIndex < 10) printf("Expected %f, Received %f", expected, output);
     } 
     barrier(CLK_LOCAL_MEM_FENCE);
     
     //delta3
-    d4 = shared_delta[0];
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = d4 * weights4[bucket * THIRD_HIDDEN_LAYER_NODES + localID] * crelu_derivative(h3_val);
+        float d3 = shared_d4 * weights4[bucket * THIRD_HIDDEN_LAYER_NODES + localID] * crelu_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
-        shared_delta[localID] = d3;
+        shared_d3[localID] = d3;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -245,14 +252,15 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     if(localID < SECOND_HIDDEN_LAYER_NODES) 
     {
         float sum = 0.0f;
+        #pragma unroll
         for (int outputIndex = 0; outputIndex < THIRD_HIDDEN_LAYER_NODES; outputIndex++) 
         {
-            sum += shared_delta[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
+            sum += shared_d3[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
         }
         float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
         float d2 = sum * crelu_derivative(h2_val);
         delta2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID] = d2;
-        shared_delta[localID] = d2;
+        shared_d2[localID] = d2;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -261,15 +269,13 @@ __kernel void backpropagate( __global const float* outputNodes, __global const f
     for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=256) 
     {
         float sum = 0.0f;
+        #pragma unroll
         for (int outputIndex = 0; outputIndex < SECOND_HIDDEN_LAYER_NODES; outputIndex++) 
         {
-            sum += shared_delta[outputIndex] * weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
+            sum += shared_d2[outputIndex] * weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
         }
         delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
     }
-
-    //SSE accumulation
-    if (localID == 0)  AtomicAddDouble(sumSquaredError, sse);
 }
 
 /******* Calculate & Accumulate Edge Weight Gradients *******/
@@ -283,12 +289,10 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
 {
     int weightIndex = get_global_id(0); //0-31
     int localID = get_local_id(1); //0-63
-    int localSize = get_local_size(1); //64
-
     float partialSum[8] = { 0.0 };
     float partialBiasSum[8] = { 0.0 }; //Only managed by the threads with weightIndex == 0.
 
-    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex+=localSize) 
+    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex+=64) 
     {
         char bucket = outputBuckets[batchIndex];
         float d4 = delta4[batchIndex];
@@ -307,7 +311,7 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
     }
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    for(int stride = localSize / 2; stride > 0; stride/=2)
+    for(int stride = 64 / 2; stride > 0; stride/=2)
     {
         if(localID < stride)
         {
@@ -315,7 +319,7 @@ __kernel void calculateGradient4(__global const float* delta4, //1 per batch sam
             for(int b = 0; b < 8; b++) 
             {
                 tempSum[b][localID] += tempSum[b][localID + stride];
-                if(weightIndex == 0)  tempBias[b][localID] += tempBias[b][localID + stride];
+                if(weightIndex == 0) tempBias[b][localID] += tempBias[b][localID + stride];
             }
         }
         barrier(CLK_LOCAL_MEM_FENCE);
@@ -387,6 +391,7 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
         tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
         barrier(CLK_LOCAL_MEM_FENCE);
 
+        #pragma unroll
         for (int batchOffset = 0; batchOffset < 16; batchOffset++)  
         {
             accumulator += tile_h1[batchOffset][tileY] * tile_delta2[batchOffset][tileX];

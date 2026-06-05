@@ -20,15 +20,12 @@
 
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
- * 
- * Uninitialized weights get trained with a max LR of 1e-4, but I lower 
- * this if I'm continuing to train existing weights.
  */
-#define MAX_LR 2.5e-6f
+#define MAX_LR 8e-4f
 #define MIN_LR 2.5e-6f
-#define INTERVAL_SCALE 1.5f
-#define FIRST_INTERVAL 500
-#define MAX_INTERVALS 20
+#define INTERVAL_SCALE 2
+#define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
+#define MAX_INTERVALS 9
 #define LOOKAHEAD_RANGE 10
 
 #define KERNEL_COUNT 10
@@ -98,7 +95,7 @@ typedef struct {
             cl_mem h3Output;
             cl_mem finalOutput;
             
-            cl_mem sumsquarederror;
+            cl_mem loss;
             
             cl_mem delta4;
             cl_mem delta3;
@@ -149,7 +146,8 @@ extern openCLKernelMemory opencl_mem;
 extern cl_event readEvent;
 
 int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expected_A, char* h_output_A,
-                                                        short* h_active_B, float* h_expected_B, char* h_output_B);
+                                                        short* h_active_B, float* h_expected_B, char* h_output_B,
+                                                        double* h_lossbuffer);
 void freeOpenCL();
 
 #define ENQUEUE_LAZY_ADAM(weights, t, gradient, firstMoment, secondMoment, size, learningRate, rho_inf, event) \
@@ -167,7 +165,7 @@ void freeOpenCL();
     clSetKernelArg(opencl_context.kernels.lookahead, 1, sizeof(cl_mem), &slowWeights); \
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.lookahead, 1, NULL, &size, NULL, 0, NULL, NULL);
 
-void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop);
+void enqueueKernels(int bufferSide, int doBackprop);
 void getWeights(network_weights* weights);
 
 #endif

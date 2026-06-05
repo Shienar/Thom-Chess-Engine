@@ -23,9 +23,21 @@ void dbg_msg(const char* fileName, int lineNumber, const char* type, const char*
 {
     if(!printDebugMessages) return;
 
+    time_t t = time(NULL);
+    struct tm *local_time = localtime(&t);
+
     va_list args;
     va_start(args, str);
-    fprintf(dbg_file, "%s: %s: %d -- ", type, fileName, lineNumber);
+    fprintf(dbg_file, "%02d-%02d-%04d %02d:%02d:%02d | %s: %s: %d -- ", 
+           local_time->tm_mon + 1,
+           local_time->tm_mday,
+           local_time->tm_year + 1900,
+           local_time->tm_hour,
+           local_time->tm_min,
+           local_time->tm_sec,
+           type, 
+           fileName, 
+           lineNumber);
     vfprintf(dbg_file, str, args);
     va_end(args);
     fprintf(dbg_file, "\n");

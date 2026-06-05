@@ -72,7 +72,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
     if(tt->array[index].hashCode == entry.hashCode && tt->array[index].checkSum == entry.checkSum)
     {
         //Update
-        if(entry.ply > tt->array[index].ply || (entry.nodeType == NODE_TYPE_PV && entry.nodeType != tt->array[index].nodeType)) tt->array[index] = entry;
+        if(entry.depth >= tt->array[index].depth) tt->array[index] = entry;
         return;
     }
 

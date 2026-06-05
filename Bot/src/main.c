@@ -9,15 +9,15 @@
 #include <string.h>
 #include <omp.h>
 
-void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context);
+
+void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
 {
     omp_set_num_threads(threadCount); 
     srand(time(NULL));
     
-    bitboard* board = create_board();
-
+    bitboard* board = NULL;
     char buffer[4096] = {'\0'};
     const char* delim = " \t\r\n";
     char* str = NULL;
@@ -34,13 +34,11 @@ int main(int argc, char** argv)
 
     searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
     threadContext->board = board;
-    threadContext->depth = MAX_PLY;
+    threadContext->maxDepth = MAX_PLY;
     threadContext->maxNodes = INT_MAX;
     threadContext->endTime = &endTime;
-    threadContext->board = board;
-    threadContext->score = calloc(1, sizeof(searchThreadContext));
 
-    THREADTYPE calculateThread;
+    THREADTYPE calculateThread = THREAD_INIT;
 
     enableDebugMessages();
 
@@ -54,7 +52,7 @@ int main(int argc, char** argv)
             if(strcmp(str, "uci") == 0) 
             {
                 printf("id name ChessBot 0.1\n");
-                printf("id author name Grant\n");
+                printf("id author Grant\n");
                 printf("option name Hash type spin default 16 min 1 max 4096\n");
                 printf("option name Threads type spin default 8 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
@@ -68,6 +66,12 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ucinewgame") == 0)
             {
+                if(isCalculating)
+                {
+                    endTime = 0;
+                    THREAD_WAIT(calculateThread);
+                    isCalculating = 0;
+                }
                 clear_tt(transpositionTable);
                 if(useBook) loadBook();
 
@@ -105,6 +109,11 @@ int main(int argc, char** argv)
                                 if(strcmp(str, "value") == 0)
                                 {
                                     str = _strtok(NULL, delim, &strtok_ptr);
+                                    if(isCalculating)
+                                    {
+                                        DEBUG_ERROR("Cannot change thread count while calculating.");
+                                        break;
+                                    }
                                     sscanf(str, "%d", &threadCount);
                                     threadCount = _min(_max(threadCount, MIN_THREADS), MAX_THREADS);
                                     omp_set_num_threads(threadCount); 
@@ -177,7 +186,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "isready") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 printf("readyok\n");
                 fflush(stdout);
             }
@@ -192,7 +201,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "position") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     if(strcmp(str, "fen") == 0)
@@ -241,7 +250,7 @@ int main(int argc, char** argv)
                     break;
                 }
                 isCalculating = 1;
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
 
                 int whiteTime = INT32_MAX;
                 int blackTime = INT32_MAX;
@@ -250,7 +259,8 @@ int main(int argc, char** argv)
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
                 threadContext->isPonder = 0;
-                memset(threadContext->searchedMoves, 0, 16 * sizeof(move));
+                memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move));
+                int play = 0;
 
                 short searchedMoveCount = 0;
                 while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
@@ -284,8 +294,8 @@ int main(int argc, char** argv)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) 
                         {
-                            sscanf(str, "%d", &threadContext->depth);
-                            threadContext->depth = _min(_max(threadContext->depth, 1), MAX_PLY);
+                            sscanf(str, "%d", &threadContext->maxDepth);
+                            threadContext->maxDepth = _min(_max(threadContext->maxDepth, 1), MAX_PLY);
                         }
                     }
                     else if(strcmp(str, "nodes") == 0)
@@ -299,11 +309,15 @@ int main(int argc, char** argv)
                     else if(strcmp(str, "searchmoves") == 0)
                     {
                         //Assume this is the final command in list.
-                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < 16)
+                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < MAX_REQUIRED_MOVES)
                         {
                             threadContext->searchedMoves[searchedMoveCount] = getStructFromString(board, str);
                             searchedMoveCount++;
                         }
+                    }
+                    else if(strcmp(str, "play") == 0)
+                    {
+                        play = 1;
                     }
                 }
 
@@ -316,30 +330,47 @@ int main(int argc, char** argv)
                     {
                         if(ISWHITE(board->turn)) endTime = (whiteTime / 20) + (whiteIncrement / 2);
                         else endTime = (blackTime / 20) + (blackIncrement / 2);
+                        endTime = clock() + (endTime * CLOCKS_PER_SEC) / 1000;
                     } 
                 }
 
                 THREAD_START(calculateThread, calculateBestMove, threadContext);
+
+                if(play)
+                {
+                    THREAD_WAIT(calculateThread);
+                    moveFromStruct(board, threadContext->pvTable[0]);
+                }
                 break;
             }
             else if(strcmp(str, "ponderhit") == 0)
             {
-                endTime = 0;
-                THREAD_WAIT(calculateThread);
-
-                threadContext->isPonder = 0;
-                THREAD_START(calculateThread, calculateBestMove, threadContext);
+                if(isCalculating)
+                {
+                    endTime = 0;
+                    THREAD_WAIT(calculateThread);
+                    threadContext->isPonder = 0;
+                }
+                else
+                {
+                    threadContext->isPonder = 0;
+                    THREAD_START(calculateThread, calculateBestMove, threadContext);
+                }
             }
             else if(strcmp(str, "stop") == 0)
             {
                 //Reap the thread, which will print out its results as it terminates.
-                endTime = 0;
-                isCalculating = 0;
-                THREAD_WAIT(calculateThread);
+                if(isCalculating)
+                {
+                    endTime = 0;
+                    isCalculating = 0;
+                    THREAD_WAIT(calculateThread);
+                }
+                
             }
             else if(strcmp(str, "train") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
 
                 //Not a part of UCI.
                 //Format: "train <epoch count>"
@@ -347,13 +378,13 @@ int main(int argc, char** argv)
                 {
                     int epochCount;
                     sscanf(str, "%d", &epochCount);
-                    train(epochCount, 4e-4f);
+                    train(epochCount, 5e-4f);
                 }
                 break;
             }
             else if(strcmp(str, "perft") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
 
                 //Not a part of UCI.
                 //Format: "perft <depth>"
@@ -373,7 +404,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perftv") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext);
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
 
                 //verbose perft
                 //Not a part of UCI.
@@ -391,7 +422,7 @@ int main(int argc, char** argv)
                 }
                 break;
             }
-            else if(strcmp(str, "moveerror") == 0)
+            else if(strcmp(str, "*moveerror*") == 0)
             {
                 char FEN[128] = {'\0'};
                 export_fen_from_board(board, FEN);
@@ -401,6 +432,14 @@ int main(int argc, char** argv)
             else if(strcmp(str, "print") == 0)
             {
                 board_print(board, 1);
+                break;
+            }else if(strcmp(str, "eval") == 0)
+            {
+                loadInputAccumulator(board, playerAccumulator, WHITE);
+                loadInputAccumulator(board, playerAccumulator, BLACK);
+                float eval = forwardPropagate(board->turn, playerAccumulator, __builtin_popcountll(board->pieces_all));
+                printf("%f\n", eval);
+                break;
             }
             else if(strcmp(str, "quit") == 0) 
             {
@@ -412,10 +451,8 @@ int main(int argc, char** argv)
         }
     }
 
-
     if(nnue_weights) free(nnue_weights);
     if(playerAccumulator) free(playerAccumulator);
-    if(threadContext->score) free(threadContext->score);
     if(threadContext) free(threadContext);
     destroyRefreshTable(playingRefreshTable);
     destroy_hashTable_tt(transpositionTable);
@@ -424,12 +461,14 @@ int main(int argc, char** argv)
     unloadBook();
 }
 
-void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context)
+void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board)
 {
     if(*isReady) return;
 
     *isReady = 1;
     if(zobrist_piece_keys[0][0] == 0) initZobristPieceKeys();
+    
+    initLMTable();
 
     if(rookTable[0] == 0) initMagics();
     if(pawnAttacks[0][0] == 0) initPawnAttacks();
@@ -453,4 +492,7 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
         tb_init(sygyzyPath);
         isPathDirty = 0;
     }
+
+    if(!(*board)) *board = create_board();
+    context->board = *board;
 }

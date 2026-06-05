@@ -47,7 +47,7 @@ float forwardPropagate(int turn, accumulator* acc, int pieceCount);
  *  - RAdam
  *          - https://arxiv.org/pdf/1908.03265
  *  - Lookahead
- *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf (TODO - read)
+ *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
  */
 void train( int maxIterations, float maxAllowedError);
 

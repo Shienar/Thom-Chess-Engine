@@ -50,6 +50,7 @@ char* host_outputBucket_A = NULL;
 short* host_activeInputs_B = NULL;
 float* host_expectedOutputs_B = NULL;
 char* host_outputBucket_B = NULL;
+double* host_lossbuffer = NULL;
 
 char* getKernelFunctions()
 {
@@ -75,7 +76,8 @@ char* getKernelFunctions()
 }
 
 int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expected_A, char* h_output_A,
-                                                        short* h_active_B, float* h_expected_B, char* h_output_B)
+                                                        short* h_active_B, float* h_expected_B, char* h_output_B,
+                                                        double* h_lossbuffer)
 {
     cosineIntervalLength = FIRST_INTERVAL;
     cosineTimestamp = 0;
@@ -88,6 +90,7 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     host_activeInputs_B = h_active_B;
     host_expectedOutputs_B = h_expected_B;
     host_outputBucket_B = h_output_B;
+    host_lossbuffer = h_lossbuffer;
 
     int err = 0;
 
@@ -162,7 +165,7 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     opencl_mem.mem.h3Output = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, MINIBATCH_SIZE * sizeof(float) * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
     opencl_mem.mem.finalOutput = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, MINIBATCH_SIZE * sizeof(float), NULL, NULL);
     
-    opencl_mem.mem.sumsquarederror = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(double), NULL, NULL);
+    opencl_mem.mem.loss = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, MINIBATCH_SIZE * sizeof(double), host_lossbuffer, NULL);
 
     opencl_mem.mem.delta4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * MINIBATCH_SIZE, NULL, NULL);
     opencl_mem.mem.delta3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(float) * MINIBATCH_SIZE * THIRD_HIDDEN_LAYER_NODES, NULL, NULL);
@@ -296,7 +299,7 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     clSetKernelArg(opencl_context.kernels.backpropagate, 10, sizeof(cl_mem), &opencl_mem.mem.delta2);
     clSetKernelArg(opencl_context.kernels.backpropagate, 11, sizeof(cl_mem), &opencl_mem.mem.delta1);
     clSetKernelArg(opencl_context.kernels.backpropagate, 12, sizeof(cl_mem), &opencl_mem.mem.outputBucket_A);
-    clSetKernelArg(opencl_context.kernels.backpropagate, 13, sizeof(cl_mem), &opencl_mem.mem.sumsquarederror);
+    clSetKernelArg(opencl_context.kernels.backpropagate, 13, sizeof(cl_mem), &opencl_mem.mem.loss);
 
     clSetKernelArg(opencl_context.kernels.calculateGradient4, 0, sizeof(cl_mem), &opencl_mem.mem.delta4);
     clSetKernelArg(opencl_context.kernels.calculateGradient4, 1, sizeof(cl_mem), &opencl_mem.mem.h3Output);
@@ -386,7 +389,7 @@ void print_prof(const char* name, cl_event e)
     clReleaseEvent(e);
 }
 
-void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
+void enqueueKernels(int bufferSide, int doBackprop)
 {
     //cosine annealing
     lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
@@ -419,7 +422,7 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     }
 
     double zero_lf = 0.0;
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.mem.sumsquarederror, &zero_lf, sizeof(double), 0, sizeof(double), 0, NULL, NULL);
+    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.mem.loss, &zero_lf, sizeof(double), 0, MINIBATCH_SIZE * sizeof(double), 0, NULL, NULL);
 
     #ifdef PERFT_KERNELS
         cl_event event_accum, event_fprop, event_back, event_grad4, event_grad3, event_grad2, event_grad1, event_w1, event_dense;
@@ -441,7 +444,8 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     clSetKernelArg(opencl_context.kernels.backpropagate, 12, sizeof(cl_mem), (bufferSide == INPUT_GROUP_A) ? &opencl_mem.mem.outputBucket_A: &opencl_mem.mem.outputBucket_B);
     clEnqueueNDRangeKernel(opencl_context.queue,opencl_context.kernels.backpropagate, 1, NULL, calcDeltaSize, calcDeltaSize_Local, 0, NULL, ENQUEUE_EVENT(event_back));
     
-    clEnqueueReadBuffer(opencl_context.queue, opencl_mem.mem.sumsquarederror, CL_FALSE, 0, sizeof(double), outputSSE, 0, NULL, &readEvent);
+    void* lossptr = clEnqueueMapBuffer(opencl_context.queue, opencl_mem.mem.loss, CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 0, MINIBATCH_SIZE * sizeof(double), 0, NULL, NULL, NULL);
+    clEnqueueUnmapMemObject(opencl_context.queue, opencl_mem.mem.activeInputs_A, lossptr, 0, NULL, &readEvent);
 
     if(!doBackprop) return;
 
@@ -450,9 +454,9 @@ void enqueueKernels(int bufferSide, double* outputSSE, int doBackprop)
     clSetKernelArg(opencl_context.kernels.calculateGradient4, 4, sizeof(cl_mem), (bufferSide == INPUT_GROUP_A) ? &opencl_mem.mem.outputBucket_A: &opencl_mem.mem.outputBucket_B);
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateGradient4, 2, NULL, calcGrad4Size, calcGrad4Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad4));
 
-    size_t calcGrad3Size[2] = { 1024, 1 };
-    size_t calcGrad3Size_Local[2]  = { 64, 1 }; 
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateGradient3, 2, NULL, calcGrad3Size, calcGrad3Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad3));
+    size_t calcGrad3Size[1] = { 1024 };
+    size_t calcGrad3Size_Local[1]  = { 64 }; 
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateGradient3, 1, NULL, calcGrad3Size, calcGrad3Size_Local, 0, NULL, ENQUEUE_EVENT(event_grad3));
 
     size_t calcGrad2Size[2] = { SECOND_HIDDEN_LAYER_NODES, ACCUMULATOR_NODES };
     size_t calcGrad2Size_Local[2] = { 16, 16 }; 

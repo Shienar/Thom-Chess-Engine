@@ -29,6 +29,8 @@
 #define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & NOT_A_FILE) |  ((epMask >> 9) & NOT_H_FILE)) & board->pieces[WHITE_PAWN])
 #define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & NOT_H_FILE) |  ((epMask << 9) & NOT_A_FILE)) & board->pieces[BLACK_PAWN])
 
+#define MAX_POSITION_MOVES 218
+
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
 
@@ -48,6 +50,9 @@ uint64_t kingMoves(bitboard* board, int square, int color);
 int movePiece(bitboard *board, move* m);
 int moveFromStruct(bitboard* board, move m);
 move getStructFromString(bitboard* board, char* str);
+
+//2 Calls result in an unchanged board state.
+void applyNullMove(bitboard* board);
 
 move unmove(bitboard *board);
 

@@ -271,7 +271,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     assert(currentBoard);
     assert(accumulatorBoard);
     assert(acc);
-    assert(((ISBLACK(color) && kingBuckets[currentBoard->kingSquare_b] == kingBuckets[accumulatorBoard->kingSquare_b]) || 
+    assert(((ISBLACK(color) && kingBuckets[FLIP_SQUARE(currentBoard->kingSquare_b)] == kingBuckets[FLIP_SQUARE(accumulatorBoard->kingSquare_b)]) || 
                 (ISWHITE(color) && kingBuckets[currentBoard->kingSquare_w] == kingBuckets[accumulatorBoard->kingSquare_w])));
 
     uint64_t curBoard[12] = {0};

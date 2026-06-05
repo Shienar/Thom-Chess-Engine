@@ -225,7 +225,6 @@ float calculateOutputLayer(float* h3, float weights[THIRD_HIDDEN_LAYER_NODES], f
                                     v_output);
     }
 
-    
     return horizontalSIMDSum(v_output) + bias;
 }
 
@@ -314,6 +313,21 @@ void shuffle_long(uint64_t* arr, int count)
     }
 }
 
+
+static inline double sumLoss(double* loss)
+{
+    __m256d tempSum1 = _mm256_setzero_pd();
+    __m256d tempSum2 = _mm256_setzero_pd();
+    for(int i = 0; i < MINIBATCH_SIZE; i+=8)
+    {
+        tempSum1 = _mm256_add_pd(tempSum1, _mm256_loadu_pd(&loss[i]));
+        tempSum2 = _mm256_add_pd(tempSum2, _mm256_loadu_pd(&loss[i + 4]));
+    }
+    tempSum1 = _mm256_add_pd(tempSum1, tempSum2);
+    __m128d sum2 = _mm_add_pd(_mm256_castpd256_pd128((__m256d)tempSum1), _mm256_extractf128_pd(tempSum1, 1));
+    return (_mm_cvtsd_f64(_mm_add_pd(sum2, _mm_permute_pd(sum2, 1))));
+}
+
 void train(int maxIterations, float maxAllowedError)
 {
     FILE* trainingDataFile = fopen("./import/trainingData.bin", "rb");
@@ -346,11 +360,13 @@ void train(int maxIterations, float maxAllowedError)
     align_alloc(float*, expectedOutputs_B, MINIBATCH_SIZE * sizeof(float), 4096);
     align_alloc(char*, outputBuckets_B, 64 * MINIBATCH_SIZE * sizeof(char), 4096);
     
-    initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B);
+    align_alloc(double*, loss_buffer, MINIBATCH_SIZE * sizeof(double), 4096);
+    
+    initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B, loss_buffer);
 
     int totalIterations = 0;
 
-    double totalSumSquaredError = 0.0; //accumulated value per iteration
+    double totalLoss = 0.0; //accumulated value per iteration
 
     //Read data for next few minibatches, then shuffle data amongst them.
     CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
@@ -362,7 +378,7 @@ void train(int maxIterations, float maxAllowedError)
     int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);
     validationEntries -= (validationEntries % MINIBATCH_SIZE);
     int validationBlocks = validationEntries / MINIBATCH_SIZE;
-    double validationMSE = 0.0;
+    double validationLoss = 0.0;
     rewind(validationData);
 
     int inputGroup = INPUT_GROUP_A;
@@ -457,25 +473,24 @@ void train(int maxIterations, float maxAllowedError)
             
             free(board);
         }
-    
-        double tempSSE = 0.0;
-        enqueueKernels(inputGroup, &tempSSE, 0);
+
+        enqueueKernels(inputGroup, 0);
 
         clWaitForEvents(1, &readEvent);
 
         clReleaseEvent(readEvent);
 
-        validationMSE+=tempSSE;
+        validationLoss+=sumLoss(loss_buffer);
     }
 
-    validationMSE /= validationEntries;
-    double minimumMSE = validationMSE;
+    validationLoss /= validationEntries;
+    double minimumLoss = validationLoss;
 
     //Yellow text
-    printf("Initial Validation MSE = \033[0;33m%e\033[0m\n", validationMSE);
+    printf("Initial Validation Loss = \033[0;33m%e\033[0m\n", validationLoss);
 
     do{
-        totalSumSquaredError = 0.0;
+        totalLoss = 0.0;
 
         shuffle_long(blockIndices, blockCount);
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
@@ -484,7 +499,7 @@ void train(int maxIterations, float maxAllowedError)
             int offset = minibatchNumber%FEN_SKIP;
             if(offset == 0)
             {
-                fseek_64(trainingDataFile, blockIndices[minibatchNumber], SEEK_SET);
+                fseek_64(trainingDataFile, blockIndices[minibatchNumber / FEN_SKIP], SEEK_SET);
                 fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
             }
 
@@ -580,19 +595,18 @@ void train(int maxIterations, float maxAllowedError)
                 free(board);
             }
 
-            double sumSquaredError = 0.0;
-
-            enqueueKernels(inputGroup, &sumSquaredError, 1);
+            enqueueKernels(inputGroup, 1);
             clWaitForEvents(1, &readEvent);
             clReleaseEvent(readEvent);
             
-            totalSumSquaredError+=sumSquaredError;
+            double loss = sumLoss(loss_buffer);
+            totalLoss+=loss;
 
-            printf("\33[2K\r\tAnalyzed block %d/%d; MSE = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, sumSquaredError / MINIBATCH_SIZE);
+            printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
         }
         totalIterations++;
         
-        printf("\33[2K\rEpoch %d MSE = %e", totalIterations, totalSumSquaredError/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH));
+        printf("\33[2K\rEpoch %d Loss = %e", totalIterations, totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH));
 
         //Validation
         rewind(validationData);
@@ -686,33 +700,32 @@ void train(int maxIterations, float maxAllowedError)
                 free(board);
             }
         
-            double tempSSE = 0.0;
-            enqueueKernels(inputGroup, &tempSSE, 0);
+            enqueueKernels(inputGroup, 0);
 
             clWaitForEvents(1, &readEvent);
 
             clReleaseEvent(readEvent);
 
-            validationMSE+=tempSSE;
+            validationLoss+=sumLoss(loss_buffer);
         }
 
-        validationMSE /= validationEntries;
+        validationLoss /= validationEntries;
 
-        if(validationMSE < minimumMSE)
+        if(validationLoss < minimumLoss)
         {
             getWeights(nnue_weights);
             saveWeights();
-            minimumMSE = validationMSE;
+            minimumLoss = validationLoss;
 
             //Green text
-            printf("; Validation MSE = \033[0;32m%e\033[0m\n", validationMSE);
+            printf("; Validation Loss = \033[0;32m%e\033[0m\n", validationLoss);
         }
         else 
         {
             //Red text
-            printf("; Validation MSE = \033[0;31m%e\033[0m\n", validationMSE);
+            printf("; Validation Loss = \033[0;31m%e\033[0m\n", validationLoss);
         }
-    } while(validationMSE > maxAllowedError && totalIterations < maxIterations);
+    } while(validationLoss > maxAllowedError && totalIterations < maxIterations);
 
     
     fclose(trainingDataFile);
@@ -726,6 +739,7 @@ void train(int maxIterations, float maxAllowedError)
     align_free(activeInputs_B);
     align_free(expectedOutputs_B);
     align_free(outputBuckets_B);
+    align_free(loss_buffer);
 
     freeOpenCL();
 }

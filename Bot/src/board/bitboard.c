@@ -252,69 +252,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
 bitboard* create_board()
 {
     bitboard* board = calloc(1, sizeof(bitboard));
-
-    board->pieces[WHITE_PAWN] = 0x000000000000FF00;
-    board->pieces[BLACK_PAWN] = 0x00FF000000000000;
-    
-    board->pieces[WHITE_BISHOP] = 0x0000000000000024;
-    board->pieces[BLACK_BISHOP] = 0x2400000000000000;
-    
-    board->pieces[WHITE_KNIGHT] = 0x0000000000000042;
-    board->pieces[BLACK_KNIGHT] = 0x4200000000000000;
-    
-    board->pieces[WHITE_ROOK] = 0x0000000000000081;
-    board->pieces[BLACK_ROOK] = 0x8100000000000000;
-    
-    board->pieces[WHITE_QUEEN] = 0x0000000000000008;
-    board->pieces[BLACK_QUEEN] = 0x0800000000000000;
-    
-    board->pieces[WHITE_KING] = 0x0000000000000010;
-    board->pieces[BLACK_KING] = 0x1000000000000000;
-
-    
-    board->pieces_side[WHITE] = 0x000000000000FFFF;
-    board->pieces_side[BLACK] = 0xFFFF000000000000;
-    board->pieces_all = 0xFFFF00000000FFFF;
-
-    board->kingSquare_b = 60;
-    board->kingSquare_w  = 4;
-
-    for(int sq = 16; sq < 56; sq++) board->pieceArr[sq] = EMPTY_PIECE;
-    board->pieceArr[0] = board->pieceArr[7] = WHITE_ROOK;
-    board->pieceArr[1] = board->pieceArr[6] = WHITE_KNIGHT;
-    board->pieceArr[2] = board->pieceArr[5] = WHITE_BISHOP;
-    board->pieceArr[3] = WHITE_QUEEN;
-    board->pieceArr[4] = WHITE_KING;
-    for(int i = 8; i < 16; i++) board->pieceArr[i] = WHITE_PAWN;
-    
-    board->pieceArr[56] = board->pieceArr[63] = BLACK_ROOK;
-    board->pieceArr[57] = board->pieceArr[62] = BLACK_KNIGHT;
-    board->pieceArr[58] = board->pieceArr[61] = BLACK_BISHOP;
-    board->pieceArr[59] = BLACK_QUEEN;
-    board->pieceArr[60] = BLACK_KING;
-    for(int i = 48; i < 56; i++) board->pieceArr[i] = BLACK_PAWN;
-
-    //Castling Rights & Check
-    board->flags = 0xF;
-
-    board->turn = WHITE;
-
-    board->victor = 0;
-
-    board->movesSinceLastChange = 0;
-
-    board->enPassantSquare = -1;
-
-    board->halfMoveCount = 0;
-    board->hashCode = getHashCode(board);
-    
-    memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
-    board->repetitionIndex = 0;
-    board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
-    
-    memset(board->history, 0, MAX_PLY * sizeof(move));
-    board->historyIndex = 0;
-
+    load_fen_string_to_board(board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     return board;
 }
 
@@ -329,7 +267,11 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
 
 void board_print(bitboard* board, int printValues)
 {
-    assert(board);
+    if(!board)
+    {
+        DEBUG_ERROR("No board.");
+        return;
+    }
     
     if(printValues) values_print(board);
 
@@ -415,6 +357,7 @@ void values_print(bitboard* board)
     if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
     if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
     printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare_w, board->kingSquare_b);
+    
 
     if(board->flags&0xF)
     {
@@ -436,6 +379,7 @@ void values_print(bitboard* board)
 
     printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->movesSinceLastChange);
     if(board->enPassantSquare != -1) printf("En passant square: %d\n", board->enPassantSquare);
+    printf("Hashcode: 0x%016" PRIx64 "\n", board->hashCode);
 }
 
 
@@ -476,7 +420,11 @@ int moves_push(bitboard* board, move m)
 {
     assert(board);
 
-    board->history[board->historyIndex++] = m;
+    if(board->historyIndex >= MAX_PLY)
+    {
+        DEBUG_ERROR("Attempted to push a move past limit.");
+    }
+    else board->history[board->historyIndex++] = m;
 
     return board->historyIndex;
 }

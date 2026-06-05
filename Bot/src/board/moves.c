@@ -7,7 +7,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
 {
     if(board->victor) 
     {
-        DEBUG_ERROR("Cannot generate moves for terminated game; Victor=x%02x", board->victor);
+        DEBUG_ERROR("Cannot generate moves for terminated game; Victor=%d", board->victor);
         return 0;
     }
 
@@ -558,7 +558,12 @@ int movePiece(bitboard *board, move* m)
     return 0;
 }
 
-
+void applyNullMove(bitboard* board)
+{
+    assert(board);
+    board->turn ^= 1;
+    board->hashCode ^= zobrist_keys[780];
+}
 
 move getStructFromString(bitboard* board, char* str)
 {
@@ -600,7 +605,7 @@ move getStructFromString(bitboard* board, char* str)
     move m = {0};
     createMove(&m, startSquare, endSquare, promoteTo, piece, board);
 
-    move moveList[256];
+    move moveList[MAX_POSITION_MOVES];
     int count = generateMoveList(moveList, board, 0);
     int isPotentialMove = 0;
     for(int index = 0; index < count; index++)
@@ -651,7 +656,7 @@ int moveFromStruct(bitboard* board, move m)
     {
         //Look for legal moves - calculate checkmate / stalemate.
         int existsLegalMove = 0;
-        move moveList[256];
+        move moveList[MAX_POSITION_MOVES];
         int entryCount = generateMoveList(moveList, board, 0);
         if(!entryCount) existsLegalMove = 0;
         else
@@ -688,27 +693,11 @@ int moveFromStruct(bitboard* board, move m)
         //King + Minor Piece vs King
         else if(board->pieces_side[BLACK] == board->pieces[BLACK_KING] && board->pieces[WHITE_PAWN] == 0 && board->pieces[WHITE_ROOK] == 0 && board->pieces[WHITE_QUEEN] == 0)
         {
-            uint64_t mask = 1;
-            int count = 0;
-            for(int i = 0; i < 63; i++)
-            {
-                if((board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT])&mask) count++;
-
-                mask = mask<<1;
-            }
-            if(count == 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+            if(__builtin_popcountll(board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT]) <= 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
         }
         else if(board->pieces_side[WHITE] == board->pieces[WHITE_KING] && board->pieces[BLACK_PAWN] == 0 && board->pieces[BLACK_ROOK] == 0 && board->pieces[BLACK_QUEEN] == 0)
         {
-            uint64_t mask = 1;
-            int count = 0;
-            for(int i = 0; i < 63; i++)
-            {
-                if((board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT])&mask) count++;
-
-                mask = mask<<1;
-            }
-            if(count == 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+            if(__builtin_popcountll(board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT]) <= 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
         }
         //King + Bishops vs King + Bishops (Same color bishops)
         else if(board->pieces_all == (board->pieces[WHITE_KING]|board->pieces[WHITE_BISHOP]|board->pieces[BLACK_KING]|board->pieces[BLACK_BISHOP]) && 

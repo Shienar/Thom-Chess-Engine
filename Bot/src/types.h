@@ -24,11 +24,9 @@ typedef struct move {
 
 typedef struct table_entry_tt {
     uint64_t hashCode;
-    clock_t age;
-    double evaluation;
-    uint8_t ply;
+    float evaluation;
+    uint8_t depth;
     int8_t nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
-    move bestMove;
     uint8_t checkSum;
 } table_entry_tt;
 
@@ -41,8 +39,8 @@ typedef struct hashtable_tt {
 //...
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
-#define MAX_PLY 32
-#define MAX_PV_SIZE 528
+#define MAX_PLY 20
+#define MAX_PV_SIZE ((MAX_PLY * (MAX_PLY + 1)) / 2)
 typedef struct bitboard {
     uint64_t pieces[PIECE_COUNT];
 
@@ -110,9 +108,9 @@ extern int kingBucketMap[KING_BUCKETS];
  * Weights are stored as w[output][input] to make SIMD possible for the hidden layers.
  * 
  * The sparse input layer is stored as w[input][output] instead since we are jumping
- * to the few active inputs.
+ * to the few active inputs. Output layer weights are w[bucket][output], not w[input][output].
  * 
- * Output bucket: 0-7, calculated with (piece count - 1) / 4
+ * Output bucket: 0-7, calculated with ((piece count - 1) / 4)
  */
 typedef struct network_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
@@ -148,17 +146,21 @@ typedef struct accumulatorRefreshTable {
     accumulator accumulators[KING_BUCKETS];
 } accumulatorRefreshTable;
 
+#define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
     int isPonder;
-    int depth;
+    int maxDepth;
+    int reachedDepth;
     int maxNodes;
     int countedNodes;
-    float* score;
+    float score;
+    int deepeningSkip;
+    clock_t startTime;
     bitboard* board;
-    clock_t* endTime;
+    volatile clock_t* endTime;
     accumulator* accumulator;
     accumulatorRefreshTable* accumulatorTable;
-    move searchedMoves[16]; //search only these at depth 1
+    move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
     move pvTable[MAX_PV_SIZE];
 } searchThreadContext;
 

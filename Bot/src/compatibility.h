@@ -19,6 +19,7 @@
     #define align_free _aligned_free
 
     #define THREADTYPE HANDLE
+    #define THREAD_INIT NULL
 
     #define THREAD_RETURN DWORD WINAPI
     #define THREAD_PARAM LPVOID
@@ -44,6 +45,7 @@
     #define align_free free
 
     #define THREADTYPE pthread_t
+    #define THREAD_INIT 0
 
     #define THREAD_RETURN void*
     #define THREAD_PARAM void*
