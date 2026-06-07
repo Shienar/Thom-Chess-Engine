@@ -29,7 +29,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     if(!depth) return 1;
     int nodes = 0;
 
-    move moveList[MAX_POSITION_MOVES];
+    move moveList[MAX_MOVES];
     int count = generateMoveList(moveList, board, 0);
     for(int index = 0; index < count; index++)
     {
@@ -206,61 +206,36 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
     };
     transposition_table_set(transpositionTable, shallowEntry);
 
-    if(ply >= MAX_PLY - 1) return best;
-
-    if(best >= beta) return best;
+    if(best >= beta || ply >= MAX_PLY - 1) return best;
     if(best > alpha) alpha = best;
 
     //Delta pruning
     if(LARGE_DELTA + best < alpha) return best;
 
-    move moveList[MAX_POSITION_MOVES];
-    int entryCount = generateMoveList(moveList, board, 1);
-    if(entryCount)
+    moveIterator* iter = create_move_iterator(board, 1, NULL, NULL);
+    if(iter)
     {
-        int moveScores[MAX_POSITION_MOVES] = {0};
-        for(int i = 0; i < entryCount; i++)
+        move* currentMove;
+        while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            move m = moveList[i];
-
-            int pieceScore = PIECE(m.piece);
-            if(pieceScore == KING) pieceScore = 1;
-            
-            if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = 10 + (PIECE(m.capturedPiece)) - pieceScore;
-            else moveScores[i] = pieceScore;
-        }
-
-        for(int i = 0; i < entryCount; i++)
-        {
-            int moveIndex = 0;
-            int maxScoreRemaining = INT32_MIN;
-            for(int j = 0; j < entryCount; j++)
+            if(!moveFromStruct(board, *currentMove))
             {
-                if(moveScores[j] > maxScoreRemaining)
-                {
-                    moveIndex = j;
-                    maxScoreRemaining = moveScores[j];
-                }
-            }
-            moveScores[moveIndex] = INT32_MIN;
-            
-            move currentMove = moveList[moveIndex];
-            if(!moveFromStruct(board, currentMove))
-            {
-                updateMoveAccumulator(board, currentMove, 0, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
                 float score = -quiesce(context, -beta, -alpha, ply + 1);
 
                 unmove(board);
-                updateMoveAccumulator(board, currentMove, 1, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
 
                 if(score >= beta)
                 {
+                    destroy_move_iterator(iter);
                     return score;
                 }
                 if(score > best) best = score;
                 if(score > alpha) alpha = score;
             }
         }
+        destroy_move_iterator(iter);
     }
     return best;
 }
@@ -287,8 +262,8 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
     //Mate distance pruning for non-root nodes.
     if(maxDepth != depth)
     {
-        float a = max(alpha, -SCORE_WIN + ply);
-        float b = max(beta, SCORE_WIN - ply - 1);
+        float a = _max(alpha, -SCORE_WIN + ply);
+        float b = _max(beta, SCORE_WIN - ply - 1);
         if(a >= b) return a;
     }
 
@@ -367,75 +342,30 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
 
     }
 
-    int entryCount = 0;
-    move moveList[MAX_POSITION_MOVES];
-    if(ply == 0)
+    moveIterator* iter = create_move_iterator(board, 0, NULL, NULL);
+    if(iter)
     {
-        for(int i = 0; i < 16; i++)
-        {
-            if(IS_VALID_MOVE(context->searchedMoves[i])) 
-            {
-                entryCount++;
-                moveList[i] = context->searchedMoves[i];
-            }
-            else break;
-        }
-        if(!entryCount) entryCount = generateMoveList(moveList, board, 0);
-    }
-    else entryCount = generateMoveList(moveList, board, 0);
-    if(entryCount)
-    {
-        move* pvMove = &context->pvTable[ply];
-
-        int moveScores[MAX_POSITION_MOVES] = {0};
-        for(int i = 0; i < entryCount; i++)
-        {
-            move m = moveList[i];
- 
-            int pieceScore = PIECE(m.piece);
-            if(pieceScore == KING) pieceScore = 1;
-
-            if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) moveScores[i] = INT32_MAX;
-            else if(m.capturedPiece != EMPTY_PIECE) moveScores[i] = 10 + (PIECE(m.capturedPiece)) - pieceScore;
-            else moveScores[i] = pieceScore;
-        }
-
-        float bestScore = -FLT_MAX;
+        move* currentMove;
         int validMovesVisited = 0;
-        for(int i = 0; i < entryCount; i++)
+        float bestScore = -FLT_MAX;
+        while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            int moveIndex = 0;
-            int maxScoreRemaining = INT32_MIN;
-            for(int j = 0; j < entryCount; j++)
-            {
-                if(moveScores[j] > maxScoreRemaining)
-                {
-                    moveIndex = j;
-                    maxScoreRemaining = moveScores[j];
-                }
-            }
-            moveScores[moveIndex] = INT32_MIN;
 
             //Move count pruning
-            if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth])
-            {
-                examineQuiets = 0; 
-            }
+            if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth]) examineQuiets = 0;
 
-            if(!moveFromStruct(board, moveList[moveIndex]))
+            if(!moveFromStruct(board, *currentMove))
             {
                 validMovesVisited++;
 
-                if(!examineQuiets && (moveList[moveIndex].capturedPiece == EMPTY_PIECE || (board->flags&0x30) == 0))
+                if(!examineQuiets && (currentMove->capturedPiece == EMPTY_PIECE || (board->flags&0x30) == 0))
                 {
                     unmove(board);
                     continue;
                 }
-                updateMoveAccumulator(board, moveList[moveIndex], 0, context->accumulator, context->accumulatorTable);
-                if(i == 0)
-                {
-                    score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
-                }
+
+                updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
+                if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
                 else
                 {
                     score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
@@ -444,13 +374,14 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
                 }
                 
                 unmove(board);
-                updateMoveAccumulator(board, moveList[moveIndex], 1, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
                 
                 if(score >= beta)
                 {
                     new_tt_entry.nodeType = NODE_TYPE_CUT;
                     new_tt_entry.evaluation = score;
                     transposition_table_set(transpositionTable, new_tt_entry);
+                    destroy_move_iterator(iter);
                     return score;
                 }
                 else if(score > bestScore)
@@ -463,7 +394,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
                         new_tt_entry.evaluation = score;
                         transposition_table_set(transpositionTable, new_tt_entry);
                         alpha = score;
-                        context->pvTable[pvIndex] = moveList[moveIndex];
+                        context->pvTable[pvIndex] = *currentMove;
                         copyNMoves(&context->pvTable[pvIndex + 1], &context->pvTable[pvIndex + depth], depth - 1);
                     }
                 }
@@ -477,11 +408,12 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
             new_tt_entry.evaluation = bestScore;
             transposition_table_set(transpositionTable, new_tt_entry);
         }
+        destroy_move_iterator(iter);
     }
     return alpha;
 }
 
-void printResultingMoves(move bestMove, move ponderMove)
+void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 {
     char startSq[3];
     char endSq[3];
@@ -491,6 +423,7 @@ void printResultingMoves(move bestMove, move ponderMove)
     getSquareName(startSquare, startSq);
     getSquareName(endSquare, endSq);
 
+    if(isBookMove) printf("info string Book move played: %s%s\n", startSq, endSq);
     printf("bestmove %s%s", startSq, endSq);
 
     if(enablePonder && IS_VALID_MOVE(ponderMove))
@@ -611,10 +544,11 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     *ponderMove = best->pvTable[1]; //Invalid & isPonder checks come later.
 
     int milliseconds = (double) (clock() - mainThread->startTime) / (CLOCKS_PER_SEC / 1000.0);
-    milliseconds = max(milliseconds, 1);
+    milliseconds = _max(milliseconds, 1);
     int NPS = totalNodes / (milliseconds / 1000.0);
     printf("info depth %d nodes %d nps %d time %d", bestDepth, totalNodes, NPS, milliseconds);
     float absScore = fabsf(best->score);
+    assert(absScore <= SCORE_WIN);
     if(absScore > MIN_MATE_SCORE)
     {
         int mateInX = SCORE_WIN - absScore;
@@ -651,14 +585,15 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     int helperThreadCount = threadCount - 1;
 
     bitboard* board = context->board;
+    assert(!board->victor);
     board->historyIndex = 0;
     context->countedNodes = 0;
 
     //Book moves
     if(entries)
     {
-        move bookMove = getBookMove(board);
-        if(IS_VALID_MOVE(bookMove)) { printResultingMoves(bookMove, (move){0}); isCalculating = 0; return 0; }
+        context->pvTable[0] = getBookMove(board);
+        if(IS_VALID_MOVE(context->pvTable[0])) { printResultingMoves(context->pvTable[0], (move){0}, 1); isCalculating = 0; return 0; }
         else unloadBook();
     }
     
@@ -712,10 +647,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             int totalNodes = context->countedNodes;
             for(int i = 0; i < helperThreadCount; i++) totalNodes += helperThreadContext[i].countedNodes; //very volatile, basically a best-guess until the cleanup.
             int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
-            milliseconds = max(milliseconds, 1);
+            milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
             printf("info depth %d nodes %d nps %d time %d", currentDepth, totalNodes, NPS, milliseconds);
             float absScore = fabsf(context->score);
+            assert(absScore <= SCORE_WIN);
             if(absScore > MIN_MATE_SCORE)
             {
                 int mateInX = SCORE_WIN - absScore;
@@ -764,10 +700,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         char FEN[100] = { '\0' };
         export_fen_from_board(board, FEN);
         DEBUG_ERROR("Engine returned empty move on %s", FEN);
-        for(int i = 0; i < maxDepth; i++) DEBUG_INFO("\tpv[%d] = %d->%d", i, context->pvTable[i].startSquare, context->pvTable[i].endSquare);
     }
 
-    printResultingMoves(bestMove, ponderMove);
+    printResultingMoves(bestMove, ponderMove, 0);
     isCalculating = 0;
     return 0;
 }

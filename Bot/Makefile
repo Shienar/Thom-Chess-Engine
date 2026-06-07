@@ -1,25 +1,38 @@
 CC = gcc
-CFLAGS = -Wall -g -std=c99 -march=native -fopenmp
-TARGET = ChessBot.exe
+CFLAGS = -Wall -g -std=c99 -march=native -fopenmp -MMD -MP
 LIBS = -lOpenCL
 
-SRCFILES = src/*.c
-SRCFILES += src/analyze/*.c
-SRCFILES += src/board/*.c
-SRCFILES += src/hashtables/*.c
-SRCFILES += src/pyrrhic/tbprobe.c
-SRCFILES += src/gpu/*.c
-
 # Speedup, harder debugging.
-CFLAGS += -O3 -DNDEBUG
+CFLAGS += -O3
+CFLAGS += -DNDEBUG
 
-# Kernel profiling for trainer, no ping-pong buffers.
+# Profiling
 # CFLAGS += -DPERFT_KERNELS
-
-# Extra CFLAGS for gprof analysis.
-# Need to run the executable first to generate gmon.out file.
 # gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
 # CFLAGS += -pg -no-pie
+
+SRC_DIR = src
+TGT_DIR = target
+OBJ_DIR = $(TGT_DIR)/obj
+
+# Use "make NEW=1" to create a copy. Used for testing elo differences between versions.
+ifdef NEW
+    TARGET = $(TGT_DIR)/ChessBot_new.exe
+else
+    TARGET = $(TGT_DIR)/ChessBot.exe
+endif
+
+SRCFILES = $(wildcard src/*.c) \
+           $(wildcard src/analyze/*.c) \
+           $(wildcard src/board/*.c) \
+           $(wildcard src/hashtables/*.c) \
+           $(wildcard src/pyrrhic/tbprobe.c) \
+           $(wildcard src/gpu/*.c)
+
+OBJFILES := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCFILES))
+DEPS     := $(OBJFILES:.o=.d)
+
+OBJ_DIRS := $(sort $(dir $(OBJFILES)))
 
 # Linux / MacOS specific compilation flags
 UNAME_S := $(shell uname -s)
@@ -30,10 +43,20 @@ ifeq ($(UNAME_S),Darwin)
     LIBS += -pthread
 endif
 
-all: clean $(TARGET)
+.PHONY: all clean directories
 
-$(TARGET):
-	$(CC) $(CFLAGS) -o $(TARGET) $(SRCFILES) $(LIBS)
+all: directories $(TARGET)
+
+$(TARGET): $(OBJFILES)
+	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+directories:
+	@mkdir -p $(OBJ_DIRS)
 
 clean:
-	rm -f $(TARGET)
+	rm -rf $(TGT_DIR)
+
+-include $(DEPS)

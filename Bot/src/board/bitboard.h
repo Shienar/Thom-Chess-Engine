@@ -6,7 +6,6 @@
 #include "../hashtables/hashtable.h"
 #include "../debug.h"
 
-
 #define WHITE 0
 #define BLACK 1
 

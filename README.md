@@ -1,4 +1,4 @@
-NNUE chess engine created in C.
+UCI-compliant NNUE chess engine created in C.
 
 ### COMPATIBLITY:
 

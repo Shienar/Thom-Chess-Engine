@@ -291,6 +291,81 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     return size;
 }
 
+//Only used when move ordering matters.
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* requiredMoves)
+{
+    moveIterator* iter = malloc(sizeof(moveIterator));
+    iter->moveList = malloc(MAX_MOVES * sizeof(move));
+    iter->moveScores = malloc(MAX_MOVES * sizeof(char));
+    iter->count = 0;
+    iter->visitedCount = 0;
+
+    if(requiredMoves)
+    {
+        for(int i = 0; i < 16; i++)
+        {
+            if(IS_VALID_MOVE(requiredMoves[i])) 
+            {
+                iter->count++;
+                iter->moveList[i] = requiredMoves[i];
+            }
+            else break;
+        }
+        if(!iter->count) iter->count = generateMoveList(iter->moveList, board, capturesOnly);
+    }
+    else iter->count = generateMoveList(iter->moveList, board, capturesOnly);
+
+    if(!iter->count) { destroy_move_iterator(iter); return NULL; }
+    
+    for(int i = 0; i < iter->count; i++)
+    {
+        move m = iter->moveList[i];
+        iter->moveScores[i] = 0;
+
+        int pieceScore = PIECE(m.piece);
+        if (pieceScore == KING) pieceScore = 1;
+
+        if (pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare)  iter->moveScores[i] = INT8_MAX;
+        else if (m.capturedPiece != EMPTY_PIECE) iter->moveScores[i] = 50 + (PIECE(m.capturedPiece)) - pieceScore;
+        else iter->moveScores[i] = pieceScore;
+
+    }
+
+    return iter;
+}
+
+move* iterate_next_move(moveIterator* iter)
+{
+    if (iter->visitedCount >= iter->count) return NULL;
+
+    int bestIndex = -1;
+    int maxScoreRemaining = INT8_MIN;
+
+    for (int j = 0; j < iter->count; j++) 
+    {
+        if (iter->moveScores[j] > maxScoreRemaining) 
+        {
+            bestIndex = j;
+            maxScoreRemaining = iter->moveScores[j];
+        }
+    }
+
+    iter->moveScores[bestIndex] = INT8_MIN;
+    iter->visitedCount++;
+    
+    return &iter->moveList[bestIndex];
+}
+
+void destroy_move_iterator(moveIterator* iter)
+{
+    if(iter)
+    {
+        if(iter->moveList) free(iter->moveList);
+        if(iter->moveScores) free(iter->moveScores);
+        free(iter);
+    }
+}
+
 
 int isThreatened(bitboard* board, int square, int squareColor)
 {
@@ -605,7 +680,7 @@ move getStructFromString(bitboard* board, char* str)
     move m = {0};
     createMove(&m, startSquare, endSquare, promoteTo, piece, board);
 
-    move moveList[MAX_POSITION_MOVES];
+    move moveList[MAX_MOVES];
     int count = generateMoveList(moveList, board, 0);
     int isPotentialMove = 0;
     for(int index = 0; index < count; index++)
@@ -656,7 +731,7 @@ int moveFromStruct(bitboard* board, move m)
     {
         //Look for legal moves - calculate checkmate / stalemate.
         int existsLegalMove = 0;
-        move moveList[MAX_POSITION_MOVES];
+        move moveList[MAX_MOVES];
         int entryCount = generateMoveList(moveList, board, 0);
         if(!entryCount) existsLegalMove = 0;
         else

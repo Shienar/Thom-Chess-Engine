@@ -26,60 +26,58 @@ void loadWeights()
     if(nnue_weights) return;
     nnue_weights = calloc(1, sizeof(network_weights));
 
-    FILE* input = fopen("import/weights.nnue", "rb");
+    FILE* input = fopen("../import/weights.nnue", "rb");
     if(input)
     {
-        fread(nnue_weights, sizeof(network_weights), 1, input);
+        size_t size = fread(nnue_weights, sizeof(network_weights), 1, input);
         fclose(input);
+        if(size == 1) return;
     }
-    else
+
+    DEBUG_ERROR("Failed to load neural network from file.");
+
+    //Biases get left at 0.0 from calloc.
+
+    double standardDeviation = sqrt(2.0/30.0);
+    
+    for(int i = 0; i < HALF_INPUT_BITS; i++)
     {
-        DEBUG_ERROR("Failed to load neural network from file.\n");
-
-
-        //Biases get left at 0.0 from calloc.
-
-        double standardDeviation = sqrt(2.0/30.0);
-        
-        for(int i = 0; i < HALF_INPUT_BITS; i++)
+        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-            {
-                sampleNormalDistribution(&nnue_weights->weights1[i][j], standardDeviation);
-            }
+            sampleNormalDistribution(&nnue_weights->weights1[i][j], standardDeviation);
         }
+    }
 
-        standardDeviation = sqrt(2.0 / 512.0);
-        for(int i = 0; i < ACCUMULATOR_NODES; i++)
+    standardDeviation = sqrt(2.0 / 512.0);
+    for(int i = 0; i < ACCUMULATOR_NODES; i++)
+    {
+        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
-            for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
-            {
-                sampleNormalDistribution(&nnue_weights->weights2[j][i], standardDeviation);
-            }
+            sampleNormalDistribution(&nnue_weights->weights2[j][i], standardDeviation);
         }
+    }
 
-        standardDeviation = sqrt(2.0 / 32.0);
-        for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    standardDeviation = sqrt(2.0 / 32.0);
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    {
+        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
         {
-            for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
-            {
-                sampleNormalDistribution(&nnue_weights->weights3[j][i], standardDeviation);
-            }
+            sampleNormalDistribution(&nnue_weights->weights3[j][i], standardDeviation);
         }
+    }
 
-        for(int b = 0; b < OUTPUT_BUCKETS; b++)
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
         {
             for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
             {
                 sampleNormalDistribution(&nnue_weights->weights4[b][i], standardDeviation);
             }
         }
-    }
 }
 
 void saveWeights()
 {
-    FILE* output = fopen("import/weights.nnue", "wb");
+    FILE* output = fopen("../import/weights.nnue", "wb");
     if(output) fwrite(nnue_weights, sizeof(network_weights), 1, output);
     else DEBUG_ERROR("Failed to write neural network to file.");
     fclose(output);
@@ -330,7 +328,7 @@ static inline double sumLoss(double* loss)
 
 void train(int maxIterations, float maxAllowedError)
 {
-    FILE* trainingDataFile = fopen("./import/trainingData.bin", "rb");
+    FILE* trainingDataFile = fopen("../import/trainingData.bin", "rb");
     if(!trainingDataFile)
     {
         DEBUG_ERROR("\nFailed to open training data file.");
@@ -372,7 +370,7 @@ void train(int maxIterations, float maxAllowedError)
     CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
     CompactPosition* unsortedData = calloc(MINIBATCH_SIZE * FEN_SKIP, sizeof(CompactPosition));
 
-    FILE* validationData = fopen("./import/validationData.bin", "rb");
+    FILE* validationData = fopen("../import/validationData.bin", "rb");
 
     fseek_64(validationData, 0, SEEK_END);
     int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);
@@ -385,7 +383,8 @@ void train(int maxIterations, float maxAllowedError)
 
     for(int i = 0; i < validationBlocks; i++)
     {
-        fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
+        size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
+        if(size < MINIBATCH_SIZE) { DEBUG_ERROR("Failed reading validation Data"); continue; }
         inputGroup ^= 1;
 
         #pragma omp parallel
@@ -500,7 +499,8 @@ void train(int maxIterations, float maxAllowedError)
             if(offset == 0)
             {
                 fseek_64(trainingDataFile, blockIndices[minibatchNumber / FEN_SKIP], SEEK_SET);
-                fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
+                size_t size = fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
+                if(size < MINIBATCH_SIZE * FEN_SKIP) { DEBUG_ERROR("Failed reading trainingData from file."); continue; }
             }
 
             for(int i = 0; i < MINIBATCH_SIZE; i++)
@@ -612,7 +612,8 @@ void train(int maxIterations, float maxAllowedError)
         rewind(validationData);
         for(int i = 0; i < validationBlocks; i++)
         {
-            fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
+            size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
+            if(size < MINIBATCH_SIZE) { DEBUG_ERROR("Failed reading validation Data"); continue; }
             inputGroup ^= 1;
 
             #pragma omp parallel

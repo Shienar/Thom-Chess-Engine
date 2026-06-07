@@ -4,7 +4,7 @@
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;
-uint64_t tt_size_entries = (1024 * 1024 * 16) / sizeof(table_entry_tt);
+uint64_t tt_size_entries = (1024 * 1024 * 4) / sizeof(table_entry_tt);
 
 hashtable_tt* create_hashTable_tt()
 {

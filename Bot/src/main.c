@@ -9,7 +9,6 @@
 #include <string.h>
 #include <omp.h>
 
-
 void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
@@ -24,7 +23,7 @@ int main(int argc, char** argv)
     char* strtok_ptr = NULL;
     
     int quit = 0;
-    int useBook = 1;
+    int useBook = 0;
     int isReady = 0;
     
     char sygyzyPath[1024] = "./sygyzy/";
@@ -45,7 +44,7 @@ int main(int argc, char** argv)
     while(!quit)
     {
         memset(buffer, 0, 4096 * sizeof(char));
-        fgets(buffer, 4096, stdin);
+        while(fgets(buffer, 4096, stdin) == NULL);
         str = _strtok(buffer, delim, &strtok_ptr);
         while(str != NULL)
         {
@@ -53,7 +52,7 @@ int main(int argc, char** argv)
             {
                 printf("id name ChessBot 0.1\n");
                 printf("id author Grant\n");
-                printf("option name Hash type spin default 16 min 1 max 4096\n");
+                printf("option name Hash type spin default 4 min 1 max 4096\n");
                 printf("option name Threads type spin default 8 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default true\n");
@@ -66,6 +65,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ucinewgame") == 0)
             {
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 if(isCalculating)
                 {
                     endTime = 0;
@@ -315,10 +315,7 @@ int main(int argc, char** argv)
                             searchedMoveCount++;
                         }
                     }
-                    else if(strcmp(str, "play") == 0)
-                    {
-                        play = 1;
-                    }
+                    else if(strcmp(str, "play") == 0) play = 1;
                 }
 
                 //Finished parsing command modifers, setup & launch thread.
@@ -433,7 +430,8 @@ int main(int argc, char** argv)
             {
                 board_print(board, 1);
                 break;
-            }else if(strcmp(str, "eval") == 0)
+            }
+            else if(strcmp(str, "eval") == 0)
             {
                 loadInputAccumulator(board, playerAccumulator, WHITE);
                 loadInputAccumulator(board, playerAccumulator, BLACK);
@@ -459,6 +457,7 @@ int main(int argc, char** argv)
     tb_free();
     if(board) free(board);
     unloadBook();
+    disableDebugMessages();  //closes file if open.
 }
 
 void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board)

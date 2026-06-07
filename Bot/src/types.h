@@ -5,8 +5,8 @@
 #include <limits.h>
 #include <time.h>
 
-//Avoid the 1ull << x calls.
 #define singleBitMask(x) (1ull << (x))
+#define MAX_MOVES 218
 
 typedef struct move {
     int8_t startSquare;
@@ -21,6 +21,13 @@ typedef struct move {
     uint8_t prevFlags;
     int8_t repetitionIndex;
 } move;
+
+typedef struct moveIterator {
+    move* moveList;
+    char* moveScores;
+    int count;
+    int visitedCount;
+} moveIterator;
 
 typedef struct table_entry_tt {
     uint64_t hashCode;

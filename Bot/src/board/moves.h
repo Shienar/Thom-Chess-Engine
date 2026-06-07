@@ -29,12 +29,15 @@
 #define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & NOT_A_FILE) |  ((epMask >> 9) & NOT_H_FILE)) & board->pieces[WHITE_PAWN])
 #define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & NOT_H_FILE) |  ((epMask << 9) & NOT_A_FILE)) & board->pieces[BLACK_PAWN])
 
-#define MAX_POSITION_MOVES 218
-
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
+
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* requiredMoves);
+move* iterate_next_move(moveIterator* iter);
+void destroy_move_iterator(moveIterator* iter);
+
 
 int isThreatened(bitboard* board, int square, int squareColor);
 

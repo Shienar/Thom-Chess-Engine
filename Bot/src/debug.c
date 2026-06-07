@@ -7,7 +7,7 @@ FILE* dbg_file = NULL;
 void enableDebugMessages() 
 {
     printDebugMessages = 1;
-    dbg_file = fopen("debug.log", "a");
+    dbg_file = fopen("../debug.log", "a");
 }
 void disableDebugMessages() 
 {
