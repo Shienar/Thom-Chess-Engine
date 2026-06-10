@@ -1,7 +1,7 @@
-#include "../debug.h"
-#include "../board/bitboard.h"
-#include "../board/moves.h"
-#include "../hashtables/hashtable.h"
+#include "debug.h"
+#include "board/bitboard.h"
+#include "board/moves.h"
+#include "hashtables/hashtable.h"
 #include <string.h>
 #include <math.h>
 
@@ -243,9 +243,12 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     memset(board->history, 0, MAX_PLY * sizeof(move));
     board->historyIndex = 0;
 
-    memset(board->repetitionHashCodes, 0, 128 * sizeof(uint64_t));
+    memset(board->repetitionHashCodes, 0, 4096 * sizeof(uint64_t));
     board->repetitionIndex = 0;
+    board->lastChangeIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
+
+    board->victor = 0;
 }
 
 //Resets the board to an opening position
@@ -369,7 +372,7 @@ void values_print(bitboard* board)
         printf("\n");
     }
 
-    if(board->flags&0x30)
+    if(IS_IN_CHECK_ANY(board->flags))
     {
         printf("Check: ");
         if(IS_IN_CHECK_W(board->flags)) printf("W\n");
@@ -380,6 +383,9 @@ void values_print(bitboard* board)
     printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->movesSinceLastChange);
     if(board->enPassantSquare != -1) printf("En passant square: %d\n", board->enPassantSquare);
     printf("Hashcode: 0x%016" PRIx64 "\n", board->hashCode);
+    char FEN[128];
+    export_fen_from_board(board, FEN);  
+    printf("FEN: %s\n", FEN);
 }
 
 
@@ -387,7 +393,7 @@ void bitmask_print(uint64_t mask, char fill)
 {
     char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
     piece_print(boardArray, mask, fill);
-    printf("\nMask: %016" PRIx64 "\n", mask);
+    printf("\nMask: 0x%016" PRIx64 "\n", mask);
     printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
     for(int row = 7; row >= 0; row--)
     {
@@ -444,7 +450,7 @@ int containsRepetition(bitboard* board)
     int index = board->repetitionIndex - 1;
     int count = 1;
     uint64_t checkedVal = board->repetitionHashCodes[index];
-    for(index = index - 4; index >= 0; index -= 2)
+    for(index = index - 4; index >= board->lastChangeIndex; index -= 2)
     {
         if(checkedVal == board->repetitionHashCodes[index])
         {

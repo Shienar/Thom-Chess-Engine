@@ -1,9 +1,10 @@
-#include "engine.h"
-#include "../board/moves.h"
-#include "../board/bitboard.h"
-#include "../debug.h"
-#include "book.h"
-#include "../pyrrhic/tbprobe.h"
+#include "analyze/engine.h"
+#include "board/moves.h"
+#include "board/bitboard.h"
+#include "debug.h"
+#include "analyze/book.h"
+#include "analyze/sygyzy.h"
+#include "pyrrhic/tbprobe.h"
 #include <string.h>
 #include <float.h>
 #include <math.h>
@@ -81,105 +82,6 @@ float evaluateEndstate(bitboard* board, int ply)
     }
 }
 
-void filterSygyzyMoves(bitboard* board, move* requiredMoves)
-{
-    //3-n man sygyzy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (board->flags&0x30)) return; 
-
-    uint32_t ep = board->enPassantSquare;
-    if(ep == -1) ep = 0;
-
-    bool turn = PYRRHIC_WHITE;
-    if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
-
-    bool hasRepeated = containsRepetition(board);
-
-    struct TbRootMoves moveResults = {0};
-
-    int result = tb_probe_root_dtz(board->pieces_side[WHITE], board->pieces_side[BLACK], 
-                                    board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
-                                    board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
-                                    board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
-                                    (unsigned) board->movesSinceLastChange/2, ep, turn, hasRepeated, &moveResults);
-    if(result)
-    {
-        int bestScore = INT32_MIN;
-        for(int i = 0; i < moveResults.size; i++)
-        {
-            if(moveResults.moves[i].tbRank > bestScore)
-            {
-                bestScore = moveResults.moves[i].tbRank;
-            }
-        }   
-        
-        int insertIndex = 0;
-        for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
-        {
-            if(IS_VALID_MOVE(requiredMoves[i])) insertIndex++;
-            else break;
-        }
-
-        int i = 0;
-        while(insertIndex < MAX_REQUIRED_MOVES && i < moveResults.size)
-        {
-            if(moveResults.moves[i].tbRank < bestScore) 
-            {
-                i++;
-                continue;
-            }
-
-            requiredMoves[insertIndex].endSquare = PYRRHIC_MOVE_TO(moveResults.moves[i].move);
-            requiredMoves[insertIndex].startSquare = PYRRHIC_MOVE_FROM(moveResults.moves[i].move);
-            requiredMoves[insertIndex].piece = findPieceOnSquare(board, requiredMoves[insertIndex].startSquare);
-
-            if(PYRRHIC_MOVE_IS_QPROMO(moveResults.moves[i].move)) requiredMoves[insertIndex].promoteTo = QUEEN;
-            else if(PYRRHIC_MOVE_IS_RPROMO(moveResults.moves[i].move)) requiredMoves[insertIndex].promoteTo = ROOK;
-            else if(PYRRHIC_MOVE_IS_BPROMO(moveResults.moves[i].move)) requiredMoves[insertIndex].promoteTo = BISHOP;
-            else if(PYRRHIC_MOVE_IS_NPROMO(moveResults.moves[i].move)) requiredMoves[insertIndex].promoteTo = KNIGHT;
-
-            requiredMoves[insertIndex].capturedPiece = findPieceOnSquare(board, requiredMoves[insertIndex].endSquare);
-            if(requiredMoves[insertIndex].capturedPiece) requiredMoves[insertIndex].capturedPieceSquare = requiredMoves[insertIndex].endSquare;
-
-            i++;
-            insertIndex++;
-        }
-    }
-
-    DEBUG_ERROR("Failed to probe sygyzy.");
-}
-
-//Return -1.0f on error. Valid results are SCORE_WIN, -SCORE_WIN, 0.0f
-float getSygyzyResult(bitboard* board)
-{
-    //3-n man sygyzy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (board->flags&0x30)) return -1.0f;
-
-    uint32_t ep = board->enPassantSquare;
-    if(ep == -1) ep = 0;
-
-    bool turn = PYRRHIC_WHITE;
-    if(ISBLACK(board->turn)) turn = PYRRHIC_BLACK;
-
-    int result = tb_probe_wdl(board->pieces_side[WHITE], board->pieces_side[BLACK], 
-                                    board->pieces[BLACK_KING]|board->pieces[WHITE_KING], board->pieces[BLACK_QUEEN]|board->pieces[WHITE_QUEEN], 
-                                    board->pieces[BLACK_ROOK]|board->pieces[WHITE_ROOK], board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP],
-                                    board->pieces[BLACK_KNIGHT]|board->pieces[WHITE_KNIGHT], board->pieces[BLACK_PAWN]|board->pieces[WHITE_PAWN],
-                                    ep, turn);
-    switch(result)
-    {
-        case TB_LOSS:
-            return -SCORE_WIN;
-        case TB_WIN:
-            return SCORE_WIN;
-        case TB_BLESSED_LOSS:
-        case TB_CURSED_WIN:
-        case TB_DRAW:
-            return 0.0f;
-        default:
-            return -1.0f;
-    }
-}
-
 float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
 {
     context->countedNodes++;
@@ -240,9 +142,7 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
     return best;
 }
 
-void copyNMoves(move* dest, move* source, int count)  {while(count--) *dest++ = *source++;}
-
-float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int pvIndex)
+float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV)
 {
     assert(context);
     context->countedNodes++;
@@ -250,20 +150,26 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
     int examineQuiets = 1;
     assert(board);
 
-    int ply = maxDepth - depth;
+    myPV->length = 0;
+    PVar childPV;
+
     int pvNode = (beta != alpha + 1);
-    int inCheck = board->flags&0x30;
+    int inCheck = IS_IN_CHECK_ANY(board->flags);
+    
+    if(ply > context->seldepth) context->seldepth = ply;
     
     if(depth == 0 || (context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor) 
     {
         return quiesce(context, alpha, beta, ply);
     }
+    
+    if(ply >= MAX_PLY - 1) return forwardPropagate(board->turn, context->accumulator, __builtin_popcountll(board->pieces_all));
 
     //Mate distance pruning for non-root nodes.
     if(maxDepth != depth)
     {
         float a = _max(alpha, -SCORE_WIN + ply);
-        float b = _max(beta, SCORE_WIN - ply - 1);
+        float b = _min(beta, SCORE_WIN - ply - 1);
         if(a >= b) return a;
     }
 
@@ -279,18 +185,20 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
             (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
             (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
     {
-        //Do not return if this is a pv node. 
-        //We need to populate the pv table.
-        //Pv nodes are searched with a full window
-        //Only do a transposition table cutoff if searched with a null window.
         if(!pvNode) return old_tt_entry->evaluation;
+        else if(old_tt_entry->nodeType == NODE_TYPE_PV)
+        {
+            myPV->line[0] = old_tt_entry->bestMove;
+            myPV->length = 1;
+            return old_tt_entry->evaluation;
+        }
     }
 
 
     //Sygyzy
     if(depth >= sygyzyProbeDepth)
     {
-        int result = getSygyzyResult(context->board);
+        float result = getSygyzyResult(context->board);
         if(result != -1.0f) 
         {
             //We aren't saving a pv move, but 
@@ -335,19 +243,22 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
         {
             int r = 3;
             applyNullMove(board);
-            float nullScore = -principalVariationSearch(context, alpha, beta, maxDepth, depth - r, pvIndex + depth);
+            float nullScore = -principalVariationSearch(context, -alpha - 1.0f, -alpha, maxDepth, depth - r, ply + 1, &childPV);
             applyNullMove(board);
             if(nullScore >= beta) return nullScore;
         }
 
     }
 
-    moveIterator* iter = create_move_iterator(board, 0, NULL, NULL);
+    moveIterator* iter;
+    if(ply > 0) iter = create_move_iterator(board, 0, NULL, NULL);
+    else iter = create_move_iterator(board, 0, &context->pv.line[ply], context->searchedMoves);
     if(iter)
     {
         move* currentMove;
         int validMovesVisited = 0;
         float bestScore = -FLT_MAX;
+
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
 
@@ -356,21 +267,26 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
 
             if(!moveFromStruct(board, *currentMove))
             {
-                validMovesVisited++;
-
-                if(!examineQuiets && (currentMove->capturedPiece == EMPTY_PIECE || (board->flags&0x30) == 0))
+                int isQuiet = (currentMove->capturedPiece == EMPTY_PIECE && (IS_IN_CHECK_ANY(board->flags)) == 0);
+                if(!examineQuiets && isQuiet)
                 {
                     unmove(board);
                     continue;
                 }
 
                 updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
-                if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
+
+                int next_depth = depth - 1;
+                if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
+
+                validMovesVisited++;
+
+                if(validMovesVisited == 1) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 else
                 {
-                    score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
+                    score = -principalVariationSearch(context, -alpha - 1.0f, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                     //Re-search PV node
-                    if (score > alpha && beta - alpha > 1) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, depth - 1, pvIndex + depth);
+                    if (score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 }
                 
                 unmove(board);
@@ -392,10 +308,13 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
                     {
                         new_tt_entry.nodeType = NODE_TYPE_PV;
                         new_tt_entry.evaluation = score;
+                        new_tt_entry.bestMove = *currentMove;
                         transposition_table_set(transpositionTable, new_tt_entry);
                         alpha = score;
-                        context->pvTable[pvIndex] = *currentMove;
-                        copyNMoves(&context->pvTable[pvIndex + 1], &context->pvTable[pvIndex + depth], depth - 1);
+                        
+                        myPV->line[0] = *currentMove;
+                        memcpy(&myPV->line[1], childPV.line, childPV.length * sizeof(move));
+                        myPV->length = childPV.length + 1;
                     }
                 }
             }
@@ -425,6 +344,27 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 
     if(isBookMove) printf("info string Book move played: %s%s\n", startSq, endSq);
     printf("bestmove %s%s", startSq, endSq);
+    
+    if(bestMove.promoteTo)
+    {
+        switch(bestMove.promoteTo)
+        {
+            case QUEEN:
+                printf("q");
+                break;
+            case KNIGHT:
+                printf("n");
+                break;
+            case ROOK:
+                printf("r");
+                break;
+            case BISHOP:
+                printf("b");
+                break;
+            default:
+                break;
+        }
+    }
 
     if(enablePonder && IS_VALID_MOVE(ponderMove))
     {
@@ -435,6 +375,28 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
         getSquareName(endSquare, endSq);
 
         printf(" ponder %s%s", startSq, endSq);
+
+        if(ponderMove.promoteTo)
+        {
+            switch(ponderMove.promoteTo)
+            {
+                case QUEEN:
+                    printf("q");
+                    break;
+                case KNIGHT:
+                    printf("n");
+                    break;
+                case ROOK:
+                    printf("r");
+                    break;
+                case BISHOP:
+                    printf("b");
+                    break;
+                default:
+                    break;
+            }
+        }
+        
     }
 
     printf("\n");
@@ -451,7 +413,8 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     if(currentDepth < MIN_ASPIRATION_DEPTH)
     {
         updateAccumulatorFromTable(board, context->accumulator, context->accumulatorTable);
-        context->score = principalVariationSearch(context, -FLT_MAX, FLT_MAX, currentDepth, currentDepth, 0);
+        context->score = principalVariationSearch(context, -FLT_MAX, FLT_MAX, currentDepth, currentDepth, 0, &context->pv);
+        context->completedDepth = currentDepth;
     }
     else
     {
@@ -464,7 +427,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             if(clock() > *endTime) break;
 
             updateAccumulatorFromTable(board, acc, accumulatorTable);
-            float score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0);
+            float score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
 
             if(score <= alpha)
             {
@@ -475,10 +438,12 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             {
                 beta+= aspiration_margin;
                 aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
+                context->completedDepth = currentDepth;
             }
             else
             {
                 context->score = score;
+                context->completedDepth = currentDepth;
                 break;
             }
 
@@ -494,19 +459,19 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 {
     searchThreadContext* context = (searchThreadContext*)param;
-    context->reachedDepth = 0;
-    move tempPV[MAX_PV_SIZE];
+    context->seldepth = 0;
+    context->completedDepth = 0;
+    PVar tempPV;
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
         if(clock() > *context->endTime) break;
         aspiration_window(context, currentDepth);
-        context->reachedDepth = currentDepth;
-        memcpy(tempPV, context->pvTable, MAX_PV_SIZE * sizeof(move));
+        if(clock() <= *context->endTime) memcpy(&tempPV, &context->pv, sizeof(PVar));
     }
 
     //Load the last stable pv
-    memcpy(context->pvTable, tempPV, MAX_PV_SIZE * sizeof(move));
+    memcpy(&context->pv, &tempPV, sizeof(PVar));
 
     return 0;
 }
@@ -514,57 +479,77 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 void findBestThread(searchThreadContext* mainThread, searchThreadContext* helperThreads, move* bestMove, move* ponderMove)
 {
     searchThreadContext* best = mainThread;
-    int bestDepth = best->reachedDepth;
+    int bestDepth = best->completedDepth;
     float bestScore = best->score;
     int totalNodes = mainThread->countedNodes;
     if(helperThreads)
     {
         for(int i = 0; i < threadCount - 1; i++)
         {
-            if(!IS_VALID_MOVE(helperThreads[i].pvTable[0])) continue;
-            int curDepth = helperThreads[i].reachedDepth;
+            if(!IS_VALID_MOVE(helperThreads[i].pv.line[0])) continue;
+            int curDepth = helperThreads[i].completedDepth;
             float curScore = helperThreads[i].score;
 
-            if(((curDepth >= bestDepth || curScore > MIN_MATE_SCORE) && curScore > bestScore)) 
+            if(curDepth >= bestDepth || curScore > MIN_MATE_SCORE) 
             {
                 best = &helperThreads[i];
-                bestDepth = best->reachedDepth;
+                bestDepth = best->completedDepth;
                 bestScore = best->score;
             }
 
             totalNodes += helperThreads[i].countedNodes;
         }
-
-        //Broadcast the best score for use in aspiration windows.
-        mainThread->score = best->score;
-        for(int i = 0; i < threadCount - 1; i++) helperThreads[i].score = best->score;
     }
     
-    *bestMove = best->pvTable[0];
-    *ponderMove = best->pvTable[1]; //Invalid & isPonder checks come later.
+    *bestMove = best->pv.line[0];
+    *ponderMove = best->pv.line[1]; //Invalid & isPonder checks come later.
 
     int milliseconds = (double) (clock() - mainThread->startTime) / (CLOCKS_PER_SEC / 1000.0);
     milliseconds = _max(milliseconds, 1);
     int NPS = totalNodes / (milliseconds / 1000.0);
-    printf("info depth %d nodes %d nps %d time %d", bestDepth, totalNodes, NPS, milliseconds);
-    float absScore = fabsf(best->score);
+    printf("info depth %d seldepth %d nodes %d nps %d time %d", bestDepth, best->seldepth, totalNodes, NPS, milliseconds);
+    float absScore = fabsf(bestScore);
     assert(absScore <= SCORE_WIN);
     if(absScore > MIN_MATE_SCORE)
     {
-        int mateInX = SCORE_WIN - absScore;
-        printf(" score mate %d", mateInX);
+        int mateInPlies = SCORE_WIN - absScore;
+        int mateInMoves = (mateInPlies + 1) / 2;
+        if (bestScore < 0) mateInMoves = -mateInMoves;
+        printf(" score mate %d", mateInMoves);
     }
-    else printf(" score cp %d", (int)lroundf(best->score));
+    else printf(" score cp %d", (int)lroundf(bestScore));
     if(bestDepth)
     {
         printf(" pv");
-        for(int i = 0; i < bestDepth; i++)
+        for(int i = 0; i < best->pv.length; i++)
         {
+            move m = best->pv.line[i];
+            if(!IS_VALID_MOVE(m)) break;
             char startSq[3] = {'\0'};
             char endSq[3] = {'\0'};
-            getSquareName(best->pvTable[i].startSquare, startSq);
-            getSquareName(best->pvTable[i].endSquare, endSq);
+            getSquareName(m.startSquare, startSq);
+            getSquareName(m.endSquare, endSq);
             printf(" %s%s", startSq, endSq);
+            if(m.promoteTo)
+            {
+                switch(m.promoteTo)
+                {
+                    case QUEEN:
+                        printf("q");
+                        break;
+                    case KNIGHT:
+                        printf("n");
+                        break;
+                    case ROOK:
+                        printf("r");
+                        break;
+                    case BISHOP:
+                        printf("b");
+                        break;
+                    default:
+                        break;
+                }
+            }
         }
     }
     printf("\n");
@@ -588,12 +573,14 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     assert(!board->victor);
     board->historyIndex = 0;
     context->countedNodes = 0;
+    context->seldepth = 0;
+    context->completedDepth = 0;
 
     //Book moves
     if(entries)
     {
-        context->pvTable[0] = getBookMove(board);
-        if(IS_VALID_MOVE(context->pvTable[0])) { printResultingMoves(context->pvTable[0], (move){0}, 1); isCalculating = 0; return 0; }
+        context->pv.line[0] = getBookMove(board);
+        if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move){0}, 1); isCalculating = 0; return 0; }
         else unloadBook();
     }
     
@@ -622,7 +609,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             memcpy(helperThreadContext[i].board, board, sizeof(bitboard));
             helperThreadContext[i].endTime = &terminateFlags[i];
             terminateFlags[i] = *context->endTime;
-            helperThreadContext[i].maxDepth = context->maxDepth + (i%2);
+            helperThreadContext[i].maxDepth = context->maxDepth;
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
 
             threadRefreshTables[i] = createRefreshTable();
@@ -640,8 +627,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
         aspiration_window(context, currentDepth);
 
-        context->reachedDepth = currentDepth;
-
         if(currentDepth < maxDepth)
         {
             int totalNodes = context->countedNodes;
@@ -649,30 +634,54 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
-            printf("info depth %d nodes %d nps %d time %d", currentDepth, totalNodes, NPS, milliseconds);
+            printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
             float absScore = fabsf(context->score);
             assert(absScore <= SCORE_WIN);
             if(absScore > MIN_MATE_SCORE)
             {
-                int mateInX = SCORE_WIN - absScore;
-                printf(" score mate %d", mateInX);
+                int mateInPlies = SCORE_WIN - absScore;
+                int mateInMoves = (mateInPlies + 1) / 2;
+                if (context->score < 0) mateInMoves = -mateInMoves;
+                printf(" score mate %d", mateInMoves);
             }
             else printf(" score cp %d", (int)lroundf(context->score));
             printf(" pv");
-            for(int i = 0; i < currentDepth; i++)
+            for(int i = 0; i < context->pv.length; i++)
             {
+                move m = context->pv.line[i];
+                if(!IS_VALID_MOVE(m)) break;
                 char startSq[3] = {'\0'};
                 char endSq[3] = {'\0'};
-                getSquareName(context->pvTable[i].startSquare, startSq);
-                getSquareName(context->pvTable[i].endSquare, endSq);
+                getSquareName(m.startSquare, startSq);
+                getSquareName(m.endSquare, endSq);
                 printf(" %s%s", startSq, endSq);
+                if(m.promoteTo)
+                {
+                    switch(m.promoteTo)
+                    {
+                        case QUEEN:
+                            printf("q");
+                            break;
+                        case KNIGHT:
+                            printf("n");
+                            break;
+                        case ROOK:
+                            printf("r");
+                            break;
+                        case BISHOP:
+                            printf("b");
+                            break;
+                        default:
+                            break;
+                    }
+                }
             }
             printf("\n");
             fflush(stdout);
         }
         
-        bestMove = context->pvTable[0];
-        bestMove = context->pvTable[1];
+        bestMove = context->pv.line[0];
+        ponderMove = context->pv.line[1];
     }
     if(helperThreadCount > 0)
     {

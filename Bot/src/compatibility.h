@@ -5,7 +5,6 @@
 
 #if defined(_WIN32) || defined(_WIN64)
     #include <windows.h>
-    #include <stdio.h>
 
     #define _strtok(x, y, z) strtok_s(x, y, z)
 
@@ -20,6 +19,8 @@
 
     #define THREADTYPE HANDLE
     #define THREAD_INIT NULL
+    
+    #define GETPID GetCurrentProcessId
 
     #define THREAD_RETURN DWORD WINAPI
     #define THREAD_PARAM LPVOID
@@ -46,6 +47,8 @@
 
     #define THREADTYPE pthread_t
     #define THREAD_INIT 0
+
+    #define GETPID getpid
 
     #define THREAD_RETURN void*
     #define THREAD_PARAM void*

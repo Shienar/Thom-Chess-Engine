@@ -5,6 +5,11 @@
 #include <limits.h>
 #include <time.h>
 
+// Should always get assigned with makefile.
+#ifndef PROJECT_CWD
+#define PROJECT_CWD ""
+#endif
+
 #define singleBitMask(x) (1ull << (x))
 #define MAX_MOVES 218
 
@@ -19,7 +24,7 @@ typedef struct move {
     int8_t prevEnPassantSquare;
     uint8_t previousMovesSinceLastChange;
     uint8_t prevFlags;
-    int8_t repetitionIndex;
+    uint16_t lastChangeIndex;
 } move;
 
 typedef struct moveIterator {
@@ -34,6 +39,7 @@ typedef struct table_entry_tt {
     float evaluation;
     uint8_t depth;
     int8_t nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
+    move bestMove;
     uint8_t checkSum;
 } table_entry_tt;
 
@@ -46,8 +52,7 @@ typedef struct hashtable_tt {
 //...
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
-#define MAX_PLY 20
-#define MAX_PV_SIZE ((MAX_PLY * (MAX_PLY + 1)) / 2)
+#define MAX_PLY 40
 typedef struct bitboard {
     uint64_t pieces[PIECE_COUNT];
 
@@ -77,8 +82,9 @@ typedef struct bitboard {
 
     move history[MAX_PLY];
     uint8_t historyIndex;
-    uint64_t repetitionHashCodes[128];
-    uint8_t repetitionIndex;
+    uint64_t repetitionHashCodes[4096];
+    uint16_t repetitionIndex;
+    uint16_t lastChangeIndex;
 
     //A pawn can capture to this square.
     //[0,63] OR -1 if empty.
@@ -153,22 +159,24 @@ typedef struct accumulatorRefreshTable {
     accumulator accumulators[KING_BUCKETS];
 } accumulatorRefreshTable;
 
+typedef struct PVar {
+    int length;
+    move line[MAX_PLY];
+} PVar;
+
 #define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
     int isPonder;
-    int maxDepth;
-    int reachedDepth;
-    int maxNodes;
-    int countedNodes;
+    int maxDepth, seldepth, completedDepth, deepeningSkip;
+    int maxNodes, countedNodes;
     float score;
-    int deepeningSkip;
     clock_t startTime;
     bitboard* board;
     volatile clock_t* endTime;
     accumulator* accumulator;
     accumulatorRefreshTable* accumulatorTable;
     move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
-    move pvTable[MAX_PV_SIZE];
+    PVar pv;
 } searchThreadContext;
 
 #endif

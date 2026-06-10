@@ -1,6 +1,6 @@
-#include "transpositiontable.h"
-#include "../debug.h"
-#include "../board/bitboard.h"
+#include "hashtables/transpositiontable.h"
+#include "debug.h"
+#include "board/bitboard.h"
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;

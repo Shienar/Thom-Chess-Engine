@@ -1,7 +1,7 @@
 #ifndef BOOK
 #define BOOK
 
-#include "../types.h"
+#include "types.h"
 
 typedef struct polyglot_book_entry {
     uint64_t hashKey;

@@ -1,8 +1,8 @@
 #ifndef ACCUMULATOR
 #define ACCUMULATOR
 
-#include "../types.h"
-#include "neuralnet.h"
+#include "types.h"
+#include "analyze/neuralnet.h"
 
 #define MIRROR_SQUARE(x) x^=7
 

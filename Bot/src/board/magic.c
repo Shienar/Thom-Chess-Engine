@@ -1,5 +1,5 @@
-#include "magic.h"
-#include "../debug.h"
+#include "board/magic.h"
+#include "debug.h"
 
 magic bishopMagics[64] = {0};
 magic rookMagics[64]= {0};

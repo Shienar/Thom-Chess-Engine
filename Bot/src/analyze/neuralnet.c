@@ -1,11 +1,11 @@
-#include "neuralnet.h"
-#include "../debug.h"
-#include "../board/bitboard.h"
-#include "../board/moves.h"
-#include "engine.h"
-#include <float.h>
-#include "../gpu/gpu_funcs.h"
+#include "analyze/neuralnet.h"
+#include "debug.h"
+#include "board/bitboard.h"
+#include "board/moves.h"
+#include "analyze/engine.h"
+#include "gpu/gpu_funcs.h"
 #include "omp.h"
+#include <float.h>
 #include <string.h>
 
 network_weights* nnue_weights = NULL;
@@ -26,14 +26,14 @@ void loadWeights()
     if(nnue_weights) return;
     nnue_weights = calloc(1, sizeof(network_weights));
 
-    FILE* input = fopen("../import/weights.nnue", "rb");
+    FILE* input = fopen(PROJECT_CWD "/import/weights.nnue", "rb");
     if(input)
     {
         size_t size = fread(nnue_weights, sizeof(network_weights), 1, input);
         fclose(input);
         if(size == 1) return;
     }
-
+    
     DEBUG_ERROR("Failed to load neural network from file.");
 
     //Biases get left at 0.0 from calloc.
@@ -77,7 +77,7 @@ void loadWeights()
 
 void saveWeights()
 {
-    FILE* output = fopen("../import/weights.nnue", "wb");
+    FILE* output = fopen(PROJECT_CWD "/import/weights.nnue", "wb");
     if(output) fwrite(nnue_weights, sizeof(network_weights), 1, output);
     else DEBUG_ERROR("Failed to write neural network to file.");
     fclose(output);
@@ -328,10 +328,10 @@ static inline double sumLoss(double* loss)
 
 void train(int maxIterations, float maxAllowedError)
 {
-    FILE* trainingDataFile = fopen("../import/trainingData.bin", "rb");
+    FILE* trainingDataFile = fopen(PROJECT_CWD "/import/trainingData.bin", "rb");
     if(!trainingDataFile)
     {
-        DEBUG_ERROR("\nFailed to open training data file.");
+        DEBUG_ERROR("Failed to open training data file.");
         exit(EXIT_FAILURE);
     }
     fseek_64(trainingDataFile, 0, SEEK_END);
@@ -370,7 +370,7 @@ void train(int maxIterations, float maxAllowedError)
     CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
     CompactPosition* unsortedData = calloc(MINIBATCH_SIZE * FEN_SKIP, sizeof(CompactPosition));
 
-    FILE* validationData = fopen("../import/validationData.bin", "rb");
+    FILE* validationData = fopen(PROJECT_CWD  "/import/validationData.bin", "rb");
 
     fseek_64(validationData, 0, SEEK_END);
     int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);

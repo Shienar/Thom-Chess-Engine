@@ -1,8 +1,8 @@
 #ifndef MOVES
 #define MOVES
 
-#include "../types.h"
-#include "magic.h"
+#include "types.h"
+#include "board/magic.h"
 
 #define THREAT_TYPE_NONE 0
 #define THREAT_TYPE_PAWN 1

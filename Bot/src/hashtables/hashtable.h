@@ -1,7 +1,7 @@
 #ifndef HASHTABLE
 #define HASHTABLE
 
-#include "../types.h"
+#include "types.h"
 #include <stdint.h>
 
 /**

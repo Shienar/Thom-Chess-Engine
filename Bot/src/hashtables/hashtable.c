@@ -1,6 +1,6 @@
-#include "../hashtables/hashtable.h"
-#include "../board/bitboard.h"
-#include "../debug.h"
+#include "hashtables/hashtable.h"
+#include "board/bitboard.h"
+#include "debug.h"
 #include <string.h>
 
 /**
@@ -248,24 +248,26 @@ void initZobristPieceKeys()
 
 uint64_t getEnPassantHash(bitboard* board)
 {
-    if (board->enPassantSquare == -1) return 0;
+    if(board->enPassantSquare == -1) return 0;
 
     int epSquare = board->enPassantSquare;
     int epRow = getRow(epSquare);
     uint64_t borderingPawnMask = 0;
 
-    int capturedPawnSquare = (epRow == 5) ? epSquare + 8 : epSquare - 8;
+    int capturedPawnSquare = (epRow == 5) ? epSquare - 8 : epSquare + 8;
 
-    if (getColumn(capturedPawnSquare) > 0) borderingPawnMask |= singleBitMask(capturedPawnSquare - 1);
-    if (getColumn(capturedPawnSquare) < 7) borderingPawnMask |= singleBitMask(capturedPawnSquare + 1);
+    if(getColumn(capturedPawnSquare) > 0) borderingPawnMask |= singleBitMask(capturedPawnSquare - 1);
+    if(getColumn(capturedPawnSquare) < 7) borderingPawnMask |= singleBitMask(capturedPawnSquare + 1);
 
-    if (epRow == 5) 
+    if(epRow == 5) 
     {
-        if (borderingPawnMask & board->pieces[WHITE_PAWN]) return zobrist_keys[772 + getColumn(epSquare)]; 
+        if(borderingPawnMask & board->pieces[WHITE_PAWN]) 
+            return zobrist_keys[772 + getColumn(epSquare)]; 
     } 
     else
     {
-        if (borderingPawnMask & board->pieces[BLACK_PAWN]) return zobrist_keys[772 + getColumn(epSquare)];
+        if(borderingPawnMask & board->pieces[BLACK_PAWN]) 
+            return zobrist_keys[772 + getColumn(epSquare)];
     }
 
     return 0;
@@ -289,11 +291,11 @@ uint64_t getHashCode(bitboard* board)
 
         mask&=(mask - 1);
     }
-
-    if(board->flags&1) returnValue^=zobrist_keys[768];
-    if(board->flags&2) returnValue^=zobrist_keys[769];
-    if(board->flags&4) returnValue^=zobrist_keys[770];
-    if(board->flags&8) returnValue^=zobrist_keys[771];
+    
+    if(KINGSIDE_CASTLE_WHITE(board->flags)) returnValue^=zobrist_keys[768];
+    if(QUEENSIDE_CASTLE_WHITE(board->flags)) returnValue^=zobrist_keys[769];
+    if(KINGSIDE_CASTLE_BLACK(board->flags)) returnValue^=zobrist_keys[770];
+    if(QUEENSIDE_CASTLE_BLACK(board->flags)) returnValue^=zobrist_keys[771];
 
 
     returnValue ^= getEnPassantHash(board);

@@ -1,10 +1,11 @@
 #ifndef ENGINE
 #define ENGINE
 
-#include "../types.h"
-#include "../hashtables/transpositiontable.h"
-#include "neuralnet.h"
-#include "accumulator.h"
+#include "types.h"
+#include "hashtables/transpositiontable.h"
+#include "analyze/neuralnet.h"
+#include "analyze/accumulator.h"
+#include "analyze/sygyzy.h"
 #include <time.h>
 
 //The evaluation score given to draws.
@@ -20,7 +21,6 @@
 #define CONTEMPT_FACTOR_FIFTYMOVERULE -125.0f
 #define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -200.0f
 
-#define SCORE_WIN 1e9f
 #define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
 
 extern int threadCount;
@@ -61,12 +61,12 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply);
 /**
  * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
  * 
- * Depth = "Depth remaining" = Maxdepth - ply (distance from root)
+ * Depth = "Depth remaining"  - normally described by Maxdepth - ply, but extensions/reductions exist.
  * Call with depth == maxdepth;
  * 
  * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int pvIndex);
+float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV);
 
 /**
  * Iterative deepening function.

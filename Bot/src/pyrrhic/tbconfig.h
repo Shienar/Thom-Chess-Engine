@@ -38,8 +38,9 @@
  * to define White as 0 and Black as 1.
  */
 
-#include "../board/moves.h"
-#include "../board/bitboard.h"
+#include "board/moves.h"
+#include "board/bitboard.h"
+#include "pyrrhic/tbconfig.h"
 
 #define PYRRHIC_POPCOUNT(x)              (__builtin_popcountll(x))
 #define PYRRHIC_LSB(x)                   (__builtin_ctzll(x))

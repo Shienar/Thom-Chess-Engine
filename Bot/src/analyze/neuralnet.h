@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <immintrin.h>
-#include "../board/bitboard.h"
+#include "board/bitboard.h"
 
 #define PI 3.141592653589793
 

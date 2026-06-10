@@ -15,12 +15,17 @@ SRC_DIR = src
 TGT_DIR = target
 OBJ_DIR = $(TGT_DIR)/obj
 
+CFLAGS += -I$(SRC_DIR)
+
 # Use "make NEW=1" to create a copy. Used for testing elo differences between versions.
 ifdef NEW
     TARGET = $(TGT_DIR)/ChessBot_new.exe
 else
     TARGET = $(TGT_DIR)/ChessBot.exe
 endif
+
+# define PROJECT_CWD as a string literal evaluating to the current path. Used for fopen-ing.
+CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
 
 SRCFILES = $(wildcard src/*.c) \
            $(wildcard src/analyze/*.c) \
@@ -34,7 +39,7 @@ DEPS     := $(OBJFILES:.o=.d)
 
 OBJ_DIRS := $(sort $(dir $(OBJFILES)))
 
-# Linux / MacOS specific compilation flags
+# Linux / MacOS specific libaries
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
     LIBS += -pthread -lm
@@ -50,7 +55,7 @@ all: directories $(TARGET)
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 directories:

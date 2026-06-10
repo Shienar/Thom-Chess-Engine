@@ -3,8 +3,8 @@
 
 #define CL_TARGET_OPENCL_VERSION 200
 #include <CL/cl.h>
-#include "../debug.h"
-#include "../analyze/neuralnet.h"
+#include "debug.h"
+#include "analyze/neuralnet.h"
 
 //Profiling
 #ifdef PERFT_KERNELS

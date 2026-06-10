@@ -2,9 +2,9 @@
 
 #define BITBOARD_H
 
-#include "../types.h"
-#include "../hashtables/hashtable.h"
-#include "../debug.h"
+#include "types.h"
+#include "hashtables/hashtable.h"
+#include "debug.h"
 
 #define WHITE 0
 #define BLACK 1
@@ -55,16 +55,17 @@
  * flags&32 == in_check_b
  */
 #define KINGSIDE_CASTLE_WHITE(flag) (flag&1)
-#define QUEENSIDE_CASTLE_WHITE(flag) ((flag&2)>>1)
-#define KINGSIDE_CASTLE_BLACK(flag) ((flag&4)>>2)
-#define QUEENSIDE_CASTLE_BLACK(flag) ((flag&8)>>3)
+#define QUEENSIDE_CASTLE_WHITE(flag) (flag&2)
+#define KINGSIDE_CASTLE_BLACK(flag) (flag&4)
+#define QUEENSIDE_CASTLE_BLACK(flag) (flag&8)
 #define BAN_KINGCASTLE_W(flag) (flag&=(~1))
 #define BAN_QUEENCASTLE_W(flag) (flag&=(~2))
 #define BAN_KINGCASTLE_B(flag) (flag&=(~4))
 #define BAN_QUEENCASTLE_B(flag) (flag&=(~8))
 
-#define IS_IN_CHECK_W(flag) ((flag&16)>>4)
-#define IS_IN_CHECK_B(flag) ((flag&32)>>5)
+#define IS_IN_CHECK_W(flag) ((flag&0x10))
+#define IS_IN_CHECK_B(flag) ((flag&0x20))
+#define IS_IN_CHECK_ANY(flag) ((flag&0x30))
 #define CHECK_W(flag) (flag|=16)
 #define CHECK_B(flag) (flag|=32)
 #define UNCHECK_W(flag) (flag&=(~16))

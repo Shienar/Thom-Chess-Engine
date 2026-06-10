@@ -3,11 +3,14 @@
 int printDebugMessages = 0;
 FILE* dbg_file = NULL;
 
+int this_pid;
+
 
 void enableDebugMessages() 
 {
     printDebugMessages = 1;
-    dbg_file = fopen("../debug.log", "a");
+    this_pid = (int) GETPID();
+    dbg_file = fopen(PROJECT_CWD "/debug.log", "a");
 }
 void disableDebugMessages() 
 {
@@ -28,7 +31,8 @@ void dbg_msg(const char* fileName, int lineNumber, const char* type, const char*
 
     va_list args;
     va_start(args, str);
-    fprintf(dbg_file, "%02d-%02d-%04d %02d:%02d:%02d | %s: %s: %d -- ", 
+    fprintf(dbg_file, "%06d | %02d-%02d-%04d %02d:%02d:%02d | %s: %s: %d -- ", 
+           this_pid,
            local_time->tm_mon + 1,
            local_time->tm_mday,
            local_time->tm_year + 1900,

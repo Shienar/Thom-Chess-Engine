@@ -1,7 +1,7 @@
-#include "../board/bitboard.h"
-#include "../board/moves.h" 
+#include "board/bitboard.h"
+#include "board/moves.h" 
+#include "debug.h"
 #include <string.h>
-#include "../debug.h"
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
 {
@@ -482,6 +482,10 @@ int movePiece(bitboard *board, move* m)
     assert(board);
     assert(m->startSquare >= 0 && m->startSquare <= 63 && m->endSquare >= 0 && m->endSquare <= 63);
 
+    //Clear the en passant hash early. clear the en passant square later.
+    //En passant square is required for legal moves, en passant hash can change by the end of the function.
+    board->hashCode ^= getEnPassantHash(board);
+
     switch(PIECE(m->piece))
     {
         case PAWN:
@@ -506,13 +510,11 @@ int movePiece(bitboard *board, move* m)
                 {
                     if(ISWHITE(m->piece)) 
                     {
-                        board->hashCode ^= getEnPassantHash(board);
                         board->enPassantSquare = m->endSquare - 8;
                         board->hashCode ^= getEnPassantHash(board);
                     }
                     else 
                     {
-                        board->hashCode ^= getEnPassantHash(board);
                         board->enPassantSquare = m->endSquare + 8;
                         board->hashCode ^= getEnPassantHash(board);
                     }
@@ -555,10 +557,10 @@ int movePiece(bitboard *board, move* m)
             }
             break;
         case ROOK:
-            if(m->startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
-            else if(m->startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
-            else if(m->startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
+            if(m->startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
+            else if(m->startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
             else if(m->startSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
+            else if(m->startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
         case KNIGHT:
         case BISHOP:
         case QUEEN:
@@ -569,14 +571,14 @@ int movePiece(bitboard *board, move* m)
             if(ISBLACK(m->piece)) 
             {
                 board->kingSquare_b = m->endSquare;
-                if(QUEENSIDE_CASTLE_BLACK(board->flags)) BAN_QUEENCASTLE_B(board->flags);
-                if(KINGSIDE_CASTLE_BLACK(board->flags)) BAN_KINGCASTLE_B(board->flags);
+                if(KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
+                if(QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
             }
             else 
             {
                 board->kingSquare_w = m->endSquare;
-                if(QUEENSIDE_CASTLE_WHITE(board->flags)) BAN_QUEENCASTLE_W(board->flags);
-                if(KINGSIDE_CASTLE_WHITE(board->flags)) BAN_KINGCASTLE_W(board->flags);
+                if(KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
+                if(QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
             }
 
             m->capturedPiece = findPieceOnSquare(board, m->endSquare);
@@ -592,19 +594,19 @@ int movePiece(bitboard *board, move* m)
             break;
     }
     
-    m->repetitionIndex = board->repetitionIndex;
+    m->lastChangeIndex = board->lastChangeIndex;
     moves_push(board, *m);
 
     if(ISROOK(m->capturedPiece))
     {
-            if(m->capturedPieceSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
-            else if(m->capturedPieceSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
-            else if(m->capturedPieceSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
+            if(m->capturedPieceSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
+            else if(m->capturedPieceSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
             else if(m->capturedPieceSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
+            else if(m->capturedPieceSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
     }
+
     if(!(ISPAWN(m->piece) && abs(m->startSquare - m->endSquare) == 16) && board->enPassantSquare != -1) 
     {
-        board->hashCode ^= getEnPassantHash(board);
         board->enPassantSquare = -1;
     }
 
@@ -627,7 +629,7 @@ int movePiece(bitboard *board, move* m)
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
     
-    if(m->capturedPiece != EMPTY_PIECE || ISPAWN(m->piece)) board->repetitionIndex = 0;
+    if(m->capturedPiece != EMPTY_PIECE || ISPAWN(m->piece)) board->lastChangeIndex = board->repetitionIndex;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
 
     return 0;
@@ -783,6 +785,22 @@ int moveFromStruct(bitboard* board, move m)
         }
     }
 
+    /*
+    uint64_t hc = getHashCode(board);
+    if(board->hashCode != hc)
+    {
+        uint64_t xor = hc ^ board->hashCode;
+        printf("Error! board code 0x%016llx != expected 0x%016llx (XOR = 0x%016llx)\n", board->hashCode, hc, xor);
+        for(int i = 780; i >= 0; i--)
+        {
+            if(zobrist_keys[i] == xor) printf("\tXOR = zobrist_keys[%d]\n", i);
+            break;
+        }
+        board_print(board, 1);
+        exit(0);
+    }
+    */
+
     return 0;
 }
 
@@ -791,12 +809,13 @@ move unmove(bitboard *board)
     assert(board);
 
     move m = moves_pop(board);
-    if(!m.startSquare && !m.endSquare)
+    if(!IS_VALID_MOVE(m))
     {
         DEBUG_ERROR("No move history to undo.");
         return (move){0};
     }
-    board->repetitionIndex = m.repetitionIndex;
+    board->repetitionIndex--;
+    board->lastChangeIndex = m.lastChangeIndex;
 
     if(m.promoteTo)
     {
@@ -823,17 +842,12 @@ move unmove(bitboard *board)
     }
     
     
-    if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
-    if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
-    if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
-    if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
+    if(KINGSIDE_CASTLE_WHITE(m.prevFlags) != KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
+    if(QUEENSIDE_CASTLE_WHITE(m.prevFlags) != QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
+    if(KINGSIDE_CASTLE_BLACK(m.prevFlags) != KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
+    if(QUEENSIDE_CASTLE_BLACK(m.prevFlags) != QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
 
     board->flags = m.prevFlags;
-    
-    if(KINGSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[768];
-    if(QUEENSIDE_CASTLE_WHITE(board->flags)) board->hashCode ^= zobrist_keys[769];
-    if(KINGSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[770];
-    if(QUEENSIDE_CASTLE_BLACK(board->flags)) board->hashCode ^= zobrist_keys[771];
 
     board->movesSinceLastChange = m.previousMovesSinceLastChange;
 

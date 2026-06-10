@@ -1,7 +1,7 @@
 #ifndef MAGICBOARDS
 #define MAGICBOARDS
 
-#include "bitboard.h"
+#include "board/bitboard.h"
 
 extern magic bishopMagics[64];
 extern magic rookMagics[64];

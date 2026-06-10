@@ -1,7 +1,7 @@
-#include "book.h"
-#include "../debug.h"
-#include "../board/bitboard.h"
-#include "../hashtables/hashtable.h"
+#include "analyze/book.h"
+#include "debug.h"
+#include "board/bitboard.h"
+#include "hashtables/hashtable.h"
 #include <stdint.h>
 
 uint64_t entryCount = 0;
@@ -10,7 +10,7 @@ polyglot_book_entry *entries = NULL;
 void loadBook()
 {
     if(entries) return;
-    FILE* input = fopen("../import/komodo.bin", "rb");
+    FILE* input = fopen(PROJECT_CWD "/import/komodo.bin", "rb");
     if(!input)
     {
         DEBUG_ERROR("Failed to read book file.");

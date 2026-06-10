@@ -1,11 +1,11 @@
-#include "./board/moves.h"
-#include "./board/bitboard.h"
+#include "board/moves.h"
+#include "board/bitboard.h"
 #include "debug.h"
-#include "./hashtables/transpositiontable.h"
-#include "./analyze/book.h"
-#include "./analyze/neuralnet.h"
-#include "./pyrrhic/tbprobe.h"
-#include "./analyze/engine.h"
+#include "hashtables/transpositiontable.h"
+#include "analyze/book.h"
+#include "analyze/neuralnet.h"
+#include "pyrrhic/tbprobe.h"
+#include "analyze/engine.h"
 #include <string.h>
 #include <omp.h>
 
@@ -26,7 +26,7 @@ int main(int argc, char** argv)
     int useBook = 0;
     int isReady = 0;
     
-    char sygyzyPath[1024] = "./sygyzy/";
+    char sygyzyPath[1024] = PROJECT_CWD "/sygyzy/";
     int isPathDirty = 1; //Has sygyzy been initialized with the current path?
 
     clock_t endTime; //Doubles as a terminate flag
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
                 printf("option name Threads type spin default 8 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default true\n");
-                printf("option name SygyzyPath type string default ./sygyzy/\n");
+                printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
                 printf("uciok\n");
@@ -70,13 +70,13 @@ int main(int argc, char** argv)
                 {
                     endTime = 0;
                     THREAD_WAIT(calculateThread);
-                    isCalculating = 0;
                 }
                 clear_tt(transpositionTable);
                 if(useBook) loadBook();
 
                 destroyRefreshTable(playingRefreshTable);
                 playingRefreshTable = createRefreshTable();
+                threadContext->accumulatorTable = playingRefreshTable;
                 break;
             }
             else if(strcmp(str, "setoption") == 0) 
@@ -158,13 +158,19 @@ int main(int argc, char** argv)
                         }
                         else if(strcmp(str, "SygyzyPath") == 0)
                         {
-                            str = _strtok(NULL, delim, &strtok_ptr);
-                            if(str) 
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                strncpy(sygyzyPath, str, 1023);
-                                sygyzyPath[1023] = '\0';
-                                isPathDirty = 1;
+                                if(strcmp(str, "value") == 0)
+                                {
+                                    if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) 
+                                    {
+                                        strncpy(sygyzyPath, str, 1023);
+                                        sygyzyPath[1023] = '\0';
+                                        isPathDirty = 1;
+                                    }
+                                }
                             }
+                            break;
                         }
                         else if(strcmp(str, "SygyzyProbeLimit") == 0)
                         {
@@ -246,8 +252,9 @@ int main(int argc, char** argv)
             {
                 if(isCalculating) 
                 {
-                    DEBUG_ERROR("Engine is already calculating.");
-                    break;
+                    DEBUG_INFO("Aborting search in progress.");
+                    endTime = 0;
+                    THREAD_WAIT(calculateThread);
                 }
                 isCalculating = 1;
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
@@ -325,8 +332,8 @@ int main(int argc, char** argv)
                     if(isInfinite) endTime = LONG_MAX;
                     else
                     {
-                        if(ISWHITE(board->turn)) endTime = (whiteTime / 20) + (whiteIncrement / 2);
-                        else endTime = (blackTime / 20) + (blackIncrement / 2);
+                        if(ISWHITE(board->turn)) endTime = (whiteTime / 40) + (whiteIncrement / 2);
+                        else endTime = (blackTime / 40) + (blackIncrement / 2);
                         endTime = clock() + (endTime * CLOCKS_PER_SEC) / 1000;
                     } 
                 }
@@ -336,7 +343,16 @@ int main(int argc, char** argv)
                 if(play)
                 {
                     THREAD_WAIT(calculateThread);
-                    moveFromStruct(board, threadContext->pvTable[0]);
+                    moveFromStruct(board, threadContext->pv.line[0]);
+                }
+                break;
+            }
+            else if(strcmp(str, "move") == 0)
+            {
+                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                {
+                    move m = getStructFromString(board, str);
+                    if(IS_VALID_MOVE(m)) moveFromStruct(board, m);
                 }
                 break;
             }

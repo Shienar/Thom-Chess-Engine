@@ -54,7 +54,7 @@ double* host_lossbuffer = NULL;
 
 char* getKernelFunctions()
 {
-    FILE* input = fopen("../src/gpu/kernels.cl", "rb"); 
+    FILE* input = fopen(PROJECT_CWD "/src/gpu/kernels.cl", "rb"); 
     if(!input)
     {
         DEBUG_ERROR("Cannot locate GPU kernel functions.");
