@@ -22,10 +22,10 @@
  * cosine annealing is done using timestamp in enqueueKernels()
  */
 #define MAX_LR 8e-4f
-#define MIN_LR 2.5e-6f
-#define INTERVAL_SCALE 2
+#define MIN_LR 1e-5f
+#define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
-#define MAX_INTERVALS 9
+#define MAX_INTERVALS 20
 #define LOOKAHEAD_RANGE 10
 
 #define KERNEL_COUNT 10
@@ -50,7 +50,7 @@ typedef struct {
             cl_kernel calculateGradient2;
             cl_kernel calculateGradient1;
             cl_kernel adamw;
-            cl_kernel lazyadam;
+            cl_kernel inputadamw;
             cl_kernel lookahead;
         };
         cl_kernel arr[KERNEL_COUNT];
@@ -133,8 +133,6 @@ typedef struct {
             cl_mem v_bias2;
             cl_mem v_bias3;
             cl_mem v_bias4;
-
-            cl_mem sparseTimestamps;
         };
         cl_mem arr[MEM_COUNT];
     } mem;
@@ -149,16 +147,6 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
                                                         short* h_active_B, float* h_expected_B, char* h_output_B,
                                                         double* h_lossbuffer);
 void freeOpenCL();
-
-#define ENQUEUE_LAZY_ADAM(weights, t, gradient, firstMoment, secondMoment, size, learningRate, rho_inf, event) \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 0, sizeof(cl_mem), &weights); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 1, sizeof(cl_mem), &t); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 2, sizeof(cl_mem), &gradient); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 3, sizeof(cl_mem), &firstMoment); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 4, sizeof(cl_mem), &secondMoment); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 5, sizeof(cl_float), &learningRate); \
-    clSetKernelArg(opencl_context.kernels.lazyadam, 6, sizeof(cl_float), &rho_inf); \
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.lazyadam, 1, NULL, &size, NULL, 0, NULL, ENQUEUE_EVENT(event));
 
 #define LOOKAHEAD_UPDATE(fastWeights, slowWeights, size) \
     clSetKernelArg(opencl_context.kernels.lookahead, 0, sizeof(cl_mem), &fastWeights); \

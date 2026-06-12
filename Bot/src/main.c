@@ -451,8 +451,13 @@ int main(int argc, char** argv)
             {
                 loadInputAccumulator(board, playerAccumulator, WHITE);
                 loadInputAccumulator(board, playerAccumulator, BLACK);
-                float eval = forwardPropagate(board->turn, playerAccumulator, __builtin_popcountll(board->pieces_all));
+                float eval = forwardPropagate(board, playerAccumulator);
                 printf("%f\n", eval);
+                break;
+            }
+            else if(strcmp(str, "netinfo") == 0)
+            {
+                print_network_statistics();
                 break;
             }
             else if(strcmp(str, "quit") == 0) 

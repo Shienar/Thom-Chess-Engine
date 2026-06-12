@@ -150,7 +150,7 @@ void print_weight_stats(const char* name, const float* data, size_t size)
 
 void print_network_statistics() 
 {
-    assert(nnue_weights);
+    if(!nnue_weights) return;
 
     print_weight_stats("weights1", &nnue_weights->weights1[0][0], sizeof(nnue_weights->weights1) / sizeof(float));
     print_weight_stats("weights1_bias", nnue_weights->weights1_bias, sizeof(nnue_weights->weights1_bias) / sizeof(float));
@@ -225,9 +225,11 @@ float calculateOutputLayer(float* h3, float weights[THIRD_HIDDEN_LAYER_NODES], f
 
     return horizontalSIMDSum(v_output) + bias;
 }
-
-float forwardPropagate(int turn, accumulator* acc, int pieceCount)
+float forwardPropagate(bitboard* board, accumulator* acc)
 {
+    int turn = board->turn;
+    int pieceCount = __builtin_popcountll(board->pieces_all);
+    
     int bucket = (pieceCount - 1) / 4;
 
     //create perspective-aligned accumulator (us vs them)
@@ -360,7 +362,12 @@ void train(int maxIterations, float maxAllowedError)
     
     align_alloc(double*, loss_buffer, MINIBATCH_SIZE * sizeof(double), 4096);
     
-    initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B, loss_buffer);
+    int cl_errorcode = initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B, loss_buffer);
+    if(cl_errorcode != 1) 
+    {
+        DEBUG_ERROR("Failed to init OpenCL - Error Code: %d", cl_errorcode);
+        exit(1);
+    }
 
     int totalIterations = 0;
 
@@ -397,46 +404,42 @@ void train(int maxIterations, float maxAllowedError)
                 if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
                 else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
 
-                uint64_t inputs[24] = {0};
+                uint64_t inputs[2 * TRACKED_PIECES] = {0};
 
                 inputs[0] = board->pieces[WHITE_PAWN];
                 inputs[1] = board->pieces[WHITE_KNIGHT];
                 inputs[2] = board->pieces[WHITE_BISHOP];
                 inputs[3] = board->pieces[WHITE_ROOK];
                 inputs[4] = board->pieces[WHITE_QUEEN];
-                inputs[5] = board->pieces[WHITE_KING];
-                inputs[6] = board->pieces[BLACK_PAWN];
-                inputs[7] = board->pieces[BLACK_KNIGHT];
-                inputs[8] = board->pieces[BLACK_BISHOP];
-                inputs[9] = board->pieces[BLACK_ROOK];
-                inputs[10] = board->pieces[BLACK_QUEEN];
-                inputs[11] = board->pieces[BLACK_KING];
+                inputs[5] = board->pieces[BLACK_PAWN];
+                inputs[6] = board->pieces[BLACK_KNIGHT];
+                inputs[7] = board->pieces[BLACK_BISHOP];
+                inputs[8] = board->pieces[BLACK_ROOK];
+                inputs[9] = board->pieces[BLACK_QUEEN];
 
-                inputs[12] = FLIP_MASK(board->pieces[BLACK_PAWN]);
-                inputs[13] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
-                inputs[14] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
-                inputs[15] = FLIP_MASK(board->pieces[BLACK_ROOK]);
-                inputs[16] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
-                inputs[17] = FLIP_MASK(board->pieces[BLACK_KING]);
-                inputs[18] = FLIP_MASK(board->pieces[WHITE_PAWN]);
-                inputs[19] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
-                inputs[20] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
-                inputs[21] = FLIP_MASK(board->pieces[WHITE_ROOK]);
-                inputs[22] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
-                inputs[23] = FLIP_MASK(board->pieces[WHITE_KING]);
+                inputs[10] = FLIP_MASK(board->pieces[BLACK_PAWN]);
+                inputs[11] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+                inputs[12] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+                inputs[13] = FLIP_MASK(board->pieces[BLACK_ROOK]);
+                inputs[14] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+                inputs[15] = FLIP_MASK(board->pieces[WHITE_PAWN]);
+                inputs[16] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+                inputs[17] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+                inputs[18] = FLIP_MASK(board->pieces[WHITE_ROOK]);
+                inputs[19] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
 
                 if(getColumn(board->kingSquare_w) > 3)
                 {
-                    for(int p = 0; p < 12; p++) inputs[p] = mirrorBoard(inputs[p]);
+                    for(int p = 0; p < TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                 }
                 if(getColumn(board->kingSquare_b) > 3)
                 {
-                    for(int p = 12; p < 24; p++) inputs[p] = mirrorBoard(inputs[p]);
+                    for(int p = TRACKED_PIECES; p < 2 * TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                 }
 
                 for(int color = 0; color < 2; color++)
                 {
-                    int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * 768 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 768;
+                    int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] * BITS_PER_BUCKET : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * BITS_PER_BUCKET;
 
                     int trackedInputs = 0;
 
@@ -444,9 +447,9 @@ void train(int maxIterations, float maxAllowedError)
                     // side = 0 if color matches board->turn
                     int side = (color != board->turn);
                     
-                    for(int piece = 0; piece < 12; piece++)
+                    for(int piece = 0; piece < TRACKED_PIECES; piece++)
                     {
-                        uint64_t mask = inputs[12 * color + piece];
+                        uint64_t mask = inputs[TRACKED_PIECES * color + piece];
                         while(mask)
                         {
                             if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
@@ -520,46 +523,43 @@ void train(int maxIterations, float maxAllowedError)
                     if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
                     else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
 
-                    uint64_t inputs[24] = {0};
+                    uint64_t inputs[2 * TRACKED_PIECES] = {0};
 
                     inputs[0] = board->pieces[WHITE_PAWN];
                     inputs[1] = board->pieces[WHITE_KNIGHT];
                     inputs[2] = board->pieces[WHITE_BISHOP];
                     inputs[3] = board->pieces[WHITE_ROOK];
                     inputs[4] = board->pieces[WHITE_QUEEN];
-                    inputs[5] = board->pieces[WHITE_KING];
-                    inputs[6] = board->pieces[BLACK_PAWN];
-                    inputs[7] = board->pieces[BLACK_KNIGHT];
-                    inputs[8] = board->pieces[BLACK_BISHOP];
-                    inputs[9] = board->pieces[BLACK_ROOK];
-                    inputs[10] = board->pieces[BLACK_QUEEN];
-                    inputs[11] = board->pieces[BLACK_KING];
+                    inputs[5] = board->pieces[BLACK_PAWN];
+                    inputs[6] = board->pieces[BLACK_KNIGHT];
+                    inputs[7] = board->pieces[BLACK_BISHOP];
+                    inputs[8] = board->pieces[BLACK_ROOK];
+                    inputs[9] = board->pieces[BLACK_QUEEN];
 
-                    inputs[12] = FLIP_MASK(board->pieces[BLACK_PAWN]);
-                    inputs[13] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
-                    inputs[14] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
-                    inputs[15] = FLIP_MASK(board->pieces[BLACK_ROOK]);
-                    inputs[16] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
-                    inputs[17] = FLIP_MASK(board->pieces[BLACK_KING]);
-                    inputs[18] = FLIP_MASK(board->pieces[WHITE_PAWN]);
-                    inputs[19] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
-                    inputs[20] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
-                    inputs[21] = FLIP_MASK(board->pieces[WHITE_ROOK]);
-                    inputs[22] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
-                    inputs[23] = FLIP_MASK(board->pieces[WHITE_KING]);
+                    inputs[10] = FLIP_MASK(board->pieces[BLACK_PAWN]);
+                    inputs[11] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+                    inputs[12] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+                    inputs[13] = FLIP_MASK(board->pieces[BLACK_ROOK]);
+                    inputs[14] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+                    inputs[15] = FLIP_MASK(board->pieces[WHITE_PAWN]);
+                    inputs[16] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+                    inputs[17] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+                    inputs[18] = FLIP_MASK(board->pieces[WHITE_ROOK]);
+                    inputs[19] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
 
                     if(getColumn(board->kingSquare_w) > 3)
                     {
-                        for(int p = 0; p < 12; p++) inputs[p] = mirrorBoard(inputs[p]);
+                        for(int p = 0; p < TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                     }
                     if(getColumn(board->kingSquare_b) > 3)
                     {
-                        for(int p = 12; p < 24; p++) inputs[p] = mirrorBoard(inputs[p]);
+                        for(int p = TRACKED_PIECES; p < 2 * TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                     }
+
 
                     for(int color = 0; color < 2; color++)
                     {
-                        int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * 768 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 768;
+                        int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * BITS_PER_BUCKET : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * BITS_PER_BUCKET;
 
                         int trackedInputs = 0;
 
@@ -567,9 +567,9 @@ void train(int maxIterations, float maxAllowedError)
                         // side = 0 if color matches board->turn
                         int side = (color != board->turn);
                         
-                        for(int piece = 0; piece < 12; piece++)
+                        for(int piece = 0; piece < TRACKED_PIECES; piece++)
                         {
-                            uint64_t mask = inputs[12 * color + piece];
+                            uint64_t mask = inputs[TRACKED_PIECES * color + piece];
                             while(mask)
                             {
                                 if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
@@ -626,46 +626,42 @@ void train(int maxIterations, float maxAllowedError)
                     if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
                     else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
 
-                    uint64_t inputs[24] = {0};
+                    uint64_t inputs[2 * TRACKED_PIECES] = {0};
 
                     inputs[0] = board->pieces[WHITE_PAWN];
                     inputs[1] = board->pieces[WHITE_KNIGHT];
                     inputs[2] = board->pieces[WHITE_BISHOP];
                     inputs[3] = board->pieces[WHITE_ROOK];
                     inputs[4] = board->pieces[WHITE_QUEEN];
-                    inputs[5] = board->pieces[WHITE_KING];
-                    inputs[6] = board->pieces[BLACK_PAWN];
-                    inputs[7] = board->pieces[BLACK_KNIGHT];
-                    inputs[8] = board->pieces[BLACK_BISHOP];
-                    inputs[9] = board->pieces[BLACK_ROOK];
-                    inputs[10] = board->pieces[BLACK_QUEEN];
-                    inputs[11] = board->pieces[BLACK_KING];
+                    inputs[5] = board->pieces[BLACK_PAWN];
+                    inputs[6] = board->pieces[BLACK_KNIGHT];
+                    inputs[7] = board->pieces[BLACK_BISHOP];
+                    inputs[8] = board->pieces[BLACK_ROOK];
+                    inputs[9] = board->pieces[BLACK_QUEEN];
 
-                    inputs[12] = FLIP_MASK(board->pieces[BLACK_PAWN]);
-                    inputs[13] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
-                    inputs[14] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
-                    inputs[15] = FLIP_MASK(board->pieces[BLACK_ROOK]);
-                    inputs[16] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
-                    inputs[17] = FLIP_MASK(board->pieces[BLACK_KING]);
-                    inputs[18] = FLIP_MASK(board->pieces[WHITE_PAWN]);
-                    inputs[19] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
-                    inputs[20] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
-                    inputs[21] = FLIP_MASK(board->pieces[WHITE_ROOK]);
-                    inputs[22] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
-                    inputs[23] = FLIP_MASK(board->pieces[WHITE_KING]);
+                    inputs[10] = FLIP_MASK(board->pieces[BLACK_PAWN]);
+                    inputs[11] = FLIP_MASK(board->pieces[BLACK_KNIGHT]);
+                    inputs[12] = FLIP_MASK(board->pieces[BLACK_BISHOP]);
+                    inputs[13] = FLIP_MASK(board->pieces[BLACK_ROOK]);
+                    inputs[14] = FLIP_MASK(board->pieces[BLACK_QUEEN]);
+                    inputs[15] = FLIP_MASK(board->pieces[WHITE_PAWN]);
+                    inputs[16] = FLIP_MASK(board->pieces[WHITE_KNIGHT]);
+                    inputs[17] = FLIP_MASK(board->pieces[WHITE_BISHOP]);
+                    inputs[18] = FLIP_MASK(board->pieces[WHITE_ROOK]);
+                    inputs[19] = FLIP_MASK(board->pieces[WHITE_QUEEN]);
 
                     if(getColumn(board->kingSquare_w) > 3)
                     {
-                        for(int p = 0; p < 12; p++) inputs[p] = mirrorBoard(inputs[p]);
+                        for(int p = 0; p < TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                     }
                     if(getColumn(board->kingSquare_b) > 3)
                     {
-                        for(int p = 12; p < 24; p++) inputs[p] = mirrorBoard(inputs[p]);
+                        for(int p = TRACKED_PIECES; p < 2 * TRACKED_PIECES; p++) inputs[p] = mirrorBoard(inputs[p]);
                     }
 
                     for(int color = 0; color < 2; color++)
                     {
-                        int baseIndex = (color == 0) ? kingBuckets[board->kingSquare_w] * 768 : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * 768;
+                        int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] * BITS_PER_BUCKET : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * BITS_PER_BUCKET;
 
                         int trackedInputs = 0;
 
@@ -673,9 +669,9 @@ void train(int maxIterations, float maxAllowedError)
                         // side = 0 if color matches board->turn
                         int side = (color != board->turn);
                         
-                        for(int piece = 0; piece < 12; piece++)
+                        for(int piece = 0; piece < TRACKED_PIECES; piece++)
                         {
-                            uint64_t mask = inputs[12 * color + piece];
+                            uint64_t mask = inputs[TRACKED_PIECES * color + piece];
                             while(mask)
                             {
                                 if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);

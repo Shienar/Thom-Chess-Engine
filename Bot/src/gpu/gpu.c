@@ -110,7 +110,7 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     free(kernelSource);
     kernelSource = NULL;
 
-    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, "-g -cl-fast-relaxed-math", NULL, NULL); 
+    err = clBuildProgram(opencl_context.program, 1, &opencl_context.device, "-g -cl-fast-relaxed-math -cl-std=CL2.0", NULL, NULL); 
     
     if(err)
     {
@@ -128,7 +128,7 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     opencl_context.kernels.calculateGradient2 = clCreateKernel(opencl_context.program, "calculateGradient2", &err);
     opencl_context.kernels.calculateGradient1 = clCreateKernel(opencl_context.program, "calculateGradient1", &err);
     opencl_context.kernels.adamw = clCreateKernel(opencl_context.program, "adamW", &err);
-    opencl_context.kernels.lazyadam = clCreateKernel(opencl_context.program, "lazyAdam", &err);
+    opencl_context.kernels.inputadamw = clCreateKernel(opencl_context.program, "inputAdamW", &err);
     opencl_context.kernels.lookahead = clCreateKernel(opencl_context.program, "lookahead_update", &err);
     
     opencl_mem.mem.activeInputs_A = clCreateBuffer(opencl_context.context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, MINIBATCH_SIZE * 64 * sizeof(short), host_activeInputs_A, NULL);
@@ -203,10 +203,6 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     opencl_mem.mem.v_bias2 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, bias2Size, NULL, NULL);
     opencl_mem.mem.v_bias3 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, bias3Size, NULL, NULL);
     opencl_mem.mem.v_bias4 = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, bias4Size, NULL, NULL);
-
-    int zero_d = 0;
-    opencl_mem.mem.sparseTimestamps = clCreateBuffer(opencl_context.context, CL_MEM_READ_WRITE, sizeof(int) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, NULL, NULL);
-    clEnqueueFillBuffer(opencl_context.queue, opencl_mem.mem.sparseTimestamps, &zero_d, sizeof(int), 0, sizeof(int) * ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS, 0, NULL, NULL);
 
     clEnqueueWriteBuffer(opencl_context.queue, opencl_mem.mem.weights1_slow, CL_TRUE, 0, weight1Size, (void*)nnue_weights->weights1, 0, NULL, NULL);
     clEnqueueCopyBuffer(opencl_context.queue, opencl_mem.mem.weights1_slow, opencl_mem.mem.weights1_fast, 0, 0, weight1Size, 0, NULL, NULL);
@@ -322,6 +318,11 @@ int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expect
     clSetKernelArg(opencl_context.kernels.calculateGradient1, 2, sizeof(cl_mem), &opencl_mem.mem.gradient1Sum);
     clSetKernelArg(opencl_context.kernels.calculateGradient1, 3, sizeof(cl_mem), &opencl_mem.mem.gradientBias1Sum);
 
+    //Weights1
+    clSetKernelArg(opencl_context.kernels.inputadamw, 0, sizeof(cl_mem), &opencl_mem.mem.weights1_fast); 
+    clSetKernelArg(opencl_context.kernels.inputadamw, 1, sizeof(cl_mem), &opencl_mem.mem.gradient1Sum);
+    clSetKernelArg(opencl_context.kernels.inputadamw, 2, sizeof(cl_mem), &opencl_mem.mem.m_weights1);
+    clSetKernelArg(opencl_context.kernels.inputadamw, 3, sizeof(cl_mem), &opencl_mem.mem.v_weights1);
     //Weights2
     clSetKernelArg(opencl_context.kernels.adamw, 0, sizeof(cl_mem), &opencl_mem.mem.weights2_fast);
     clSetKernelArg(opencl_context.kernels.adamw, 1, sizeof(cl_mem), &opencl_mem.mem.gradient2Sum);
@@ -428,8 +429,8 @@ void enqueueKernels(int bufferSide, int doBackprop)
         cl_event event_accum, event_fprop, event_back, event_grad4, event_grad3, event_grad2, event_grad1, event_w1, event_dense;
     #endif
 
-    size_t calcAccumSize[1] = {MINIBATCH_SIZE * ACCUMULATOR_NODES};
-    size_t calcAccumSize_Local[1] = {ACCUMULATOR_NODES_PER_SIDE};
+    size_t calcAccumSize[1] = { MINIBATCH_SIZE * 2 * 32 };
+    size_t calcAccumSize_Local[1] = { 32 };
     clSetKernelArg(opencl_context.kernels.calculateAccumulator, 0, sizeof(cl_mem), (bufferSide == INPUT_GROUP_A) ? &opencl_mem.mem.activeInputs_A : &opencl_mem.mem.activeInputs_B);
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.calculateAccumulator, 1, NULL, calcAccumSize, calcAccumSize_Local, 0, NULL, ENQUEUE_EVENT(event_accum));
     
@@ -474,16 +475,18 @@ void enqueueKernels(int bufferSide, int doBackprop)
     if (rho_timestamp > 5.0f) rectificationTerm = sqrt(((rho_timestamp - 4.0f) * (rho_timestamp - 2.0f) * rho_inf) / ((rho_inf - 4.0f) * (rho_inf - 2.0f) * rho_timestamp));
     else rectificationTerm = 0.0f;
 
-    
-
     clSetKernelArg(opencl_context.kernels.adamw, 28, sizeof(cl_float), &lr);
     clSetKernelArg(opencl_context.kernels.adamw, 29, sizeof(cl_float), &biasCorrection1);
     clSetKernelArg(opencl_context.kernels.adamw, 30, sizeof(cl_float), &biasCorrection2);
     clSetKernelArg(opencl_context.kernels.adamw, 31, sizeof(cl_float), &rectificationTerm);
     clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.adamw, 1, NULL, &weight2Count, NULL, 0, NULL, ENQUEUE_EVENT(event_dense));
 
-    ENQUEUE_LAZY_ADAM(opencl_mem.mem.weights1_fast, opencl_mem.mem.sparseTimestamps, opencl_mem.mem.gradient1Sum, opencl_mem.mem.m_weights1, opencl_mem.mem.v_weights1, weight1Count, lr, rho_inf, event_w1);
-
+    clSetKernelArg(opencl_context.kernels.inputadamw, 4, sizeof(cl_float), &lr); 
+    clSetKernelArg(opencl_context.kernels.inputadamw, 5, sizeof(cl_float), &biasCorrection1);
+    clSetKernelArg(opencl_context.kernels.inputadamw, 6, sizeof(cl_float), &biasCorrection2);
+    clSetKernelArg(opencl_context.kernels.inputadamw, 7, sizeof(cl_float), &rectificationTerm);
+    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.inputadamw, 1, NULL, &weight1Count, NULL, 0, NULL, ENQUEUE_EVENT(event_w1));
+ 
     if(timestamp % LOOKAHEAD_RANGE == 0)
     {
         LOOKAHEAD_UPDATE(opencl_mem.mem.weights1_fast, opencl_mem.mem.weights1_slow, weight1Count);
@@ -502,6 +505,12 @@ void enqueueKernels(int bufferSide, int doBackprop)
         //which slows down execution.
         clWaitForEvents(1, &event_dense); 
 
+        //The total time is not the sum of all parts - there is some overlap.
+        cl_ulong start, end;
+        clGetEventProfilingInfo(event_accum, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+        clGetEventProfilingInfo(event_dense, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+        double total_time = (end - start) / 1000000.0;
+
         printf("\n--- Profiling ---\n");
         print_prof("Accumulator", event_accum);
         print_prof("Forward Propagation", event_fprop);
@@ -512,6 +521,8 @@ void enqueueKernels(int bufferSide, int doBackprop)
         print_prof("Gradient 1", event_grad1);
         print_prof("W1", event_w1);
         print_prof("Dense", event_dense);
+        printf("%-24s | %0.4f ms\n", "Total", total_time);
+
         printf("-----------------\n");
     #endif
 

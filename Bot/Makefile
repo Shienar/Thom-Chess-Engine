@@ -7,9 +7,13 @@ CFLAGS += -O3
 CFLAGS += -DNDEBUG
 
 # Profiling
-# CFLAGS += -DPERFT_KERNELS
-# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
-# CFLAGS += -pg -no-pie
+ifdef KPERFT
+    CFLAGS += -DPERFT_KERNELS
+endif
+ifdef PROF
+    # gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
+    CFLAGS += -pg -no-pie
+endif
 
 SRC_DIR = src
 TGT_DIR = target

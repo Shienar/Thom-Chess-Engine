@@ -291,12 +291,119 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     return size;
 }
 
+uint64_t getAttackers(bitboard* board, int square, int occupied)
+{
+    uint64_t attackers = 0;
+
+    //Pawns.
+    attackers |= (pawnAttacks[WHITE][square] & board->pieces[BLACK_PAWN]);
+    attackers |= (pawnAttacks[BLACK][square] & board->pieces[WHITE_PAWN]);
+
+    //Knights
+    attackers |= (knightMoves(0, square) & (board->pieces[WHITE_KNIGHT] | board->pieces[BLACK_KNIGHT]));
+
+    //Sliding pieces
+    uint64_t bishopqueen = board->pieces[WHITE_BISHOP] | board->pieces[BLACK_BISHOP] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
+    uint64_t rookqueen = board->pieces[WHITE_ROOK] | board->pieces[BLACK_ROOK] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
+
+    attackers |= (bishopMoves(0, occupied, square) & bishopqueen);
+    attackers |= (rookMoves(0, occupied, square) & rookqueen);
+
+    //Kings
+    attackers |= pyrrhicKingAttacks(square) & (board->pieces[WHITE_KING] | board->pieces[BLACK_KING]);
+
+    return attackers;
+}
+
+int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
+{
+    assert(pieceType);
+    for(int pc = side; pc <= BLACK_KING; pc+=2)
+    {
+        uint64_t attackingPiecesOfType = attackers & board->pieces[pc];
+        if(attackingPiecesOfType)
+        {
+            *pieceType = pc;
+            return __builtin_ctzll(attackingPiecesOfType);
+        }
+    }
+    return -1;
+}
+
+static const int pieceValuesSEE[15] = {100, 100, 300, 300, 325, 325, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
+int staticExchangeEvaluation(bitboard* board, move m)
+{
+    int gain[32];
+    int ply = 0;
+
+    int side = COLOR(m.piece);
+
+    //Handle the first moved piece
+    gain[0] = pieceValuesSEE[m.capturedPiece];
+
+    uint64_t removeLastMovedMask = ~singleBitMask(m.startSquare);
+
+    uint64_t occupied = board->pieces_all & removeLastMovedMask;
+    uint64_t attackers = getAttackers(board, m.endSquare, occupied) & removeLastMovedMask;
+
+    side = FLIP_COLOR(side);
+
+    int attackerSquare;
+    int attackerPiece;
+
+    if(ISPAWN(m.piece) || ISBISHOP(m.piece) || ISROOK(m.piece) || ISQUEEN(m.piece))
+    {
+        attackers |= getAttackers(board, m.endSquare, occupied);
+    }
+
+    while(1)
+    {
+        attackerSquare = findLVA(board, attackers, side, &attackerPiece);
+        if(attackerSquare == -1) break;
+
+        ply++;
+        gain[ply] = pieceValuesSEE[attackerPiece] - gain[ply - 1];
+
+        if(gain[ply] < 0 && -gain[ply] > pieceValuesSEE[attackerPiece])
+        {
+            ply--;
+            break;
+        }
+
+        removeLastMovedMask = ~singleBitMask(attackerSquare);
+        occupied &= removeLastMovedMask;
+        attackers &= removeLastMovedMask;
+        if(ISPAWN(attackerPiece) || ISBISHOP(attackerPiece) || ISROOK(attackerPiece) || ISQUEEN(attackerPiece))
+        {
+            attackers |= getAttackers(board, m.endSquare, occupied);
+        }
+
+        side = FLIP_COLOR(side);
+    }
+
+    while(ply > 0)
+    {
+        if(gain[ply] < 0) gain[ply - 1] = 0;
+        else
+        {
+            int capture = -gain[ply];
+            if(capture < gain[ply - 1])
+            {
+                gain[ply - 1] = capture;
+            }
+        }
+        ply--;
+    }
+    return gain[0];
+}
+
+
 //Only used when move ordering matters.
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* requiredMoves)
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
-    iter->moveScores = malloc(MAX_MOVES * sizeof(char));
+    iter->moveScores = malloc(MAX_MOVES * sizeof(int16_t));
     iter->count = 0;
     iter->visitedCount = 0;
 
@@ -320,14 +427,17 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
     for(int i = 0; i < iter->count; i++)
     {
         move m = iter->moveList[i];
-        iter->moveScores[i] = 0;
 
-        int pieceScore = PIECE(m.piece);
-        if (pieceScore == KING) pieceScore = 1;
+        if (pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) 
+            iter->moveScores[i] = INT8_MAX;
+        else if (m.capturedPiece != EMPTY_PIECE) 
+        {
+            int seeValue = staticExchangeEvaluation(board, m);
 
-        if (pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare)  iter->moveScores[i] = INT8_MAX;
-        else if (m.capturedPiece != EMPTY_PIECE) iter->moveScores[i] = 50 + (PIECE(m.capturedPiece)) - pieceScore;
-        else iter->moveScores[i] = pieceScore;
+            if(seeValue >= 0) iter->moveScores[i] = 1000 + seeValue;
+            else iter->moveScores[i] = -1000 + seeValue;
+        }
+        else iter->moveScores[i] = (ISKING(m.piece)) ? 1 : PIECE(m.piece);
 
     }
 

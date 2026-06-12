@@ -98,7 +98,7 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
         if (entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
     }
      
-    float best = forwardPropagate(board->turn, context->accumulator, __builtin_popcountll(board->pieces_all));
+    float best = forwardPropagate(board, context->accumulator);
     
     table_entry_tt shallowEntry = {
         .depth = 0,
@@ -158,12 +158,10 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
     
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(depth == 0 || (context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor) 
+    if(depth == 0 || (context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
     {
         return quiesce(context, alpha, beta, ply);
     }
-    
-    if(ply >= MAX_PLY - 1) return forwardPropagate(board->turn, context->accumulator, __builtin_popcountll(board->pieces_all));
 
     //Mate distance pruning for non-root nodes.
     if(maxDepth != depth)
@@ -214,7 +212,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
     if(old_tt_entry) score = old_tt_entry->evaluation;
     else
     {
-        score = forwardPropagate(board->turn, context->accumulator, __builtin_popcountll(board->pieces_all));
+        score = forwardPropagate(board, context->accumulator);
         table_entry_tt shallowEntry = {
             .depth = 0,
             .hashCode = board->hashCode,
@@ -263,7 +261,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
         {
 
             //Move count pruning
-            if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth]) examineQuiets = 0;
+            //if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth]) examineQuiets = 0;
 
             if(!moveFromStruct(board, *currentMove))
             {

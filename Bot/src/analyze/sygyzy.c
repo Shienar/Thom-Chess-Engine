@@ -6,7 +6,8 @@ void getFromPyrrhic(bitboard* board, move* dest, unsigned result)
     dest->startSquare = TB_RESULT_FROM(result);
     dest->piece = findPieceOnSquare(board, dest->startSquare);
 
-    if(TB_RESULT_IS_QPROMO(result)) dest->promoteTo = QUEEN;
+    if(!ISPAWN(dest->piece)) dest->promoteTo = 0;
+    else if(TB_RESULT_IS_QPROMO(result)) dest->promoteTo = QUEEN;
     else if(TB_RESULT_IS_RPROMO(result)) dest->promoteTo = ROOK;
     else if(TB_RESULT_IS_BPROMO(result)) dest->promoteTo = BISHOP;
     else if(TB_RESULT_IS_NPROMO(result)) dest->promoteTo = KNIGHT;
@@ -47,7 +48,9 @@ void filterSygyzyMoves(bitboard* board, move* requiredMoves)
         if(moveResults[i] == TB_RESULT_FAILED) break;
         
         if(TB_GET_WDL(moveResults[i]) == TB_GET_WDL(result) && TB_GET_DTZ(moveResults[i]) <= TB_GET_DTZ(result))
+        {
             getFromPyrrhic(board, &requiredMoves[insertIndex++], moveResults[i]);
+        }
     }
 }
 

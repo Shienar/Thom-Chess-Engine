@@ -2,17 +2,19 @@
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 
 #define MINIBATCH_SIZE 16384
-#define INPUT_BITS 20480
-#define HALF_INPUT_BITS 10240
+#define INPUT_BITS 12800
+#define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
-#define ACCUMULATOR_NODES_PER_SIDE 256
+#define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
+#define VECTOR_ACCUMULATOR_NODES (ACCUMULATOR_NODES / 8)
+#define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 8)
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_BUCKETS 1
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
-#define ADAM_EPSILON 1e-15f
+#define ADAM_EPSILON 1e-8f
 #define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
@@ -21,31 +23,10 @@
 
 /******* UTIL *******/
 
-inline float screlu(float x)
-{
-    float y = clamp(x, 0.0f, 1.0f);
-    return y * y;
-} 
-
-inline float screlu_derivative(float x)
-{
-    return (((x > 0.0f) & (x < 1.0f)) ? (2.0f*x) : 0.0f );
-}
-
-inline float crelu(float x)
-{
-    return clamp(x, 0.0f, 1.0f);
-}
-
-inline float crelu_derivative(float x)
-{
-    return (float) ((x > 0.0f) & (x < 1.0f));
-}
-
-inline float sigmoid(float x)
-{
-    return 1.0f / (1.0f + exp(-x));
-}
+inline float screlu(float x) { float y = clamp(x, 0.0f, 1.0f); return y * y; }
+inline float screlu_derivative(float x) { return (((x > 0.0f) & (x < 1.0f)) ? (2.0f*x) : 0.0f ); }
+inline float crelu_derivative(float x) { return (float) ((x > 0.0f) & (x < 1.0f)); }
+inline float sigmoid(float x) { return 1.0f / (1.0f + native_exp(-x)); }
 
 //From https://streamhpc.com/blog/2016-02-09/atomic-operations-for-floats-in-opencl-improved/
 inline void AtomicAddFloat(volatile __global float* source, const float operand )
@@ -84,34 +65,31 @@ inline void AtomicAddDouble(volatile __global double* source, const double opera
 
 /******* Forward Propagation *******/
 
-//~ 3.5 ms
+//~ 0.95 ms
 __kernel void calculateAccumulator(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
-                                    __global const float* weights,          //shared
-                                    __global const float* bias,             //shared
-                                    __global float* output)  //contains every activated output in entire batch
+                                    __global const float8* weights,          //shared
+                                    __global const float8* bias,             //shared
+                                    __global float8* output)  //contains every raw output in entire batch
 {
-    int globalId = get_global_id(0); // All output nodes.
-    int localId  = get_local_id(0);  // The output node for our side. (0-255)
+    int groupID = get_group_id(0);  // 2 groups per batch item
+    int localID = get_local_id(0);  // 0 to 31
 
-    int totalSideIndex = globalId / ACCUMULATOR_NODES_PER_SIDE;
-    int batchIndex = totalSideIndex / 2; //2 sides per batch.
-    int side = totalSideIndex % 2;
+    int batchIndex = groupID >> 1;      // groupId / 2
+    int side       = groupID & 1;       // groupId % 2
 
-    __local short mySideActiveInputs[32];
-    
-    if(localId < 32)   mySideActiveInputs[localId] = activeInputs[batchIndex * 64 + (side * 32) + localId];
-    barrier(CLK_LOCAL_MEM_FENCE);
+    int offset = batchIndex * 64 + 32 * side;
+    short myFeature = activeInputs[offset + localID];
 
-    float sum = bias[localId];
+    float8 sum = bias[localID];
 
     #pragma unroll
-    for (int activeIndex = 0; activeIndex < 32; activeIndex++)
-    {
-        short input = mySideActiveInputs[activeIndex];
-        if (input == -1) break;
-        sum += weights[input * ACCUMULATOR_NODES_PER_SIDE + localId];
+    for (int f = 0; f < 32; f++) {
+        short currentFeature = sub_group_broadcast(myFeature, f);
+        if(currentFeature == -1) break;
+        sum += weights[currentFeature * VECTOR_ACCUMULATOR_NODES_PER_SIDE + localID];
     }
-    output[globalId] = sum;  
+
+    output[(groupID * VECTOR_ACCUMULATOR_NODES_PER_SIDE) + localID] = sum;  
 }
 
 //~0.77 ms
@@ -370,25 +348,40 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
 {
 
     //16,384 total threads in global group. One per nonbias weight.
-    //256 threads in one group, sharing local data and loading together.
+    //256 (16 x 16) threads in one group, sharing local data and loading together.
     //row == 0 thread calculates bias for their output column.
-    int col = get_global_id(0); // 0 to 31. Two column groups
-    int row = get_global_id(1); // 0 to 511. 32 row groups
+    int col = get_global_id(0); // 0 to 31. Two column groups (16 per)
+    int row = get_global_id(1); // 0 to 511. 32 row groups (16 per)
     int tileX = get_local_id(0); //0 to 15 (local col)
     int tileY = get_local_id(1); //0 to 15 (local row)
 
-    __local float tile_h1[16][16]; // batch index x row/inputs
-    __local float tile_delta2[16][16]; // batch index x column/outputs
+    __local float tile_h1[16][16];
+    __local float tile_delta2[16][16];
 
     float accumulator = 0.0f;
     float biasAccumulator = 0.0f; 
 
     for (int batchIndex = 0; batchIndex < MINIBATCH_SIZE; batchIndex+=16) 
     {
-        // load into local memory
-        // the extra activation here is faster than storing it activated and using native_sqrt() in the derivative function.
-        tile_h1[tileY][tileX] = screlu(h1[(batchIndex + tileY) * ACCUMULATOR_NODES + row]); 
+        /**
+          * Load into local memory.
+          *
+          * The extra activation here is faster than storing it activated and
+          * using native_sqrt() in the derivative function.
+          *
+          * Tile_h1[batchIndex][row/inputs]
+          *     - TileY is local row
+          *     - TileX is used as a placeholder for batchIndex
+          *
+          * Tile_delta2[batchIndex][column/outputs]
+          *     - TileX is local column
+          *     - TileY is used as a placeholder for batchIndex
+          *
+          */
+
+        tile_h1[tileX][tileY] = screlu(h1[(batchIndex + tileX) * ACCUMULATOR_NODES + row]); 
         tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
+
         barrier(CLK_LOCAL_MEM_FENCE);
 
         #pragma unroll
@@ -409,7 +402,7 @@ __kernel void calculateGradient2(__global const float* delta2, //SECOND_HIDDEN_L
     }
 }
 
-//~5ms. Drops only to 4.3ms if you treat atmoicadd as nonatomic add; there's just a lot of weights here.
+//4ms. Drops to 3ms if atomic adds treated as nonatomic.
 __kernel void calculateGradient1(__global const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
                                     __global const float* delta1, // ACCUMULATOR_NODES per batch sample
                                     __global float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
@@ -420,27 +413,38 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
 
     // Shared storage for the 64 active features of this board position
     __local short sharedFeatures[64];
+    __local float d1[512];
 
     sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
+    
+    int offset = batchIndex * ACCUMULATOR_NODES;
+    
+    d1[localID]       = delta1[offset + localID];
+    d1[localID + 64]  = delta1[offset + localID + 64];
+    d1[localID + 128] = delta1[offset + localID + 128];
+    d1[localID + 192] = delta1[offset + localID + 192];
+    d1[localID + 256] = delta1[offset + localID + 256];
+    d1[localID + 320] = delta1[offset + localID + 320];
+    d1[localID + 384] = delta1[offset + localID + 384];
+    d1[localID + 448] = delta1[offset + localID + 448];
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-
-    //Process all 512 nodes in chunks of 64
-    for (int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64) 
+    int f = 0;
+    while(sharedFeatures[f] != -1 && f < 32)
     {
-        float d1_us = delta1[batchIndex * ACCUMULATOR_NODES + outIndex];
-        float d1_them = delta1[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + outIndex];
-
-        AtomicAddFloat(&bias1_Sum[outIndex], d1_them + d1_us);
-
-        int f = 0;
-        while(sharedFeatures[f] != -1 && f < 32)
+        for(int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64)
         {
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_us);
-            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1_them);
-            f++;
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1[outIndex]);
+            AtomicAddFloat(&gradient1_Sum[sharedFeatures[32 + f] * ACCUMULATOR_NODES_PER_SIDE + outIndex], d1[ACCUMULATOR_NODES_PER_SIDE + outIndex]);
         }
+        f++;
+    }
+
+    //Bias
+    for(int outIndex = localID; outIndex < ACCUMULATOR_NODES_PER_SIDE; outIndex+=64)
+    {
+        AtomicAddFloat(&bias1_Sum[outIndex], d1[outIndex] + d1[outIndex + ACCUMULATOR_NODES_PER_SIDE]);
     }
 }
 
@@ -462,8 +466,8 @@ __kernel void calculateGradient1(__global const short* activeInputs,       //con
         weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
         gradientSum[i] = 0.0f; \
     }
-
-//~0.006 ms
+    
+//~0.005 ms
 __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, __global float* v2,
                     __global float* w3, __global float* g3, __global float* m3, __global float* v3,
                     __global float* w4, __global float* g4, __global float* m4, __global float* v4,
@@ -485,40 +489,15 @@ __kernel void adamW(__global float* w2, __global float* g2, __global float* m2, 
     
 }
 
-//0.7ms on sparse input layer. Would be 3.4ms with pown instead of native_powr
-__kernel void lazyAdam(__global float* weights,
-                    __global int* timestamps,
-                    __global float* gradientSum,
-                    __global float* firstMoment,
-                    __global float* secondMoment,
-                    float learningRate,
-                    float rho_inf)
+//0.28ms
+//Roughly half (e.g. ~778k / 1,638,400) will be active.
+__kernel void inputAdamW(__global float* w1, __global float* g1, __global float* m1, __global float* v1,
+                            float lr, float biasCorrection1, float biasCorrection2, float rectificationTerm)
 {
-    // Flattened array of weights.
     int i = get_global_id(0);
-    float grad = gradientSum[i] / MINIBATCH_SIZE;
-    
-    if(!grad) return;
+    int size = get_global_size(0);
 
-    firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad;
-    secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad;
-
-    int t = ++timestamps[i];
-    float b1 = native_powr(ADAM_BETA1, t);
-    float b2 = native_powr(ADAM_BETA2, t);
-    float correctedFirstMoment = firstMoment[i] / (1.0f - b1);
- 
-    float rho_timestamp = rho_inf - (2.0f * t * b2) / (1.0f - b2);
-
-    if (rho_timestamp > 5.0) 
-    {
-        float rectificationTerm = sqrt(((rho_timestamp - 4.0f) * (rho_timestamp - 2.0f) * rho_inf) / ((rho_inf - 4.0f) * (rho_inf - 2.0f) * rho_timestamp));
-        
-        float correctedSecondMoment = secondMoment[i] / (1.0f - b2);
-        weights[i] -= learningRate * rectificationTerm * (correctedFirstMoment / (sqrt(correctedSecondMoment) + ADAM_EPSILON));
-    } 
-    else weights[i] -= learningRate * correctedFirstMoment;
-    gradientSum[i] = 0.0f; 
+    UPDATE_ADAMW(w1, g1, m1, v1, size);
 }
 
 __kernel void lookahead_update(__global float* fast_weights, __global float* slow_weights)

@@ -29,9 +29,9 @@ typedef struct move {
 
 typedef struct moveIterator {
     move* moveList;
-    char* moveScores;
-    int count;
-    int visitedCount;
+    int16_t* moveScores;
+    uint8_t count;
+    uint8_t visitedCount;
 } moveIterator;
 
 typedef struct table_entry_tt {
@@ -103,16 +103,18 @@ typedef struct magic {
     int8_t shiftOffset;
 } magic;
 
-#define INPUT_BITS 24576
-#define HALF_INPUT_BITS 12288
+#define INPUT_BITS 12800
+#define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
-#define ACCUMULATOR_NODES_PER_SIDE 256
+#define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
 #define OUTPUT_BUCKETS 8
 
-#define KING_BUCKETS 16
-#define BITBOARDS_PER_INPUT_SIDE 192 //1 bitboard for each of the twelve pieces for each king bucket.
+#define TRACKED_PIECES 10 //12 for halfKA, 10 for halfKP
+#define BITS_PER_BUCKET (64 * TRACKED_PIECES)
+#define KING_BUCKETS 10
+#define BITBOARDS_PER_INPUT_SIDE (KING_BUCKETS * TRACKED_PIECES)
 
 extern int kingBuckets[64];
 extern int kingBucketMap[KING_BUCKETS];
@@ -137,7 +139,7 @@ typedef struct network_weights {
 } network_weights;
 
 typedef struct accumulator {
-    uint64_t inputNodes[384];
+    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
     float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
     float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
