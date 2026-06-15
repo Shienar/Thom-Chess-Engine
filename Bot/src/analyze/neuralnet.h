@@ -14,7 +14,7 @@
 #define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
-#define LAMBDA 0.75f
+#define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384

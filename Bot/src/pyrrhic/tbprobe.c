@@ -123,13 +123,13 @@ inline static uint16_t read_le_u16(void *p) { return from_le_u16(*(uint16_t *)p)
 static size_t file_size(FD fd) {
 #ifdef _WIN32
   LARGE_INTEGER fileSize;
-  if (GetFileSizeEx(fd, &fileSize)==0) {
+  if(GetFileSizeEx(fd, &fileSize)==0) {
     return 0;
   }
   return (size_t) fileSize.QuadPart;
 #else
   struct stat buf;
-  if (fstat(fd,&buf)) {
+  if(fstat(fd,&buf)) {
     return 0;
   } else {
     return buf.st_size;
@@ -178,7 +178,7 @@ static FD open_tb(const char *str, const char *suffix)
 #endif
 #endif
     free(file);
-    if (fd != FD_ERR) {
+    if(fd != FD_ERR) {
       return fd;
     }
   }
@@ -198,7 +198,7 @@ static void *map_file(FD fd, map_t *mapping)
 {
 #ifndef _WIN32
   struct stat statbuf;
-  if (fstat(fd, &statbuf)) {
+  if(fstat(fd, &statbuf)) {
     perror("fstat");
     close_tb(fd);
     return NULL;
@@ -211,7 +211,7 @@ static void *map_file(FD fd, map_t *mapping)
   madvise(data, statbuf.st_size, MADV_RANDOM);
   #endif
 
-  if (data == MAP_FAILED) {
+  if(data == MAP_FAILED) {
     perror("mmap");
     return NULL;
   }
@@ -220,13 +220,13 @@ static void *map_file(FD fd, map_t *mapping)
   size_low = GetFileSize(fd, &size_high);
   HANDLE map = CreateFileMapping(fd, NULL, PAGE_READONLY, size_high, size_low,
 				  NULL);
-  if (map == NULL) {
+  if(map == NULL) {
     fprintf(stderr,"CreateFileMapping() failed, error = %lu.\n", GetLastError());
     return NULL;
   }
   *mapping = (map_t)map;
   void *data = (void *)MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
-  if (data == NULL) {
+  if(data == NULL) {
     fprintf(stderr,"MapViewOfFile() failed, error = %lu.\n", GetLastError());
   }
 #endif
@@ -236,19 +236,19 @@ static void *map_file(FD fd, map_t *mapping)
 #ifndef _WIN32
 static void unmap_file(void *data, map_t size)
 {
-  if (!data) return;
-  if (munmap(data, size) < 0) {
+  if(!data) return;
+  if(munmap(data, size) < 0) {
 	  perror("munmap");
   }
 }
 #else
 static void unmap_file(void *data, map_t mapping)
 {
-  if (!data) return;
-  if (!UnmapViewOfFile(data)) {
+  if(!data) return;
+  if(!UnmapViewOfFile(data)) {
 	  fprintf(stderr, "unmap failed, error code %lu\n", GetLastError());
   }
-  if (!CloseHandle((HANDLE)mapping)) {
+  if(!CloseHandle((HANDLE)mapping)) {
 	  fprintf(stderr, "CloseHandle failed, error code %lu\n", GetLastError());
   }
 }
@@ -355,8 +355,8 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results);
 static unsigned dtz_to_wdl(int cnt50, int dtz) {
 
     int wdl = 0;
-    if (dtz > 0)      wdl =  dtz + cnt50 <= 100 ?  2:  1;
-    else if (dtz < 0) wdl = -dtz + cnt50 <= 100 ? -2: -1;
+    if(dtz > 0)      wdl =  dtz + cnt50 <= 100 ?  2:  1;
+    else if(dtz < 0) wdl = -dtz + cnt50 <= 100 ? -2: -1;
     return wdl + 2;
 }
 
@@ -376,7 +376,7 @@ unsigned tb_probe_wdl(
 
     int success;
     int v = probe_wdl(&pos, &success);
-    if (success == 0)
+    if(success == 0)
         return TB_RESULT_FAILED;
     return (unsigned)(v + 2);
 }
@@ -399,9 +399,9 @@ unsigned tb_probe_root(
     int dtz;
 
     PyrrhicMove move = probe_root(&pos, &dtz, results);
-    if (move == 0)                 return TB_RESULT_FAILED;
-    if (move == TB_MOVE_CHECKMATE) return TB_RESULT_CHECKMATE;
-    if (move == TB_MOVE_STALEMATE) return TB_RESULT_STALEMATE;
+    if(move == 0)                 return TB_RESULT_FAILED;
+    if(move == TB_MOVE_CHECKMATE) return TB_RESULT_CHECKMATE;
+    if(move == TB_MOVE_STALEMATE) return TB_RESULT_STALEMATE;
 
     unsigned res = 0;
     res = TB_SET_WDL(res, dtz_to_wdl(rule50, dtz));
@@ -474,12 +474,12 @@ static int test_tb(const char *str, const char *suffix) {
 
     FD fd = open_tb(str, suffix);
 
-    if (fd != FD_ERR) {
+    if(fd != FD_ERR) {
 
         size_t size = file_size(fd);
         close_tb(fd);
 
-        if ((size & 63) != 16) {
+        if((size & 63) != 16) {
             fprintf(stderr, "Incomplete tablebase file %s.%s\n", str, suffix);
             printf("info string Incomplete tablebase file %s.%s\n", str, suffix);
             fd = FD_ERR;
@@ -492,11 +492,11 @@ static int test_tb(const char *str, const char *suffix) {
 static void *map_tb(const char *name, const char *suffix, map_t *mapping) {
 
     FD fd = open_tb(name, suffix);
-    if (fd == FD_ERR)
+    if(fd == FD_ERR)
         return NULL;
 
     void *data = map_file(fd, mapping);
-    if (data == NULL) {
+    if(data == NULL) {
         fprintf(stderr, "Could not map %s%s into memory.\n", name, suffix);
         exit(EXIT_FAILURE);
     }
@@ -522,7 +522,7 @@ static void add_to_hash(struct BaseEntry *ptr, uint64_t key) {
 
 static void init_tb(char *str)
 {
-  if (!test_tb(str, tbSuffix[WDL]))
+  if(!test_tb(str, tbSuffix[WDL]))
     return;
 
   int pcs[16];
@@ -530,11 +530,11 @@ static void init_tb(char *str)
     pcs[i] = 0;
   int color = 0;
   for (char *s = str; *s; s++)
-    if (*s == 'v')
+    if(*s == 'v')
       color = 8;
     else {
       int piece_type = pyrrhic_char_to_piece_type(*s);
-      if (piece_type) {
+      if(piece_type) {
         assert((piece_type | color) < 16);
         pcs[piece_type | color]++;
       }
@@ -558,31 +558,31 @@ static void init_tb(char *str)
   numDtm += be->hasDtm = test_tb(str, tbSuffix[DTM]);
   numDtz += be->hasDtz = test_tb(str, tbSuffix[DTZ]);
 
-  if (be->num > TB_MaxCardinality) {
+  if(be->num > TB_MaxCardinality) {
     TB_MaxCardinality = be->num;
   }
-  if (be->hasDtm)
-    if (be->num > TB_MaxCardinalityDTM) {
+  if(be->hasDtm)
+    if(be->num > TB_MaxCardinalityDTM) {
       TB_MaxCardinalityDTM = be->num;
     }
 
   for (int type = 0; type < 3; type++)
     atomic_init(&be->ready[type], false);
 
-  if (!be->hasPawns) {
+  if(!be->hasPawns) {
     int j = 0;
     for (int i = 0; i < 16; i++)
-      if (pcs[i] == 1) j++;
+      if(pcs[i] == 1) j++;
     be->kk_enc = j == 2;
   } else {
     be->pawns[0] = pcs[PYRRHIC_WPAWN];
     be->pawns[1] = pcs[PYRRHIC_BPAWN];
-    if (pcs[PYRRHIC_BPAWN] && (!pcs[PYRRHIC_WPAWN] || pcs[PYRRHIC_WPAWN] > pcs[PYRRHIC_BPAWN]))
+    if(pcs[PYRRHIC_BPAWN] && (!pcs[PYRRHIC_WPAWN] || pcs[PYRRHIC_WPAWN] > pcs[PYRRHIC_BPAWN]))
       PYRRHIC_SWAP(be->pawns[0], be->pawns[1]);
   }
 
   add_to_hash(be, key);
-  if (key != key2)
+  if(key != key2)
     add_to_hash(be, key2);
 }
 
@@ -604,13 +604,13 @@ struct EncInfo *first_ei(struct BaseEntry *be, const int type)
 static void free_tb_entry(struct BaseEntry *be)
 {
   for (int type = 0; type < 3; type++) {
-    if (atomic_load_explicit(&be->ready[type], memory_order_relaxed)) {
+    if(atomic_load_explicit(&be->ready[type], memory_order_relaxed)) {
       unmap_file((void*)(be->data[type]), be->mapping[type]);
       int num = num_tables(be, type);
       struct EncInfo *ei = first_ei(be, type);
       for (int t = 0; t < num; t++) {
         free(ei[t].precomp);
-        if (type != DTZ)
+        if(type != DTZ)
           free(ei[num + t].precomp);
       }
       atomic_store_explicit(&be->ready[type], false, memory_order_relaxed);
@@ -620,7 +620,7 @@ static void free_tb_entry(struct BaseEntry *be)
 
 bool tb_init(const char *path)
 {
-  if (!initialized) {
+  if(!initialized) {
     init_indices();
     initialized = 1;
   }
@@ -631,7 +631,7 @@ bool tb_init(const char *path)
   TB_NUM_DTM = 0;
 
   // if pathString is set, we need to clean up first.
-  if (pathString) {
+  if(pathString) {
     free(pathString);
     free(paths);
 
@@ -648,17 +648,17 @@ bool tb_init(const char *path)
 
   // if path is an empty string or equals "<empty>", we are done.
   const char *p = path;
-  if (strlen(p) == 0 || !strcmp(p, "<empty>")) return true;
+  if(strlen(p) == 0 || !strcmp(p, "<empty>")) return true;
 
   pathString = (char*)malloc(strlen(p) + 1);
   strcpy(pathString, p);
   numPaths = 0;
   for (int i = 0;; i++) {
-    if (pathString[i] != SEP_CHAR)
+    if(pathString[i] != SEP_CHAR)
       numPaths++;
     while (pathString[i] && pathString[i] != SEP_CHAR)
       i++;
-    if (!pathString[i]) break;
+    if(!pathString[i]) break;
     pathString[i] = 0;
   }
   paths = (char**)malloc(numPaths * sizeof(*paths));
@@ -673,10 +673,10 @@ bool tb_init(const char *path)
   tbNumPiece = tbNumPawn = 0;
   TB_MaxCardinality = TB_MaxCardinalityDTM = 0;
 
-  if (!pieceEntry) {
+  if(!pieceEntry) {
     pieceEntry = (struct PieceEntry*)malloc(TB_MAX_PIECE * sizeof(*pieceEntry));
     pawnEntry = (struct PawnEntry*)malloc(TB_MAX_PAWN * sizeof(*pawnEntry));
-    if (!pieceEntry || !pawnEntry) {
+    if(!pieceEntry || !pawnEntry) {
       fprintf(stderr, "Out of memory.\n");
       exit(EXIT_FAILURE);
     }
@@ -722,7 +722,7 @@ bool tb_init(const char *path)
       }
 
   // 6- and 7-piece TBs make sense only with a 64-bit address space
-  if (sizeof(size_t) < 8 || TB_PIECES < 6)
+  if(sizeof(size_t) < 8 || TB_PIECES < 6)
     goto finished;
 
   for (i = 0; i < 5; i++)
@@ -749,7 +749,7 @@ bool tb_init(const char *path)
           init_tb(str);
         }
 
-  if (TB_PIECES < 7)
+  if(TB_PIECES < 7)
     goto finished;
 
   for (i = 0; i < 5; i++)
@@ -783,7 +783,7 @@ finished:
 
     // Set TB_LARGEST, for backward compatibility with pre-7-man Fathom
     TB_LARGEST = TB_MaxCardinality;
-    if (TB_MaxCardinalityDTM > TB_LARGEST) {
+    if(TB_MaxCardinalityDTM > TB_LARGEST) {
         TB_LARGEST = TB_MaxCardinalityDTM;
     }
     TB_NUM_WDL = numWdl;
@@ -1008,7 +1008,7 @@ static void init_indices(void)
     for (j = 0; j < 24; j++) {
       PawnIdx[0][i][j] = s;
       s += Binomial[i][PawnTwist[0][(1 + (j % 6)) * 8 + (j / 6)]];
-      if ((j + 1) % 6 == 0) {
+      if((j + 1) % 6 == 0) {
         PawnFactorFile[i][j / 6] = s;
         s = 0;
       }
@@ -1020,7 +1020,7 @@ static void init_indices(void)
     for (j = 0; j < 24; j++) {
       PawnIdx[1][i][j] = s;
       s += Binomial[i][PawnTwist[1][(1 + (j / 4)) * 8 + (j % 4)]];
-      if ((j + 1) % 4 == 0) {
+      if((j + 1) % 4 == 0) {
         PawnFactorRank[i][j / 4] = s;
         s = 0;
       }
@@ -1031,7 +1031,7 @@ static void init_indices(void)
 int leading_pawn(int *p, struct BaseEntry *be, const int enc)
 {
   for (int i = 1; i < be->pawns[0]; i++)
-    if (Flap[enc-1][p[0]] > Flap[enc-1][p[i]])
+    if(Flap[enc-1][p[0]] > Flap[enc-1][p[i]])
       PYRRHIC_SWAP(p[0], p[i]);
 
   return enc == FILE_ENC ? FileToFile[p[0] & 7] : (p[0] - 8) >> 3;
@@ -1044,35 +1044,35 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
   size_t idx;
   int k;
 
-  if (p[0] & 0x04)
+  if(p[0] & 0x04)
     for (int i = 0; i < n; i++)
       p[i] ^= 0x07;
 
-  if (enc == PIECE_ENC) {
-    if (p[0] & 0x20)
+  if(enc == PIECE_ENC) {
+    if(p[0] & 0x20)
       for (int i = 0; i < n; i++)
         p[i] ^= 0x38;
 
     for (int i = 0; i < n; i++)
-      if (OffDiag[p[i]]) {
-        if (OffDiag[p[i]] > 0 && i < (be->kk_enc ? 2 : 3))
+      if(OffDiag[p[i]]) {
+        if(OffDiag[p[i]] > 0 && i < (be->kk_enc ? 2 : 3))
           for (int j = 0; j < n; j++)
             p[j] = FlipDiag[p[j]];
         break;
       }
 
-    if (be->kk_enc) {
+    if(be->kk_enc) {
       idx = KKIdx[Triangle[p[0]]][p[1]];
       k = 2;
     } else {
       int s1 = (p[1] > p[0]);
       int s2 = (p[2] > p[0]) + (p[2] > p[1]);
 
-      if (OffDiag[p[0]])
+      if(OffDiag[p[0]])
         idx = Triangle[p[0]] * 63*62 + (p[1] - s1) * 62 + (p[2] - s2);
-      else if (OffDiag[p[1]])
+      else if(OffDiag[p[1]])
         idx = 6*63*62 + Diag[p[0]] * 28*62 + Lower[p[1]] * 62 + p[2] - s2;
-      else if (OffDiag[p[2]])
+      else if(OffDiag[p[2]])
         idx = 6*63*62 + 4*28*62 + Diag[p[0]] * 7*28 + (Diag[p[1]] - s1) * 28 + Lower[p[2]];
       else
         idx = 6*63*62 + 4*28*62 + 4*7*28 + Diag[p[0]] * 7*6 + (Diag[p[1]] - s1) * 6 + (Diag[p[2]] - s2);
@@ -1082,7 +1082,7 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
   } else {
     for (int i = 1; i < be->pawns[0]; i++)
       for (int j = i + 1; j < be->pawns[0]; j++)
-        if (PawnTwist[enc-1][p[i]] < PawnTwist[enc-1][p[j]])
+        if(PawnTwist[enc-1][p[i]] < PawnTwist[enc-1][p[j]])
           PYRRHIC_SWAP(p[i], p[j]);
 
     k = be->pawns[0];
@@ -1092,11 +1092,11 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
     idx *= ei->factor[0];
 
     // Pawns of other color
-    if (be->pawns[1]) {
+    if(be->pawns[1]) {
       int t = k + be->pawns[1];
       for (int i = k; i < t; i++)
         for (int j = i + 1; j < t; j++)
-          if (p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
+          if(p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
       size_t s = 0;
       for (int i = k; i < t; i++) {
         int sq = p[i];
@@ -1114,7 +1114,7 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
     int t = k + ei->norm[k];
     for (int i = k; i < t; i++)
       for (int j = i + 1; j < t; j++)
-        if (p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
+        if(p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
     size_t s = 0;
     for (int i = k; i < t; i++) {
       int sq = p[i];
@@ -1174,7 +1174,7 @@ static size_t init_enc_info(struct EncInfo *ei, struct BaseEntry *be,
   int k = ei->norm[0] =  enc != PIECE_ENC ? be->pawns[0]
                        : be->kk_enc ? 2 : 3;
 
-  if (morePawns) {
+  if(morePawns) {
     ei->norm[k] = be->pawns[1];
     k += ei->norm[k];
   }
@@ -1187,12 +1187,12 @@ static size_t init_enc_info(struct EncInfo *ei, struct BaseEntry *be,
   size_t f = 1;
 
   for (int i = 0; k < be->num || i == order || i == order2; i++) {
-    if (i == order) {
+    if(i == order) {
       ei->factor[0] = f;
       f *=  enc == FILE_ENC ? PawnFactorFile[ei->norm[0] - 1][t]
           : enc == RANK_ENC ? PawnFactorRank[ei->norm[0] - 1][t]
           : be->kk_enc ? 462 : 31332;
-    } else if (i == order2) {
+    } else if(i == order2) {
       ei->factor[ei->norm[0]] = f;
       f *= subfactor(ei->norm[ei->norm[0]], 48 - ei->norm[0]);
     } else {
@@ -1210,12 +1210,12 @@ static void calc_symLen(struct PairsData *d, uint32_t s, char *tmp)
 {
   uint8_t *w = d->symPat + 3 * s;
   uint32_t s2 = (w[2] << 4) | (w[1] >> 4);
-  if (s2 == 0x0fff)
+  if(s2 == 0x0fff)
     d->symLen[s] = 0;
   else {
     uint32_t s1 = ((w[1] & 0xf) << 8) | w[0];
-    if (!tmp[s1]) calc_symLen(d, s1, tmp);
-    if (!tmp[s2]) calc_symLen(d, s2, tmp);
+    if(!tmp[s1]) calc_symLen(d, s1, tmp);
+    if(!tmp[s2]) calc_symLen(d, s2, tmp);
     d->symLen[s] = d->symLen[s1] + d->symLen[s2] + 1;
   }
   tmp[s] = 1;
@@ -1228,7 +1228,7 @@ static struct PairsData *setup_pairs(uint8_t **ptr, size_t tb_size,
   uint8_t *data = *ptr;
 
   *flags = data[0];
-  if (data[0] & 0x80) {
+  if(data[0] & 0x80) {
     d = (struct PairsData*)malloc(sizeof(struct PairsData));
     d->idxBits = 0;
     d->constValue[0] = type == WDL ? data[1] : 0;
@@ -1264,7 +1264,7 @@ static struct PairsData *setup_pairs(uint8_t **ptr, size_t tb_size,
   char tmp[TB_MAX_SYMS];
   memset(tmp, 0, numSyms);
   for (uint32_t s = 0; s < numSyms; s++)
-    if (!tmp[s])
+    if(!tmp[s])
       calc_symLen(d, s, tmp);
 
   d->base[h - 1] = 0;
@@ -1285,9 +1285,9 @@ static struct PairsData *setup_pairs(uint8_t **ptr, size_t tb_size,
 static bool init_table(struct BaseEntry *be, const char *str, int type)
 {
   uint8_t *data = (uint8_t*)map_tb(str, tbSuffix[type], &be->mapping[type]);
-  if (!data) return false;
+  if(!data) return false;
 
-  if (read_le_u32(data) != tbMagic[type]) {
+  if(read_le_u32(data) != tbMagic[type]) {
     fprintf(stderr, "Corrupted table.\n");
     unmap_file((void*)data, be->mapping[type]);
     return false;
@@ -1296,7 +1296,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   be->data[type] = data;
 
   bool split = type != DTZ && (data[4] & 0x01);
-  if (type == DTM)
+  if(type == DTM)
     be->dtmLossOnly = data[4] & 0x04;
 
   data += 5;
@@ -1308,7 +1308,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
 
   for (int t = 0; t < num; t++) {
     tb_size[t][0] = init_enc_info(&ei[t], be, data, 0, t, enc);
-    if (split)
+    if(split)
       tb_size[t][1] = init_enc_info(&ei[num + t], be, data, 4, t, enc);
     data += be->num + 1 + (be->hasPawns && be->pawns[1]);
   }
@@ -1318,19 +1318,19 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   for (int t = 0; t < num; t++) {
     uint8_t flags;
     ei[t].precomp = setup_pairs(&data, tb_size[t][0], size[t][0], &flags, type);
-    if (type == DTZ) {
-      if (!be->hasPawns)
+    if(type == DTZ) {
+      if(!be->hasPawns)
         PIECEENTRY(be)->dtzFlags = flags;
       else
         PAWNENTRY(be)->dtzFlags[t] = flags;
     }
-    if (split)
+    if(split)
       ei[num + t].precomp = setup_pairs(&data, tb_size[t][1], size[t][1], &flags, type);
-    else if (type != DTZ)
+    else if(type != DTZ)
       ei[num + t].precomp = NULL;
   }
 
-  if (type == DTM && !be->dtmLossOnly) {
+  if(type == DTM && !be->dtmLossOnly) {
     uint16_t *map = (uint16_t *)data;
     *(be->hasPawns ? &PAWNENTRY(be)->dtmMap : &PIECEENTRY(be)->dtmMap) = map;
     uint16_t (*mapIdx)[2][2] = be->hasPawns ? &PAWNENTRY(be)->dtmMapIdx[0]
@@ -1340,7 +1340,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
         mapIdx[t][0][i] = (uint16_t)(data + 1 - (uint8_t*)map);
         data += 2 + 2 * read_le_u16(data);
       }
-      if (split) {
+      if(split) {
         for (int i = 0; i < 2; i++) {
           mapIdx[t][1][i] = (uint16_t)(data + 1 - (uint8_t*)map);
           data += 2 + 2 * read_le_u16(data);
@@ -1349,7 +1349,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     }
   }
 
-  if (type == DTZ) {
+  if(type == DTZ) {
     void *map = data;
     *(be->hasPawns ? &PAWNENTRY(be)->dtzMap : &PIECEENTRY(be)->dtzMap) = map;
     uint16_t (*mapIdx)[4] = be->hasPawns ? &PAWNENTRY(be)->dtzMapIdx[0]
@@ -1357,8 +1357,8 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     uint8_t *flags = be->hasPawns ? &PAWNENTRY(be)->dtzFlags[0]
                                   : &PIECEENTRY(be)->dtzFlags;
     for (int t = 0; t < num; t++) {
-      if (flags[t] & 2) {
-        if (!(flags[t] & 16)) {
+      if(flags[t] & 2) {
+        if(!(flags[t] & 16)) {
           for (int i = 0; i < 4; i++) {
             mapIdx[t][i] = (uint16_t)(data + 1 - (uint8_t *)map);
             data += 1 + data[0];
@@ -1378,7 +1378,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   for (int t = 0; t < num; t++) {
     ei[t].precomp->indexTable = data;
     data += size[t][0][0];
-    if (split) {
+    if(split) {
       ei[num + t].precomp->indexTable = data;
       data += size[t][1][0];
     }
@@ -1387,7 +1387,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   for (int t = 0; t < num; t++) {
     ei[t].precomp->sizeTable = (uint16_t *)data;
     data += size[t][0][1];
-    if (split) {
+    if(split) {
       ei[num + t].precomp->sizeTable = (uint16_t *)data;
       data += size[t][1][1];
     }
@@ -1397,14 +1397,14 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     data = (uint8_t *)(((uintptr_t)data + 0x3f) & ~0x3f);
     ei[t].precomp->data = data;
     data += size[t][0][2];
-    if (split) {
+    if(split) {
       data = (uint8_t *)(((uintptr_t)data + 0x3f) & ~0x3f);
       ei[num + t].precomp->data = data;
       data += size[t][1][2];
     }
   }
 
-  if (type == DTM && be->hasPawns)
+  if(type == DTM && be->hasPawns)
     PAWNENTRY(be)->dtmSwitched =
       pyrrhic_calc_key_from_pieces(ei[0].pieces, be->num) != be->key;
 
@@ -1413,7 +1413,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
 
 static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
 {
-  if (!d->idxBits)
+  if(!d->idxBits)
     return d->constValue;
 
   uint32_t mainIdx = (uint32_t)(idx >> d->idxBits);
@@ -1425,7 +1425,7 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
   uint16_t idxOffset = *(uint16_t *)(d->indexTable + 6 * mainIdx + 4);
   litIdx += from_le_u16(idxOffset);
 
-  if (litIdx < 0)
+  if(litIdx < 0)
     while (litIdx < 0)
       litIdx += d->sizeTable[--block] + 1;
   else
@@ -1450,11 +1450,11 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
     while (code < base[l]) l++;
     sym = from_le_u16(offset[l]);
     sym += (uint32_t)((code - base[l]) >> (64 - l));
-    if (litIdx < (int)symLen[sym] + 1) break;
+    if(litIdx < (int)symLen[sym] + 1) break;
     litIdx -= (int)symLen[sym] + 1;
     code <<= l;
     bitCnt += l;
-    if (bitCnt >= 32) {
+    if(bitCnt >= 32) {
       bitCnt -= 32;
       uint32_t tmp = from_be_u32(*ptr++);
       code |= (uint64_t)tmp << bitCnt;
@@ -1469,11 +1469,11 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
     int l = m;
     while (code < base[l]) l++;
     sym = offset[l] + ((code - base[l]) >> (32 - l));
-    if (litIdx < (int)symLen[sym] + 1) break;
+    if(litIdx < (int)symLen[sym] + 1) break;
     litIdx -= (int)symLen[sym] + 1;
     code <<= l;
-    if (bitCnt < l) {
-      if (bitCnt) {
+    if(bitCnt < l) {
+      if(bitCnt) {
 	code |= (next >> (32 - l));
 	l -= bitCnt;
       }
@@ -1490,7 +1490,7 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
   while (symLen[sym] != 0) {
     uint8_t *w = symPat + (3 * sym);
     int s1 = ((w[1] & 0xf) << 8) | w[0];
-    if (litIdx < (int)symLen[s1] + 1)
+    if(litIdx < (int)symLen[s1] + 1)
       sym = s1;
     else {
       litIdx -= (int)symLen[s1] + 1;
@@ -1509,7 +1509,7 @@ inline static int fill_squares(const PyrrhicPosition *pos, uint8_t *pc, bool fli
     int i)
 {
   int color = pyrrhic_colour_of_piece(pc[i]);
-  if (flip) color = !color;
+  if(flip) color = !color;
   uint64_t bb = pyrrhic_pieces_by_type(pos, color, pyrrhic_type_of_piece(pc[i]));
   unsigned sq;
   do {
@@ -1526,30 +1526,30 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
 
   // Test for KvK
   // Note: Cfish has key == 2ULL for KvK but we have 0
-  if (type == WDL && key == 0ULL)
+  if(type == WDL && key == 0ULL)
     return 0;
 
   int hashIdx = key >> (64 - TB_HASHBITS);
   while (tbHash[hashIdx].key && tbHash[hashIdx].key != key)
     hashIdx = (hashIdx + 1) & ((1 << TB_HASHBITS) - 1);
-  if (!tbHash[hashIdx].ptr) {
+  if(!tbHash[hashIdx].ptr) {
     *success = 0;
     return 0;
   }
 
   struct BaseEntry *be = tbHash[hashIdx].ptr;
-  if ((type == DTM && !be->hasDtm) || (type == DTZ && !be->hasDtz)) {
+  if((type == DTM && !be->hasDtm) || (type == DTZ && !be->hasDtz)) {
     *success = 0;
     return 0;
   }
 
   // Use double-checked locking to reduce locking overhead
-  if (!atomic_load_explicit(&be->ready[type], memory_order_acquire)) {
+  if(!atomic_load_explicit(&be->ready[type], memory_order_acquire)) {
     LOCK(tbMutex);
-    if (!atomic_load_explicit(&be->ready[type], memory_order_relaxed)) {
+    if(!atomic_load_explicit(&be->ready[type], memory_order_relaxed)) {
       char str[16];
       prt_str(pos, str, be->key != key);
-      if (!init_table(be, str, type)) {
+      if(!init_table(be, str, type)) {
         tbHash[hashIdx].ptr = NULL; // mark as deleted
         *success = 0;
         UNLOCK(tbMutex);
@@ -1561,10 +1561,10 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
   }
 
   bool bside, flip;
-  if (!be->symmetric) {
+  if(!be->symmetric) {
     flip = key != be->key;
     bside = (pos->turn == PYRRHIC_WHITE) == flip;
-    if (type == DTM && be->hasPawns && PAWNENTRY(be)->dtmSwitched) {
+    if(type == DTM && be->hasPawns && PAWNENTRY(be)->dtmSwitched) {
       flip = !flip;
       bside = !bside;
     }
@@ -1579,10 +1579,10 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
   int t = 0;
   uint8_t flags = 0; // initialize to fix GCC warning
 
-  if (!be->hasPawns) {
-    if (type == DTZ) {
+  if(!be->hasPawns) {
+    if(type == DTZ) {
       flags = PIECEENTRY(be)->dtzFlags;
-      if ((flags & 1) != bside && !be->symmetric) {
+      if((flags & 1) != bside && !be->symmetric) {
         *success = -1;
         return 0;
       }
@@ -1594,9 +1594,9 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
   } else {
     int i = fill_squares(pos, ei->pieces, flip, flip ? 0x38 : 0, p, 0);
     t = leading_pawn(p, be, type != DTM ? FILE_ENC : RANK_ENC);
-    if (type == DTZ) {
+    if(type == DTZ) {
       flags = PAWNENTRY(be)->dtzFlags[t];
-      if ((flags & 1) != bside && !be->symmetric) {
+      if((flags & 1) != bside && !be->symmetric) {
         *success = -1;
         return 0;
       }
@@ -1610,20 +1610,20 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
 
   uint8_t *w = decompress_pairs(ei->precomp, idx);
 
-  if (type == WDL)
+  if(type == WDL)
     return (int)w[0] - 2;
 
   int v = w[0] + ((w[1] & 0x0f) << 8);
 
-  if (type == DTM) {
-    if (!be->dtmLossOnly)
+  if(type == DTM) {
+    if(!be->dtmLossOnly)
       v = (int)from_le_u16(be->hasPawns
                        ? PAWNENTRY(be)->dtmMap[PAWNENTRY(be)->dtmMapIdx[t][bside][s] + v]
                         : PIECEENTRY(be)->dtmMap[PIECEENTRY(be)->dtmMapIdx[bside][s] + v]);
   } else {
-    if (flags & 2) {
+    if(flags & 2) {
       int m = WdlToMap[s + 2];
-      if (!(flags & 16))
+      if(!(flags & 16))
         v =  be->hasPawns
            ? ((uint8_t *)PAWNENTRY(be)->dtzMap)[PAWNENTRY(be)->dtzMapIdx[t][m] + v]
            : ((uint8_t *)PIECEENTRY(be)->dtzMap)[PIECEENTRY(be)->dtzMapIdx[m] + v];
@@ -1632,7 +1632,7 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
                          ? ((uint16_t *)PAWNENTRY(be)->dtzMap)[PAWNENTRY(be)->dtzMapIdx[t][m] + v]
                           : ((uint16_t *)PIECEENTRY(be)->dtzMap)[PIECEENTRY(be)->dtzMapIdx[m] + v]);
     }
-    if (!(flags & PAFlags[s + 2]) || (s & 1))
+    if(!(flags & PAFlags[s + 2]) || (s & 1))
       v *= 2;
   }
 
@@ -1662,14 +1662,14 @@ static int probe_ab(const PyrrhicPosition *pos, int alpha, int beta, int *succes
   for (; m < end; m++) {
     PyrrhicPosition pos1;
     PyrrhicMove move = *m;
-    if (!pyrrhic_is_capture(pos, move))
+    if(!pyrrhic_is_capture(pos, move))
       continue;
-    if (!pyrrhic_do_move(&pos1, pos, move))
+    if(!pyrrhic_do_move(&pos1, pos, move))
       continue; // illegal move
     int v = -probe_ab(&pos1, -beta, -alpha, success);
-    if (*success == 0) return 0;
-    if (v > alpha) {
-      if (v >= beta)
+    if(*success == 0) return 0;
+    if(v > alpha) {
+      if(v >= beta)
         return v;
       alpha = v;
     }
@@ -1712,26 +1712,26 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
   for (; m < end; m++) {
     PyrrhicPosition pos1;
     PyrrhicMove move = *m;
-    if (!pyrrhic_is_capture(pos, move))
+    if(!pyrrhic_is_capture(pos, move))
       continue;
-    if (!pyrrhic_do_move(&pos1, pos, move))
+    if(!pyrrhic_do_move(&pos1, pos, move))
       continue; // illegal move
     int v = -probe_ab(&pos1, -2, -bestCap, success);
-    if (*success == 0) return 0;
-    if (v > bestCap) {
-      if (v == 2) {
+    if(*success == 0) return 0;
+    if(v > bestCap) {
+      if(v == 2) {
         *success = 2;
         return 2;
       }
-      if (!pyrrhic_is_en_passant(pos,move))
+      if(!pyrrhic_is_en_passant(pos,move))
         bestCap = v;
-      else if (v > bestEp)
+      else if(v > bestEp)
         bestEp = v;
     }
   }
 
   int v = probe_wdl_table(pos, success);
-  if (*success == 0) return 0;
+  if(*success == 0) return 0;
 
   // Now max(v, bestCap) is the WDL value of the position without ep rights.
   // If the position without ep rights is not stalemate or no ep captures
@@ -1739,8 +1739,8 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
   // If the position without ep rights is stalemate and bestEp > -3,
   // then the value of the position is bestEp (and we will have v == 0).
 
-  if (bestEp > bestCap) {
-    if (bestEp > v) { // ep capture (possibly cursed losing) is best.
+  if(bestEp > bestCap) {
+    if(bestEp > v) { // ep capture (possibly cursed losing) is best.
       *success = 2;
       return bestEp;
     }
@@ -1750,7 +1750,7 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
   // Now max(v, bestCap) is the WDL value of the position unless
   // the position without ep rights is stalemate and bestEp > -3.
 
-  if (bestCap >= v) {
+  if(bestCap >= v) {
     // No need to test for the stalemate case here: either there are
     // non-ep captures, or bestCap == bestEp >= v anyway.
     *success = 1 + (bestCap > 0);
@@ -1758,14 +1758,14 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
   }
 
   // Now handle the stalemate case.
-  if (bestEp > -3 && v == 0) {
+  if(bestEp > -3 && v == 0) {
     PyrrhicMove moves[TB_MAX_MOVES];
     PyrrhicMove *end2 = pyrrhic_gen_moves(pos, moves);
     // Check for stalemate in the position with ep captures.
     for (m = moves; m < end2; m++) {
-      if (!pyrrhic_is_en_passant(pos,*m) && pyrrhic_legal_move(pos, *m)) break;
+      if(!pyrrhic_is_en_passant(pos,*m) && pyrrhic_legal_move(pos, *m)) break;
     }
-    if (m == end2 && !pyrrhic_is_check(pos)) {
+    if(m == end2 && !pyrrhic_is_check(pos)) {
       // stalemate score from tb (w/o e.p.), but an en-passant capture
       // is possible.
       *success = 2;
@@ -1810,13 +1810,13 @@ static int WdlToDtz[] = { -1, -101, 0, 101, 1 };
 int probe_dtz(PyrrhicPosition *pos, int *success)
 {
   int wdl = probe_wdl(pos, success);
-  if (*success == 0) return 0;
+  if(*success == 0) return 0;
 
   // If draw, then dtz = 0.
-  if (wdl == 0) return 0;
+  if(wdl == 0) return 0;
 
   // Check for winning capture or en passant capture as only best move.
-  if (*success == 2)
+  if(*success == 2)
     return WdlToDtz[wdl + 2];
 
   PyrrhicMove moves[TB_MAX_MOVES];
@@ -1824,7 +1824,7 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
   PyrrhicPosition pos1;
 
   // If winning, check for a winning pawn move.
-  if (wdl > 0) {
+  if(wdl > 0) {
     // Generate at least all legal non-capturing pawn moves
     // including non-capturing promotions.
     // (The following call in fact generates all moves.)
@@ -1832,13 +1832,13 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
 
     for (m = moves; m < end; m++) {
       PyrrhicMove move = *m;
-      if (!pyrrhic_is_pawn_move(pos, move) || pyrrhic_is_capture(pos, move))
+      if(!pyrrhic_is_pawn_move(pos, move) || pyrrhic_is_capture(pos, move))
          continue;
-      if (!pyrrhic_do_move(&pos1, pos, move))
+      if(!pyrrhic_do_move(&pos1, pos, move))
          continue; // not legal
       int v = -probe_wdl(&pos1, success);
-      if (*success == 0) return 0;
-      if (v == wdl) {
+      if(*success == 0) return 0;
+      if(v == wdl) {
         assert(wdl < 3);
         return WdlToDtz[wdl + 2];
       }
@@ -1851,15 +1851,15 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
   // DTZ table with the current value of wdl.
 
   int dtz = probe_dtz_table(pos, wdl, success);
-  if (*success >= 0)
+  if(*success >= 0)
     return WdlToDtz[wdl + 2] + ((wdl > 0) ? dtz : -dtz);
 
   // *success < 0 means we need to probe DTZ for the other side to move.
   int best;
-  if (wdl > 0) {
+  if(wdl > 0) {
     best = INT32_MAX;
   } else {
-    // If (cursed) loss, the worst case is a losing capture or pawn move
+    // if(cursed) loss, the worst case is a losing capture or pawn move
     // as the "best" move, leading to dtz of -1 or -101.
     // In case of mate, this will cause -1 to be returned.
     best = WdlToDtz[wdl + 2];
@@ -1873,24 +1873,24 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
     // We can skip pawn moves and captures.
     // If wdl > 0, we already caught them. If wdl < 0, the initial value
     // of best already takes account of them.
-    if (pyrrhic_is_capture(pos, move) || pyrrhic_is_pawn_move(pos, move))
+    if(pyrrhic_is_capture(pos, move) || pyrrhic_is_pawn_move(pos, move))
       continue;
-    if (!pyrrhic_do_move(&pos1, pos, move)) {
+    if(!pyrrhic_do_move(&pos1, pos, move)) {
       // move was not legal
       continue;
     }
     int v = -probe_dtz(&pos1, success);
     // Check for the case of mate in 1
-    if (v == 1 && pyrrhic_is_mate(&pos1))
+    if(v == 1 && pyrrhic_is_mate(&pos1))
       best = 1;
-    else if (wdl > 0) {
-      if (v > 0 && v + 1 < best)
+    else if(wdl > 0) {
+      if(v > 0 && v + 1 < best)
         best = v + 1;
     } else {
-      if (v - 1 < best)
+      if(v - 1 < best)
         best = v - 1;
     }
-    if (*success == 0) return 0;
+    if(*success == 0) return 0;
   }
   return best;
 }
@@ -1915,7 +1915,7 @@ int root_probe_dtz(const PyrrhicPosition *pos, bool hasRepeated, struct TbRootMo
     pyrrhic_do_move(&pos1, pos, m->move);
 
     // Calculate dtz for the current move counting from the root position.
-    if (pos1.rule50 == 0) {
+    if(pos1.rule50 == 0) {
       // If the move resets the 50-move counter, dtz is -101/-1/0/1/101.
       v = -probe_wdl(&pos1, &success);
       assert(v < 3);
@@ -1923,15 +1923,15 @@ int root_probe_dtz(const PyrrhicPosition *pos, bool hasRepeated, struct TbRootMo
     } else {
       // Otherwise, take dtz for the new position and correct by 1 ply.
       v = -probe_dtz(&pos1, &success);
-      if (v > 0) v++;
-      else if (v < 0) v--;
+      if(v > 0) v++;
+      else if(v < 0) v--;
     }
     // Make sure that a mating move gets value 1.
-    if (v == 2 && pyrrhic_is_mate(&pos1)) {
+    if(v == 2 && pyrrhic_is_mate(&pos1)) {
       v = 1;
     }
 
-    if (!success) return 0;
+    if(!success) return 0;
 
     // Better moves are ranked higher. Guaranteed wins are ranked equally.
     // Losing moves are ranked equally unless a 50-move draw is in sight.
@@ -1965,8 +1965,8 @@ int root_probe_wdl(const PyrrhicPosition *pos, bool useRule50, struct TbRootMove
     m->move = moves[i];
     pyrrhic_do_move(&pos1, pos, m->move);
     v = -probe_wdl(&pos1, &success);
-    if (!success) return 0;
-    if (!useRule50)
+    if(!success) return 0;
+    if(!useRule50)
       v = v > 0 ? 2 : v < 0 ? -2 : 0;
     m->tbRank = WdlToRank[v + 2];
   }
@@ -1985,7 +1985,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
 {
     int success;
     int dtz = probe_dtz(pos, &success);
-    if (!success)
+    if(!success)
         return 0;
 
     int16_t scores[TB_MAX_MOVES];
@@ -1998,22 +1998,22 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
     for (unsigned i = 0; i < len; i++)
     {
         PyrrhicPosition pos1;
-        if (!pyrrhic_do_move(&pos1, pos, moves[i]))
+        if(!pyrrhic_do_move(&pos1, pos, moves[i]))
         {
             scores[i] = TB_SCORE_ILLEGAL;
             continue;
         }
         int v = 0;
-        if (dtz > 0 && pyrrhic_is_mate(&pos1))
+        if(dtz > 0 && pyrrhic_is_mate(&pos1))
             v = 1;
         else
         {
-            if (pos1.rule50 != 0)
+            if(pos1.rule50 != 0)
             {
                 v = -probe_dtz(&pos1, &success);
-                if (v > 0)
+                if(v > 0)
                     v++;
-                else if (v < 0)
+                else if(v < 0)
                     v--;
             }
             else
@@ -2023,10 +2023,10 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
             }
         }
         num_draw += (v == 0);
-        if (!success)
+        if(!success)
             return 0;
         scores[i] = v;
-        if (results != NULL)
+        if(results != NULL)
         {
             unsigned res = 0;
             res = TB_SET_WDL(res, dtz_to_wdl(pos->rule50, v));
@@ -2038,22 +2038,22 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
             results[j++] = res;
         }
     }
-    if (results != NULL)
+    if(results != NULL)
         results[j++] = TB_RESULT_FAILED;
-    if (score != NULL)
+    if(score != NULL)
         *score = dtz;
 
     // Now be a bit smart about filtering out moves.
-    if (dtz > 0)        // winning (or 50-move rule draw)
+    if(dtz > 0)        // winning (or 50-move rule draw)
     {
         int best = TB_BEST_NONE;
         uint16_t best_move = 0;
         for (unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
-            if (v == TB_SCORE_ILLEGAL)
+            if(v == TB_SCORE_ILLEGAL)
                 continue;
-            if (v > 0 && v < best)
+            if(v > 0 && v < best)
             {
                 best = v;
                 best_move = moves[i];
@@ -2061,16 +2061,16 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
         }
         return (best == TB_BEST_NONE ? 0 : best_move);
     }
-    else if (dtz < 0)   // losing (or 50-move rule draw)
+    else if(dtz < 0)   // losing (or 50-move rule draw)
     {
         int best = 0;
         uint16_t best_move = 0;
         for (unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
-            if (v == TB_SCORE_ILLEGAL)
+            if(v == TB_SCORE_ILLEGAL)
                 continue;
-            if (v < best)
+            if(v < best)
             {
                 best = v;
                 best_move = moves[i];
@@ -2081,7 +2081,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
     else                // drawing
     {
         // Check for stalemate:
-        if (num_draw == 0)
+        if(num_draw == 0)
             return TB_MOVE_STALEMATE;
 
         // Select a "random" move that preserves the draw.
@@ -2090,11 +2090,11 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
         for (unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
-            if (v == TB_SCORE_ILLEGAL)
+            if(v == TB_SCORE_ILLEGAL)
                 continue;
-            if (v == 0)
+            if(v == 0)
             {
-                if (count == 0)
+                if(count == 0)
                     return moves[i];
                 count--;
             }

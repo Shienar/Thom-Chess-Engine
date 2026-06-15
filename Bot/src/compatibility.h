@@ -14,9 +14,6 @@
     #define _min min
     #define _max max
 
-    #define align_alloc(type, varName, size, alignment) type varName = (type)_aligned_malloc(size, alignment)
-    #define align_free _aligned_free
-
     #define THREADTYPE HANDLE
     #define THREAD_INIT NULL
     
@@ -40,10 +37,6 @@
     
     #define _min MIN
     #define _max MAX
-    
-    #define align_alloc(type, ptr, size, alignment) type ptr = NULL; \
-                                                posix_memalign((void**)&ptr, alignment, size)
-    #define align_free free
 
     #define THREADTYPE pthread_t
     #define THREAD_INIT 0

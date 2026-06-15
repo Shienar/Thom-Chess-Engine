@@ -219,7 +219,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(knights);
         uint64_t mask = knightMoves(allies, startSquare);
-        if (capturesOnly) mask &= enemies;
+        if(capturesOnly) mask &= enemies;
         
         while(mask) 
         {
@@ -234,7 +234,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(bishop);
         uint64_t moveMask = bishopMoves(allies, enemies, startSquare);
-        if (capturesOnly) moveMask &= enemies;
+        if(capturesOnly) moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -249,7 +249,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(rook);
         uint64_t moveMask = rookMoves(allies, enemies, startSquare); 
-        if (capturesOnly) moveMask &= enemies;
+        if(capturesOnly) moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -264,7 +264,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(queen);
         uint64_t moveMask = queenMoves(allies, enemies, startSquare); 
-        if (capturesOnly) moveMask &= enemies;
+        if(capturesOnly) moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -279,7 +279,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(king);
         uint64_t moveMask = kingMoves(board, startSquare, board->turn);
-        if (capturesOnly) moveMask &= enemies;
+        if(capturesOnly) moveMask &= enemies;
         while(moveMask) 
         {
             int endSquare = __builtin_ctzll(moveMask);
@@ -428,9 +428,9 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
     {
         move m = iter->moveList[i];
 
-        if (pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) 
+        if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) 
             iter->moveScores[i] = INT8_MAX;
-        else if (m.capturedPiece != EMPTY_PIECE) 
+        else if(m.capturedPiece != EMPTY_PIECE) 
         {
             int seeValue = staticExchangeEvaluation(board, m);
 
@@ -446,14 +446,14 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
 
 move* iterate_next_move(moveIterator* iter)
 {
-    if (iter->visitedCount >= iter->count) return NULL;
+    if(iter->visitedCount >= iter->count) return NULL;
 
     int bestIndex = -1;
     int maxScoreRemaining = INT8_MIN;
 
     for (int j = 0; j < iter->count; j++) 
     {
-        if (iter->moveScores[j] > maxScoreRemaining) 
+        if(iter->moveScores[j] > maxScoreRemaining) 
         {
             bestIndex = j;
             maxScoreRemaining = iter->moveScores[j];

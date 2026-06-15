@@ -106,7 +106,7 @@ uint64_t pyrrhic_pieces_by_type(const PyrrhicPosition *pos, int colour, int piec
 int pyrrhic_char_to_piece_type(char c) {
 
     for (int i = PYRRHIC_PAWN; i <= PYRRHIC_KING; i++)
-        if (c == pyrrhic_piece_to_char[i])
+        if(c == pyrrhic_piece_to_char[i])
             return i;
     return 0;
 }
@@ -172,10 +172,10 @@ PyrrhicMove pyrrhic_build_move(unsigned flags, unsigned from, unsigned to) {
 
 PyrrhicMove* pyrrhic_add_move(PyrrhicMove *moves, bool promotes, bool enpass, unsigned from, unsigned to) {
 
-    if (enpass)
+    if(enpass)
         *moves++ = pyrrhic_build_move(PYRRHIC_FLAG_ENPASS, from, to);
 
-    else if (promotes) {
+    else if(promotes) {
         *moves++ = pyrrhic_build_move(PYRRHIC_FLAG_QPROMO, from, to);
         *moves++ = pyrrhic_build_move(PYRRHIC_FLAG_RPROMO, from, to);
         *moves++ = pyrrhic_build_move(PYRRHIC_FLAG_BPROMO, from, to);
@@ -221,7 +221,7 @@ PyrrhicMove* pyrrhic_gen_captures(const PyrrhicPosition *pos, PyrrhicMove *moves
         unsigned from = PYRRHIC_LSB(b);
 
         // Generate Enpassant Captures
-        if (pos->ep && pyrrhic_test_bit(PYRRHIC_PAWN_ATTACKS(from, pos->turn), pos->ep))
+        if(pos->ep && pyrrhic_test_bit(PYRRHIC_PAWN_ATTACKS(from, pos->turn), pos->ep))
             moves = pyrrhic_add_move(moves, false, true, from, pos->ep);
 
         // Generate non-Enpassant Captures
@@ -266,15 +266,15 @@ PyrrhicMove* pyrrhic_gen_moves(const PyrrhicPosition *pos, PyrrhicMove *moves) {
         unsigned from = PYRRHIC_LSB(b);
 
         // Generate Enpassant Captures
-        if (pos->ep && pyrrhic_test_bit(PYRRHIC_PAWN_ATTACKS(from, pos->turn), pos->ep))
+        if(pos->ep && pyrrhic_test_bit(PYRRHIC_PAWN_ATTACKS(from, pos->turn), pos->ep))
             moves = pyrrhic_add_move(moves, false, true, from, pos->ep);
 
         // Generate any single pawn pushes
-        if (!pyrrhic_test_bit(us | them, from + Forward))
+        if(!pyrrhic_test_bit(us | them, from + Forward))
             moves = pyrrhic_add_move(moves, pyrrhic_promo_square(from + Forward), false, from, from + Forward);
 
         // Generate any double pawn pushes
-        if (    pyrrhic_pawn_start_square(pos->turn, from)
+        if(    pyrrhic_pawn_start_square(pos->turn, from)
             && !pyrrhic_test_bit(us | them, from + Forward)
             && !pyrrhic_test_bit(us | them, from + 2 * Forward))
             moves = pyrrhic_add_move(moves, false, false, from, from + 2 * Forward);
@@ -294,7 +294,7 @@ PyrrhicMove* pyrrhic_gen_legal(const PyrrhicPosition *pos, PyrrhicMove *moves) {
     PyrrhicMove *results = moves;
 
     for (PyrrhicMove *m = _moves; m < end; m++)
-        if (pyrrhic_legal_move(pos, *m))
+        if(pyrrhic_legal_move(pos, *m))
             *results++ = *m;
     return results;
 }
@@ -343,7 +343,7 @@ bool pyrrhic_is_check(const PyrrhicPosition *pos) {
 
 bool pyrrhic_is_mate(const PyrrhicPosition *pos) {
 
-    if (!pyrrhic_is_check(pos)) return 0;
+    if(!pyrrhic_is_check(pos)) return 0;
 
     PyrrhicPosition pos1;
     PyrrhicMove moves0[TB_MAX_MOVES];
@@ -351,7 +351,7 @@ bool pyrrhic_is_mate(const PyrrhicPosition *pos) {
     PyrrhicMove *end = pyrrhic_gen_moves(pos, moves);
 
     for (; moves < end; moves++)
-        if (pyrrhic_do_move(&pos1, pos, *moves))
+        if(pyrrhic_do_move(&pos1, pos, *moves))
             return 0;
     return 1;
 }
@@ -376,7 +376,7 @@ bool pyrrhic_do_move(PyrrhicPosition *pos, const PyrrhicPosition *pos0, PyrrhicM
     pos->ep      = 0;
 
     // Promotions reset the Fifty-Move Rule and add a piece
-    if (promotes) {
+    if(promotes) {
 
         pyrrhic_disable_bit(&pos->pawns, to);
 
@@ -391,24 +391,24 @@ bool pyrrhic_do_move(PyrrhicPosition *pos, const PyrrhicPosition *pos0, PyrrhicM
     }
 
     // Pawn moves can be Enpassant, or allow a future Enpassant
-    else if (pyrrhic_test_bit(pos0->pawns, from)) {
+    else if(pyrrhic_test_bit(pos0->pawns, from)) {
 
         pos->rule50 = 0; // Pawn move
 
         // Check for a double push by White
-        if (   (from ^ to) == 16
+        if(   (from ^ to) == 16
             &&  pos0->turn == PYRRHIC_WHITE
             && (PYRRHIC_PAWN_ATTACKS(from + 8, PYRRHIC_WHITE) & pos0->pawns & pos0->black))
             pos->ep = from + 8;
 
         // Check for a double push by Black
-        if (   (from ^ to) == 16
+        if(   (from ^ to) == 16
             &&  pos0->turn == PYRRHIC_BLACK
             && (PYRRHIC_PAWN_ATTACKS(from - 8, PYRRHIC_BLACK) & pos0->pawns & pos0->white))
             pos->ep = from - 8;
 
         // Check for an Enpassant being played
-        else if (to == pos0->ep) {
+        else if(to == pos0->ep) {
             pyrrhic_disable_bit(&pos->white, pos0->turn ? to - 8: to + 8);
             pyrrhic_disable_bit(&pos->black, pos0->turn ? to - 8: to + 8);
             pyrrhic_disable_bit(&pos->pawns, pos0->turn ? to - 8: to + 8);
@@ -416,7 +416,7 @@ bool pyrrhic_do_move(PyrrhicPosition *pos, const PyrrhicPosition *pos0, PyrrhicM
     }
 
     // Any other sort of capture also resets the Fifty-Move Rule
-    else if (pyrrhic_test_bit(pos0->white | pos0->black, to))
+    else if(pyrrhic_test_bit(pos0->white | pos0->black, to))
         pos->rule50 = 0;
 
     // Otherwise, carry on as normal

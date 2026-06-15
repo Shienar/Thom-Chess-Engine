@@ -350,7 +350,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
             float* targetAcc = acc->rawAccumulator[color];
             float* targetWeights = (color == WHITE) ? nnue_weights->weights1[featureIndex_White] : nnue_weights->weights1[featureIndex_Black];
 
-            if (wasAdded) 
+            if(wasAdded) 
             {
                 for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 8) 
                 {

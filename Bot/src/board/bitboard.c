@@ -315,7 +315,7 @@ void board_print(bitboard* board, int printValues)
         printf(TEXT_BOLD "\t\t%d   ", row+1);
         for(int column = 0; column <= 7; column++)
         {
-            if (boardArray[row][column] < 91 && boardArray[row][column] > 64)
+            if(boardArray[row][column] < 91 && boardArray[row][column] > 64)
             {
                 if(8 * row + column == lastMoveStartSquare) printf(TEXT_COLOR_SOURCE_BLACK_PIECE);
                 else if(8 * row + column == lastMoveEndSquare) printf(TEXT_COLOR_DESTINATION_BLACK_PIECE);
@@ -400,7 +400,7 @@ void bitmask_print(uint64_t mask, char fill)
         printf(TEXT_BOLD "\t\t%d   ", row+1);
         for(int column = 0; column <= 7; column++)
         {
-            if (boardArray[row][column] < 91 && boardArray[row][column] > 64)
+            if(boardArray[row][column] < 91 && boardArray[row][column] > 64)
             {
                 if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
                 else printf(TEXT_COLOR_DARK_SQUARE_BLACK_PIECE);

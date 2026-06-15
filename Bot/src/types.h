@@ -126,6 +126,13 @@ extern int kingBucketMap[KING_BUCKETS];
  * to the few active inputs. Output layer weights are w[bucket][output], not w[input][output].
  * 
  * Output bucket: 0-7, calculated with ((piece count - 1) / 4)
+ * 
+ * During training, we will accelerate training by forcing everything 
+ * into the same input king bucket and output bucket. Once the network
+ * plateaus, the weights will be broadcasted to all buckets for the rest
+ * of training. There's probably a better way to do this since both sides won't
+ * ever really be in the same king bucket, but this really is a massive speedup to
+ * training.
  */
 typedef struct network_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];

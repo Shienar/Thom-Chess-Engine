@@ -112,8 +112,8 @@ void print_weight_stats(const char* name, const float* data, size_t size)
         if(isinf(val)) infinityCount++;
         if(!val) zeroCount++;
 
-        if (val > max_val) max_val = val;
-        if (val < min_val) min_val = val;
+        if(val > max_val) max_val = val;
+        if(val < min_val) min_val = val;
         
         double delta = val - mean;
         mean += delta / (i + 1);
@@ -123,8 +123,8 @@ void print_weight_stats(const char* name, const float* data, size_t size)
         //Absolute
         float abs_val = fabsf(val);
 
-        if (abs_val > abs_max) abs_max = abs_val;
-        if (abs_val < abs_min) abs_min = abs_val;
+        if(abs_val > abs_max) abs_max = abs_val;
+        if(abs_val < abs_min) abs_min = abs_val;
 
         double abs_delta = abs_val - abs_mean;
         abs_mean += abs_delta / (i + 1);
@@ -314,18 +314,22 @@ void shuffle_long(uint64_t* arr, int count)
 }
 
 
-static inline double sumLoss(double* loss)
+static inline float sumLoss(float* loss)
 {
-    __m256d tempSum1 = _mm256_setzero_pd();
-    __m256d tempSum2 = _mm256_setzero_pd();
-    for(int i = 0; i < MINIBATCH_SIZE; i+=8)
+    __m256 tempSum1 = _mm256_setzero_ps();
+    __m256 tempSum2 = _mm256_setzero_ps();
+    for(int i = 0; i < MINIBATCH_SIZE; i+=16)
     {
-        tempSum1 = _mm256_add_pd(tempSum1, _mm256_loadu_pd(&loss[i]));
-        tempSum2 = _mm256_add_pd(tempSum2, _mm256_loadu_pd(&loss[i + 4]));
+        tempSum1 = _mm256_add_ps(tempSum1, _mm256_loadu_ps(&loss[i]));
+        tempSum2 = _mm256_add_ps(tempSum2, _mm256_loadu_ps(&loss[i + 8]));
     }
-    tempSum1 = _mm256_add_pd(tempSum1, tempSum2);
-    __m128d sum2 = _mm_add_pd(_mm256_castpd256_pd128((__m256d)tempSum1), _mm256_extractf128_pd(tempSum1, 1));
-    return (_mm_cvtsd_f64(_mm_add_pd(sum2, _mm_permute_pd(sum2, 1))));
+    tempSum1 = _mm256_add_ps(tempSum1, tempSum2);
+
+    __m128 sum128 = _mm_add_ps(_mm256_castps256_ps128((__m256)tempSum1), _mm256_extractf128_ps(tempSum1, 1));
+    
+    sum128 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128)); 
+    sum128 = _mm_add_ss(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 1, 1, 1))); 
+    return _mm_cvtss_f32(sum128);
 }
 
 void train(int maxIterations, float maxAllowedError)
@@ -350,28 +354,30 @@ void train(int maxIterations, float maxAllowedError)
     {
         blockIndices[i] = (MINIBATCH_SIZE * FEN_SKIP) * i * sizeof(CompactPosition);
     }
+    
+    short* activeInputs_A = NULL;
+    float* expectedOutputs_A = NULL;
+    char* outputBuckets_A = NULL;
 
-    //Aligned declarations
-    align_alloc(short*, activeInputs_A, 64 * MINIBATCH_SIZE * sizeof(short), 4096);
-    align_alloc(float*, expectedOutputs_A, MINIBATCH_SIZE * sizeof(float), 4096);
-    align_alloc(char*, outputBuckets_A, 64 * MINIBATCH_SIZE * sizeof(char), 4096);
+    short* activeInputs_B = NULL;
+    float* expectedOutputs_B = NULL;
+    char* outputBuckets_B = NULL;
+
+    float* loss_buffer = NULL;
     
-    align_alloc(short*, activeInputs_B, 64 * MINIBATCH_SIZE * sizeof(short), 4096);
-    align_alloc(float*, expectedOutputs_B, MINIBATCH_SIZE * sizeof(float), 4096);
-    align_alloc(char*, outputBuckets_B, 64 * MINIBATCH_SIZE * sizeof(char), 4096);
-    
-    align_alloc(double*, loss_buffer, MINIBATCH_SIZE * sizeof(double), 4096);
-    
-    int cl_errorcode = initOpenCL(nnue_weights, activeInputs_A, expectedOutputs_A, outputBuckets_A, activeInputs_B, expectedOutputs_B, outputBuckets_B, loss_buffer);
-    if(cl_errorcode != 1) 
+    int cl_errorcode = initHIP(nnue_weights, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
+    if(cl_errorcode != hipSuccess) 
     {
-        DEBUG_ERROR("Failed to init OpenCL - Error Code: %d", cl_errorcode);
-        exit(1);
+        DEBUG_ERROR("Failed to init OpenCL - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
+        exit(EXIT_FAILURE);
     }
 
     int totalIterations = 0;
 
-    double totalLoss = 0.0; //accumulated value per iteration
+    float totalLoss = 0.0; //accumulated value per iteration
+
+    clock_t startTime, endTime;
+    double duration_sec;
 
     //Read data for next few minibatches, then shuffle data amongst them.
     CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
@@ -383,11 +389,12 @@ void train(int maxIterations, float maxAllowedError)
     int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);
     validationEntries -= (validationEntries % MINIBATCH_SIZE);
     int validationBlocks = validationEntries / MINIBATCH_SIZE;
-    double validationLoss = 0.0;
+    float validationLoss = 0.0;
     rewind(validationData);
 
     int inputGroup = INPUT_GROUP_A;
 
+    startTime = clock();
     for(int i = 0; i < validationBlocks; i++)
     {
         size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
@@ -440,7 +447,7 @@ void train(int maxIterations, float maxAllowedError)
                 for(int color = 0; color < 2; color++)
                 {
                     int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] * BITS_PER_BUCKET : kingBuckets[FLIP_SQUARE(board->kingSquare_b)] * BITS_PER_BUCKET;
-
+                    
                     int trackedInputs = 0;
 
                     //First half matches side to move.
@@ -477,24 +484,25 @@ void train(int maxIterations, float maxAllowedError)
         }
 
         enqueueKernels(inputGroup, 0);
+        hipEventSynchronize(hip_events.readLoss);
 
-        clWaitForEvents(1, &readEvent);
-
-        clReleaseEvent(readEvent);
 
         validationLoss+=sumLoss(loss_buffer);
     }
-
+    endTime = clock();
+    duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
     validationLoss /= validationEntries;
-    double minimumLoss = validationLoss;
+    float minimumLoss = validationLoss;
 
     //Yellow text
-    printf("Initial Validation Loss = \033[0;33m%e\033[0m\n", validationLoss);
+    //Validation pos/sec is roughly double that of training. It doesn't have to perform backprop.
+    printf("Initial Validation Loss = \033[0;33m%e\033[0m (%.1fs at %d pos/sec)\n", validationLoss, duration_sec, (int) (validationEntries / duration_sec));
 
     do{
         totalLoss = 0.0;
 
         shuffle_long(blockIndices, blockCount);
+        startTime = clock();
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {    
 
@@ -596,20 +604,25 @@ void train(int maxIterations, float maxAllowedError)
             }
 
             enqueueKernels(inputGroup, 1);
-            clWaitForEvents(1, &readEvent);
-            clReleaseEvent(readEvent);
+            hipEventSynchronize(hip_events.readLoss);
             
-            double loss = sumLoss(loss_buffer);
+            float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
 
             printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
         }
         totalIterations++;
-        
-        printf("\33[2K\rEpoch %d Loss = %e", totalIterations, totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH));
+        endTime = clock();
+        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
+
+        //If we comment out hipEventSynchronize, we end up with 17.4 million positions/second.
+        //Commenting out enqueueKernels as well nets us 18.4 million positions/second.
+        //This is the upper limit bounded by the CPU I/O, and it is far above the current GPU-bound pos/sec.
+        printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec)", totalIterations, totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH), duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
 
         //Validation
         rewind(validationData);
+        startTime = clock();
         for(int i = 0; i < validationBlocks; i++)
         {
             size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
@@ -698,13 +711,13 @@ void train(int maxIterations, float maxAllowedError)
             }
         
             enqueueKernels(inputGroup, 0);
-
-            clWaitForEvents(1, &readEvent);
-
-            clReleaseEvent(readEvent);
+            hipEventSynchronize(hip_events.readLoss);
 
             validationLoss+=sumLoss(loss_buffer);
         }
+        
+        endTime = clock();
+        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
 
         validationLoss /= validationEntries;
 
@@ -715,13 +728,14 @@ void train(int maxIterations, float maxAllowedError)
             minimumLoss = validationLoss;
 
             //Green text
-            printf("; Validation Loss = \033[0;32m%e\033[0m\n", validationLoss);
+            printf("; Validation Loss = \033[0;32m%e\033[0m", validationLoss);
         }
         else 
         {
             //Red text
-            printf("; Validation Loss = \033[0;31m%e\033[0m\n", validationLoss);
+            printf("; Validation Loss = \033[0;31m%e\033[0m", validationLoss);
         }
+        printf(" (%.1fs at %d pos/sec)\n", duration_sec, (int) (validationEntries / duration_sec));
     } while(validationLoss > maxAllowedError && totalIterations < maxIterations);
 
     
@@ -730,13 +744,6 @@ void train(int maxIterations, float maxAllowedError)
     free(blockIndices);
     free(batchData);
     free(unsortedData);
-    align_free(activeInputs_A);
-    align_free(expectedOutputs_A);
-    align_free(outputBuckets_A);
-    align_free(activeInputs_B);
-    align_free(expectedOutputs_B);
-    align_free(outputBuckets_B);
-    align_free(loss_buffer);
 
-    freeOpenCL();
+    freeHIP();
 }

@@ -38,7 +38,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
         {
             int branchNodes = perft(board, depth - 1, maxDepth, 0);
             nodes += branchNodes;
-            if (verbose) 
+            if(verbose) 
             {
                 char fromSquare[3] = {'\0'};
                 char toSquare[3] = {'\0'};
@@ -93,9 +93,9 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
     table_entry_tt* entry = transposition_table_get(board, transpositionTable);
     if(entry)
     {
-        if (entry->nodeType == NODE_TYPE_PV) return entry->evaluation;
-        if (entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) return alpha;
-        if (entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
+        if(entry->nodeType == NODE_TYPE_PV) return entry->evaluation;
+        if(entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) return alpha;
+        if(entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
     }
      
     float best = forwardPropagate(board, context->accumulator);
@@ -284,7 +284,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
                 {
                     score = -principalVariationSearch(context, -alpha - 1.0f, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                     //Re-search PV node
-                    if (score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                    if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 }
                 
                 unmove(board);
@@ -512,7 +512,7 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     {
         int mateInPlies = SCORE_WIN - absScore;
         int mateInMoves = (mateInPlies + 1) / 2;
-        if (bestScore < 0) mateInMoves = -mateInMoves;
+        if(bestScore < 0) mateInMoves = -mateInMoves;
         printf(" score mate %d", mateInMoves);
     }
     else printf(" score cp %d", (int)lroundf(bestScore));
@@ -639,7 +639,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             {
                 int mateInPlies = SCORE_WIN - absScore;
                 int mateInMoves = (mateInPlies + 1) / 2;
-                if (context->score < 0) mateInMoves = -mateInMoves;
+                if(context->score < 0) mateInMoves = -mateInMoves;
                 printf(" score mate %d", mateInMoves);
             }
             else printf(" score cp %d", (int)lroundf(context->score));

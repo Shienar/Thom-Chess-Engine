@@ -1,16 +1,19 @@
 #ifndef GPU_FUNCS
 #define GPU_FUNCS
 
-#define CL_TARGET_OPENCL_VERSION 200
-#include <CL/cl.h>
+#if !defined(__HIP_PLATFORM_AMD__) && !defined(__HIP_PLATFORM_NVIDIA__)
+    #define __HIP_PLATFORM_AMD__
+#endif
+
+#include <hip/hip_runtime_api.h>
 #include "debug.h"
 #include "analyze/neuralnet.h"
 
 //Profiling
 #ifdef PERFT_KERNELS
-    #define ENQUEUE_EVENT(x) &x
+    #define ENQUEUE_EVENT(event, queue) hipStreamSynchronize(queue); hipEventRecord(event, queue)
 #else
-    #define ENQUEUE_EVENT(x) NULL
+    #define ENQUEUE_EVENT(event, queue)
 #endif
 
 //CPU fills one group while gpu uses other group.
@@ -22,7 +25,7 @@
  * cosine annealing is done using timestamp in enqueueKernels()
  */
 #define MAX_LR 8e-4f
-#define MIN_LR 1e-5f
+#define MIN_LR 2.5e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
 #define MAX_INTERVALS 20
@@ -30,128 +33,165 @@
 
 #define KERNEL_COUNT 10
 #define MEM_COUNT 56
+#define EVENT_TRACKED_KERNELS 9
 typedef struct {
-    cl_platform_id platform;
-    cl_device_id device;
-    cl_context context;
-    cl_command_queue queue;
-    cl_program program;
+    int deviceID;
+    hipStream_t queue;
+    hipModule_t module;
 
     //One kernel per function to run.
     //A union is used for iteration.
     union 
     {
         struct {
-            cl_kernel calculateAccumulator;
-            cl_kernel forwardPropagate;
-            cl_kernel backpropagate;
-            cl_kernel calculateGradient4;
-            cl_kernel calculateGradient3;
-            cl_kernel calculateGradient2;
-            cl_kernel calculateGradient1;
-            cl_kernel adamw;
-            cl_kernel inputadamw;
-            cl_kernel lookahead;
+            hipFunction_t calculateAccumulator;
+            hipFunction_t forwardPropagate;
+            hipFunction_t backpropagate;
+            hipFunction_t calculateGradient4;
+            hipFunction_t calculateGradient3;
+            hipFunction_t calculateGradient2;
+            hipFunction_t calculateGradient1;
+            hipFunction_t adamw;
+            hipFunction_t inputadamw;
+            hipFunction_t lookahead;
         };
-        cl_kernel arr[KERNEL_COUNT];
+        hipFunction_t arr[KERNEL_COUNT];
     } kernels;
-} openCLContext;
+} hipContext;
 
 typedef struct {
     union
     {
         struct
         {
-            cl_mem activeInputs_A;
-            cl_mem expectedOutput_A;
-            cl_mem outputBucket_A;
+            void* activeInputs_A;
+            void* expectedOutput_A;
+            void* outputBucket_A;
 
-            cl_mem activeInputs_B;
-            cl_mem expectedOutput_B;
-            cl_mem outputBucket_B;
+            void* activeInputs_B;
+            void* expectedOutput_B;
+            void* outputBucket_B;
 
-            cl_mem weights1_fast;
-            cl_mem weights2_fast;
-            cl_mem weights3_fast;
-            cl_mem weights4_fast;
+            void* weights1_fast;
+            void* weights2_fast;
+            void* weights3_fast;
+            void* weights4_fast;
 
-            cl_mem bias1_fast;
-            cl_mem bias2_fast;
-            cl_mem bias3_fast;
-            cl_mem bias4_fast;
+            void* bias1_fast;
+            void* bias2_fast;
+            void* bias3_fast;
+            void* bias4_fast;
             
-            cl_mem weights1_slow;
-            cl_mem weights2_slow;
-            cl_mem weights3_slow;
-            cl_mem weights4_slow;
+            void* weights1_slow;
+            void* weights2_slow;
+            void* weights3_slow;
+            void* weights4_slow;
 
-            cl_mem bias1_slow;
-            cl_mem bias2_slow;
-            cl_mem bias3_slow;
-            cl_mem bias4_slow;
+            void* bias1_slow;
+            void* bias2_slow;
+            void* bias3_slow;
+            void* bias4_slow;
             
-            cl_mem accumulatorOutput;
-            cl_mem h2Output;
-            cl_mem h3Output;
-            cl_mem finalOutput;
+            void* accumulatorOutput;
+            void* h2Output;
+            void* h3Output;
+            void* finalOutput;
             
-            cl_mem loss;
+            void* loss;
             
-            cl_mem delta4;
-            cl_mem delta3;
-            cl_mem delta2;
-            cl_mem delta1;
+            void* delta4;
+            void* delta3;
+            void* delta2;
+            void* delta1;
             
-            cl_mem gradient1Sum;
-            cl_mem gradient2Sum;
-            cl_mem gradient3Sum;
-            cl_mem gradient4Sum;
+            void* gradient1Sum;
+            void* gradient2Sum;
+            void* gradient3Sum;
+            void* gradient4Sum;
 
-            cl_mem gradientBias1Sum;
-            cl_mem gradientBias2Sum;
-            cl_mem gradientBias3Sum;
-            cl_mem gradientBias4Sum;
+            void* gradientBias1Sum;
+            void* gradientBias2Sum;
+            void* gradientBias3Sum;
+            void* gradientBias4Sum;
 
             //Adam first moments
-            cl_mem m_weights1;
-            cl_mem m_weights2;
-            cl_mem m_weights3;
-            cl_mem m_weights4;
+            void* m_weights1;
+            void* m_weights2;
+            void* m_weights3;
+            void* m_weights4;
 
-            cl_mem m_bias1;
-            cl_mem m_bias2;
-            cl_mem m_bias3;
-            cl_mem m_bias4;
+            void* m_bias1;
+            void* m_bias2;
+            void* m_bias3;
+            void* m_bias4;
 
             //Adam second moments
-            cl_mem v_weights1;
-            cl_mem v_weights2;
-            cl_mem v_weights3;
-            cl_mem v_weights4;
+            void* v_weights1;
+            void* v_weights2;
+            void* v_weights3;
+            void* v_weights4;
 
-            cl_mem v_bias1;
-            cl_mem v_bias2;
-            cl_mem v_bias3;
-            cl_mem v_bias4;
+            void* v_bias1;
+            void* v_bias2;
+            void* v_bias3;
+            void* v_bias4;
         };
-        cl_mem arr[MEM_COUNT];
+        void* arr[MEM_COUNT];
     } mem;
 
-} openCLKernelMemory;
+} hipKernelArgs;
 
-extern openCLContext opencl_context;
-extern openCLKernelMemory opencl_mem;
-extern cl_event readEvent;
+typedef struct {
+    hipEvent_t readLoss;
 
-int initOpenCL(network_weights* nnue_weights, short* h_active_A, float* h_expected_A, char* h_output_A,
-                                                        short* h_active_B, float* h_expected_B, char* h_output_B,
-                                                        double* h_lossbuffer);
-void freeOpenCL();
+    union {
+        struct {
+            hipEvent_t calcAccum;
+            hipEvent_t fprop;
+            hipEvent_t backprop;
+            hipEvent_t gradient1;
+            hipEvent_t gradient2;
+            hipEvent_t gradient3;
+            hipEvent_t gradient4;
+            hipEvent_t denseUpdate;
+            hipEvent_t inputUpdate;
+        };
+        hipEvent_t arr[EVENT_TRACKED_KERNELS];
+    } startEvents;
+    
+    union {
+        struct {
+            hipEvent_t calcAccum;
+            hipEvent_t fprop;
+            hipEvent_t backprop;
+            hipEvent_t gradient1;
+            hipEvent_t gradient2;
+            hipEvent_t gradient3;
+            hipEvent_t gradient4;
+            hipEvent_t denseUpdate;
+            hipEvent_t inputUpdate;
+        };
+        hipEvent_t arr[EVENT_TRACKED_KERNELS];
+    } endEvents;
+} hipEvents;
+
+extern hipContext hip_context;
+extern hipKernelArgs hip_args;
+extern hipEvents hip_events;
+
+hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_expected_A, char** h_output_A,
+                                                        short** h_active_B, float** h_expected_B, char** h_output_B,
+                                                        float** h_lossbuffer);
+void freeHIP();
 
 #define LOOKAHEAD_UPDATE(fastWeights, slowWeights, size) \
-    clSetKernelArg(opencl_context.kernels.lookahead, 0, sizeof(cl_mem), &fastWeights); \
-    clSetKernelArg(opencl_context.kernels.lookahead, 1, sizeof(cl_mem), &slowWeights); \
-    clEnqueueNDRangeKernel(opencl_context.queue, opencl_context.kernels.lookahead, 1, NULL, &size, NULL, 0, NULL, NULL);
+    do { \
+        void* lookaheadArgs[2] = { &fastWeights, &slowWeights }; \
+        hipModuleLaunchKernel(hip_context.kernels.lookahead, \
+                                (size + 32 - 1) / 32, 1, 1,  \
+                                32, 1, 1, \
+                                0, hip_context.queue, lookaheadArgs, NULL); \
+    }while(0)
 
 void enqueueKernels(int bufferSide, int doBackprop);
 void getWeights(network_weights* weights);
