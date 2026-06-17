@@ -66,11 +66,9 @@ typedef struct {
         {
             void* activeInputs_A;
             void* expectedOutput_A;
-            void* outputBucket_A;
 
             void* activeInputs_B;
             void* expectedOutput_B;
-            void* outputBucket_B;
 
             void* weights1_fast;
             void* weights2_fast;
@@ -179,8 +177,8 @@ extern hipContext hip_context;
 extern hipKernelArgs hip_args;
 extern hipEvents hip_events;
 
-hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_expected_A, char** h_output_A,
-                                                        short** h_active_B, float** h_expected_B, char** h_output_B,
+hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_expected_A,
+                                                        short** h_active_B, float** h_expected_B,
                                                         float** h_lossbuffer);
 void freeHIP();
 

@@ -163,17 +163,15 @@ void print_network_statistics()
 }
 
 /*** Inference ***/
-static inline float horizontalSIMDSum(__m256 vector)
-{
-    __m128 sum128 = _mm_add_ps(_mm256_castps256_ps128(vector), _mm256_extractf128_ps(vector, 1));
-    sum128 = _mm_hadd_ps(sum128, sum128); //[A, B, C, D] -> [A + B, C + D, A + B, C + D]
-    sum128 = _mm_hadd_ps(sum128, sum128); //[A + B, C + D, A + B, C + D] -> 4 copies of {A + B + C + D}
-    return _mm_cvtss_f32(sum128);
-}
 
-void calculateHiddenLayer(float* inputValues, float* outputValues, int numInputs, int numOutputs, float weights[numOutputs][numInputs], float* biasWeights)
+void calculateHiddenLayer(float* inputValuesA, float* inputValuesB, float* outputValues, 
+                            int numInputsA, int numInputsB, int numOutputs, 
+                            float weights[numOutputs][numInputsA + numInputsB], float* biasWeights)
 {
-    float totalSum1, totalSum2, totalSum3, totalSum4;
+
+    __m128 zero_vec = _mm_setzero_ps();
+    __m128 one_vec  = _mm_set1_ps(1.0f);
+
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex+=4)
     {
         __m256 v_output1 = _mm256_setzero_ps();
@@ -181,34 +179,43 @@ void calculateHiddenLayer(float* inputValues, float* outputValues, int numInputs
         __m256 v_output3 = _mm256_setzero_ps();
         __m256 v_output4 = _mm256_setzero_ps();
 
-        //All layer lengths are divisible by 32 so no overflow.
-        for(int inputIndex = 0; inputIndex < numInputs; inputIndex+=8)
+        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=8)
         {
-            __m256 v_inputBatch = _mm256_loadu_ps(&inputValues[inputIndex]);
+            __m256 v_inputBatch = _mm256_loadu_ps(&inputValuesA[inputIndex]);
 
-            //Weights are an array of float w[OUTPUT NODES][INPUT NODES]
-            __m256 v_weightsBatch1 = _mm256_loadu_ps(&weights[outputIndex + 0][inputIndex]);
-            __m256 v_weightsBatch2 = _mm256_loadu_ps(&weights[outputIndex + 1][inputIndex]);
-            __m256 v_weightsBatch3 = _mm256_loadu_ps(&weights[outputIndex + 2][inputIndex]);
-            __m256 v_weightsBatch4 = _mm256_loadu_ps(&weights[outputIndex + 3][inputIndex]);
-
-            //Multiply inputs by weights.
-            //Add temp products to intermediate registers.
-            v_output1 = _mm256_fmadd_ps(v_inputBatch, v_weightsBatch1, v_output1);
-            v_output2 = _mm256_fmadd_ps(v_inputBatch, v_weightsBatch2, v_output2);
-            v_output3 = _mm256_fmadd_ps(v_inputBatch, v_weightsBatch3, v_output3);
-            v_output4 = _mm256_fmadd_ps(v_inputBatch, v_weightsBatch4, v_output4);
+            v_output1 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 0][inputIndex]), v_output1);
+            v_output2 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 1][inputIndex]), v_output2);
+            v_output3 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 2][inputIndex]), v_output3);
+            v_output4 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 3][inputIndex]), v_output4);
         }
 
-        totalSum1 = horizontalSIMDSum(v_output1) + biasWeights[outputIndex + 0];
-        totalSum2 = horizontalSIMDSum(v_output2) + biasWeights[outputIndex + 1];
-        totalSum3 = horizontalSIMDSum(v_output3) + biasWeights[outputIndex + 2];
-        totalSum4 = horizontalSIMDSum(v_output4) + biasWeights[outputIndex + 3];
-        
-        outputValues[outputIndex + 0] = _max(_min(totalSum1, 1.0f), 0.0f);
-        outputValues[outputIndex + 1] = _max(_min(totalSum2, 1.0f), 0.0f);
-        outputValues[outputIndex + 2] = _max(_min(totalSum3, 1.0f), 0.0f);
-        outputValues[outputIndex + 3] = _max(_min(totalSum4, 1.0f), 0.0f);
+        if(inputValuesB)
+        {
+            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=8, loadIndex+=8)
+            {
+                __m256 v_inputBatch = _mm256_loadu_ps(&inputValuesB[loadIndex]);
+
+                v_output1 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 0][weightIndex]), v_output1);
+                v_output2 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 1][weightIndex]), v_output2);
+                v_output3 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 2][weightIndex]), v_output3);
+                v_output4 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 3][weightIndex]), v_output4);
+            
+            }
+        }
+
+        //reduce 
+        __m256 v_partial12 = _mm256_hadd_ps(v_output1, v_output2);
+        __m256 v_partial34 = _mm256_hadd_ps(v_output3, v_output4);
+        __m256 v_partial1234 = _mm256_hadd_ps(v_partial12, v_partial34);
+
+        __m128 v_final_sums = _mm_add_ps(_mm256_castps256_ps128(v_partial1234), _mm256_extractf128_ps(v_partial1234, 1));
+        v_final_sums = _mm_add_ps(v_final_sums, _mm_loadu_ps(&biasWeights[outputIndex]));
+
+        //crelu
+        v_final_sums = _mm_max_ps(v_final_sums, zero_vec);
+        v_final_sums = _mm_min_ps(v_final_sums, one_vec);
+
+        _mm_storeu_ps(&outputValues[outputIndex], v_final_sums);
     }
 }
 
@@ -223,33 +230,43 @@ float calculateOutputLayer(float* h3, float weights[THIRD_HIDDEN_LAYER_NODES], f
                                     v_output);
     }
 
-    return horizontalSIMDSum(v_output) + bias;
+    
+    __m128 sum128 = _mm_add_ps(_mm256_castps256_ps128(v_output), _mm256_extractf128_ps(v_output, 1));
+    
+    //_MM_SHUFFLE() reorganizes from default indices (3, 2, 1, 0)
+    // 0 and 1 come from second vector
+    // 2 and 3 come from first vector
+    sum128 = _mm_add_ps(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum128 = _mm_add_ps(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 1, 1, 1)));
+
+    return _mm_cvtss_f32(sum128) + bias;
 }
+
 float forwardPropagate(bitboard* board, accumulator* acc)
 {
     int turn = board->turn;
-    int pieceCount = __builtin_popcountll(board->pieces_all);
-    
-    int bucket = (pieceCount - 1) / 4;
 
-    //create perspective-aligned accumulator (us vs them)
-    float tempAccumulator[ACCUMULATOR_NODES];
+    int bucket = 0;
+
+    float* side_us;
+    float* side_them;
+
     if(ISWHITE(turn))
     {
-        memcpy(&tempAccumulator[0], &acc->accumulator[WHITE][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
-        memcpy(&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE], &acc->accumulator[BLACK][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
+        side_us = acc->accumulator[WHITE];
+        side_them = acc->accumulator[BLACK];
     }
     else
     {
-        memcpy(&tempAccumulator[0], &acc->accumulator[BLACK][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
-        memcpy(&tempAccumulator[ACCUMULATOR_NODES_PER_SIDE], &acc->accumulator[WHITE][0], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
+        side_us = acc->accumulator[BLACK];
+        side_them = acc->accumulator[WHITE];
     }
 
     float h2[SECOND_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(tempAccumulator, h2, ACCUMULATOR_NODES, SECOND_HIDDEN_LAYER_NODES, nnue_weights->weights2, nnue_weights->weights2_bias);
+    calculateHiddenLayer(side_us, side_them, h2, ACCUMULATOR_NODES_PER_SIDE, ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, nnue_weights->weights2, nnue_weights->weights2_bias);
 
     float h3[THIRD_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(h2, h3, SECOND_HIDDEN_LAYER_NODES, THIRD_HIDDEN_LAYER_NODES, nnue_weights->weights3, nnue_weights->weights3_bias);
+    calculateHiddenLayer(h2, NULL, h3, SECOND_HIDDEN_LAYER_NODES, 0, THIRD_HIDDEN_LAYER_NODES, nnue_weights->weights3, nnue_weights->weights3_bias);
 
     return calculateOutputLayer(h3, nnue_weights->weights4[bucket], nnue_weights->weights4_bias[bucket]);
 }
@@ -357,18 +374,15 @@ void train(int maxIterations, float maxAllowedError)
     
     short* activeInputs_A = NULL;
     float* expectedOutputs_A = NULL;
-    char* outputBuckets_A = NULL;
 
     short* activeInputs_B = NULL;
     float* expectedOutputs_B = NULL;
-    char* outputBuckets_B = NULL;
-
     float* loss_buffer = NULL;
     
-    int cl_errorcode = initHIP(nnue_weights, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
+    int cl_errorcode = initHIP(nnue_weights, &activeInputs_A, &expectedOutputs_A, &activeInputs_B, &expectedOutputs_B, &loss_buffer);
     if(cl_errorcode != hipSuccess) 
     {
-        DEBUG_ERROR("Failed to init OpenCL - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
+        DEBUG_ERROR("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
         exit(EXIT_FAILURE);
     }
 
@@ -465,10 +479,6 @@ void train(int maxIterations, float maxAllowedError)
                             mask&=(mask - 1);
                         }
                     }
-
-                    
-                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
-                    else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
                     
                     //-1 padding
                     while(trackedInputs < 32)
@@ -587,9 +597,6 @@ void train(int maxIterations, float maxAllowedError)
                             }
                         }
                         
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
-                        else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
-                        
                         //-1 padding
                         while(trackedInputs < 32)
                         {
@@ -609,11 +616,11 @@ void train(int maxIterations, float maxAllowedError)
             float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
 
-            printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
+            if((minibatchNumber + 1) % 10 == 0) printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
         }
         totalIterations++;
         endTime = clock();
-        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
+        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
 
         //If we comment out hipEventSynchronize, we end up with 17.4 million positions/second.
         //Commenting out enqueueKernels as well nets us 18.4 million positions/second.
@@ -693,9 +700,6 @@ void train(int maxIterations, float maxAllowedError)
                                 mask&=(mask - 1);
                             }
                         }
-                        
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = (trackedInputs - 1) / 4;
-                        else outputBuckets_B[entryNumber] = (trackedInputs - 1) / 4;
 
                         //-1 padding
                         while(trackedInputs < 32)

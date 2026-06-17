@@ -9,12 +9,12 @@
 #define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 4)
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
-#define OUTPUT_BUCKETS 8
+#define OUTPUT_BUCKETS 1
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 #define ADAM_EPSILON 1e-8f
-#define ADAM_WEIGHT_DECAY 1e-2f
+#define ADAM_WEIGHT_DECAY 1e-3f
 
 #define EVAL_SCALE 400.0f
 
@@ -80,14 +80,12 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
 extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
                                             float* h2_weights, float* h2_bias, float* h2_output,
                                             float* h3_weights, float* h3_bias, float* h3_output,
-                                            float* output_weights, float* output_bias, 
-                                            char* outputBuckets,
+                                            float* output_weights, float* output_bias,
                                             float* outputs)
 {
     int batchIndex = blockIdx.x;
-    int localID = threadIdx.x;
+    int localID = threadIdx.x; //0-31
 
-    int bucket = (int)outputBuckets[batchIndex];
     int baseIndex = batchIndex * ACCUMULATOR_NODES;
 
     //each local thread contributes to loading part of the input.
@@ -135,7 +133,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     __syncthreads();
 
     //calculate output
-    float myOutputContribution = shared[localID] * output_weights[bucket * THIRD_HIDDEN_LAYER_NODES + localID];
+    float myOutputContribution = shared[localID] * output_weights[localID];
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
@@ -146,7 +144,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
 
     if(localID == 0)  
     {
-        outputs[batchIndex] = sigmoid((myOutputContribution + output_bias[bucket]) / (EVAL_SCALE));
+        outputs[batchIndex] = sigmoid((myOutputContribution + output_bias[0]) / (EVAL_SCALE));
     }
 }
 
@@ -164,7 +162,6 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
                             float* delta3,
                             float* delta2,
                             float* delta1,
-                            const char* outputBuckets,
                             float* loss)
 {
     int batchIndex = blockIdx.x; //0-16383
@@ -173,7 +170,6 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
     __shared__ float shared_d4;
     __shared__ float shared_d3[32];
     __shared__ float shared_d2[32]; 
-    __shared__ char bucket;
 
     //delta4
     if(localID == 0) 
@@ -187,8 +183,6 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
         shared_d4 *= (output * (1.0f - output)); //sigmoid derivative
 
         delta4[batchIndex] = shared_d4;
-
-        bucket = outputBuckets[batchIndex];
     } 
     __syncthreads();
     
@@ -196,7 +190,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = shared_d4 * weights4[bucket * THIRD_HIDDEN_LAYER_NODES + localID] * crelu_derivative(h3_val);
+        float d3 = shared_d4 * weights4[localID] * crelu_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
         shared_d3[localID] = d3;
     }
@@ -238,45 +232,35 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
 extern "C" __global__ void calculateGradient4(const float* delta4, //1 per batch sample
                                     const float* h3, //THIRD_HIDDEN_LAYER_NODES per batch sample
                                     float* gradient4_Sum, //THIRD_HIDDEN_LAYER_NODES * OUTPUT_BUCKETS shared
-                                    float* bias4_Sum, //8 shared
-                                    const char* outputBuckets) //MINIBATCH_SIZE
+                                    float* bias4_Sum)
 {
     int weightIndex = blockIdx.x; //0-31
     int localID = threadIdx.x; //0-31
 
-    float partialSum[8] = { 0.0 };
-    float partialBiasSum[8] = { 0.0 }; //Only managed by the threads with weightIndex == 0.
+    float partialSum = 0.0f;
+    float partialBiasSum = 0.0f; //Only managed by the threads with weightIndex == 0.
 
     for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex+=32) 
     {
-        char bucket = outputBuckets[batchIndex];
         float d4 = delta4[batchIndex];
 
-        partialSum[bucket] += d4 * h3[THIRD_HIDDEN_LAYER_NODES * batchIndex + weightIndex];
-        partialBiasSum[bucket] += d4;
+        partialSum += d4 * h3[THIRD_HIDDEN_LAYER_NODES * batchIndex + weightIndex];
+        partialBiasSum += d4;
     }
 
     __syncthreads();
     //Parallel reduction
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
-    for(int b = 0; b < 8; b++) 
-    {
-        #pragma unroll
-        for (int offset = 16; offset > 0; offset /= 2) {
-            partialSum[b] += __shfl_down_sync(mask_32, partialSum[b], offset, 32);
-            partialBiasSum[b] += __shfl_down_sync(mask_32, partialBiasSum[b], offset, 32);
-        }
+    for (int offset = 16; offset > 0; offset /= 2) {
+        partialSum += __shfl_down_sync(mask_32, partialSum, offset, 32);
+        partialBiasSum += __shfl_down_sync(mask_32, partialBiasSum, offset, 32);
     }
 
     if(localID == 0)
     {
-        #pragma unroll
-        for(int b = 0; b < 8; b++) 
-        {
-            gradient4_Sum[b * THIRD_HIDDEN_LAYER_NODES + weightIndex] = partialSum[b];
-            if(weightIndex == 0) bias4_Sum[b] = partialBiasSum[b];
-        }
+        gradient4_Sum[weightIndex] = partialSum;
+        if(weightIndex == 0) bias4_Sum[0] = partialBiasSum;
     }
 }
 
@@ -461,6 +445,7 @@ extern "C" __global__ void inputAdamW(float* w1, float* g1, float* m1, float* v1
     int size = gridDim.x * blockDim.x;
 
     UPDATE_ADAMW(w1, g1, m1, v1, size);
+    if(w1[i] == 0.0f) w1[i] = ADAM_EPSILON;
 }
 
 extern "C" __global__ void lookahead_update(float* fast_weights, float* slow_weights)

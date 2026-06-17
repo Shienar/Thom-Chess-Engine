@@ -109,7 +109,7 @@ typedef struct magic {
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 #define SECOND_HIDDEN_LAYER_NODES 32
 #define THIRD_HIDDEN_LAYER_NODES 32
-#define OUTPUT_BUCKETS 8
+#define OUTPUT_BUCKETS 1
 
 #define TRACKED_PIECES 10 //12 for halfKA, 10 for halfKP
 #define BITS_PER_BUCKET (64 * TRACKED_PIECES)
@@ -127,12 +127,11 @@ extern int kingBucketMap[KING_BUCKETS];
  * 
  * Output bucket: 0-7, calculated with ((piece count - 1) / 4)
  * 
- * During training, we will accelerate training by forcing everything 
- * into the same input king bucket and output bucket. Once the network
- * plateaus, the weights will be broadcasted to all buckets for the rest
- * of training. There's probably a better way to do this since both sides won't
- * ever really be in the same king bucket, but this really is a massive speedup to
- * training.
+ * Training will get started with all inputs forced into the same input and
+ * output buckets. Later, weights1 get broadcasted and multiple input king
+ * buckets are allowed. Output buckets can get introduced later on towards the
+ * very end of training. There might be a better way to do this, but it saved
+ * me a lot of training time.
  */
 typedef struct network_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
@@ -151,21 +150,10 @@ typedef struct accumulator {
     float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
 
-/**
- * Each accumulator is truly two entries, one for each half
- * of the accumulator.
- * 
- * boards[0] = white
- * boards[1] = black
- * 
- * White accumulators:
- *  - accumulators[i].accumulator[0]
- * Black accumulators:
- *  - accumulators[i].accumulator[1]
- */
 typedef struct accumulatorRefreshTable {
-    bitboard* boards[2][KING_BUCKETS];
-    accumulator accumulators[KING_BUCKETS];
+    bitboard* boards[2][64];
+    accumulator accumulators[2][64];
+    uint8_t initialized[2][64];
 } accumulatorRefreshTable;
 
 typedef struct PVar {

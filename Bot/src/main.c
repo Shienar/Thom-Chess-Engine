@@ -349,6 +349,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "move") == 0)
             {
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     move m = getStructFromString(board, str);
