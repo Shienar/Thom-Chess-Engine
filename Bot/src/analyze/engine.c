@@ -34,7 +34,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     int count = generateMoveList(moveList, board, 0);
     for(int index = 0; index < count; index++)
     {
-        if(!moveFromStruct(board, moveList[index]))
+        if(!moveFromStruct(board, &moveList[index]))
         {
             int branchNodes = perft(board, depth - 1, maxDepth, 0);
             nodes += branchNodes;
@@ -66,18 +66,7 @@ float evaluateEndstate(bitboard* board, int ply)
     }
     else
     {
-        //Draws are less desirable in the early/middlegame and more desirable in the lategame.
-        int scale;
-        if(board->halfMoveCount < MIDDLEGAME_START_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_EARLYGAME;
-        else if(board->halfMoveCount < MIDDLEGAME_END_HALFMOVES) scale = CONTEMPT_FACTOR_SCALE_MIDDLEGAME;
-        else scale = CONTEMPT_FACTOR_SCALE_ENDGAME;
-
-        if(board->victor == VICTOR_DRAW_STALEMATE_WHITE || board->victor == VICTOR_DRAW_STALEMATE_BLACK) return scale*CONTEMPT_FACTOR_STALEMATE;
-        if(board->victor == VICTOR_DRAW_THREEFOLD) return scale*CONTEMPT_FACTOR_THREEFOLD;
-        if(board->victor == VICTOR_DRAW_FIFTY_MOVE_RULE) return scale*CONTEMPT_FACTOR_FIFTYMOVERULE;
-        if(board->victor == VICTOR_DRAW_INSUFFICIENT_MATERIAL) return scale*CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL;
-
-        DEBUG_ERROR("Unhandled draw condition.");
+        //Not going to worry about contempt with negamax.
         return 0.0;
     }
 }
@@ -120,7 +109,7 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
         move* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            if(!moveFromStruct(board, *currentMove))
+            if(!moveFromStruct(board, currentMove))
             {
                 updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
                 float score = -quiesce(context, -beta, -alpha, ply + 1);
@@ -158,7 +147,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
     
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(depth == 0 || (context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
+    if(depth == 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
     {
         return quiesce(context, alpha, beta, ply);
     }
@@ -263,7 +252,7 @@ float principalVariationSearch(searchThreadContext* context, float alpha, float 
             //Move count pruning
             //if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth]) examineQuiets = 0;
 
-            if(!moveFromStruct(board, *currentMove))
+            if(!moveFromStruct(board, currentMove))
             {
                 int isQuiet = (currentMove->capturedPiece == EMPTY_PIECE && (IS_IN_CHECK_ANY(board->flags)) == 0);
                 if(!examineQuiets && isQuiet)
@@ -422,7 +411,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         float beta = context->score + aspiration_margin;
         while(1)
         {
-            if(clock() > *endTime) break;
+            if(context->isPonder == 0 && clock() > *endTime) break;
 
             updateAccumulatorFromTable(board, acc, accumulatorTable);
             float score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
@@ -463,9 +452,12 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
-        if(clock() > *context->endTime) break;
+        if(context->isPonder == 0 && clock() > *context->endTime) break;
+
         aspiration_window(context, currentDepth);
         if(clock() <= *context->endTime) memcpy(&tempPV, &context->pv, sizeof(PVar));
+        
+        if(fabsf(context->score) > MIN_MATE_SCORE) break;
     }
 
     //Load the last stable pv
@@ -680,6 +672,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
+
+        if(fabsf(context->score) > MIN_MATE_SCORE) break;
     }
     if(helperThreadCount > 0)
     {
@@ -699,8 +693,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     free(threadAccumulators);
     for(int i = 0; i < helperThreadCount; i++) destroyRefreshTable(threadRefreshTables[i]);
     free(threadRefreshTables);
-
-    while(context->isPonder && *context->endTime > 0) ;
 
     if(!IS_VALID_MOVE(bestMove) && bestMove.startSquare == 0)
     {

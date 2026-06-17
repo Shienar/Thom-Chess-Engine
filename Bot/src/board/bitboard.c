@@ -252,10 +252,11 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
 }
 
 //Resets the board to an opening position
-bitboard* create_board()
+bitboard* create_board(const char* fenString)
 {
+    if(!fenString) fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     bitboard* board = calloc(1, sizeof(bitboard));
-    load_fen_string_to_board(board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    load_fen_string_to_board(board, fenString);
     return board;
 }
 

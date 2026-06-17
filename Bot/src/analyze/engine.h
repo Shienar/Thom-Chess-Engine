@@ -8,19 +8,6 @@
 #include "analyze/sygyzy.h"
 #include <time.h>
 
-//The evaluation score given to draws.
-#define CONTEMPT_FACTOR_SCALE_EARLYGAME 15.0f
-#define CONTEMPT_FACTOR_SCALE_MIDDLEGAME 8.0f
-#define CONTEMPT_FACTOR_SCALE_ENDGAME 2.0f
-
-#define MIDDLEGAME_START_HALFMOVES 20.0f 
-#define MIDDLEGAME_END_HALFMOVES 60.0f
-
-#define CONTEMPT_FACTOR_STALEMATE -50.0f
-#define CONTEMPT_FACTOR_THREEFOLD -250.0f
-#define CONTEMPT_FACTOR_FIFTYMOVERULE -125.0f
-#define CONTEMPT_FACTOR_INSUFFICIENT_MATERIAL -200.0f
-
 #define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
 
 extern int threadCount;

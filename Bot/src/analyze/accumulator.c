@@ -31,9 +31,6 @@ int kingBuckets[64] = {
     9, 9, 9, 9,     9, 9, 9, 9,
 };
 
-//Contains example squares that a king in bucket X can exist on.
-int kingBucketMap[KING_BUCKETS] = {0, 1, 2, 3, 8, 10, 16, 24, 32, 48};
-
 //full refresh of raw values.
 void calculateAccumulator(uint64_t* inputNodes, float* outputValues, int kingBucket, network_weights* weights)
 {
@@ -107,16 +104,11 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
 
     if(getColumn(board->kingSquare_w) > 3)
     {
-        for (int p = 0; p < TRACKED_PIECES; p++) 
-        {
-            inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
-        }
+        for (int p = 0; p < TRACKED_PIECES; p++) inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
     }
     if(getColumn(board->kingSquare_b) > 3)
     {
-        for (int p = 0; p < TRACKED_PIECES; p++) {
-            inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
-        }
+        for (int p = 0; p < TRACKED_PIECES; p++) inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
     }
 
     if(ISWHITE(color)) 
@@ -133,6 +125,7 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
 
 void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, accumulator* acc,  accumulatorRefreshTable* refreshTable)
 {
+    assert(board);
     assert(acc);
     assert(refreshTable);
 
@@ -183,15 +176,50 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
             toSq ^= 7;
         }
 
-        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  6 + PIECE(pieceOffset) / 2;
-        
+        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  (TRACKED_PIECES / 2) + PIECE(pieceOffset) / 2;
+
         int inputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset;
-        uint64_t xorMask = singleBitMask(fromSq) | singleBitMask(toSq);
+        
+        int fromIdx, toIdx;
+        if(lastMove.promoteTo) 
+        {
+            int promotePieceOffset = ISWHITE(pieceOffset) ? PIECE(lastMove.promoteTo) / 2 :  (TRACKED_PIECES / 2) + PIECE(lastMove.promoteTo) / 2;
+            int promoteInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (TRACKED_PIECES * kingBuckets[ksq]) + promotePieceOffset;
+            
+            if(shouldUndoMove)
+            {
+                uint64_t xorMask_promote = singleBitMask(fromSq);
+                uint64_t xorMask_pawn = singleBitMask(toSq);
 
-        acc->inputNodes[inputNodeIndex]^=xorMask;
+                acc->inputNodes[inputNodeIndex] ^= xorMask_pawn;
+                acc->inputNodes[promoteInputNodeIndex] ^= xorMask_promote;
+                
+                fromIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + promotePieceOffset)) + fromSq;
+                toIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + toSq;
+            }
+            else
+            {
+                uint64_t xorMask_promote = singleBitMask(toSq);
+                uint64_t xorMask_pawn = singleBitMask(fromSq);
 
-        int fromIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + fromSq;
-        int toIdx   = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + toSq;
+                acc->inputNodes[inputNodeIndex] ^= xorMask_pawn;
+                acc->inputNodes[promoteInputNodeIndex] ^= xorMask_promote;
+                
+                fromIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + fromSq;
+                toIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + promotePieceOffset)) + toSq;
+            }
+        }
+        else
+        {
+            
+            uint64_t xorMask = singleBitMask(fromSq) | singleBitMask(toSq);
+
+            acc->inputNodes[inputNodeIndex]^=xorMask;
+
+            fromIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + fromSq;
+            toIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + pieceOffset)) + toSq;
+
+        }
 
         int capIdx = -1;
         if(lastMove.capturedPiece != EMPTY_PIECE)
@@ -214,7 +242,7 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
                 capturedPieceSquare ^= 7;
             }
 
-            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  6 + PIECE(capturedPieceOffset) / 2;
+            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  (TRACKED_PIECES / 2) + PIECE(capturedPieceOffset) / 2;
             int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (TRACKED_PIECES * kingBuckets[ksq]) + capturedPieceOffset;
 
             acc->inputNodes[capturedInputNodeIndex]^=(1ull<<capturedPieceSquare);
@@ -252,6 +280,26 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
         }
         activateAccumulator(acc->rawAccumulator[side], acc->accumulator[side]);
     }
+
+    //Keeping this commented out most of the time. 
+    //It makes the engine a thousand times slower but it necessary for debugging.
+    /*
+    #ifndef NDEBUG
+        accumulator realAccumValues = {0};
+        loadInputAccumulator(board, &realAccumValues, WHITE);
+        loadInputAccumulator(board, &realAccumValues, BLACK);
+        assert(memcmp(&realAccumValues.inputNodes, &acc->inputNodes, sizeof(acc->inputNodes)) == 0);
+        for(int i = 0; i < 2; i++)
+        {
+            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+            {
+                //floating point drift will always exist, no memcmp here.
+                assert(fabsf(realAccumValues.rawAccumulator[i][j] - acc->rawAccumulator[i][j]) < 1e-4f);
+                assert(fabsf(realAccumValues.accumulator[i][j] - acc->accumulator[i][j]) < 1e-4f);
+            }
+        }
+    #endif
+    */
 }
 
 void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, accumulator* acc, int color)
@@ -265,7 +313,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     uint64_t curBoard[TRACKED_PIECES] = {0};
     uint64_t accumBoard[TRACKED_PIECES] = {0};
 
-    int ksq;
+    int ksq; 
     if(ISWHITE(color))
     {
         ksq = accumulatorBoard->kingSquare_w;
@@ -393,6 +441,7 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     {
         memcpy(refreshTable->boards[WHITE][kingSq_w], board, sizeof(bitboard));
         loadInputAccumulator(refreshTable->boards[WHITE][kingSq_w], &refreshTable->accumulators[WHITE][kingSq_w], WHITE);
+        loadInputAccumulator(refreshTable->boards[WHITE][kingSq_w], &refreshTable->accumulators[WHITE][kingSq_w], BLACK);
         refreshTable->initialized[WHITE][kingSq_w] = 1;
     }
     else updateBoardAccumulator(board, refreshTable->boards[WHITE][kingSq_w], &refreshTable->accumulators[WHITE][kingSq_w], WHITE);
@@ -400,11 +449,15 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     if (!refreshTable->initialized[BLACK][kingSq_b])
     {
         memcpy(refreshTable->boards[BLACK][kingSq_b], board, sizeof(bitboard));
+        loadInputAccumulator(refreshTable->boards[BLACK][kingSq_b], &refreshTable->accumulators[BLACK][kingSq_b], WHITE);
         loadInputAccumulator(refreshTable->boards[BLACK][kingSq_b], &refreshTable->accumulators[BLACK][kingSq_b], BLACK);
         refreshTable->initialized[BLACK][kingSq_b] = 1;
     }
     else updateBoardAccumulator(board, refreshTable->boards[BLACK][kingSq_b], &refreshTable->accumulators[BLACK][kingSq_b], BLACK);
     
+    memcpy(&acc->inputNodes, &refreshTable->accumulators[WHITE][kingSq_w].inputNodes, sizeof(uint64_t) * BITBOARDS_PER_INPUT_SIDE);
+    memcpy(&acc->inputNodes[BITBOARDS_PER_INPUT_SIDE], &refreshTable->accumulators[BLACK][kingSq_b].inputNodes[BITBOARDS_PER_INPUT_SIDE], sizeof(uint64_t) * BITBOARDS_PER_INPUT_SIDE);
+
     memcpy(acc->rawAccumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].rawAccumulator[WHITE], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
     memcpy(acc->accumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].accumulator[WHITE], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
 
@@ -419,20 +472,7 @@ accumulatorRefreshTable* createRefreshTable()
     {
         for(int newKSq = 0; newKSq < 64; newKSq++)
         {
-            table->boards[color][newKSq] = create_board();
-            if(color == WHITE) 
-            {
-                board_clear_square(table->boards[color][newKSq], table->boards[color][newKSq]->kingSquare_w);
-                table->boards[color][newKSq]->kingSquare_w = newKSq;
-                board_set(table->boards[color][newKSq], newKSq, KING|color);
-            }
-            else
-            {   
-                board_clear_square(table->boards[color][newKSq], table->boards[color][newKSq]->kingSquare_b);
-                table->boards[color][newKSq]->kingSquare_b = newKSq;
-                board_set(table->boards[color][newKSq], newKSq, KING|color);
-            }
-
+            table->boards[color][newKSq] = create_board(NULL);
         }
     }
     return table;

@@ -208,6 +208,12 @@ int main(int argc, char** argv)
             else if(strcmp(str, "position") == 0)
             {
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                if(isCalculating)
+                {
+                    endTime = 0;
+                    THREAD_WAIT(calculateThread);
+                }
+
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     if(strcmp(str, "fen") == 0)
@@ -236,15 +242,16 @@ int main(int argc, char** argv)
 
                     if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
                     {
+                        move m;
                         while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
                             board->historyIndex = 0;
-                            moveFromStruct(board, getStructFromString(board, str));
+                            m = getStructFromString(board, str);
+                            moveFromStruct(board, &m);
                         }
                     }
 
-                    loadInputAccumulator(board, playerAccumulator, WHITE);
-                    loadInputAccumulator(board, playerAccumulator, BLACK);
+                    updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
                 }
                 break; 
             }
@@ -326,15 +333,19 @@ int main(int argc, char** argv)
                 }
 
                 //Finished parsing command modifers, setup & launch thread.
-                if(fixedMoveTime) endTime = clock() + (fixedMoveTime * CLOCKS_PER_SEC) / 1000;
+                if(fixedMoveTime) endTime = clock() + (fixedMoveTime * CLOCKS_PER_SEC) / 1000; 
                 else
                 {
-                    if(isInfinite) endTime = LONG_MAX;
+                    if(isInfinite) 
+                    {
+                        endTime = LONG_MAX;
+                        threadContext->maxDepth = MAX_PLY;
+                    }
                     else
                     {
                         if(ISWHITE(board->turn)) endTime = (whiteTime / 40) + (whiteIncrement / 2);
                         else endTime = (blackTime / 40) + (blackIncrement / 2);
-                        endTime = clock() + (endTime * CLOCKS_PER_SEC) / 1000;
+                        endTime = (clock() + (endTime * CLOCKS_PER_SEC) / 1000)  - 50; //Subtracting UCI overhead from move time.
                     } 
                 }
 
@@ -343,7 +354,7 @@ int main(int argc, char** argv)
                 if(play)
                 {
                     THREAD_WAIT(calculateThread);
-                    moveFromStruct(board, threadContext->pv.line[0]);
+                    moveFromStruct(board, &threadContext->pv.line[0]);
                 }
                 break;
             }
@@ -353,7 +364,7 @@ int main(int argc, char** argv)
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     move m = getStructFromString(board, str);
-                    if(IS_VALID_MOVE(m)) moveFromStruct(board, m);
+                    if(IS_VALID_MOVE(m)) moveFromStruct(board, &m);
                 }
                 break;
             }
@@ -361,9 +372,8 @@ int main(int argc, char** argv)
             {
                 if(isCalculating)
                 {
-                    endTime = 0;
-                    THREAD_WAIT(calculateThread);
                     threadContext->isPonder = 0;
+                    THREAD_WAIT(calculateThread);
                 }
                 else
                 {
@@ -450,8 +460,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
-                loadInputAccumulator(board, playerAccumulator, WHITE);
-                loadInputAccumulator(board, playerAccumulator, BLACK);
+                updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
                 float eval = forwardPropagate(board, playerAccumulator);
                 printf("%f\n", eval);
                 break;
@@ -514,6 +523,6 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
         isPathDirty = 0;
     }
 
-    if(!(*board)) *board = create_board();
+    if(!(*board)) *board = create_board(NULL);
     context->board = *board;
 }

@@ -6,15 +6,17 @@ CFLAGS += -I"$(HIP_ROOT)/include"
 LIBS = -L"$(HIP_ROOT)/lib" -lamdhip64
 
 # Speedup, harder debugging.
+ifndef DEBUG
 CFLAGS += -O3
 CFLAGS += -DNDEBUG
+endif
 
 # Profiling
 ifdef KPERFT
 	CFLAGS += -DPERFT_KERNELS
 endif
+# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
 ifdef PROF
-	# gprof ./ChessBot.exe -P_mcount_private -P__fentry__ -b > output.txt
 	CFLAGS += -pg -no-pie
 endif
 
@@ -26,9 +28,9 @@ CFLAGS += -I$(SRC_DIR)
 
 # Use "make NEW=1" to create a copy. Used for testing elo differences between versions.
 ifdef NEW
-	TARGET = $(TGT_DIR)/ChessBot_new.exe
+	TARGET = $(TGT_DIR)/Thom_new.exe
 else
-	TARGET = $(TGT_DIR)/ChessBot.exe
+	TARGET = $(TGT_DIR)/Thom.exe
 endif
 
 # Use "make NVIDIA=1" to compile on NVIDIA gpus. (untested)

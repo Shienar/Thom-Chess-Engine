@@ -813,16 +813,16 @@ move getStructFromString(bitboard* board, char* str)
     return m;
 }
 
-int moveFromStruct(bitboard* board, move m)
+int moveFromStruct(bitboard* board, move* m)
 {   
     assert(board);
     assert(!board->victor);
-    assert(!ISBLACK(m.piece) || board->turn != WHITE);
-    assert(!ISWHITE(m.piece) || board->turn != BLACK);
-    assert(m.startSquare >= 0 && m.startSquare <= 63 && m.endSquare >= 0 && m.endSquare <= 63);
-    assert(IS_VALID_MOVE(m));
+    assert(!ISBLACK(m->piece) || board->turn != WHITE);
+    assert(!ISWHITE(m->piece) || board->turn != BLACK);
+    assert(m->startSquare >= 0 && m->startSquare <= 63 && m->endSquare >= 0 && m->endSquare <= 63);
+    assert(IS_VALID_MOVE((*m)));
 
-    if(movePiece(board, &m) != 0) 
+    if(movePiece(board, m) != 0) 
     {
         DEBUG_ERROR("Failed to move piece from struct.");
         return -1;

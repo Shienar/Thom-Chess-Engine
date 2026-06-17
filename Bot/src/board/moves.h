@@ -51,7 +51,9 @@ uint64_t pyrrhicKingAttacks(int square);
 uint64_t kingMoves(bitboard* board, int square, int color);
 
 int movePiece(bitboard *board, move* m);
-int moveFromStruct(bitboard* board, move m);
+
+//Assigns captured piece.
+int moveFromStruct(bitboard* board, move* m);
 move getStructFromString(bitboard* board, char* str);
 
 //2 Calls result in an unchanged board state.
