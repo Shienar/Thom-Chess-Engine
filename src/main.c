@@ -53,9 +53,9 @@ int main(int argc, char** argv)
                 printf("id name ChessBot 0.1\n");
                 printf("id author Grant\n");
                 printf("option name Hash type spin default 4 min 1 max 4096\n");
-                printf("option name Threads type spin default 8 min 1 max 64\n");
+                printf("option name Threads type spin default 4 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
-                printf("option name OwnBook type check default true\n");
+                printf("option name OwnBook type check default false\n");
                 printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
@@ -364,7 +364,11 @@ int main(int argc, char** argv)
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     move m = getStructFromString(board, str);
-                    if(IS_VALID_MOVE(m)) moveFromStruct(board, &m);
+                    if(IS_VALID_MOVE(m)) 
+                    {
+                        moveFromStruct(board, &m);
+                        updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
+                    }
                 }
                 break;
             }
@@ -395,7 +399,8 @@ int main(int argc, char** argv)
             else if(strcmp(str, "train") == 0)
             {
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
-
+                loadRawWeights();
+                
                 //Not a part of UCI.
                 //Format: "train <epoch count>"
                 if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
@@ -480,7 +485,8 @@ int main(int argc, char** argv)
         }
     }
 
-    if(nnue_weights) free(nnue_weights);
+    if(raw_weights) free(raw_weights);
+    if(int_weights) free(int_weights);
     if(playerAccumulator) free(playerAccumulator);
     if(threadContext) free(threadContext);
     destroyRefreshTable(playingRefreshTable);
@@ -505,7 +511,7 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
     if(knightAttacks[0] == 0) initKnightMoveTable();
     if(kingAttacks[0] == 0) initKingMoveTable();
 
-    loadWeights();
+    loadQuantizedWeights();
 
     if(!transpositionTable) transpositionTable = create_hashTable_tt();
     if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));

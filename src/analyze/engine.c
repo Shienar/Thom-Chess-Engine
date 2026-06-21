@@ -9,7 +9,7 @@
 #include <float.h>
 #include <math.h>
 
-int threadCount = 8;
+int threadCount = 4;
 int enablePonder = 0;
 int isCalculating = 0;
 

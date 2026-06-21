@@ -4,7 +4,6 @@
 #include "board/moves.h"
 #include "analyze/engine.h"
 #include <math.h>
-#include <float.h>
 #include <immintrin.h>
 #include <string.h>
 
@@ -32,11 +31,11 @@ int kingBuckets[64] = {
 };
 
 //full refresh of raw values.
-void calculateAccumulator(uint64_t* inputNodes, float* outputValues, int kingBucket, network_weights* weights)
+void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingBucket, quantized_weights* weights)
 {
-    for (int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=8) 
+    for (int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=16) 
     {
-        __m256 v_output = _mm256_loadu_ps(&weights->weights1_bias[outputIndex]);
+        __m256i v_output = _mm256_loadu_si256((const __m256i*)&weights->weights1_bias[outputIndex]);
 
         for(int piece = 0; piece < TRACKED_PIECES; piece++)
         {
@@ -46,25 +45,66 @@ void calculateAccumulator(uint64_t* inputNodes, float* outputValues, int kingBuc
             {
                 int featureIndex =  baseIndex + __builtin_ctzll(pieceMask);
 
-                v_output = _mm256_add_ps(v_output, _mm256_loadu_ps(&weights->weights1[featureIndex][outputIndex]));
+                v_output = _mm256_adds_epi16(v_output, _mm256_loadu_si256((const __m256i*)&weights->weights1[featureIndex][outputIndex]));
 
                 pieceMask &= (pieceMask - 1);
             }
         }
 
-        _mm256_storeu_ps(&outputValues[outputIndex], v_output);
+        _mm256_storeu_si256((__m256i*)&outputValues[outputIndex], v_output);
     } 
 }
 
-void activateAccumulator(float* rawValues, float* activatedValues)
+void activateAccumulator(int16_t* rawValues, uint8_t* activatedValues)
 {
-    const __m256 v_min = _mm256_setzero_ps();
-    const __m256 v_max = _mm256_set1_ps(1.0f);
+    const __m256i v_min = _mm256_setzero_si256();
+    const __m256i v_max = _mm256_set1_epi16(QA);
 
-    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 8) 
+    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 32) 
     {
-        __m256 v_clamped =_mm256_max_ps(_mm256_min_ps(_mm256_loadu_ps(&rawValues[i]), v_max), v_min);
-        _mm256_storeu_ps(&activatedValues[i], _mm256_mul_ps(v_clamped, v_clamped));
+        //Clamp
+        __m256i v_clamped = _mm256_max_epi16(_mm256_min_epi16(_mm256_loadu_si256((const __m256i*)&rawValues[i]), v_max), v_min); 
+        
+        //Seperate
+        __m256i v_low = _mm256_unpacklo_epi16(v_clamped, v_min);
+        __m256i v_high = _mm256_unpackhi_epi16(v_clamped, v_min);
+
+        //Square
+        v_low = _mm256_mullo_epi32(v_low, v_low);
+        v_high = _mm256_mullo_epi32(v_high, v_high);
+
+        //Downscale to [0, 254]
+        v_low = _mm256_srli_epi32(v_low, 8);
+        v_high = _mm256_srli_epi32(v_high, 8);
+
+        //Pack 1
+        __m256i v_output1 = _mm256_packus_epi32(v_low, v_high);
+        v_output1 = _mm256_permute4x64_epi64(v_output1, _MM_SHUFFLE(3, 1, 2, 0));
+
+        //Clamp
+        v_clamped = _mm256_max_epi16(_mm256_min_epi16(_mm256_loadu_si256((const __m256i*)&rawValues[i + 16]), v_max), v_min); 
+        
+        //Seperate
+        v_low = _mm256_unpacklo_epi16(v_clamped, v_min);
+        v_high = _mm256_unpackhi_epi16(v_clamped, v_min);
+
+        //Square
+        v_low = _mm256_mullo_epi32(v_low, v_low);
+        v_high = _mm256_mullo_epi32(v_high, v_high);
+
+        //Downscale to [0, 254]
+        v_low = _mm256_srli_epi32(v_low, 8);
+        v_high = _mm256_srli_epi32(v_high, 8);
+
+        //Pack 2
+        __m256i v_output2 = _mm256_packus_epi32(v_low, v_high);
+        v_output2 = _mm256_permute4x64_epi64(v_output2, _MM_SHUFFLE(3, 1, 2, 0));
+
+        //Merge packed
+        __m256i v_packed = _mm256_packus_epi16(v_output1, v_output2);
+        v_packed = _mm256_permute4x64_epi64(v_packed, _MM_SHUFFLE(3, 1, 2, 0));
+
+        _mm256_storeu_si256((__m256i*)&activatedValues[i], v_packed);
     }
 }
 
@@ -113,12 +153,12 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
 
     if(ISWHITE(color)) 
     {
-        calculateAccumulator(inputs, acc->rawAccumulator[WHITE], kingBuckets[board->kingSquare_w], nnue_weights);
+        calculateAccumulator(inputs, acc->rawAccumulator[WHITE], kingBuckets[board->kingSquare_w], int_weights);
         activateAccumulator(acc->rawAccumulator[WHITE], acc->accumulator[WHITE]);
     }
     if(ISBLACK(color)) 
     {
-        calculateAccumulator(&inputs[BITBOARDS_PER_INPUT_SIDE], acc->rawAccumulator[BLACK], kingBuckets[FLIP_SQUARE(board->kingSquare_b)], nnue_weights);
+        calculateAccumulator(&inputs[BITBOARDS_PER_INPUT_SIDE], acc->rawAccumulator[BLACK], kingBuckets[FLIP_SQUARE(board->kingSquare_b)], int_weights);
         activateAccumulator(acc->rawAccumulator[BLACK], acc->accumulator[BLACK]);
     }
 }
@@ -250,31 +290,41 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
             capIdx = (64 * ((TRACKED_PIECES * kingBuckets[ksq]) + capturedPieceOffset)) + capturedPieceSquare;
         }
 
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8)
+        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
         {
-            __m256 v_acc = _mm256_add_ps(_mm256_loadu_ps(&acc->rawAccumulator[side][j]), _mm256_sub_ps(_mm256_loadu_ps(&nnue_weights->weights1[toIdx][j]), 
-                                                                                            _mm256_loadu_ps(&nnue_weights->weights1[fromIdx][j])));
+            __m256i v_acc   = _mm256_loadu_si256((__m256i const*)&acc->rawAccumulator[side][j]);
+            __m256i v_to    = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[toIdx][j]);
+            __m256i v_from  = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[fromIdx][j]);
             
-            _mm256_storeu_ps(&acc->rawAccumulator[side][j], v_acc);
+            v_acc = _mm256_adds_epi16(v_acc, v_to);
+            v_acc = _mm256_subs_epi16(v_acc, v_from);
+            
+            _mm256_storeu_si256((__m256i*)&acc->rawAccumulator[side][j], v_acc);
         }
         if(capIdx != -1)
         {
             if(shouldUndoMove)
             {
-                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8)
+                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
                 {
-                    _mm256_storeu_ps(&acc->rawAccumulator[side][j], 
-                                        _mm256_add_ps(_mm256_loadu_ps(&acc->rawAccumulator[side][j]), 
-                                                         _mm256_loadu_ps(&nnue_weights->weights1[capIdx][j])));
+                    __m256i v_acc = _mm256_loadu_si256((__m256i const*)&acc->rawAccumulator[side][j]);
+                    __m256i v_cap = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[capIdx][j]);
+                    
+                    v_acc = _mm256_adds_epi16(v_acc, v_cap);
+                    
+                    _mm256_storeu_si256((__m256i*)&acc->rawAccumulator[side][j], v_acc);
                 }
             }
             else
             {
-                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=8)
+                for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
                 {
-                    _mm256_storeu_ps(&acc->rawAccumulator[side][j], 
-                                        _mm256_sub_ps(_mm256_loadu_ps(&acc->rawAccumulator[side][j]), 
-                                                         _mm256_loadu_ps(&nnue_weights->weights1[capIdx][j])));
+                    __m256i v_acc = _mm256_loadu_si256((__m256i const*)&acc->rawAccumulator[side][j]);
+                    __m256i v_cap = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[capIdx][j]);
+                    
+                    v_acc = _mm256_subs_epi16(v_acc, v_cap);
+                    
+                    _mm256_storeu_si256((__m256i*)&acc->rawAccumulator[side][j], v_acc);
                 }
             }
         }
@@ -282,22 +332,15 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
     }
 
     //Keeping this commented out most of the time. 
-    //It makes the engine a thousand times slower but it necessary for debugging.
+    //It makes the engine  slower but it is necessary for debugging.
     /*
     #ifndef NDEBUG
         accumulator realAccumValues = {0};
         loadInputAccumulator(board, &realAccumValues, WHITE);
         loadInputAccumulator(board, &realAccumValues, BLACK);
         assert(memcmp(&realAccumValues.inputNodes, &acc->inputNodes, sizeof(acc->inputNodes)) == 0);
-        for(int i = 0; i < 2; i++)
-        {
-            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-            {
-                //floating point drift will always exist, no memcmp here.
-                assert(fabsf(realAccumValues.rawAccumulator[i][j] - acc->rawAccumulator[i][j]) < 1e-4f);
-                assert(fabsf(realAccumValues.accumulator[i][j] - acc->accumulator[i][j]) < 1e-4f);
-            }
-        }
+        assert(memcmp(&realAccumValues.rawAccumulator, &acc->rawAccumulator, sizeof(acc->rawAccumulator)) == 0);
+        assert(memcmp(&realAccumValues.accumulator, &acc->accumulator, sizeof(acc->accumulator)) == 0);
     #endif
     */
 }
@@ -394,25 +437,32 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
 
             char wasAdded = curBoard[piece]&singleBitMask(square) ? 1 : 0;
 
-            float* targetAcc = acc->rawAccumulator[color];
-            float* targetWeights = (color == WHITE) ? nnue_weights->weights1[featureIndex_White] : nnue_weights->weights1[featureIndex_Black];
+            int16_t* targetAcc = acc->rawAccumulator[color];
+            int16_t* targetWeights = (color == WHITE) ? int_weights->weights1[featureIndex_White] : int_weights->weights1[featureIndex_Black];
 
             if(wasAdded) 
             {
-                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 8) 
+                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
                 {
-                    _mm256_storeu_ps(&targetAcc[i], 
-                                        _mm256_add_ps(_mm256_loadu_ps(&targetAcc[i]),
-                                                         _mm256_loadu_ps(&targetWeights[i])));
+                    __m256i v_acc = _mm256_loadu_si256((__m256i const*)&targetAcc[i]);
+                    __m256i v_weight = _mm256_loadu_si256((__m256i const*)&targetWeights[i]);
+                    
+                    v_acc = _mm256_adds_epi16(v_acc, v_weight);
+                    
+                    _mm256_storeu_si256((__m256i*)&targetAcc[i], v_acc);
                 }
             } 
             else 
             {
-                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 8) 
+                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
                 {
-                    _mm256_storeu_ps(&targetAcc[i], 
-                                        _mm256_sub_ps(_mm256_loadu_ps(&targetAcc[i]),
-                                                         _mm256_loadu_ps(&targetWeights[i])));
+                    __m256i v_acc = _mm256_loadu_si256((__m256i const*)&targetAcc[i]);
+                    __m256i v_w   = _mm256_loadu_si256((__m256i const*)&targetWeights[i]);
+                    
+                    // Saturated integer subtraction
+                    v_acc = _mm256_subs_epi16(v_acc, v_w);
+                    
+                    _mm256_storeu_si256((__m256i*)&targetAcc[i], v_acc);
                 }
             }
 
@@ -458,11 +508,11 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     memcpy(&acc->inputNodes, &refreshTable->accumulators[WHITE][kingSq_w].inputNodes, sizeof(uint64_t) * BITBOARDS_PER_INPUT_SIDE);
     memcpy(&acc->inputNodes[BITBOARDS_PER_INPUT_SIDE], &refreshTable->accumulators[BLACK][kingSq_b].inputNodes[BITBOARDS_PER_INPUT_SIDE], sizeof(uint64_t) * BITBOARDS_PER_INPUT_SIDE);
 
-    memcpy(acc->rawAccumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].rawAccumulator[WHITE], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
-    memcpy(acc->accumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].accumulator[WHITE], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
+    memcpy(acc->rawAccumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].rawAccumulator[WHITE], sizeof(int16_t) * ACCUMULATOR_NODES_PER_SIDE);
+    memcpy(acc->accumulator[WHITE], refreshTable->accumulators[WHITE][kingSq_w].accumulator[WHITE], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
 
-    memcpy(acc->rawAccumulator[BLACK], refreshTable->accumulators[BLACK][kingSq_b].rawAccumulator[BLACK], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
-    memcpy(acc->accumulator[BLACK], refreshTable->accumulators[BLACK][kingSq_b].accumulator[BLACK], sizeof(float) * ACCUMULATOR_NODES_PER_SIDE);
+    memcpy(acc->rawAccumulator[BLACK], refreshTable->accumulators[BLACK][kingSq_b].rawAccumulator[BLACK], sizeof(int16_t) * ACCUMULATOR_NODES_PER_SIDE);
+    memcpy(acc->accumulator[BLACK], refreshTable->accumulators[BLACK][kingSq_b].accumulator[BLACK], sizeof(uint8_t) * ACCUMULATOR_NODES_PER_SIDE);
 }
 
 accumulatorRefreshTable* createRefreshTable()

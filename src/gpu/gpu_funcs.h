@@ -24,7 +24,7 @@
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
  */
-#define MAX_LR 8e-4f
+#define MAX_LR 8e-6f
 #define MIN_LR 2.5e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
@@ -177,7 +177,7 @@ extern hipContext hip_context;
 extern hipKernelArgs hip_args;
 extern hipEvents hip_events;
 
-hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_expected_A,
+hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A,
                                                         short** h_active_B, float** h_expected_B,
                                                         float** h_lossbuffer);
 void freeHIP();
@@ -192,6 +192,6 @@ void freeHIP();
     }while(0)
 
 void enqueueKernels(int bufferSide, int doBackprop);
-void getWeights(network_weights* weights);
+void getWeights(training_weights* weights);
 
 #endif

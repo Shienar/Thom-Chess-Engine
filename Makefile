@@ -1,12 +1,16 @@
 CC = gcc
-CFLAGS = -Wall -g -std=c99 -march=native -fopenmp -MMD -MP
+CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
 
+ifdef HIP_PATH
 HIP_ROOT = $(subst \,/,$(HIP_PATH))
+endif
 CFLAGS += -I"$(HIP_ROOT)/include"
 LIBS = -L"$(HIP_ROOT)/lib" -lamdhip64
 
-# Speedup, harder debugging.
-ifndef DEBUG
+# 
+ifdef DEBUG
+CFLAGS += -g
+else
 CFLAGS += -O3
 CFLAGS += -DNDEBUG
 endif
@@ -72,7 +76,11 @@ endif
 
 .PHONY: all clean directories
 
+ifdef HIP_PATH
 all: directories $(TARGET) $(KTARGET)
+else
+all: directories $(TARGET)
+endif
 
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -82,6 +90,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile | directories
 
 directories:
 	@mkdir -p $(OBJ_DIRS)
+
+trainer: $(KTARGET)
 
 $(KTARGET): src/gpu/kernels.hip
 	$(KC) $(KFLAGS) src/gpu/kernels.hip -o $(KTARGET)

@@ -103,6 +103,9 @@ typedef struct magic {
     int8_t shiftOffset;
 } magic;
 
+#define QA 255
+#define QB 64
+
 #define INPUT_BITS 12800
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
@@ -133,7 +136,17 @@ extern int kingBucketMap[KING_BUCKETS];
  * very end of training. There might be a better way to do this, but it saved
  * me a lot of training time.
  */
-typedef struct network_weights {
+typedef struct quantized_weights {
+    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    int32_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
+    int32_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
+    int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
+    int32_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
+    int8_t weights4[OUTPUT_BUCKETS][THIRD_HIDDEN_LAYER_NODES];
+    int32_t weights4_bias[OUTPUT_BUCKETS];
+} quantized_weights;
+typedef struct training_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
     float weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
@@ -142,12 +155,12 @@ typedef struct network_weights {
     float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
     float weights4[OUTPUT_BUCKETS][THIRD_HIDDEN_LAYER_NODES];
     float weights4_bias[OUTPUT_BUCKETS];
-} network_weights;
+} training_weights;
 
 typedef struct accumulator {
     uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
-    float accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
-    float rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
+    uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
+    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
 
 typedef struct accumulatorRefreshTable {

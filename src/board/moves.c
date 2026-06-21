@@ -409,7 +409,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
 
     if(requiredMoves)
     {
-        for(int i = 0; i < 16; i++)
+        for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
         {
             if(IS_VALID_MOVE(requiredMoves[i])) 
             {

@@ -26,25 +26,25 @@ float rectificationTerm = 0.0;
 float biasCorrection1 = 1.0;
 float biasCorrection2 = 1.0;
 
-size_t weight1Size = sizeof(((network_weights*)0)->weights1);
-size_t weight2Size = sizeof(((network_weights*)0)->weights2);
-size_t weight3Size = sizeof(((network_weights*)0)->weights3);
-size_t weight4Size = sizeof(((network_weights*)0)->weights4);
+size_t weight1Size = sizeof(((training_weights*)0)->weights1);
+size_t weight2Size = sizeof(((training_weights*)0)->weights2);
+size_t weight3Size = sizeof(((training_weights*)0)->weights3);
+size_t weight4Size = sizeof(((training_weights*)0)->weights4);
 
-size_t bias1Size = sizeof(((network_weights*)0)->weights1_bias);
-size_t bias2Size = sizeof(((network_weights*)0)->weights2_bias);
-size_t bias3Size = sizeof(((network_weights*)0)->weights3_bias);
-size_t bias4Size = sizeof(((network_weights*)0)->weights4_bias);
+size_t bias1Size = sizeof(((training_weights*)0)->weights1_bias);
+size_t bias2Size = sizeof(((training_weights*)0)->weights2_bias);
+size_t bias3Size = sizeof(((training_weights*)0)->weights3_bias);
+size_t bias4Size = sizeof(((training_weights*)0)->weights4_bias);
 
-size_t weight1Count = sizeof(((network_weights*)0)->weights1) / sizeof(float);
-size_t weight2Count = sizeof(((network_weights*)0)->weights2) / sizeof(float);
-size_t weight3Count = sizeof(((network_weights*)0)->weights3) / sizeof(float);
-size_t weight4Count = sizeof(((network_weights*)0)->weights4) / sizeof(float);
+size_t weight1Count = sizeof(((training_weights*)0)->weights1) / sizeof(float);
+size_t weight2Count = sizeof(((training_weights*)0)->weights2) / sizeof(float);
+size_t weight3Count = sizeof(((training_weights*)0)->weights3) / sizeof(float);
+size_t weight4Count = sizeof(((training_weights*)0)->weights4) / sizeof(float);
 
-size_t bias1Count = sizeof(((network_weights*)0)->weights1_bias) / sizeof(float);
-size_t bias2Count = sizeof(((network_weights*)0)->weights2_bias) / sizeof(float);
-size_t bias3Count = sizeof(((network_weights*)0)->weights3_bias) / sizeof(float);
-size_t bias4Count = sizeof(((network_weights*)0)->weights4_bias) / sizeof(float);
+size_t bias1Count = sizeof(((training_weights*)0)->weights1_bias) / sizeof(float);
+size_t bias2Count = sizeof(((training_weights*)0)->weights2_bias) / sizeof(float);
+size_t bias3Count = sizeof(((training_weights*)0)->weights3_bias) / sizeof(float);
+size_t bias4Count = sizeof(((training_weights*)0)->weights4_bias) / sizeof(float);
 
 short* host_activeInputs_A = NULL; 
 float* host_expectedOutputs_A = NULL;
@@ -75,7 +75,8 @@ unsigned char* loadCompiledKernels(size_t* size)
     FILE* input = fopen(fileName, "rb"); 
     if(!input)
     {
-        DEBUG_ERROR("Cannot locate GPU kernel functions.");
+        printf("Cannot locate compiled gpu kernels at %s\n", fileName);
+        printf("You can build them using 'make trainer'\n");
         return NULL;
     }
     
@@ -104,7 +105,7 @@ unsigned char* loadCompiledKernels(size_t* size)
     return binary;
 }
 
-hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_expected_A,
+hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A,
                                                         short** h_active_B, float** h_expected_B,
                                                         float** h_lossbuffer)
 {
@@ -232,14 +233,14 @@ hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_
 
     /** COPYING **/
     //weights1
-    hipMemcpyAsync(hip_mem.mem.weights1_slow, (void*)nnue_weights->weights1, weight1Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.weights1_slow, (void*)raw_weights->weights1, weight1Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.weights1_fast, hip_mem.mem.weights1_slow, weight1Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //weights2
     float* transposedWeight2 = calloc(ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES, sizeof(float));
     for (int i = 0; i < ACCUMULATOR_NODES; i++) {
         for (int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++) {
             // CPU [output][input] -> GPU [input][output]
-            transposedWeight2[i * SECOND_HIDDEN_LAYER_NODES + j] = nnue_weights->weights2[j][i];
+            transposedWeight2[i * SECOND_HIDDEN_LAYER_NODES + j] = raw_weights->weights2[j][i];
         }
     }
     hipMemcpyAsync(hip_mem.mem.weights2_slow, (void*)transposedWeight2, weight2Size, hipMemcpyHostToDevice, hip_context.queue);
@@ -249,25 +250,25 @@ hipError_t initHIP(network_weights* nnue_weights, short** h_active_A, float** h_
     for (int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) {
         for (int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++) {
             // CPU [output][input] -> GPU [input][output]
-            transposedWeight3[i * THIRD_HIDDEN_LAYER_NODES + j] = nnue_weights->weights3[j][i];
+            transposedWeight3[i * THIRD_HIDDEN_LAYER_NODES + j] = raw_weights->weights3[j][i];
         }
     }
     hipMemcpyAsync(hip_mem.mem.weights3_slow, (void*)transposedWeight3, weight3Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.weights3_fast, hip_mem.mem.weights3_slow, weight3Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //weights4
-    hipMemcpyAsync(hip_mem.mem.weights4_slow, (void*)&nnue_weights->weights4, weight4Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.weights4_slow, (void*)&raw_weights->weights4, weight4Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.weights4_fast, hip_mem.mem.weights4_slow, weight4Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //bias1
-    hipMemcpyAsync(hip_mem.mem.bias1_slow, (void*)&nnue_weights->weights1_bias, bias1Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.bias1_slow, (void*)&raw_weights->weights1_bias, bias1Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.bias1_fast, hip_mem.mem.bias1_slow, bias1Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //bias2
-    hipMemcpyAsync(hip_mem.mem.bias2_slow, (void*)&nnue_weights->weights2_bias, bias2Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.bias2_slow, (void*)&raw_weights->weights2_bias, bias2Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.bias2_fast, hip_mem.mem.bias2_slow, bias2Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //bias3
-    hipMemcpyAsync(hip_mem.mem.bias3_slow, (void*)&nnue_weights->weights3_bias, bias3Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.bias3_slow, (void*)&raw_weights->weights3_bias, bias3Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.bias3_fast, hip_mem.mem.bias3_slow, bias3Size, hipMemcpyDeviceToDevice, hip_context.queue);
     //bias4
-    hipMemcpyAsync(hip_mem.mem.bias4_slow, (void*)&nnue_weights->weights4_bias, bias4Size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.bias4_slow, (void*)&raw_weights->weights4_bias, bias4Size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.bias4_fast, hip_mem.mem.bias4_slow, bias4Size, hipMemcpyDeviceToDevice, hip_context.queue);
 
     /** ZEROING **/
@@ -591,7 +592,7 @@ void enqueueKernels(int bufferSide, int doBackprop)
     #endif
 }
 
-void getWeights(network_weights* weights)
+void getWeights(training_weights* weights)
 {
     float* transposedWeights2 = malloc(weight2Size);
     float* transposedWeights3 = malloc(weight3Size);

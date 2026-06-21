@@ -14,6 +14,7 @@
 #define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
+#define OUTPUT_SCALE 16
 #define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
@@ -26,16 +27,19 @@
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
-extern network_weights* nnue_weights;
+extern training_weights* raw_weights;
+extern quantized_weights* int_weights;
 
 /* Binary  file storage. */
-void loadWeights();
-void saveWeights();
+void loadRawWeights();
+void saveRawWeights();
+void loadQuantizedWeights();
+void saveQuantizedWeights();
 
 //https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
 void print_network_statistics();
 
-float forwardPropagate(bitboard* board, accumulator* acc);
+int forwardPropagate(bitboard* board, accumulator* acc);
 
 /**
  * Ranger

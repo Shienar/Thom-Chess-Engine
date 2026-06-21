@@ -8,7 +8,8 @@
 #include <float.h>
 #include <string.h>
 
-network_weights* nnue_weights = NULL;
+training_weights* raw_weights = NULL;
+quantized_weights* int_weights = NULL;
 
 /*** Creating/loading weights ***/
 //Box-Muller transform.
@@ -21,20 +22,20 @@ void sampleNormalDistribution(float* dest, double standardDeviation)
     }while(*dest == 0.0f);
 }
 
-void loadWeights()
+void loadRawWeights()
 {
-    if(nnue_weights) return;
-    nnue_weights = calloc(1, sizeof(network_weights));
+    if(raw_weights) return;
+    raw_weights = calloc(1, sizeof(training_weights));
 
-    FILE* input = fopen(PROJECT_CWD "/import/weights.nnue", "rb");
+    FILE* input = fopen(PROJECT_CWD "/import/raw.nnue", "rb");
     if(input)
     {
-        size_t size = fread(nnue_weights, sizeof(network_weights), 1, input);
+        size_t size = fread(raw_weights, sizeof(training_weights), 1, input);
         fclose(input);
         if(size == 1) return;
     }
     
-    DEBUG_ERROR("Failed to load neural network from file.");
+    DEBUG_ERROR("Failed to load raw neural network weights from file.");
 
     //Biases get left at 0.0 from calloc.
 
@@ -44,7 +45,7 @@ void loadWeights()
     {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
         {
-            sampleNormalDistribution(&nnue_weights->weights1[i][j], standardDeviation);
+            sampleNormalDistribution(&raw_weights->weights1[i][j], standardDeviation);
         }
     }
 
@@ -53,7 +54,7 @@ void loadWeights()
     {
         for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
         {
-            sampleNormalDistribution(&nnue_weights->weights2[j][i], standardDeviation);
+            sampleNormalDistribution(&raw_weights->weights2[j][i], standardDeviation);
         }
     }
 
@@ -62,7 +63,7 @@ void loadWeights()
     {
         for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
         {
-            sampleNormalDistribution(&nnue_weights->weights3[j][i], standardDeviation);
+            sampleNormalDistribution(&raw_weights->weights3[j][i], standardDeviation);
         }
     }
 
@@ -70,17 +71,92 @@ void loadWeights()
         {
             for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
             {
-                sampleNormalDistribution(&nnue_weights->weights4[b][i], standardDeviation);
+                sampleNormalDistribution(&raw_weights->weights4[b][i], standardDeviation);
             }
         }
 }
 
-void saveWeights()
+void saveRawWeights()
 {
-    FILE* output = fopen(PROJECT_CWD "/import/weights.nnue", "wb");
-    if(output) fwrite(nnue_weights, sizeof(network_weights), 1, output);
+    FILE* output = fopen(PROJECT_CWD "/import/raw.nnue", "wb");
+    if(output) 
+    {
+        fwrite(raw_weights, sizeof(training_weights), 1, output);
+        fclose(output);
+    }
     else DEBUG_ERROR("Failed to write neural network to file.");
-    fclose(output);
+}
+
+void quantizeWeights(training_weights* inputFloats, quantized_weights* outputInts)
+{
+    assert(inputFloats);
+    assert(outputInts);
+
+    //weights 1-4
+    for(int i = 0; i < HALF_INPUT_BITS; i++)
+    {
+        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
+        {
+            outputInts->weights1[i][j] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->weights1[i][j] * QA)), INT16_MIN);
+        }
+    }
+    for(int i = 0; i < ACCUMULATOR_NODES; i++)
+    {
+        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
+        {
+            outputInts->weights2[j][i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights2[j][i] * QB)), INT8_MIN);
+        }
+    }
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
+    {
+        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
+        {
+            outputInts->weights3[j][i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights3[j][i] * QB)), INT8_MIN);
+        }
+    }
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
+    {
+        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
+        {
+            outputInts->weights4[b][i] = (int8_t) max(min(INT8_MAX, lroundf(inputFloats->weights4[b][i] * QB)), INT8_MIN);
+        }
+    }
+
+    //bias 1-4
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputInts->weights1_bias[i] = (int32_t) max(min(INT16_MAX, lroundf(inputFloats->weights1_bias[i] * QA)), INT16_MIN);
+    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputInts->weights2_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights2_bias[i] * QA * QB)), INT32_MIN);
+    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputInts->weights3_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights3_bias[i] * QA * QB)), INT32_MIN);
+    for(int i = 0; i < OUTPUT_BUCKETS; i++) outputInts->weights4_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias[i] * QA * QB)), INT32_MIN);
+}
+
+void loadQuantizedWeights()
+{
+    if(int_weights) return;
+    int_weights = calloc(1, sizeof(quantized_weights));
+
+    FILE* input = fopen(PROJECT_CWD "/import/quantized_1.nnue", "rb");
+    if(input)
+    {
+        size_t size = fread(int_weights, sizeof(quantized_weights), 1, input);
+        fclose(input);
+        if(size == 1) return;
+    }
+
+    DEBUG_ERROR("Failed to load raw neural network weights from file.");
+    loadRawWeights();
+    quantizeWeights(raw_weights, int_weights);
+    saveQuantizedWeights();
+}
+
+void saveQuantizedWeights()
+{
+    FILE* output = fopen(PROJECT_CWD "/import/quantized.nnue", "wb");
+    if(output)
+    {
+        fwrite(int_weights, sizeof(quantized_weights), 1, output);
+        fclose(output);
+    }
+    else DEBUG_ERROR("Failed to write neural network to file.");
 }
 
 void print_weight_stats(const char* name, const float* data, size_t size) 
@@ -150,317 +226,132 @@ void print_weight_stats(const char* name, const float* data, size_t size)
 
 void print_network_statistics() 
 {
-    if(!nnue_weights) return;
+    if(!raw_weights) return;
 
-    print_weight_stats("weights1", &nnue_weights->weights1[0][0], sizeof(nnue_weights->weights1) / sizeof(float));
-    print_weight_stats("weights1_bias", nnue_weights->weights1_bias, sizeof(nnue_weights->weights1_bias) / sizeof(float));
-    print_weight_stats("weights2", &nnue_weights->weights2[0][0], sizeof(nnue_weights->weights2) / sizeof(float));
-    print_weight_stats("weights2_bias", nnue_weights->weights2_bias,sizeof(nnue_weights->weights2_bias) / sizeof(float));
-    print_weight_stats("weights3", &nnue_weights->weights3[0][0], sizeof(nnue_weights->weights3) / sizeof(float));
-    print_weight_stats("weights3_bias",nnue_weights->weights3_bias, sizeof(nnue_weights->weights3_bias) / sizeof(float));
-    print_weight_stats("weights4", &nnue_weights->weights4[0][0], sizeof(nnue_weights->weights4) / sizeof(float));
-    print_weight_stats("weights4_bias", nnue_weights->weights4_bias, sizeof(nnue_weights->weights4_bias) / sizeof(float));
+    print_weight_stats("weights1", &raw_weights->weights1[0][0], sizeof(raw_weights->weights1) / sizeof(float));
+    print_weight_stats("weights1_bias", raw_weights->weights1_bias, sizeof(raw_weights->weights1_bias) / sizeof(float));
+    print_weight_stats("weights2", &raw_weights->weights2[0][0], sizeof(raw_weights->weights2) / sizeof(float));
+    print_weight_stats("weights2_bias", raw_weights->weights2_bias,sizeof(raw_weights->weights2_bias) / sizeof(float));
+    print_weight_stats("weights3", &raw_weights->weights3[0][0], sizeof(raw_weights->weights3) / sizeof(float));
+    print_weight_stats("weights3_bias",raw_weights->weights3_bias, sizeof(raw_weights->weights3_bias) / sizeof(float));
+    print_weight_stats("weights4", &raw_weights->weights4[0][0], sizeof(raw_weights->weights4) / sizeof(float));
+    print_weight_stats("weights4_bias", raw_weights->weights4_bias, sizeof(raw_weights->weights4_bias) / sizeof(float));
 }
 
 /*** Inference ***/
 
-void calculateHiddenLayer(float* inputValuesA, float* inputValuesB, float* outputValues, 
+void calculateHiddenLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, uint8_t* outputValues, 
                             int numInputsA, int numInputsB, int numOutputs, 
-                            float weights[numOutputs][numInputsA + numInputsB], float* biasWeights)
+                            int8_t weights[numOutputs][numInputsA + numInputsB], int32_t* biasWeights)
 {
-
-    __m128 zero_vec = _mm_setzero_ps();
-    __m128 one_vec  = _mm_set1_ps(1.0f);
+    const __m128i v_min = _mm_setzero_si128();
+    const __m128i v_max = _mm_set1_epi32(QA);
+    const __m256i v_one  = _mm256_set1_epi16(1);
 
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex+=4)
     {
-        __m256 v_output1 = _mm256_setzero_ps();
-        __m256 v_output2 = _mm256_setzero_ps();
-        __m256 v_output3 = _mm256_setzero_ps();
-        __m256 v_output4 = _mm256_setzero_ps();
+        __m256i v_output1 = _mm256_setzero_si256();
+        __m256i v_output2 = _mm256_setzero_si256();
+        __m256i v_output3 = _mm256_setzero_si256();
+        __m256i v_output4 = _mm256_setzero_si256();
 
-        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=8)
+        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=32)
         {
-            __m256 v_inputBatch = _mm256_loadu_ps(&inputValuesA[inputIndex]);
+            __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&inputValuesA[inputIndex]);
 
-            v_output1 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 0][inputIndex]), v_output1);
-            v_output2 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 1][inputIndex]), v_output2);
-            v_output3 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 2][inputIndex]), v_output3);
-            v_output4 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 3][inputIndex]), v_output4);
+            //Satured multiply-add
+            __m256i t_1 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 0][inputIndex]));
+            __m256i t_2 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 1][inputIndex]));
+            __m256i t_3 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 2][inputIndex]));
+            __m256i t_4 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 3][inputIndex]));
+
+            //Widen when storing to prevent overflow
+            v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(t_1, v_one));
+            v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(t_2, v_one));
+            v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(t_3, v_one));
+            v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(t_4, v_one));
         }
 
         if(inputValuesB)
         {
-            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=8, loadIndex+=8)
+            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=32, loadIndex+=32)
             {
-                __m256 v_inputBatch = _mm256_loadu_ps(&inputValuesB[loadIndex]);
+                __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&inputValuesB[loadIndex]);
+                
+                __m256i t_1 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 0][weightIndex]));
+                __m256i t_2 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 1][weightIndex]));
+                __m256i t_3 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 2][weightIndex]));
+                __m256i t_4 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 3][weightIndex]));
 
-                v_output1 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 0][weightIndex]), v_output1);
-                v_output2 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 1][weightIndex]), v_output2);
-                v_output3 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 2][weightIndex]), v_output3);
-                v_output4 = _mm256_fmadd_ps(v_inputBatch, _mm256_loadu_ps(&weights[outputIndex + 3][weightIndex]), v_output4);
+                //Widen when storing to prevent overflow
+                v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(t_1, v_one));
+                v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(t_2, v_one));
+                v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(t_3, v_one));
+                v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(t_4, v_one));
             
             }
         }
 
-        //reduce 
-        __m256 v_partial12 = _mm256_hadd_ps(v_output1, v_output2);
-        __m256 v_partial34 = _mm256_hadd_ps(v_output3, v_output4);
-        __m256 v_partial1234 = _mm256_hadd_ps(v_partial12, v_partial34);
+        //reduce sums to 4 32-bit ints, including bias
+        __m128i s1 = _mm_add_epi32(_mm256_castsi256_si128(v_output1), _mm256_extracti128_si256(v_output1, 1));
+        __m128i s2 = _mm_add_epi32(_mm256_castsi256_si128(v_output2), _mm256_extracti128_si256(v_output2, 1));
+        __m128i s3 = _mm_add_epi32(_mm256_castsi256_si128(v_output3), _mm256_extracti128_si256(v_output3, 1));
+        __m128i s4 = _mm_add_epi32(_mm256_castsi256_si128(v_output4), _mm256_extracti128_si256(v_output4, 1));
 
-        __m128 v_final_sums = _mm_add_ps(_mm256_castps256_ps128(v_partial1234), _mm256_extractf128_ps(v_partial1234, 1));
-        v_final_sums = _mm_add_ps(v_final_sums, _mm_loadu_ps(&biasWeights[outputIndex]));
+        __m128i s12 = _mm_hadd_epi32(s1, s2); // [s1_01, s1_23, s2_01, s2_23]
+        __m128i s34 = _mm_hadd_epi32(s3, s4); // [s3_01, s3_23, s4_01, s4_23]
 
-        //crelu
-        v_final_sums = _mm_max_ps(v_final_sums, zero_vec);
-        v_final_sums = _mm_min_ps(v_final_sums, one_vec);
+        __m128i final_sums = _mm_hadd_epi32(s12, s34);  //[s1_0123, s2_0123, s3_0123, s4_0123]
+        final_sums = _mm_add_epi32(final_sums, _mm_loadu_si128((const __m128i*)&biasWeights[outputIndex]));
 
-        _mm_storeu_ps(&outputValues[outputIndex], v_final_sums);
+        //scale down by QB (64 = 2^6)
+        final_sums = _mm_srai_epi32(final_sums, 6);
+
+        //CReLU
+        final_sums = _mm_max_epi32(_mm_min_epi32(final_sums, v_max), v_min);
+
+        //Store the 4 ints as uint8_t
+        final_sums = _mm_packs_epi32(final_sums, final_sums); 
+        final_sums = _mm_packus_epi16(final_sums, final_sums);
+        _mm_storeu_si32(&outputValues[outputIndex], final_sums);
     }
 }
 
-float calculateOutputLayer(float* h3, float weights[THIRD_HIDDEN_LAYER_NODES], float bias)
+int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], int32_t bias)
 {
-    __m256 v_output = _mm256_setzero_ps(); 
+    __m256i v_output = _mm256_setzero_si256(); 
+    const __m256i v_one  = _mm256_set1_epi16(1);
 
-    for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=8)
+    for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=32)
     {
-        v_output = _mm256_fmadd_ps(_mm256_loadu_ps(&h3[inputIndex]), 
-                                    _mm256_loadu_ps(&weights[inputIndex]), 
-                                    v_output);
+            __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&h3[inputIndex]);
+
+            __m256i temp = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[inputIndex]));
+
+            v_output = _mm256_add_epi32(v_output, _mm256_madd_epi16(temp, v_one));
     }
 
-    
-    __m128 sum128 = _mm_add_ps(_mm256_castps256_ps128(v_output), _mm256_extractf128_ps(v_output, 1));
+    //Reduce from 8 ints to one int.
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(v_output), _mm256_extracti128_si256(v_output, 1));
     
     //_MM_SHUFFLE() reorganizes from default indices (3, 2, 1, 0)
-    // 0 and 1 come from second vector
-    // 2 and 3 come from first vector
-    sum128 = _mm_add_ps(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(2, 3, 0, 1)));
-    sum128 = _mm_add_ps(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 1, 1, 1)));
-
-    return _mm_cvtss_f32(sum128) + bias;
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1))); //[2 + 3, 3 + 2, 0 + 1, 1 + 0]
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2))); //[0 + 1 + 2 + 3, 0 + 1 + 2 + 3, 0 + 1 + 2 + 3, 0 + 1 + 2 + 3]
+    
+    //QB downscaling
+    //No activation
+    int output = _mm_cvtsi128_si32(sum128) + bias;
+    return (output >> 6) / OUTPUT_SCALE;
 }
 
-/** PESTO (temp) **/
-
-int mg_value[6] = { 82, 337, 365, 477, 1025,  0};
-int eg_value[6] = { 94, 281, 297, 512,  936,  0};
-
-int mg_pawn_table[64] = {
-      0,   0,   0,   0,   0,   0,  0,   0,
-     98, 134,  61,  95,  68, 126, 34, -11,
-     -6,   7,  26,  31,  65,  56, 25, -20,
-    -14,  13,   6,  21,  23,  12, 17, -23,
-    -27,  -2,  -5,  12,  17,   6, 10, -25,
-    -26,  -4,  -4, -10,   3,   3, 33, -12,
-    -35,  -1, -20, -23, -15,  24, 38, -22,
-      0,   0,   0,   0,   0,   0,  0,   0,
-};
-
-int eg_pawn_table[64] = {
-      0,   0,   0,   0,   0,   0,   0,   0,
-    178, 173, 158, 134, 147, 132, 165, 187,
-     94, 100,  85,  67,  56,  53,  82,  84,
-     32,  24,  13,   5,  -2,   4,  17,  17,
-     13,   9,  -3,  -7,  -7,  -8,   3,  -1,
-      4,   7,  -6,   1,   0,  -5,  -1,  -8,
-     13,   8,   8,  10,  13,   0,   2,  -7,
-      0,   0,   0,   0,   0,   0,   0,   0,
-};
-
-int mg_knight_table[64] = {
-    -167, -89, -34, -49,  61, -97, -15, -107,
-     -73, -41,  72,  36,  23,  62,   7,  -17,
-     -47,  60,  37,  65,  84, 129,  73,   44,
-      -9,  17,  19,  53,  37,  69,  18,   22,
-     -13,   4,  16,  13,  28,  19,  21,   -8,
-     -23,  -9,  12,  10,  19,  17,  25,  -16,
-     -29, -53, -12,  -3,  -1,  18, -14,  -19,
-    -105, -21, -58, -33, -17, -28, -19,  -23,
-};
-
-int eg_knight_table[64] = {
-    -58, -38, -13, -28, -31, -27, -63, -99,
-    -25,  -8, -25,  -2,  -9, -25, -24, -52,
-    -24, -20,  10,   9,  -1,  -9, -19, -41,
-    -17,   3,  22,  22,  22,  11,   8, -18,
-    -18,  -6,  16,  25,  16,  17,   4, -18,
-    -23,  -3,  -1,  15,  10,  -3, -20, -22,
-    -42, -20, -10,  -5,  -2, -20, -23, -44,
-    -29, -51, -23, -15, -22, -18, -50, -64,
-};
-
-int mg_bishop_table[64] = {
-    -29,   4, -82, -37, -25, -42,   7,  -8,
-    -26,  16, -18, -13,  30,  59,  18, -47,
-    -16,  37,  43,  40,  35,  50,  37,  -2,
-     -4,   5,  19,  50,  37,  37,   7,  -2,
-     -6,  13,  13,  26,  34,  12,  10,   4,
-      0,  15,  15,  15,  14,  27,  18,  10,
-      4,  15,  16,   0,   7,  21,  33,   1,
-    -33,  -3, -14, -21, -13, -12, -39, -21,
-};
-
-int eg_bishop_table[64] = {
-    -14, -21, -11,  -8, -7,  -9, -17, -24,
-     -8,  -4,   7, -12, -3, -13,  -4, -14,
-      2,  -8,   0,  -1, -2,   6,   0,   4,
-     -3,   9,  12,   9, 14,  10,   3,   2,
-     -6,   3,  13,  19,  7,  10,  -3,  -9,
-    -12,  -3,   8,  10, 13,   3,  -7, -15,
-    -14, -18,  -7,  -1,  4,  -9, -15, -27,
-    -23,  -9, -23,  -5, -9, -16,  -5, -17,
-};
-
-int mg_rook_table[64] = {
-     32,  42,  32,  51, 63,  9,  31,  43,
-     27,  32,  58,  62, 80, 67,  26,  44,
-     -5,  19,  26,  36, 17, 45,  61,  16,
-    -24, -11,   7,  26, 24, 35,  -8, -20,
-    -36, -26, -12,  -1,  9, -7,   6, -23,
-    -45, -25, -16, -17,  3,  0,  -5, -33,
-    -44, -16, -20,  -9, -1, 11,  -6, -71,
-    -19, -13,   1,  17, 16,  7, -37, -26,
-};
-
-int eg_rook_table[64] = {
-    13, 10, 18, 15, 12,  12,   8,   5,
-    11, 13, 13, 11, -3,   3,   8,   3,
-     7,  7,  7,  5,  4,  -3,  -5,  -3,
-     4,  3, 13,  1,  2,   1,  -1,   2,
-     3,  5,  8,  4, -5,  -6,  -8, -11,
-    -4,  0, -5, -1, -7, -12,  -8, -16,
-    -6, -6,  0,  2, -9,  -9, -11,  -3,
-    -9,  2,  3, -1, -5, -13,   4, -20,
-};
-
-int mg_queen_table[64] = {
-    -28,   0,  29,  12,  59,  44,  43,  45,
-    -24, -39,  -5,   1, -16,  57,  28,  54,
-    -13, -17,   7,   8,  29,  56,  47,  57,
-    -27, -27, -16, -16,  -1,  17,  -2,   1,
-     -9, -26,  -9, -10,  -2,  -4,   3,  -3,
-    -14,   2, -11,  -2,  -5,   2,  14,   5,
-    -35,  -8,  11,   2,   8,  15,  -3,   1,
-     -1, -18,  -9,  10, -15, -25, -31, -50,
-};
-
-int eg_queen_table[64] = {
-     -9,  22,  22,  27,  27,  19,  10,  20,
-    -17,  20,  32,  41,  58,  25,  30,   0,
-    -20,   6,   9,  49,  47,  35,  19,   9,
-      3,  22,  24,  45,  57,  40,  57,  36,
-    -18,  28,  19,  47,  31,  34,  39,  23,
-    -16, -27,  15,   6,   9,  17,  10,   5,
-    -22, -23, -30, -16, -16, -23, -36, -32,
-    -33, -28, -22, -43,  -5, -32, -20, -41,
-};
-
-int mg_king_table[64] = {
-    -65,  23,  16, -15, -56, -34,   2,  13,
-     29,  -1, -20,  -7,  -8,  -4, -38, -29,
-     -9,  24,   2, -16, -20,   6,  22, -22,
-    -17, -20, -12, -27, -30, -25, -14, -36,
-    -49,  -1, -27, -39, -46, -44, -33, -51,
-    -14, -14, -22, -46, -44, -30, -15, -27,
-      1,   7,  -8, -64, -43, -16,   9,   8,
-    -15,  36,  12, -54,   8, -28,  24,  14,
-};
-
-int eg_king_table[64] = {
-    -74, -35, -18, -18, -11,  15,   4, -17,
-    -12,  17,  14,  17,  17,  38,  23,  11,
-     10,  17,  23,  15,  20,  45,  44,  13,
-     -8,  22,  24,  27,  26,  33,  26,   3,
-    -18,  -4,  21,  24,  27,  23,   9, -11,
-    -19,  -3,  11,  21,  23,  16,   7,  -9,
-    -27, -11,   4,  13,  14,   4,  -5, -17,
-    -53, -34, -21, -11, -28, -14, -24, -43
-};
-
-int* mg_pesto_table[6] =
+int forwardPropagate(bitboard* board, accumulator* acc)
 {
-    mg_pawn_table,
-    mg_knight_table,
-    mg_bishop_table,
-    mg_rook_table,
-    mg_queen_table,
-    mg_king_table
-};
-
-int* eg_pesto_table[6] =
-{
-    eg_pawn_table,
-    eg_knight_table,
-    eg_bishop_table,
-    eg_rook_table,
-    eg_queen_table,
-    eg_king_table
-};
-
-int gamephaseInc[12] = {0,0,1,1,1,1,2,2,4,4,0,0};
-int mg_table[12][64];
-int eg_table[12][64];
-
-int valid = 0;
-void init_tables()
-{
-    for (int p = 0; p < 6; p++) {
-        int pc= 2 * p;
-        for (int sq = 0; sq < 64; sq++) {
-            mg_table[pc]  [sq] = mg_value[p] + mg_pesto_table[p][sq];
-            eg_table[pc]  [sq] = eg_value[p] + eg_pesto_table[p][sq];
-            mg_table[pc+1][sq] = mg_value[p] + mg_pesto_table[p][FLIP_SQUARE(sq)];
-            eg_table[pc+1][sq] = eg_value[p] + eg_pesto_table[p][FLIP_SQUARE(sq)];
-        }
-    }
-}
-
-int eval(bitboard* board)
-{
-    if(!valid)
-    {
-        init_tables();
-        valid = 1;
-    }
-    int mg[2];
-    int eg[2];
-    int gamePhase = 0;
-
-    mg[WHITE] = 0;
-    mg[BLACK] = 0;
-    eg[WHITE] = 0;
-    eg[BLACK] = 0;
-
-    // evaluate each piece 
-    for (int sq = 0; sq < 64; ++sq) {
-        int pc = board->pieceArr[sq];
-        if (pc != EMPTY_PIECE) {
-            mg[COLOR(pc)] += mg_table[pc][sq];
-            eg[COLOR(pc)] += eg_table[pc][sq];
-            gamePhase += gamephaseInc[pc];
-        }
-    }
-
-    // tapered eval
-    int mgScore = mg[board->turn] - mg[FLIP_COLOR(board->turn)];
-    int egScore = eg[board->turn] - eg[FLIP_COLOR(board->turn)];
-    int mgPhase = gamePhase;
-    if (mgPhase > 24) mgPhase = 24; // in case of early promotion 
-    int egPhase = 24 - mgPhase;
-    return (mgScore * mgPhase + egScore * egPhase) / 24;
-}
-
-float forwardPropagate(bitboard* board, accumulator* acc)
-{
-    if(1) return eval(board);
     int turn = board->turn;
 
     int bucket = 0;
 
-    float* side_us;
-    float* side_them;
+    uint8_t* side_us;
+    uint8_t* side_them;
 
     if(ISWHITE(turn))
     {
@@ -473,13 +364,13 @@ float forwardPropagate(bitboard* board, accumulator* acc)
         side_them = acc->accumulator[WHITE];
     }
 
-    float h2[SECOND_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(side_us, side_them, h2, ACCUMULATOR_NODES_PER_SIDE, ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, nnue_weights->weights2, nnue_weights->weights2_bias);
+    uint8_t h2[SECOND_HIDDEN_LAYER_NODES];
+    calculateHiddenLayer(side_us, side_them, h2, ACCUMULATOR_NODES_PER_SIDE, ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, int_weights->weights2, int_weights->weights2_bias);
 
-    float h3[THIRD_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(h2, NULL, h3, SECOND_HIDDEN_LAYER_NODES, 0, THIRD_HIDDEN_LAYER_NODES, nnue_weights->weights3, nnue_weights->weights3_bias);
+    uint8_t h3[THIRD_HIDDEN_LAYER_NODES];
+    calculateHiddenLayer(h2, NULL, h3, SECOND_HIDDEN_LAYER_NODES, 0, THIRD_HIDDEN_LAYER_NODES, int_weights->weights3, int_weights->weights3_bias);
 
-    return calculateOutputLayer(h3, nnue_weights->weights4[bucket], nnue_weights->weights4_bias[bucket]);
+    return calculateOutputLayer(h3, int_weights->weights4[bucket], int_weights->weights4_bias[bucket]);
 }
 
 /*** Training Weights ***/
@@ -566,7 +457,7 @@ void train(int maxIterations, float maxAllowedError)
     if(!trainingDataFile)
     {
         DEBUG_ERROR("Failed to open training data file.");
-        exit(EXIT_FAILURE);
+        return;
     }
     fseek_64(trainingDataFile, 0, SEEK_END);
     uint64_t file_size = ftell_64(trainingDataFile);
@@ -590,11 +481,13 @@ void train(int maxIterations, float maxAllowedError)
     float* expectedOutputs_B = NULL;
     float* loss_buffer = NULL;
     
-    int cl_errorcode = initHIP(nnue_weights, &activeInputs_A, &expectedOutputs_A, &activeInputs_B, &expectedOutputs_B, &loss_buffer);
+    int cl_errorcode = initHIP(raw_weights, &activeInputs_A, &expectedOutputs_A, &activeInputs_B, &expectedOutputs_B, &loss_buffer);
     if(cl_errorcode != hipSuccess) 
     {
         DEBUG_ERROR("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
-        exit(EXIT_FAILURE);
+        fclose(trainingDataFile);
+        free(blockIndices);
+        return;
     }
 
     int totalIterations = 0;
@@ -938,8 +831,8 @@ void train(int maxIterations, float maxAllowedError)
 
         if(validationLoss < minimumLoss)
         {
-            getWeights(nnue_weights);
-            saveWeights();
+            getWeights(raw_weights);
+            saveRawWeights();
             minimumLoss = validationLoss;
 
             //Green text

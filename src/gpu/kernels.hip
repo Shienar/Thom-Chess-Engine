@@ -17,8 +17,24 @@
 #define ADAM_WEIGHT_DECAY 1e-3f
 
 #define EVAL_SCALE 400.0f
+#define OUTPUT_SCALE 16.0f
 
 #define LOOKAHEAD_ALPHA 0.5f
+
+#define QA 255.0f
+#define QB 64.0f
+
+#define QA_16_MIN (-32768.0f / QA)
+#define QA_16_MAX (32767.0f / QA)
+
+#define QB_8_MIN (-128.0f / QB)
+#define QB_8_MAX (127.0f / QB)
+
+#define B_HIDDEN_MIN (-2147483648.0f / (QA * QB))
+#define B_HIDDEN_MAX (2147483647.0f / (QA * QB))
+
+#define B_INPUT_MIN (-2147483648.0f / QA)
+#define B_INPUT_MAX (2147483647.0f / QB)
 
 /******* UTIL *******/
 
@@ -29,8 +45,21 @@ __device__ inline float crelu_derivative(float x) { return (float) ((x > 0.0f) &
 
 __device__ inline float sigmoid(float x) { return 1.0f / (1.0f + __expf(-x)); }
 
+__device__ inline float fake_quantize(float val, float scale, float min_int, float max_int) { return fminf(max_int, fmaxf(min_int, rintf(val * scale))) / scale; }
+__device__ inline float4 fake_quantize4(float4 val, float scale, float min_int, float max_int) {
+    float4 out;
+    out.x = fake_quantize(val.x, scale, min_int, max_int);
+    out.y = fake_quantize(val.y, scale, min_int, max_int);
+    out.z = fake_quantize(val.z, scale, min_int, max_int);
+    out.w = fake_quantize(val.w, scale, min_int, max_int);
+    return out;
+}
+
+
 /******* Forward Propagation *******/
 //~ 0.81 ms
+//Grid Dimensions:  MINIBATCH_SIZE * 2, 1, 1
+//Block Dimensions: 32,                 1, 1
 extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [MINIBATCH_SIZE][2][32] - max 32 active features
                                                 const float4* weights, //shared
                                                 const float4* bias,    //shared
@@ -47,8 +76,8 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
     int vector1Index = localID * 2;
     int vector2Index = localID * 2 + 1; 
 
-    float4 sum1 = bias[vector1Index];
-    float4 sum2 = bias[vector2Index];
+    float4 sum1 = fake_quantize4(bias[vector1Index], QA, -32768.0f, 32767.0f);
+    float4 sum2 = fake_quantize4(bias[vector2Index], QA, -32768.0f, 32767.0f);
 
     int baseIndex;
 
@@ -64,8 +93,8 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
 
         baseIndex = currentFeature * VECTOR_ACCUMULATOR_NODES_PER_SIDE;
 
-        float4 w1 = weights[baseIndex + vector1Index];
-        float4 w2 = weights[baseIndex + vector2Index];
+        float4 w1 = fake_quantize4(weights[baseIndex + vector1Index], QA, -32768.0f, 32767.0f);
+        float4 w2 = fake_quantize4(weights[baseIndex + vector2Index], QA, -32768.0f, 32767.0f);
 
         sum1.x += w1.x;  sum1.y += w1.y;  sum1.z += w1.z;  sum1.w += w1.w;
         sum2.x += w2.x;  sum2.y += w2.y;  sum2.z += w2.z;  sum2.w += w2.w;
@@ -77,6 +106,8 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
 }
 
 //~1ms
+//Grid Dimensions:  MINIBATCH_SIZE, 1, 1
+//Block Dimensions: 32,             1, 1
 extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
                                             float* h2_weights, float* h2_bias, float* h2_output,
                                             float* h3_weights, float* h3_bias, float* h3_output,
@@ -99,12 +130,12 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     __syncthreads();
 
     //calculate h2
-    float sum = h2_bias[localID];
+    float sum = fake_quantize(h2_bias[localID], QA * QB, -2147483648.0f, 2147483647.0f);;
 
     #pragma unroll 4
     for (int inputIndex = 0; inputIndex < ACCUMULATOR_NODES; inputIndex++) 
     {
-        sum += shared[inputIndex] * h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID];
+        sum += shared[inputIndex] * fake_quantize(h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID], QB, -128.0f, 127.0f);
     }
     sum = crelu(sum);
 
@@ -116,12 +147,12 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     __syncthreads();
 
     //calculate h3
-    sum = h3_bias[localID];
+    sum = fake_quantize(h3_bias[localID], QA * QB,  -2147483648.0f, 2147483647.0f);
 
     #pragma unroll
     for (int inputIndex = 0; inputIndex < SECOND_HIDDEN_LAYER_NODES; inputIndex++) 
     {
-        sum += shared[inputIndex] * h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID];
+        sum += shared[inputIndex] * fake_quantize(h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID], QB, -128.0f, 127.0f);
     }
     sum = crelu(sum);
     
@@ -133,7 +164,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     __syncthreads();
 
     //calculate output
-    float myOutputContribution = shared[localID] * output_weights[localID];
+    float myOutputContribution = shared[localID] * fake_quantize(output_weights[localID], QB, -128.0f, 127.0f);
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
@@ -144,13 +175,17 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
 
     if(localID == 0)  
     {
-        outputs[batchIndex] = sigmoid((myOutputContribution + output_bias[0]) / (EVAL_SCALE));
+        float finalOutput = myOutputContribution + fake_quantize(output_bias[0], QA * QB, -2147483648.0f, 2147483647.0f);
+        finalOutput*= (QA / OUTPUT_SCALE);
+        outputs[batchIndex] = sigmoid(finalOutput / EVAL_SCALE);
     }
 }
 
 /******* Backpropagation (Delta calculations) *******/
 
 //~2.5 ms
+//Grid Dimensions:  MINIBATCH_SIZE,             1, 1
+//Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
 extern "C" __global__ void backpropagate( const float* outputNodes, const float* expectedOutputs,
                             const float* h3, 
                             const float* h2,
@@ -180,7 +215,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
         shared_d4 = output - expected;
         
         loss[batchIndex] = (shared_d4 * shared_d4);
-        shared_d4 *= (output * (1.0f - output)); //sigmoid derivative
+        shared_d4 *= (output * (1.0f - output)) * (QA / OUTPUT_SCALE); //sigmoid derivative, Chain Rule
 
         delta4[batchIndex] = shared_d4;
     } 
@@ -190,7 +225,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
     if(localID < THIRD_HIDDEN_LAYER_NODES) 
     {
         float h3_val = h3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID];
-        float d3 = shared_d4 * weights4[localID] * crelu_derivative(h3_val);
+        float d3 = shared_d4 * fake_quantize(weights4[localID], QB, -128.0f, 127.0f) * crelu_derivative(h3_val);
         delta3[batchIndex * THIRD_HIDDEN_LAYER_NODES + localID] = d3;
         shared_d3[localID] = d3;
     }
@@ -203,7 +238,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
         #pragma unroll
         for (int outputIndex = 0; outputIndex < THIRD_HIDDEN_LAYER_NODES; outputIndex++) 
         {
-            sum += shared_d3[outputIndex] * weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex];
+            sum += shared_d3[outputIndex] * fake_quantize(weights3[localID * THIRD_HIDDEN_LAYER_NODES + outputIndex], QB, -128.0f, 127.0f);
         }
         float h2_val = h2[batchIndex * SECOND_HIDDEN_LAYER_NODES + localID];
         float d2 = sum * crelu_derivative(h2_val);
@@ -220,7 +255,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
         #pragma unroll
         for (int outputIndex = 0; outputIndex < SECOND_HIDDEN_LAYER_NODES; outputIndex++) 
         {
-            sum += shared_d2[outputIndex] * weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex];
+            sum += shared_d2[outputIndex] * fake_quantize(weights2[nodeIndex * SECOND_HIDDEN_LAYER_NODES + outputIndex], QB, -128.0f, 127.0f);
         }
         delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
     }
@@ -229,6 +264,8 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
 /******* Calculate & Accumulate Edge Weight Gradients *******/
 
 //~0.22 ms
+//Grid Dimensions:  32, 1, 1
+//Block Dimensions: 32, 1, 1
 extern "C" __global__ void calculateGradient4(const float* delta4, //1 per batch sample
                                     const float* h3, //THIRD_HIDDEN_LAYER_NODES per batch sample
                                     float* gradient4_Sum, //THIRD_HIDDEN_LAYER_NODES * OUTPUT_BUCKETS shared
@@ -265,6 +302,8 @@ extern "C" __global__ void calculateGradient4(const float* delta4, //1 per batch
 }
 
 //~0.5 ms
+//Grid Dimensions:  MINIBATCH_SIZE,             1, 1
+//Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
 extern "C" __global__ void calculateGradient3(const float* delta3, //THIRD_HIDDEN_LAYER_NODES per batch sample
                                 const float* h2, //SECOND_HIDDEN_LAYER_NODES per batch sample
                                 float* gradient3_Sum, //SECOND_HIDDEN_LAYER_NODES * THIRD_HIDDEN_LAYER_NODES shared
@@ -290,6 +329,8 @@ extern "C" __global__ void calculateGradient3(const float* delta3, //THIRD_HIDDE
 }
 
 //~1ms
+//Grid Dimensions:  SECOND_HIDDEN_LAYER_NODES / 16, ACCUMULATOR_NODES / 16, 1
+//Block Dimensions: 16,                             16,                     1
 extern "C" __global__ void calculateGradient2(const float* delta2, //SECOND_HIDDEN_LAYER_NODES per batch sample
                                 const float* h1, //ACCUMULATOR_NODES per batch sample
                                 float* gradient2_Sum, //ACCUMULATOR_NODES * SECOND_HIDDEN_LAYER_NODES shared
@@ -349,6 +390,8 @@ extern "C" __global__ void calculateGradient2(const float* delta2, //SECOND_HIDD
 }
 
 //~4.2ms. Drops to 3.1ms if atomic adds treated as nonatomic. There's just a lot of weights to handle.
+//Grid Dimensions:  MINIBATCH_SIZE,             1, 1
+//Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
 extern "C" __global__ void calculateGradient1(const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
                                     const float* delta1, // ACCUMULATOR_NODES per batch sample
                                     float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
@@ -397,7 +440,7 @@ extern "C" __global__ void calculateGradient1(const short* activeInputs,       /
 }
 
 /******* Adam Update *******/
-#define UPDATE_ADAMW(weight, gradientSum, firstMoment, secondMoment, size) \
+#define UPDATE_ADAMW(weight, gradientSum, firstMoment, secondMoment, size, min, max) \
     if(i < size) \
     { \
         float grad = gradientSum[i] / MINIBATCH_SIZE; \
@@ -411,10 +454,13 @@ extern "C" __global__ void calculateGradient1(const short* activeInputs,       /
             weight[i] -= lr * correctedFirstMoment; \
         } \
         weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
+        weight[i] = fminf(max, fmaxf(min, weight[i])); \
         gradientSum[i] = 0.0f; \
     }
-    
+
 //~0.1 ms
+//Grid Dimensions:  weight2Count / 32, 1, 1
+//Block Dimensions: 32,                1, 1
 extern "C" __global__ void adamW(float* w2, float* g2, float* m2, float* v2,
                     float* w3, float* g3, float* m3, float* v3,
                     float* w4, float* g4, float* m4, float* v4,
@@ -426,26 +472,27 @@ extern "C" __global__ void adamW(float* w2, float* g2, float* m2, float* v2,
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    UPDATE_ADAMW(w2, g2, m2, v2, 16384); // 512 * 32
-    UPDATE_ADAMW(w3, g3, m3, v3, 1024);  // 32 * 32
-    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256);
-    UPDATE_ADAMW(b2, gb2, mb2, vb2, 32);
-    UPDATE_ADAMW(b3, gb3, mb3, vb3, 32);
-    UPDATE_ADAMW(w4, g4, m4, v4, 32);
-    UPDATE_ADAMW(b4, gb4, mb4, vb4, 8);
+    UPDATE_ADAMW(w2, g2, m2, v2, 16384, QB_8_MIN, QB_8_MAX); // 512 * 32
+    UPDATE_ADAMW(w3, g3, m3, v3, 1024, QB_8_MIN, QB_8_MAX);  // 32 * 32
+    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256, B_INPUT_MIN, B_INPUT_MAX);
+    UPDATE_ADAMW(b2, gb2, mb2, vb2, 32, B_HIDDEN_MIN, B_HIDDEN_MAX);
+    UPDATE_ADAMW(b3, gb3, mb3, vb3, 32, B_HIDDEN_MIN, B_HIDDEN_MAX);
+    UPDATE_ADAMW(w4, g4, m4, v4, 32, QB_8_MIN, QB_8_MAX);
+    UPDATE_ADAMW(b4, gb4, mb4, vb4, 8, B_HIDDEN_MIN, B_HIDDEN_MAX);
     
 }
 
 //0.42ms
 //Roughly half (e.g. ~778k / 1,638,400) will be active.
+//Grid Dimensions:  weight1Count / 32, 1, 1
+//Block Dimensions: 32,                1, 1
 extern "C" __global__ void inputAdamW(float* w1, float* g1, float* m1, float* v1,
                             float lr, float biasCorrection1, float biasCorrection2, float rectificationTerm)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int size = gridDim.x * blockDim.x;
 
-    UPDATE_ADAMW(w1, g1, m1, v1, size);
-    if(w1[i] == 0.0f) w1[i] = ADAM_EPSILON;
+    UPDATE_ADAMW(w1, g1, m1, v1, size, QA_16_MIN, QA_16_MAX);
 }
 
 extern "C" __global__ void lookahead_update(float* fast_weights, float* slow_weights)
