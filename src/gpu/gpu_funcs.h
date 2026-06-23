@@ -17,6 +17,10 @@
 #endif
 
 //CPU fills one group while gpu uses other group.
+//All copy instructinos get placed in a queue so this might seem redundant, 
+//but using ping-pong buffers increases positions/second by 9.375%. Probably because
+//it can safely overlap copying with kernel execution since its copying into a buffer
+//that isn't being used.
 #define INPUT_GROUP(block) (block%2)
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1

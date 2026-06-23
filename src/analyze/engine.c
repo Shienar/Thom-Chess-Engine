@@ -52,7 +52,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     return nodes;
 }
 
-float evaluateEndstate(bitboard* board, int ply)
+int evaluateEndstate(bitboard* board, int ply)
 {
     assert(board->victor);
 
@@ -71,7 +71,7 @@ float evaluateEndstate(bitboard* board, int ply)
     }
 }
 
-float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
+int quiesce(searchThreadContext* context, float alpha, float beta, int ply)
 {
     context->countedNodes++;
 
@@ -131,7 +131,7 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply)
     return best;
 }
 
-float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV)
+int principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV)
 {
     assert(context);
     context->countedNodes++;

@@ -17,9 +17,9 @@ extern int isCalculating;
 #define MAX_THREADS 64
 
 #define MIN_ASPIRATION_DEPTH 5
-#define INITIAL_ASPIRATION_MARGIN 32.0f
-#define MAXIMUM_ASPIRATION_MARGIN 512.0f
-#define ASPIRATION_MARGIN_MULT_FACTOR 2.0f
+#define INITIAL_ASPIRATION_MARGIN 16
+#define MAXIMUM_ASPIRATION_MARGIN 128
+#define ASPIRATION_MARGIN_MULT_FACTOR 2
 
 #define REVERSE_FUTILITY_PRUNING_DEPTH 7
 #define FUTILITY_PRUNING_DEPTH 4
@@ -43,7 +43,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose);
  * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
  * position is reached. (Do extra searching for subsequent capture moves).
  */
-float quiesce(searchThreadContext* context, float alpha, float beta, int ply);
+int quiesce(searchThreadContext* context, float alpha, float beta, int ply);
 
 /**
  * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
@@ -53,7 +53,7 @@ float quiesce(searchThreadContext* context, float alpha, float beta, int ply);
  * 
  * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-float principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV);
+int principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV);
 
 /**
  * Iterative deepening function.

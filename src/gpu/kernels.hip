@@ -33,9 +33,6 @@
 #define B_HIDDEN_MIN (-2147483648.0f / (QA * QB))
 #define B_HIDDEN_MAX (2147483647.0f / (QA * QB))
 
-#define B_INPUT_MIN (-2147483648.0f / QA)
-#define B_INPUT_MAX (2147483647.0f / QB)
-
 /******* UTIL *******/
 
 __device__ inline float screlu(float x) { float y = fminf(fmaxf(x, 0.0f), 1.0f); return y * y; }
@@ -54,7 +51,6 @@ __device__ inline float4 fake_quantize4(float4 val, float scale, float min_int, 
     out.w = fake_quantize(val.w, scale, min_int, max_int);
     return out;
 }
-
 
 /******* Forward Propagation *******/
 //~ 0.81 ms
@@ -176,7 +172,11 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     if(localID == 0)  
     {
         float finalOutput = myOutputContribution + fake_quantize(output_bias[0], QA * QB, -2147483648.0f, 2147483647.0f);
-        finalOutput*= (QA / OUTPUT_SCALE);
+        
+        //32 float weights in range of [-2, 1.98] cannot reach expected outputs in range of +-10,000 so we must scale the output.
+        //Scale by the relative scale of the quantized output node during fprop.
+        finalOutput *= (QA / OUTPUT_SCALE);
+
         outputs[batchIndex] = sigmoid(finalOutput / EVAL_SCALE);
     }
 }
@@ -474,7 +474,7 @@ extern "C" __global__ void adamW(float* w2, float* g2, float* m2, float* v2,
 
     UPDATE_ADAMW(w2, g2, m2, v2, 16384, QB_8_MIN, QB_8_MAX); // 512 * 32
     UPDATE_ADAMW(w3, g3, m3, v3, 1024, QB_8_MIN, QB_8_MAX);  // 32 * 32
-    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256, B_INPUT_MIN, B_INPUT_MAX);
+    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256, QA_16_MIN, QA_16_MAX);
     UPDATE_ADAMW(b2, gb2, mb2, vb2, 32, B_HIDDEN_MIN, B_HIDDEN_MAX);
     UPDATE_ADAMW(b3, gb3, mb3, vb3, 32, B_HIDDEN_MIN, B_HIDDEN_MAX);
     UPDATE_ADAMW(w4, g4, m4, v4, 32, QB_8_MIN, QB_8_MAX);

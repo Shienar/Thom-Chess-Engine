@@ -138,7 +138,7 @@ extern int kingBucketMap[KING_BUCKETS];
  */
 typedef struct quantized_weights {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
-    int32_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
     int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
     int32_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
     int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];

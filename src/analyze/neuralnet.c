@@ -123,7 +123,7 @@ void quantizeWeights(training_weights* inputFloats, quantized_weights* outputInt
     }
 
     //bias 1-4
-    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputInts->weights1_bias[i] = (int32_t) max(min(INT16_MAX, lroundf(inputFloats->weights1_bias[i] * QA)), INT16_MIN);
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) outputInts->weights1_bias[i] = (int16_t) max(min(INT16_MAX, lroundf(inputFloats->weights1_bias[i] * QA)), INT16_MIN);
     for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) outputInts->weights2_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights2_bias[i] * QA * QB)), INT32_MIN);
     for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) outputInts->weights3_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights3_bias[i] * QA * QB)), INT32_MIN);
     for(int i = 0; i < OUTPUT_BUCKETS; i++) outputInts->weights4_bias[i] = (int32_t) max(min(INT32_MAX, lroundf(inputFloats->weights4_bias[i] * QA * QB)), INT32_MIN);
@@ -246,7 +246,6 @@ void calculateHiddenLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, uint8_t*
 {
     const __m128i v_min = _mm_setzero_si128();
     const __m128i v_max = _mm_set1_epi32(QA);
-    const __m256i v_one  = _mm256_set1_epi16(1);
 
     for(int outputIndex = 0; outputIndex < numOutputs; outputIndex+=4)
     {
@@ -255,39 +254,35 @@ void calculateHiddenLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, uint8_t*
         __m256i v_output3 = _mm256_setzero_si256();
         __m256i v_output4 = _mm256_setzero_si256();
 
-        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=32)
-        {
-            __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&inputValuesA[inputIndex]);
+        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=16)
+        { 
+            // Load 16 bytes of inputs and weights, widen to int16
+            __m256i v_input  =  _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesA[inputIndex]));
+            __m256i v_weight1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 0][inputIndex]));
+            __m256i v_weight2 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 1][inputIndex]));
+            __m256i v_weight3 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 2][inputIndex]));
+            __m256i v_weight4 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 3][inputIndex]));
 
-            //Satured multiply-add
-            __m256i t_1 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 0][inputIndex]));
-            __m256i t_2 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 1][inputIndex]));
-            __m256i t_3 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 2][inputIndex]));
-            __m256i t_4 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 3][inputIndex]));
-
-            //Widen when storing to prevent overflow
-            v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(t_1, v_one));
-            v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(t_2, v_one));
-            v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(t_3, v_one));
-            v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(t_4, v_one));
+            v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(v_input, v_weight1));
+            v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(v_input, v_weight2));
+            v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(v_input, v_weight3));
+            v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(v_input, v_weight4));
         }
 
         if(inputValuesB)
         {
-            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=32, loadIndex+=32)
+            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=16, loadIndex+=16)
             {
-                __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&inputValuesB[loadIndex]);
-                
-                __m256i t_1 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 0][weightIndex]));
-                __m256i t_2 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 1][weightIndex]));
-                __m256i t_3 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 2][weightIndex]));
-                __m256i t_4 = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[outputIndex + 3][weightIndex]));
+                __m256i v_input  =  _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesB[loadIndex]));
+                __m256i v_weight1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 0][weightIndex]));
+                __m256i v_weight2 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 1][weightIndex]));
+                __m256i v_weight3 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 2][weightIndex]));
+                __m256i v_weight4 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 3][weightIndex]));
 
-                //Widen when storing to prevent overflow
-                v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(t_1, v_one));
-                v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(t_2, v_one));
-                v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(t_3, v_one));
-                v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(t_4, v_one));
+                v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(v_input, v_weight1));
+                v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(v_input, v_weight2));
+                v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(v_input, v_weight3));
+                v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(v_input, v_weight4));
             
             }
         }
@@ -320,15 +315,13 @@ void calculateHiddenLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, uint8_t*
 int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], int32_t bias)
 {
     __m256i v_output = _mm256_setzero_si256(); 
-    const __m256i v_one  = _mm256_set1_epi16(1);
 
-    for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=32)
+    for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=16)
     {
-            __m256i v_inputBatch = _mm256_loadu_si256((const __m256i*)&h3[inputIndex]);
-
-            __m256i temp = _mm256_maddubs_epi16(v_inputBatch, _mm256_loadu_si256((const __m256i*)&weights[inputIndex]));
-
-            v_output = _mm256_add_epi32(v_output, _mm256_madd_epi16(temp, v_one));
+        __m256i v_input  = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&h3[inputIndex]));
+        __m256i v_weight = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[inputIndex]));
+        
+        v_output = _mm256_add_epi32(v_output, _mm256_madd_epi16(v_input, v_weight));
     }
 
     //Reduce from 8 ints to one int.
@@ -341,7 +334,10 @@ int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], 
     //QB downscaling
     //No activation
     int output = _mm_cvtsi128_si32(sum128) + bias;
-    return (output >> 6) / OUTPUT_SCALE;
+
+    //QB = 2^6.
+    //Output Scale = 2^4
+    return (output >> 10);
 }
 
 int forwardPropagate(bitboard* board, accumulator* acc)
