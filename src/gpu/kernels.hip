@@ -17,7 +17,7 @@
 #define ADAM_WEIGHT_DECAY 1e-3f
 
 #define EVAL_SCALE 400.0f
-#define OUTPUT_SCALE 16.0f
+#define OUTPUT_SCALE 8.0f
 
 #define LOOKAHEAD_ALPHA 0.5f
 
@@ -121,7 +121,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     #pragma unroll
     for(int i = localID; i < ACCUMULATOR_NODES; i+= 32)
     {
-        shared[i] = screlu(accumulatorOutput[baseIndex + i]);
+        shared[i] = fake_quantize(screlu(accumulatorOutput[baseIndex + i]), QA, 0.0f, QA);
     }
     __syncthreads();
 
@@ -133,7 +133,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     {
         sum += shared[inputIndex] * fake_quantize(h2_weights[inputIndex * SECOND_HIDDEN_LAYER_NODES + localID], QB, -128.0f, 127.0f);
     }
-    sum = crelu(sum);
+    sum = fake_quantize(crelu(sum), QA, 0.0f, QA);
 
     __syncthreads(); 
 
@@ -150,7 +150,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     {
         sum += shared[inputIndex] * fake_quantize(h3_weights[inputIndex * THIRD_HIDDEN_LAYER_NODES + localID], QB, -128.0f, 127.0f);
     }
-    sum = crelu(sum);
+    sum = fake_quantize(crelu(sum), QA, 0.0f, QA);
     
     __syncthreads(); 
 
@@ -369,7 +369,7 @@ extern "C" __global__ void calculateGradient2(const float* delta2, //SECOND_HIDD
           *
           */
 
-        tile_h1[tileX][tileY] = screlu(h1[(batchIndex + tileX) * ACCUMULATOR_NODES + row]); 
+        tile_h1[tileX][tileY] = fake_quantize(screlu(h1[(batchIndex + tileX) * ACCUMULATOR_NODES + row]), QA, 0.0f, QA);
         tile_delta2[tileY][tileX] = delta2[(batchIndex + tileY) * 32 + col];
 
         __syncthreads();

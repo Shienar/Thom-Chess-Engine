@@ -5,9 +5,9 @@
 #include "board/bitboard.h"
 #include "pyrrhic/tbprobe.h"
 
-#define SCORE_WIN 1e6f
+#define SCORE_WIN 1e8
 
-float getSygyzyResult(bitboard* board);
+int getSygyzyResult(bitboard* board);
 void filterSygyzyMoves(bitboard* board, move* requiredMoves);
 
 #endif

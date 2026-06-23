@@ -54,11 +54,11 @@ void filterSygyzyMoves(bitboard* board, move* requiredMoves)
     }
 }
 
-//Return -1.0f on error. Valid results are SCORE_WIN, -SCORE_WIN, 0.0f
-float getSygyzyResult(bitboard* board)
+//Return -1 on error. Valid results are SCORE_WIN, -SCORE_WIN, 0
+int getSygyzyResult(bitboard* board)
 {
     //3-n man sygyzy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (IS_IN_CHECK_ANY(board->flags))) return -1.0f;
+    if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (IS_IN_CHECK_ANY(board->flags))) return -1;
 
     uint32_t ep = board->enPassantSquare;
     if(ep == -1) ep = 0;
@@ -80,10 +80,10 @@ float getSygyzyResult(bitboard* board)
         case TB_BLESSED_LOSS:
         case TB_CURSED_WIN:
         case TB_DRAW:
-            return 0.0f;
+            return 0;
         case TB_RESULT_FAILED:
             DEBUG_ERROR("Failed to probe sygyzy result.");
         default:
-            return -1.0f;
+            return -1;
     }
 }

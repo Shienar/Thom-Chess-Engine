@@ -179,7 +179,7 @@ typedef struct searchThreadContext {
     int isPonder;
     int maxDepth, seldepth, completedDepth, deepeningSkip;
     int maxNodes, countedNodes;
-    float score;
+    int score;
     clock_t startTime;
     bitboard* board;
     volatile clock_t* endTime;

@@ -6,7 +6,6 @@
 #include "analyze/sygyzy.h"
 #include "pyrrhic/tbprobe.h"
 #include <string.h>
-#include <float.h>
 #include <math.h>
 
 int threadCount = 4;
@@ -71,7 +70,7 @@ int evaluateEndstate(bitboard* board, int ply)
     }
 }
 
-int quiesce(searchThreadContext* context, float alpha, float beta, int ply)
+int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
 {
     context->countedNodes++;
 
@@ -87,7 +86,7 @@ int quiesce(searchThreadContext* context, float alpha, float beta, int ply)
         if(entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
     }
      
-    float best = forwardPropagate(board, context->accumulator);
+    int best = forwardPropagate(board, context->accumulator);
     
     table_entry_tt shallowEntry = {
         .depth = 0,
@@ -112,7 +111,7 @@ int quiesce(searchThreadContext* context, float alpha, float beta, int ply)
             if(!moveFromStruct(board, currentMove))
             {
                 updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
-                float score = -quiesce(context, -beta, -alpha, ply + 1);
+                int score = -quiesce(context, -beta, -alpha, ply + 1);
 
                 unmove(board);
                 updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
@@ -131,7 +130,7 @@ int quiesce(searchThreadContext* context, float alpha, float beta, int ply)
     return best;
 }
 
-int principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV)
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int maxDepth, int depth, int ply, PVar* myPV)
 {
     assert(context);
     context->countedNodes++;
@@ -155,8 +154,8 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
     //Mate distance pruning for non-root nodes.
     if(maxDepth != depth)
     {
-        float a = _max(alpha, -SCORE_WIN + ply);
-        float b = _min(beta, SCORE_WIN - ply - 1);
+        int a = _max(alpha, -SCORE_WIN + ply);
+        int b = _min(beta, SCORE_WIN - ply - 1);
         if(a >= b) return a;
     }
 
@@ -166,6 +165,8 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
         .hashCode = board->hashCode
     };
     table_entry_tt* old_tt_entry = NULL;
+    move tt_move = (move){0};
+    move* pvMove = NULL;
     if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
         old_tt_entry->depth >= depth &&
             (old_tt_entry->nodeType == NODE_TYPE_PV ||
@@ -173,20 +174,15 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
             (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
     {
         if(!pvNode) return old_tt_entry->evaluation;
-        else if(old_tt_entry->nodeType == NODE_TYPE_PV)
-        {
-            myPV->line[0] = old_tt_entry->bestMove;
-            myPV->length = 1;
-            return old_tt_entry->evaluation;
-        }
+        else if(old_tt_entry->nodeType == NODE_TYPE_PV) { tt_move = old_tt_entry->bestMove; pvMove = &tt_move; }
     }
-
+    if(!pvMove && IS_VALID_MOVE(context->pv.line[ply])) pvMove = &context->pv.line[ply];
 
     //Sygyzy
     if(depth >= sygyzyProbeDepth)
     {
-        float result = getSygyzyResult(context->board);
-        if(result != -1.0f) 
+        int result = getSygyzyResult(context->board);
+        if(result != -1) 
         {
             //We aren't saving a pv move, but 
             //this isn't the root node so it doesn't matter much.
@@ -197,7 +193,7 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
         }
     }
 
-    float score = 0.0f;
+    int score = 0.0f;
     if(old_tt_entry) score = old_tt_entry->evaluation;
     else
     {
@@ -230,7 +226,7 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
         {
             int r = 3;
             applyNullMove(board);
-            float nullScore = -principalVariationSearch(context, -alpha - 1.0f, -alpha, maxDepth, depth - r, ply + 1, &childPV);
+            int nullScore = -principalVariationSearch(context, -alpha - 1.0, -alpha, maxDepth, depth - r, ply + 1, &childPV);
             applyNullMove(board);
             if(nullScore >= beta) return nullScore;
         }
@@ -238,13 +234,12 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
     }
 
     moveIterator* iter;
-    if(ply > 0) iter = create_move_iterator(board, 0, NULL, NULL);
-    else iter = create_move_iterator(board, 0, &context->pv.line[ply], context->searchedMoves);
+    iter = create_move_iterator(board, 0, pvMove, (ply == 0) ? context->searchedMoves : NULL);
     if(iter)
     {
         move* currentMove;
         int validMovesVisited = 0;
-        float bestScore = -FLT_MAX;
+        int bestScore = -INT32_MAX;
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
@@ -271,7 +266,7 @@ int principalVariationSearch(searchThreadContext* context, float alpha, float be
                 if(validMovesVisited == 1) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 else
                 {
-                    score = -principalVariationSearch(context, -alpha - 1.0f, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                    score = -principalVariationSearch(context, -alpha - 1.0, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                     //Re-search PV node
                     if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 }
@@ -400,21 +395,21 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     if(currentDepth < MIN_ASPIRATION_DEPTH)
     {
         updateAccumulatorFromTable(board, context->accumulator, context->accumulatorTable);
-        context->score = principalVariationSearch(context, -FLT_MAX, FLT_MAX, currentDepth, currentDepth, 0, &context->pv);
+        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, currentDepth, 0, &context->pv);
         context->completedDepth = currentDepth;
     }
     else
     {
 
-        float aspiration_margin = INITIAL_ASPIRATION_MARGIN;
-        float alpha = context->score - aspiration_margin;
-        float beta = context->score + aspiration_margin;
+        int aspiration_margin = INITIAL_ASPIRATION_MARGIN;
+        int alpha = context->score - aspiration_margin;
+        int beta = context->score + aspiration_margin;
         while(1)
         {
             if(context->isPonder == 0 && clock() > *endTime) break;
 
             updateAccumulatorFromTable(board, acc, accumulatorTable);
-            float score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
+            int score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
 
             if(score <= alpha)
             {
@@ -436,8 +431,8 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
             if(aspiration_margin > MAXIMUM_ASPIRATION_MARGIN)
             {
-                alpha = -FLT_MAX;
-                beta = FLT_MAX;
+                alpha = -INT32_MAX;
+                beta = INT32_MAX;
             }
         }
     }
@@ -457,7 +452,7 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
         aspiration_window(context, currentDepth);
         if(clock() <= *context->endTime) memcpy(&tempPV, &context->pv, sizeof(PVar));
         
-        if(fabsf(context->score) > MIN_MATE_SCORE) break;
+        if(abs(context->score) > MIN_MATE_SCORE) break;
     }
 
     //Load the last stable pv
@@ -470,7 +465,7 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
 {
     searchThreadContext* best = mainThread;
     int bestDepth = best->completedDepth;
-    float bestScore = best->score;
+    int bestScore = best->score;
     int totalNodes = mainThread->countedNodes;
     if(helperThreads)
     {
@@ -478,7 +473,7 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
         {
             if(!IS_VALID_MOVE(helperThreads[i].pv.line[0])) continue;
             int curDepth = helperThreads[i].completedDepth;
-            float curScore = helperThreads[i].score;
+            int curScore = helperThreads[i].score;
 
             if(curDepth >= bestDepth || curScore > MIN_MATE_SCORE) 
             {
@@ -498,16 +493,16 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     milliseconds = _max(milliseconds, 1);
     int NPS = totalNodes / (milliseconds / 1000.0);
     printf("info depth %d seldepth %d nodes %d nps %d time %d", bestDepth, best->seldepth, totalNodes, NPS, milliseconds);
-    float absScore = fabsf(bestScore);
+    int absScore = abs(bestScore);
     assert(absScore <= SCORE_WIN);
-    if(absScore > MIN_MATE_SCORE)
+    if(absScore >= MIN_MATE_SCORE)
     {
         int mateInPlies = SCORE_WIN - absScore;
         int mateInMoves = (mateInPlies + 1) / 2;
         if(bestScore < 0) mateInMoves = -mateInMoves;
         printf(" score mate %d", mateInMoves);
     }
-    else printf(" score cp %d", (int)lroundf(bestScore));
+    else printf(" score cp %d", bestScore);
     if(bestDepth)
     {
         printf(" pv");
@@ -625,16 +620,16 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
             printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
-            float absScore = fabsf(context->score);
+            int absScore = abs(context->score);
             assert(absScore <= SCORE_WIN);
-            if(absScore > MIN_MATE_SCORE)
+            if(absScore >= MIN_MATE_SCORE)
             {
                 int mateInPlies = SCORE_WIN - absScore;
                 int mateInMoves = (mateInPlies + 1) / 2;
                 if(context->score < 0) mateInMoves = -mateInMoves;
                 printf(" score mate %d", mateInMoves);
             }
-            else printf(" score cp %d", (int)lroundf(context->score));
+            else printf(" score cp %d", context->score);
             printf(" pv");
             for(int i = 0; i < context->pv.length; i++)
             {
@@ -673,7 +668,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
 
-        if(fabsf(context->score) > MIN_MATE_SCORE) break;
+        if(abs(context->score) > MIN_MATE_SCORE) break;
     }
     if(helperThreadCount > 0)
     {

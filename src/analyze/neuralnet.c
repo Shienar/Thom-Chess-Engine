@@ -336,8 +336,8 @@ int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], 
     int output = _mm_cvtsi128_si32(sum128) + bias;
 
     //QB = 2^6.
-    //Output Scale = 2^4
-    return (output >> 10);
+    //Output Scale = 2^3
+    return (output >> 9);
 }
 
 int forwardPropagate(bitboard* board, accumulator* acc)

@@ -17,8 +17,8 @@ extern int isCalculating;
 #define MAX_THREADS 64
 
 #define MIN_ASPIRATION_DEPTH 5
-#define INITIAL_ASPIRATION_MARGIN 16
-#define MAXIMUM_ASPIRATION_MARGIN 128
+#define INITIAL_ASPIRATION_MARGIN 8
+#define MAXIMUM_ASPIRATION_MARGIN 64
 #define ASPIRATION_MARGIN_MULT_FACTOR 2
 
 #define REVERSE_FUTILITY_PRUNING_DEPTH 7
@@ -26,13 +26,13 @@ extern int isCalculating;
 #define NULLMOVE_PRUNING_DEPTH 5
 
 #define REVERSE_FUTILITY_MARGIN 150
-#define FUTILITY_MARGIN 2500
+#define FUTILITY_MARGIN 250
 
 #define LM_DEPTH 7
 #define LM_BASE 2.0f
 #define LM_SCALE 0.5f
 
-#define LARGE_DELTA 900
+#define LARGE_DELTA 500
 
 void initLMTable();
 
@@ -43,7 +43,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose);
  * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
  * position is reached. (Do extra searching for subsequent capture moves).
  */
-int quiesce(searchThreadContext* context, float alpha, float beta, int ply);
+int quiesce(searchThreadContext* context, int alpha, int beta, int ply);
 
 /**
  * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
@@ -53,7 +53,7 @@ int quiesce(searchThreadContext* context, float alpha, float beta, int ply);
  * 
  * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
  */
-int principalVariationSearch(searchThreadContext* context, float alpha, float beta, int maxDepth, int depth, int ply, PVar* myPV);
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int maxDepth, int depth, int ply, PVar* myPV);
 
 /**
  * Iterative deepening function.
