@@ -2,7 +2,6 @@
 #define DEBUGGER
 
 #include "types.h"
-#include "compatibility.h"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>

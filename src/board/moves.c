@@ -397,9 +397,8 @@ int staticExchangeEvaluation(bitboard* board, move m)
     return gain[0];
 }
 
-
 //Only used when move ordering matters.
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* requiredMoves)
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int history[2][6][64])
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
@@ -407,7 +406,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
     iter->count = 0;
     iter->visitedCount = 0;
 
-    if(requiredMoves)
+    if(requiredMoves && IS_VALID_MOVE(requiredMoves[0]))
     {
         for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
         {
@@ -418,7 +417,6 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
             }
             else break;
         }
-        if(!iter->count) iter->count = generateMoveList(iter->moveList, board, capturesOnly);
     }
     else iter->count = generateMoveList(iter->moveList, board, capturesOnly);
 
@@ -428,16 +426,29 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
     {
         move m = iter->moveList[i];
 
-        if(pvMove && m.startSquare == pvMove->startSquare && m.endSquare == pvMove->endSquare) 
-            iter->moveScores[i] = INT8_MAX;
+        if(ttMove && ARE_EQUAL_MOVES(m, ttMove[0]))
+            iter->moveScores[i] = TT_MOVE_SCORE;
+        else if(pvMove && ARE_EQUAL_MOVES(m, pvMove[0]))
+            iter->moveScores[i] = PV_MOVE_SCORE;
         else if(m.capturedPiece != EMPTY_PIECE) 
         {
             int seeValue = staticExchangeEvaluation(board, m);
 
-            if(seeValue >= 0) iter->moveScores[i] = 1000 + seeValue;
-            else iter->moveScores[i] = -1000 + seeValue;
+            if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
+            else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
-        else iter->moveScores[i] = (ISKING(m.piece)) ? 1 : PIECE(m.piece);
+        else if(killerMoves && ARE_EQUAL_MOVES(m, killerMoves[0]))
+            iter->moveScores[i] = KILLER_1_SCORE;
+        else if(killerMoves && ARE_EQUAL_MOVES(m, killerMoves[1]))
+            iter->moveScores[i] = KILLER_2_SCORE;
+        else if(history)
+        {
+            int historyVal = clamp(history[board->turn][PIECE(m.piece) / 2][m.endSquare], -HISTORY_LIMIT, HISTORY_LIMIT);
+            historyVal = (int) (((int64_t) historyVal * MAX_HISTORY_SCORE) /  HISTORY_LIMIT);
+
+            iter->moveScores[i] = (int16_t) historyVal;
+        }
+        else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
 
     }
 
@@ -449,7 +460,7 @@ move* iterate_next_move(moveIterator* iter)
     if(iter->visitedCount >= iter->count) return NULL;
 
     int bestIndex = -1;
-    int maxScoreRemaining = INT8_MIN;
+    int maxScoreRemaining = INT16_MIN;
 
     for (int j = 0; j < iter->count; j++) 
     {
@@ -460,7 +471,9 @@ move* iterate_next_move(moveIterator* iter)
         }
     }
 
-    iter->moveScores[bestIndex] = INT8_MIN;
+    if(bestIndex == -1) return NULL;
+
+    iter->moveScores[bestIndex] = INT16_MIN;
     iter->visitedCount++;
     
     return &iter->moveList[bestIndex];

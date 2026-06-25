@@ -115,7 +115,7 @@ int main(int argc, char** argv)
                                         break;
                                     }
                                     sscanf(str, "%d", &threadCount);
-                                    threadCount = _min(_max(threadCount, MIN_THREADS), MAX_THREADS);
+                                    threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
                                     omp_set_num_threads(threadCount); 
                                 }
                             }
@@ -176,14 +176,14 @@ int main(int argc, char** argv)
                         {
                             str = _strtok(NULL, delim, &strtok_ptr);
                             if(str) sscanf(str, "%d", &sygyzyProbeLimit);
-                            sygyzyProbeLimit = _max(_min(sygyzyProbeLimit, MAX_PROBE_LIMIT), MIN_PROBE_LIMIT);
+                            sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
                             break;
                         }
                         else if(strcmp(str, "SyzygyProbeDepth") == 0)
                         {
                             str = _strtok(NULL, delim, &strtok_ptr);
                             if(str) sscanf(str, "%d", &sygyzyProbeDepth);
-                            sygyzyProbeDepth = _max(_min(sygyzyProbeDepth, MAX_PROBE_DEPTH), MIN_PROBE_DEPTH);
+                            sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
                             break;
                         }
                         break;
@@ -309,7 +309,7 @@ int main(int argc, char** argv)
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) 
                         {
                             sscanf(str, "%d", &threadContext->maxDepth);
-                            threadContext->maxDepth = _min(_max(threadContext->maxDepth, 1), MAX_PLY);
+                            threadContext->maxDepth = clamp(threadContext->maxDepth, 1, MAX_PLY);
                         }
                     }
                     else if(strcmp(str, "nodes") == 0)

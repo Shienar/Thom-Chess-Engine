@@ -1,9 +1,12 @@
 #ifndef ENGINESTRUCTS
 #define ENGINESTRUCTS
 
+#include "compatibility.h"
 #include <stdint.h>
 #include <limits.h>
 #include <time.h>
+
+#define clamp(originalValue, minClamp, maxClamp) _min(maxClamp, _max(minClamp, originalValue));
 
 // Should always get assigned with makefile.
 #ifndef PROJECT_CWD
@@ -186,6 +189,8 @@ typedef struct searchThreadContext {
     accumulator* accumulator;
     accumulatorRefreshTable* accumulatorTable;
     move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
+    move killerMoves[MAX_PLY][2]; //Killer heuristic
+    int historyTable[2][6][64]; //History heuristic
     PVar pv;
 } searchThreadContext;
 

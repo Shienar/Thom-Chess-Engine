@@ -31,10 +31,18 @@
 
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
+#define ARE_EQUAL_MOVES(m1, m2) (m1.startSquare == m2.startSquare && m1.endSquare == m2.endSquare)
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* requiredMoves);
+#define TT_MOVE_SCORE 30000
+#define PV_MOVE_SCORE 20000
+#define KILLER_1_SCORE 10000
+#define KILLER_2_SCORE 9500
+#define MAX_HISTORY_SCORE 5000 //+- max bound
+#define CAPTURE_SCORE 5000 //+- min bound
+#define HISTORY_LIMIT 16384
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int history[2][6][64]);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 

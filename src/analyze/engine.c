@@ -12,15 +12,21 @@ int threadCount = 4;
 int enablePonder = 0;
 int isCalculating = 0;
 
-int lateMoveCounts[MAX_PLY] = {0};
+int reductionTable[MAX_PLY][MAX_MOVES] = {0};
 
 void initLMTable()
 {
-    if(lateMoveCounts[0]) return;
+    if(reductionTable[25][25]) return;
 
     for(int depth = 0; depth < MAX_PLY; depth++)
     {
-        lateMoveCounts[depth] = LM_BASE + LM_SCALE * depth * depth;
+        int count = LM_BASE + LM_SCALE * depth * depth;
+        for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
+        {
+            if(depth >= LM_DEPTH && moveCount >= count)
+                reductionTable[depth][moveCount] = (int)(0.99 + log(depth) * log(moveCount) / 3.14);
+            else reductionTable[depth][moveCount] = 0;
+        }
     }
 }
 
@@ -66,7 +72,7 @@ int evaluateEndstate(bitboard* board, int ply)
     else
     {
         //Not going to worry about contempt with negamax.
-        return 0.0;
+        return 0;
     }
 }
 
@@ -102,7 +108,7 @@ int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
     //Delta pruning
     if(LARGE_DELTA + best < alpha) return best;
 
-    moveIterator* iter = create_move_iterator(board, 1, NULL, NULL);
+    moveIterator* iter = create_move_iterator(board, 1, NULL, NULL, NULL, NULL, NULL);
     if(iter)
     {
         move* currentMove;
@@ -135,7 +141,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     assert(context);
     context->countedNodes++;
     bitboard* board = context->board;
-    int examineQuiets = 1;
     assert(board);
 
     myPV->length = 0;
@@ -144,9 +149,16 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int pvNode = (beta != alpha + 1);
     int inCheck = IS_IN_CHECK_ANY(board->flags);
     
+    move* pvMove = &context->pv.line[ply];
+    move* tt_move = NULL;
+    move temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.
+
+    int searchedQuietIndices[MAX_MOVES] = {0};
+    int searchedQuietCount = 0;
+
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(depth == 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
+    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
     {
         return quiesce(context, alpha, beta, ply);
     }
@@ -164,20 +176,21 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         .depth = depth,
         .hashCode = board->hashCode
     };
-    table_entry_tt* old_tt_entry = NULL;
-    move tt_move = (move){0};
-    move* pvMove = NULL;
-    if((old_tt_entry = transposition_table_get(board, transpositionTable)) != NULL && 
-        old_tt_entry->depth >= depth &&
-            (old_tt_entry->nodeType == NODE_TYPE_PV ||
-            (old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) ||
-            (old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta)))
+    table_entry_tt* old_tt_entry = transposition_table_get(board, transpositionTable);
+    if(old_tt_entry != NULL) 
     {
-        if(!pvNode) return old_tt_entry->evaluation;
-        else if(old_tt_entry->nodeType == NODE_TYPE_PV) { tt_move = old_tt_entry->bestMove; pvMove = &tt_move; }
-    }
-    if(!pvMove && IS_VALID_MOVE(context->pv.line[ply])) pvMove = &context->pv.line[ply];
+        //Move sorting
+        temp = old_tt_entry->bestMove; 
+        tt_move = &temp; 
 
+        if(old_tt_entry->depth >= depth && !pvNode) 
+        {
+            if(old_tt_entry->nodeType == NODE_TYPE_PV) return old_tt_entry->evaluation;
+            if(old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) return alpha;
+            if(old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta) return beta;
+        }
+    }
+    
     //Sygyzy
     if(depth >= sygyzyProbeDepth)
     {
@@ -193,7 +206,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
     }
 
-    int score = 0.0f;
+    int score = 0;
     if(old_tt_entry) score = old_tt_entry->evaluation;
     else
     {
@@ -226,7 +239,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             int r = 3;
             applyNullMove(board);
-            int nullScore = -principalVariationSearch(context, -alpha - 1.0, -alpha, maxDepth, depth - r, ply + 1, &childPV);
+            int nullScore = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, depth - r, ply + 1, &childPV);
             applyNullMove(board);
             if(nullScore >= beta) return nullScore;
         }
@@ -234,7 +247,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     moveIterator* iter;
-    iter = create_move_iterator(board, 0, pvMove, (ply == 0) ? context->searchedMoves : NULL);
+    iter = create_move_iterator(board, 0, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
     if(iter)
     {
         move* currentMove;
@@ -243,30 +256,20 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-
-            //Move count pruning
-            //if(score > -MIN_MATE_SCORE && depth <= LM_DEPTH && validMovesVisited >= lateMoveCounts[depth]) examineQuiets = 0;
-
             if(!moveFromStruct(board, currentMove))
             {
-                int isQuiet = (currentMove->capturedPiece == EMPTY_PIECE && (IS_IN_CHECK_ANY(board->flags)) == 0);
-                if(!examineQuiets && isQuiet)
-                {
-                    unmove(board);
-                    continue;
-                }
-
                 updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
 
                 int next_depth = depth - 1;
+                int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && currentMove->capturedPiece == EMPTY_PIECE && !currentMove->promoteTo);
                 if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
 
-                validMovesVisited++;
+                if(isQuietMove) next_depth -= reductionTable[depth][validMovesVisited];
 
-                if(validMovesVisited == 1) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 else
                 {
-                    score = -principalVariationSearch(context, -alpha - 1.0, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                    score = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                     //Re-search PV node
                     if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 }
@@ -280,6 +283,22 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     new_tt_entry.evaluation = score;
                     transposition_table_set(transpositionTable, new_tt_entry);
                     destroy_move_iterator(iter);
+
+                    if(isQuietMove)
+                    {
+                        //Killer heuristic
+                        context->killerMoves[ply][1] = context->killerMoves[ply][0];
+                        context->killerMoves[ply][0] = *currentMove;
+                    
+                        //History heuristic
+                        int bonus = depth * depth;
+                        int* dest = &context->historyTable[board->turn][PIECE(currentMove->piece) / 2][currentMove->endSquare];
+                        *dest = _min(*dest + bonus, HISTORY_LIMIT);
+                        int* straightArr = (int*) context->historyTable;
+                        for(int i = 0; i < searchedQuietCount; i++)
+                            straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - bonus, -HISTORY_LIMIT);
+                    }
+
                     return score;
                 }
                 else if(score > bestScore)
@@ -299,6 +318,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         myPV->length = childPV.length + 1;
                     }
                 }
+                validMovesVisited++;
+
+                if(isQuietMove)
+                    searchedQuietIndices[searchedQuietCount++] = (board->turn * 384) + ((PIECE(currentMove->piece) / 2) * 64) + currentMove->endSquare;
             }
         }
 
@@ -546,6 +569,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     srand(time(NULL));
 
     searchThreadContext* context = (searchThreadContext*)param;
+    memset(context->historyTable, 0, sizeof(context->historyTable));
     
     int maxDepth = context->maxDepth;
     volatile clock_t *endTime = context->endTime;

@@ -28,7 +28,7 @@ extern int isCalculating;
 #define REVERSE_FUTILITY_MARGIN 150
 #define FUTILITY_MARGIN 250
 
-#define LM_DEPTH 7
+#define LM_DEPTH 4
 #define LM_BASE 2.0f
 #define LM_SCALE 0.5f
 
