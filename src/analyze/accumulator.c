@@ -487,7 +487,7 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     int kingSq_b = board->kingSquare_b; 
         
     //Uninitialized bitboard in accumulator refresh table.
-    if (!refreshTable->initialized[WHITE][kingSq_w])
+    if(!refreshTable->initialized[WHITE][kingSq_w])
     {
         memcpy(refreshTable->boards[WHITE][kingSq_w], board, sizeof(bitboard));
         loadInputAccumulator(refreshTable->boards[WHITE][kingSq_w], &refreshTable->accumulators[WHITE][kingSq_w], WHITE);
@@ -496,7 +496,7 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     }
     else updateBoardAccumulator(board, refreshTable->boards[WHITE][kingSq_w], &refreshTable->accumulators[WHITE][kingSq_w], WHITE);
 
-    if (!refreshTable->initialized[BLACK][kingSq_b])
+    if(!refreshTable->initialized[BLACK][kingSq_b])
     {
         memcpy(refreshTable->boards[BLACK][kingSq_b], board, sizeof(bitboard));
         loadInputAccumulator(refreshTable->boards[BLACK][kingSq_b], &refreshTable->accumulators[BLACK][kingSq_b], WHITE);

@@ -8,7 +8,7 @@
 #include <string.h>
 #include <math.h>
 
-int threadCount = 4;
+int threadCount = 1;
 int enablePonder = 0;
 int isCalculating = 0;
 
@@ -76,7 +76,7 @@ int evaluateEndstate(bitboard* board, int ply)
     }
 }
 
-int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
+int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 {
     context->countedNodes++;
 
@@ -84,12 +84,13 @@ int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
 
     if(board->victor) return evaluateEndstate(board, ply);
 
-    table_entry_tt* entry = transposition_table_get(board, transpositionTable);
-    if(entry)
+    uint8_t tt_hit;
+    table_entry_tt entry = transposition_table_get(board, transpositionTable, &tt_hit, ply);
+    if(tt_hit)
     {
-        if(entry->nodeType == NODE_TYPE_PV) return entry->evaluation;
-        if(entry->nodeType == NODE_TYPE_ALL && entry->evaluation <= alpha) return alpha;
-        if(entry->nodeType == NODE_TYPE_CUT && entry->evaluation >= beta) return beta;
+        if(entry.nodeType == NODE_TYPE_PV) return entry.evaluation;
+        else if(entry.nodeType == NODE_TYPE_ALL && entry.evaluation <= alpha) return alpha;
+        else if(entry.nodeType == NODE_TYPE_CUT && entry.evaluation >= beta) return beta;
     }
      
     int best = forwardPropagate(board, context->accumulator);
@@ -100,7 +101,7 @@ int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
         .nodeType = NODE_TYPE_PV,
         .evaluation = best,
     };
-    transposition_table_set(transpositionTable, shallowEntry);
+    transposition_table_set(transpositionTable, shallowEntry, ply);
 
     if(best >= beta || ply >= MAX_PLY - 1) return best;
     if(best > alpha) alpha = best;
@@ -117,7 +118,7 @@ int quiesce(searchThreadContext* context, int alpha, int beta, int ply)
             if(!moveFromStruct(board, currentMove))
             {
                 updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
-                int score = -quiesce(context, -beta, -alpha, ply + 1);
+                int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
 
                 unmove(board);
                 updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
@@ -160,7 +161,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     
     if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && maxDepth > 1) || board->victor || ply >= MAX_PLY - 1) 
     {
-        return quiesce(context, alpha, beta, ply);
+        return quiescentSearch(context, alpha, beta, ply);
     }
 
     //Mate distance pruning for non-root nodes.
@@ -171,23 +172,26 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         if(a >= b) return a;
     }
 
+    int score = 0;
+
     //Transposition table
     table_entry_tt new_tt_entry = {
         .depth = depth,
         .hashCode = board->hashCode
     };
-    table_entry_tt* old_tt_entry = transposition_table_get(board, transpositionTable);
-    if(old_tt_entry != NULL) 
+    uint8_t hit;
+    table_entry_tt old_tt_entry = transposition_table_get(board, transpositionTable, &hit, ply);
+    if(hit) 
     {
-        //Move sorting
-        temp = old_tt_entry->bestMove; 
-        tt_move = &temp; 
+        temp = old_tt_entry.bestMove; 
+        tt_move = &temp;
+        score = old_tt_entry.evaluation;
 
-        if(old_tt_entry->depth >= depth && !pvNode) 
+        if(old_tt_entry.depth >= depth && !pvNode) 
         {
-            if(old_tt_entry->nodeType == NODE_TYPE_PV) return old_tt_entry->evaluation;
-            if(old_tt_entry->nodeType == NODE_TYPE_ALL && old_tt_entry->evaluation <= alpha) return alpha;
-            if(old_tt_entry->nodeType == NODE_TYPE_CUT && old_tt_entry->evaluation >= beta) return beta;
+            if(old_tt_entry.nodeType == NODE_TYPE_PV) return score;
+            if(old_tt_entry.nodeType == NODE_TYPE_ALL && old_tt_entry.evaluation <= alpha) return alpha;
+            if(old_tt_entry.nodeType == NODE_TYPE_CUT && old_tt_entry.evaluation >= beta) return beta;
         }
     }
     
@@ -201,14 +205,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             //this isn't the root node so it doesn't matter much.
             new_tt_entry.nodeType = NODE_TYPE_CUT;
             new_tt_entry.evaluation = result;
-            transposition_table_set(transpositionTable, new_tt_entry);
+            transposition_table_set(transpositionTable, new_tt_entry, ply);
             return result;
         }
     }
 
-    int score = 0;
-    if(old_tt_entry) score = old_tt_entry->evaluation;
-    else
+    if(!hit) 
     {
         score = forwardPropagate(board, context->accumulator);
         table_entry_tt shallowEntry = {
@@ -217,13 +219,13 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             .nodeType = NODE_TYPE_PV,
             .evaluation = score,
         };
-        transposition_table_set(transpositionTable, shallowEntry);
+        transposition_table_set(transpositionTable, shallowEntry, ply);
     }
 
     if(!pvNode && !inCheck)
     {
         //Reverse Futility Pruning
-        if(depth <= REVERSE_FUTILITY_PRUNING_DEPTH && score >= beta + REVERSE_FUTILITY_MARGIN * depth)
+        if(depth <= REVERSE_FUTILITY_PRUNING_DEPTH && score - REVERSE_FUTILITY_MARGIN * depth >= beta)
         {
             return score;
         }
@@ -243,7 +245,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             applyNullMove(board);
             if(nullScore >= beta) return nullScore;
         }
-
     }
 
     moveIterator* iter;
@@ -269,9 +270,18 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
                 else
                 {
+                    //Scout
                     score = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, next_depth, ply + 1, &childPV);
-                    //Re-search PV node
-                    if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+
+                    //LMR Re-search
+                    if (score > alpha && next_depth < depth - 1)
+                    {
+                        next_depth = depth - 1;
+                        score = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                    }
+                    
+                    //PVS Re-search
+                    if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -score, maxDepth, next_depth, ply + 1, &childPV);
                 }
                 
                 unmove(board);
@@ -281,7 +291,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 {
                     new_tt_entry.nodeType = NODE_TYPE_CUT;
                     new_tt_entry.evaluation = score;
-                    transposition_table_set(transpositionTable, new_tt_entry);
+                    transposition_table_set(transpositionTable, new_tt_entry, ply);
                     destroy_move_iterator(iter);
 
                     if(isQuietMove)
@@ -292,11 +302,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     
                         //History heuristic
                         int bonus = depth * depth;
-                        int* dest = &context->historyTable[board->turn][PIECE(currentMove->piece) / 2][currentMove->endSquare];
-                        *dest = _min(*dest + bonus, HISTORY_LIMIT);
-                        int* straightArr = (int*) context->historyTable;
+                        int16_t* dest = &context->historyTable[board->turn][PIECE(currentMove->piece) / 2][currentMove->endSquare];
+                        *dest = _min(*dest + bonus, MAX_HISTORY_SCORE);
+                        int16_t* straightArr = (int16_t*) context->historyTable;
                         for(int i = 0; i < searchedQuietCount; i++)
-                            straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - bonus, -HISTORY_LIMIT);
+                            straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - bonus, -MAX_HISTORY_SCORE);
                     }
 
                     return score;
@@ -310,7 +320,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         new_tt_entry.nodeType = NODE_TYPE_PV;
                         new_tt_entry.evaluation = score;
                         new_tt_entry.bestMove = *currentMove;
-                        transposition_table_set(transpositionTable, new_tt_entry);
+                        transposition_table_set(transpositionTable, new_tt_entry, ply);
                         alpha = score;
                         
                         myPV->line[0] = *currentMove;
@@ -330,7 +340,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             //Don't save a bestmove since we couldn't find one that fits in window.
             new_tt_entry.nodeType = NODE_TYPE_ALL;
             new_tt_entry.evaluation = bestScore;
-            transposition_table_set(transpositionTable, new_tt_entry);
+            transposition_table_set(transpositionTable, new_tt_entry, ply);
         }
         destroy_move_iterator(iter);
     }
@@ -635,6 +645,12 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         if(currentDepth > 1 && (clock() > *endTime || context->countedNodes > context->maxNodes)) break;
 
         aspiration_window(context, currentDepth);
+        
+        bestMove = context->pv.line[0];
+        ponderMove = context->pv.line[1];
+
+        if(abs(context->score) >= MIN_MATE_SCORE) break;
+
 
         if(currentDepth < maxDepth)
         {
@@ -644,16 +660,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
             printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
-            int absScore = abs(context->score);
-            assert(absScore <= SCORE_WIN);
-            if(absScore >= MIN_MATE_SCORE)
-            {
-                int mateInPlies = SCORE_WIN - absScore;
-                int mateInMoves = (mateInPlies + 1) / 2;
-                if(context->score < 0) mateInMoves = -mateInMoves;
-                printf(" score mate %d", mateInMoves);
-            }
-            else printf(" score cp %d", context->score);
+            assert(abs(context->score) <= SCORE_WIN);
+            printf(" score cp %d", context->score);
             printf(" pv");
             for(int i = 0; i < context->pv.length; i++)
             {
@@ -688,11 +696,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             printf("\n");
             fflush(stdout);
         }
-        
-        bestMove = context->pv.line[0];
-        ponderMove = context->pv.line[1];
-
-        if(abs(context->score) > MIN_MATE_SCORE) break;
     }
     if(helperThreadCount > 0)
     {

@@ -8,8 +8,6 @@
 #include "analyze/sygyzy.h"
 #include <time.h>
 
-#define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
-
 extern int threadCount;
 extern int enablePonder;
 extern int isCalculating;
@@ -21,11 +19,11 @@ extern int isCalculating;
 #define MAXIMUM_ASPIRATION_MARGIN 64
 #define ASPIRATION_MARGIN_MULT_FACTOR 2
 
-#define REVERSE_FUTILITY_PRUNING_DEPTH 7
+#define REVERSE_FUTILITY_PRUNING_DEPTH 4
 #define FUTILITY_PRUNING_DEPTH 4
 #define NULLMOVE_PRUNING_DEPTH 5
 
-#define REVERSE_FUTILITY_MARGIN 150
+#define REVERSE_FUTILITY_MARGIN 80
 #define FUTILITY_MARGIN 250
 
 #define LM_DEPTH 4
@@ -35,29 +33,9 @@ extern int isCalculating;
 #define LARGE_DELTA 500
 
 void initLMTable();
-
 int perft(bitboard* board, int depth, int maxDepth, int verbose);
-
-/**
- * Quiescence search function.
- * At the leaf nodes of alpha/beta, continue searching until a "quiet" 
- * position is reached. (Do extra searching for subsequent capture moves).
- */
-int quiesce(searchThreadContext* context, int alpha, int beta, int ply);
-
-/**
- * pv = move array of length depth - 1. Saved from previous iteration, different from pv table stored in engine.
- * 
- * Depth = "Depth remaining"  - normally described by Maxdepth - ply, but extensions/reductions exist.
- * Call with depth == maxdepth;
- * 
- * timeLimit is passed as a pointer. You can modify its value from another thread to end the search early.
- */
+int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply);
 int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int maxDepth, int depth, int ply, PVar* myPV);
-
-/**
- * Iterative deepening function.
- */
 THREAD_RETURN calculateBestMove(THREAD_PARAM param);
 
 #endif

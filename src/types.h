@@ -190,7 +190,7 @@ typedef struct searchThreadContext {
     accumulatorRefreshTable* accumulatorTable;
     move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
     move killerMoves[MAX_PLY][2]; //Killer heuristic
-    int historyTable[2][6][64]; //History heuristic
+    int16_t historyTable[2][6][64]; //History heuristic
     PVar pv;
 } searchThreadContext;
 

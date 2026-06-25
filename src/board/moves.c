@@ -398,7 +398,7 @@ int staticExchangeEvaluation(bitboard* board, move m)
 }
 
 //Only used when move ordering matters.
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int history[2][6][64])
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int16_t history[2][6][64])
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
@@ -442,12 +442,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMo
         else if(killerMoves && ARE_EQUAL_MOVES(m, killerMoves[1]))
             iter->moveScores[i] = KILLER_2_SCORE;
         else if(history)
-        {
-            int historyVal = clamp(history[board->turn][PIECE(m.piece) / 2][m.endSquare], -HISTORY_LIMIT, HISTORY_LIMIT);
-            historyVal = (int) (((int64_t) historyVal * MAX_HISTORY_SCORE) /  HISTORY_LIMIT);
-
-            iter->moveScores[i] = (int16_t) historyVal;
-        }
+            iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
 
     }

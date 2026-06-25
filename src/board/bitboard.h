@@ -46,6 +46,10 @@
 #define ISQUEEN(piece) ((piece&0xE) == QUEEN)
 #define ISKING(piece) ((piece&0xE) == KING)
 
+#define SCORE_WIN 1e8
+#define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
+
+
 /**
  * flags&1 == canKingsideCastle_w
  * flags&2 == canQueensideCastle_w 

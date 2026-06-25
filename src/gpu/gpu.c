@@ -433,7 +433,7 @@ float print_prof(const char* name, hipEvent_t start, hipEvent_t stop)
 {
     float execute_ms = 0.0f;
     hipError_t err = hipEventElapsedTime(&execute_ms, start, stop);
-    if (err == hipSuccess) 
+    if(err == hipSuccess) 
     {
         printf("%-24s | %0.4f ms\n", name, execute_ms);
         return execute_ms;

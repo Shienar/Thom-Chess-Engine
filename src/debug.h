@@ -6,7 +6,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-//#define NDEBUG
 #include <assert.h>
 
 extern int printDebugMessages;

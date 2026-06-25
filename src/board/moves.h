@@ -41,8 +41,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 #define KILLER_2_SCORE 9500
 #define MAX_HISTORY_SCORE 5000 //+- max bound
 #define CAPTURE_SCORE 5000 //+- min bound
-#define HISTORY_LIMIT 16384
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int history[2][6][64]);
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int16_t history[2][6][64]);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 

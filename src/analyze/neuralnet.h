@@ -33,6 +33,7 @@ extern quantized_weights* int_weights;
 /* Binary  file storage. */
 void loadRawWeights();
 void saveRawWeights();
+void quantizeWeights(training_weights* inputFloats, quantized_weights* outputInts);
 void loadQuantizedWeights();
 void saveQuantizedWeights();
 

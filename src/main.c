@@ -53,7 +53,7 @@ int main(int argc, char** argv)
                 printf("id name ChessBot 0.1\n");
                 printf("id author Grant\n");
                 printf("option name Hash type spin default 4 min 1 max 4096\n");
-                printf("option name Threads type spin default 4 min 1 max 64\n");
+                printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
                 printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");

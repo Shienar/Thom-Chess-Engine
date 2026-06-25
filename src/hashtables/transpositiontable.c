@@ -36,38 +36,52 @@ void clear_tt(hashtable_tt* tt)
     if(tt && tt->array) memset(tt->array, 0, tt->capacity * sizeof(table_entry_tt));
 }
 
-uint8_t generateChecksum(table_entry_tt* entry)
+uint8_t generateChecksum(table_entry_tt entry)
 {
-    const uint8_t* ptr = (const uint8_t*)entry;
+    const uint8_t* ptr = (const uint8_t*)&entry;
     uint8_t checksum = 0;
     for(int i = 0; i < sizeof(entry) - 1; i++)  checksum^=ptr[i];
     return checksum;
 }
 
-table_entry_tt* transposition_table_get(bitboard* board, hashtable_tt* tt)
+table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply)
 {
-    if(!board || !tt) return NULL;
-
-    uint64_t hashCode = board->hashCode;
-    size_t index = hashCode%tt->capacity;
-
-    if(tt->array[index].hashCode == hashCode)
+    if(board && tt)
     {
-        uint8_t checkSum = generateChecksum(&tt->array[index]);
-        if(tt->array[index].checkSum == checkSum) return &tt->array[index];
+        uint64_t hashCode = board->hashCode;
+        size_t index = hashCode%tt->capacity;
+
+        if(tt->array[index].hashCode == hashCode)
+        {
+            uint8_t checkSum = generateChecksum(tt->array[index]);
+            if(tt->array[index].checkSum == checkSum) 
+            {
+                *hit = 1;
+                table_entry_tt hitEntry = tt->array[index];
+
+                if (hitEntry.evaluation > MIN_MATE_SCORE) hitEntry.evaluation -= ply;
+                else if (hitEntry.evaluation < -MIN_MATE_SCORE) hitEntry.evaluation += ply;
+
+                return hitEntry;
+            }
+        }
     }
 
-    return NULL;
+    *hit = 0;
+    return (table_entry_tt){0};
 }
 
 
-void transposition_table_set(hashtable_tt* tt, table_entry_tt entry)
+void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
 {
-     assert(tt);
+    assert(tt);
 
     size_t index = entry.hashCode%tt->capacity;
 
-    (&entry)->checkSum = generateChecksum(&entry); 
+    if(entry.evaluation > MIN_MATE_SCORE) entry.evaluation += ply; 
+    else if(entry.evaluation < -MIN_MATE_SCORE)  entry.evaluation -= ply;
+
+    entry.checkSum = generateChecksum(entry); 
 
     if(tt->array[index].hashCode == entry.hashCode && tt->array[index].checkSum == entry.checkSum)
     {
