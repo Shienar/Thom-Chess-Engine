@@ -42,38 +42,14 @@ void loadRawWeights()
     double standardDeviation = sqrt(2.0/30.0);
     
     for(int i = 0; i < HALF_INPUT_BITS; i++)
-    {
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-        {
             sampleNormalDistribution(&raw_weights->weights1[i][j], standardDeviation);
-        }
-    }
 
     standardDeviation = sqrt(2.0 / 512.0);
     for(int i = 0; i < ACCUMULATOR_NODES; i++)
-    {
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
-        {
-            sampleNormalDistribution(&raw_weights->weights2[j][i], standardDeviation);
-        }
-    }
+        sampleNormalDistribution(&raw_weights->weights2[i], standardDeviation);
 
-    standardDeviation = sqrt(2.0 / 32.0);
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
-    {
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
-        {
-            sampleNormalDistribution(&raw_weights->weights3[j][i], standardDeviation);
-        }
-    }
-
-    for(int b = 0; b < OUTPUT_BUCKETS; b++)
-        {
-            for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
-            {
-                sampleNormalDistribution(&raw_weights->weights4[b][i], standardDeviation);
-            }
-        }
+    saveRawWeights();
 }
 
 void saveRawWeights()
@@ -92,35 +68,19 @@ void quantizeWeights(training_weights* inputFloats, quantized_weights* outputInt
     assert(inputFloats);
     assert(outputInts);
 
-    //weights 1-4
+    //weights
     for(int i = 0; i < HALF_INPUT_BITS; i++)
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
             outputInts->weights1[i][j] = (int16_t) clamp(lroundf(inputFloats->weights1[i][j] * QA), INT16_MIN, INT16_MAX);
 
     for(int i = 0; i < ACCUMULATOR_NODES; i++)
-        for(int j = 0; j < SECOND_HIDDEN_LAYER_NODES; j++)
-            outputInts->weights2[j][i] = (int8_t) clamp(lroundf(inputFloats->weights2[j][i] * QB), INT8_MIN, INT8_MAX);
+            outputInts->weights2[i] = (int8_t) clamp(lroundf(inputFloats->weights2[i] * QB), INT8_MIN, INT8_MAX);
             
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++)
-        for(int j = 0; j < THIRD_HIDDEN_LAYER_NODES; j++)
-            outputInts->weights3[j][i] = (int8_t) clamp(lroundf(inputFloats->weights3[j][i] * QB), INT8_MIN, INT8_MAX);
-            
-    for(int b = 0; b < OUTPUT_BUCKETS; b++)
-        for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++)
-            outputInts->weights4[b][i] = (int8_t) clamp(lroundf(inputFloats->weights4[b][i] * QB), INT8_MIN, INT8_MAX);
-
     //bias 1-4
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
         outputInts->weights1_bias[i] = (int16_t) clamp(lroundf(inputFloats->weights1_bias[i] * QA), INT16_MIN, INT16_MAX);
 
-    for(int i = 0; i < SECOND_HIDDEN_LAYER_NODES; i++) 
-        outputInts->weights2_bias[i] = (int32_t) clamp(lroundf(inputFloats->weights2_bias[i] * QA * QB), INT32_MIN, INT32_MAX);
-
-    for(int i = 0; i < THIRD_HIDDEN_LAYER_NODES; i++) 
-        outputInts->weights3_bias[i] = (int32_t) clamp(lroundf(inputFloats->weights3_bias[i] * QA * QB), INT32_MIN, INT32_MAX);
-
-    for(int i = 0; i < OUTPUT_BUCKETS; i++) 
-        outputInts->weights4_bias[i] = (int32_t) clamp(lroundf(inputFloats->weights4_bias[i] * QA * QB), INT32_MIN, INT32_MAX);
+    outputInts->weights2_bias = (int32_t) clamp(lroundf(inputFloats->weights2_bias * QA * QB), INT32_MIN, INT32_MAX);
 }
 
 void loadQuantizedWeights()
@@ -224,96 +184,28 @@ void print_network_statistics()
 
     print_weight_stats("weights1", &raw_weights->weights1[0][0], sizeof(raw_weights->weights1) / sizeof(float));
     print_weight_stats("weights1_bias", raw_weights->weights1_bias, sizeof(raw_weights->weights1_bias) / sizeof(float));
-    print_weight_stats("weights2", &raw_weights->weights2[0][0], sizeof(raw_weights->weights2) / sizeof(float));
-    print_weight_stats("weights2_bias", raw_weights->weights2_bias,sizeof(raw_weights->weights2_bias) / sizeof(float));
-    print_weight_stats("weights3", &raw_weights->weights3[0][0], sizeof(raw_weights->weights3) / sizeof(float));
-    print_weight_stats("weights3_bias",raw_weights->weights3_bias, sizeof(raw_weights->weights3_bias) / sizeof(float));
-    print_weight_stats("weights4", &raw_weights->weights4[0][0], sizeof(raw_weights->weights4) / sizeof(float));
-    print_weight_stats("weights4_bias", raw_weights->weights4_bias, sizeof(raw_weights->weights4_bias) / sizeof(float));
+    print_weight_stats("weights2", &raw_weights->weights2[0], sizeof(raw_weights->weights2) / sizeof(float));
+    print_weight_stats("weights2_bias", &raw_weights->weights2_bias,sizeof(raw_weights->weights2_bias) / sizeof(float));
 }
 
 /*** Inference ***/
 
-void calculateHiddenLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, uint8_t* outputValues, 
-                            int numInputsA, int numInputsB, int numOutputs, 
-                            int8_t weights[numOutputs][numInputsA + numInputsB], int32_t* biasWeights)
+int calculateOutputLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, int8_t weights[ACCUMULATOR_NODES], int32_t bias)
 {
-    const __m128i v_min = _mm_setzero_si128();
-    const __m128i v_max = _mm_set1_epi32(QA);
+    __m256i v_output = _mm256_setzero_si256();
 
-    for(int outputIndex = 0; outputIndex < numOutputs; outputIndex+=4)
+    for(int inputIndex = 0; inputIndex < ACCUMULATOR_NODES_PER_SIDE; inputIndex+=16)
     {
-        __m256i v_output1 = _mm256_setzero_si256();
-        __m256i v_output2 = _mm256_setzero_si256();
-        __m256i v_output3 = _mm256_setzero_si256();
-        __m256i v_output4 = _mm256_setzero_si256();
-
-        for(int inputIndex = 0; inputIndex < numInputsA; inputIndex+=16)
-        { 
-            // Load 16 bytes of inputs and weights, widen to int16
-            __m256i v_input  =  _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesA[inputIndex]));
-            __m256i v_weight1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 0][inputIndex]));
-            __m256i v_weight2 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 1][inputIndex]));
-            __m256i v_weight3 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 2][inputIndex]));
-            __m256i v_weight4 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 3][inputIndex]));
-
-            v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(v_input, v_weight1));
-            v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(v_input, v_weight2));
-            v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(v_input, v_weight3));
-            v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(v_input, v_weight4));
-        }
-
-        if(inputValuesB)
-        {
-            for(int weightIndex = numInputsA, loadIndex = 0; weightIndex < numInputsA + numInputsB; weightIndex +=16, loadIndex+=16)
-            {
-                __m256i v_input  =  _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesB[loadIndex]));
-                __m256i v_weight1 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 0][weightIndex]));
-                __m256i v_weight2 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 1][weightIndex]));
-                __m256i v_weight3 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 2][weightIndex]));
-                __m256i v_weight4 = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[outputIndex + 3][weightIndex]));
-
-                v_output1 = _mm256_add_epi32(v_output1, _mm256_madd_epi16(v_input, v_weight1));
-                v_output2 = _mm256_add_epi32(v_output2, _mm256_madd_epi16(v_input, v_weight2));
-                v_output3 = _mm256_add_epi32(v_output3, _mm256_madd_epi16(v_input, v_weight3));
-                v_output4 = _mm256_add_epi32(v_output4, _mm256_madd_epi16(v_input, v_weight4));
-            
-            }
-        }
-
-        //reduce sums to 4 32-bit ints, including bias
-        __m128i s1 = _mm_add_epi32(_mm256_castsi256_si128(v_output1), _mm256_extracti128_si256(v_output1, 1));
-        __m128i s2 = _mm_add_epi32(_mm256_castsi256_si128(v_output2), _mm256_extracti128_si256(v_output2, 1));
-        __m128i s3 = _mm_add_epi32(_mm256_castsi256_si128(v_output3), _mm256_extracti128_si256(v_output3, 1));
-        __m128i s4 = _mm_add_epi32(_mm256_castsi256_si128(v_output4), _mm256_extracti128_si256(v_output4, 1));
-
-        __m128i s12 = _mm_hadd_epi32(s1, s2); // [s1_01, s1_23, s2_01, s2_23]
-        __m128i s34 = _mm_hadd_epi32(s3, s4); // [s3_01, s3_23, s4_01, s4_23]
-
-        __m128i final_sums = _mm_hadd_epi32(s12, s34);  //[s1_0123, s2_0123, s3_0123, s4_0123]
-        final_sums = _mm_add_epi32(final_sums, _mm_loadu_si128((const __m128i*)&biasWeights[outputIndex]));
-
-        //scale down by QB (64 = 2^6)
-        final_sums = _mm_srai_epi32(final_sums, 6);
-
-        //CReLU
-        final_sums = _mm_max_epi32(_mm_min_epi32(final_sums, v_max), v_min);
-
-        //Store the 4 ints as uint8_t
-        final_sums = _mm_packs_epi32(final_sums, final_sums); 
-        final_sums = _mm_packus_epi16(final_sums, final_sums);
-        _mm_storeu_si32(&outputValues[outputIndex], final_sums);
-    }
-}
-
-int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], int32_t bias)
-{
-    __m256i v_output = _mm256_setzero_si256(); 
-
-    for(int inputIndex = 0; inputIndex < THIRD_HIDDEN_LAYER_NODES; inputIndex+=16)
-    {
-        __m256i v_input  = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&h3[inputIndex]));
+        __m256i v_input  = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesA[inputIndex]));
         __m256i v_weight = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[inputIndex]));
+        
+        v_output = _mm256_add_epi32(v_output, _mm256_madd_epi16(v_input, v_weight));
+    }
+    
+    for(int inputIndex = 0; inputIndex < ACCUMULATOR_NODES_PER_SIDE; inputIndex+=16)
+    {
+        __m256i v_input  = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i*)&inputValuesB[inputIndex]));
+        __m256i v_weight = _mm256_cvtepi8_epi16(_mm_loadu_si128((const __m128i*)&weights[ACCUMULATOR_NODES_PER_SIDE + inputIndex]));
         
         v_output = _mm256_add_epi32(v_output, _mm256_madd_epi16(v_input, v_weight));
     }
@@ -330,15 +222,13 @@ int calculateOutputLayer(uint8_t* h3, int8_t weights[THIRD_HIDDEN_LAYER_NODES], 
     int output = _mm_cvtsi128_si32(sum128) + bias;
 
     //QB = 2^6.
-    //Output Scale = 2^3
-    return (output >> 9);
+    //Output Scale = 2^4
+    return (output >> 10);
 }
 
 int forwardPropagate(bitboard* board, accumulator* acc)
 {
     int turn = board->turn;
-
-    int bucket = 0;
 
     uint8_t* side_us;
     uint8_t* side_them;
@@ -354,11 +244,5 @@ int forwardPropagate(bitboard* board, accumulator* acc)
         side_them = acc->accumulator[WHITE];
     }
 
-    uint8_t h2[SECOND_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(side_us, side_them, h2, ACCUMULATOR_NODES_PER_SIDE, ACCUMULATOR_NODES_PER_SIDE, SECOND_HIDDEN_LAYER_NODES, int_weights->weights2, int_weights->weights2_bias);
-
-    uint8_t h3[THIRD_HIDDEN_LAYER_NODES];
-    calculateHiddenLayer(h2, NULL, h3, SECOND_HIDDEN_LAYER_NODES, 0, THIRD_HIDDEN_LAYER_NODES, int_weights->weights3, int_weights->weights3_bias);
-
-    return calculateOutputLayer(h3, int_weights->weights4[bucket], int_weights->weights4_bias[bucket]);
+    return calculateOutputLayer(side_us, side_them, int_weights->weights2, int_weights->weights2_bias);
 }

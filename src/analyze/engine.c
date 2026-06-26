@@ -117,11 +117,11 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         {
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 0, context->accumulator);
                 int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
 
                 unmove(board);
-                updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 1, context->accumulator);
 
                 if(score >= beta)
                 {
@@ -259,7 +259,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             if(!moveFromStruct(board, currentMove))
             {
-                updateMoveAccumulator(board, *currentMove, 0, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 0, context->accumulator);
 
                 int next_depth = depth - 1;
                 int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && currentMove->capturedPiece == EMPTY_PIECE && !currentMove->promoteTo);
@@ -285,7 +285,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 }
                 
                 unmove(board);
-                updateMoveAccumulator(board, *currentMove, 1, context->accumulator, context->accumulatorTable);
+                updateMoveAccumulator(board, *currentMove, 1, context->accumulator);
                 
                 if(score >= beta)
                 {
@@ -423,11 +423,11 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     bitboard* board = context->board;
     volatile clock_t* endTime = context->endTime;
     accumulator* acc = context->accumulator;
-    accumulatorRefreshTable* accumulatorTable = context->accumulatorTable;
     
     if(currentDepth < MIN_ASPIRATION_DEPTH)
     {
-        updateAccumulatorFromTable(board, context->accumulator, context->accumulatorTable);
+        loadInputAccumulator(board, acc, WHITE);
+        loadInputAccumulator(board, acc, BLACK);
         context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, currentDepth, 0, &context->pv);
         context->completedDepth = currentDepth;
     }
@@ -441,7 +441,8 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         {
             if(context->isPonder == 0 && clock() > *endTime) break;
 
-            updateAccumulatorFromTable(board, acc, accumulatorTable);
+            loadInputAccumulator(board, acc, WHITE);
+            loadInputAccumulator(board, acc, BLACK);
             int score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
 
             if(score <= alpha)
@@ -611,7 +612,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     clock_t* terminateFlags = NULL;
     bitboard* threadBoards = NULL;
     accumulator* threadAccumulators = NULL;
-    accumulatorRefreshTable** threadRefreshTables = NULL;
 
     if(helperThreadCount > 0)
     {
@@ -620,7 +620,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         terminateFlags = calloc(helperThreadCount, sizeof(clock_t));
         threadBoards = calloc(helperThreadCount, sizeof(bitboard));
         threadAccumulators = calloc(helperThreadCount, sizeof(accumulator));
-        threadRefreshTables = calloc(helperThreadCount, sizeof(accumulatorRefreshTable*));
         
         for(int i = 0; i < helperThreadCount; i++) 
         {
@@ -631,8 +630,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             helperThreadContext[i].maxDepth = context->maxDepth;
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
 
-            threadRefreshTables[i] = createRefreshTable();
-            helperThreadContext[i].accumulatorTable = threadRefreshTables[i];
             helperThreadContext[i].accumulator = &threadAccumulators[i];
 
             memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16*sizeof(move));
@@ -713,8 +710,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     free(terminateFlags);
 
     free(threadAccumulators);
-    for(int i = 0; i < helperThreadCount; i++) destroyRefreshTable(threadRefreshTables[i]);
-    free(threadRefreshTables);
 
     if(!IS_VALID_MOVE(bestMove) && bestMove.startSquare == 0)
     {

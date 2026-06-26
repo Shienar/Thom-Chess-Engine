@@ -14,7 +14,7 @@
 #define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
-#define OUTPUT_SCALE 8
+#define OUTPUT_SCALE 16
 #define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 

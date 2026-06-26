@@ -322,7 +322,7 @@ void board_print(bitboard* board, int printValues)
                 else if(8 * row + column == lastMoveEndSquare) printf(TEXT_COLOR_DESTINATION_BLACK_PIECE);
                 else
                 {
-                    if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
+                    if((column + row)&1) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
                     else printf(TEXT_COLOR_DARK_SQUARE_BLACK_PIECE);
                 }
                 
@@ -336,7 +336,7 @@ void board_print(bitboard* board, int printValues)
                 else if(8 * row + column == lastMoveEndSquare) printf(TEXT_COLOR_DESTINATION_WHITE_PIECE);
                 else
                 {
-                    if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
+                    if((column + row)&1) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
                     else printf(TEXT_COLOR_DARK_SQUARE_WHITE_PIECE);
                 }
 
@@ -403,7 +403,7 @@ void bitmask_print(uint64_t mask, char fill)
         {
             if(boardArray[row][column] < 91 && boardArray[row][column] > 64)
             {
-                if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
+                if((column + row)&1) printf(TEXT_COLOR_LIGHT_SQUARE_BLACK_PIECE);
                 else printf(TEXT_COLOR_DARK_SQUARE_BLACK_PIECE);
                 
                 boardArray[row][column] = boardArray[row][column]+32;
@@ -411,7 +411,7 @@ void bitmask_print(uint64_t mask, char fill)
             }
             else
             {
-                if((column + row)%2) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
+                if((column + row)&1) printf(TEXT_COLOR_LIGHT_SQUARE_WHITE_PIECE);
                 else printf(TEXT_COLOR_DARK_SQUARE_WHITE_PIECE);
 
                 printf("%c ", boardArray[row][column]);

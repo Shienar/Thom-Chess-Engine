@@ -73,10 +73,6 @@ int main(int argc, char** argv)
                 }
                 clear_tt(transpositionTable);
                 if(useBook) loadBook();
-
-                destroyRefreshTable(playingRefreshTable);
-                playingRefreshTable = createRefreshTable();
-                threadContext->accumulatorTable = playingRefreshTable;
                 break;
             }
             else if(strcmp(str, "setoption") == 0) 
@@ -251,7 +247,8 @@ int main(int argc, char** argv)
                         }
                     }
 
-                    updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
+                    loadInputAccumulator(board, playerAccumulator, WHITE);
+                    loadInputAccumulator(board, playerAccumulator, BLACK);
                 }
                 break; 
             }
@@ -367,7 +364,7 @@ int main(int argc, char** argv)
                     if(IS_VALID_MOVE(m)) 
                     {
                         moveFromStruct(board, &m);
-                        updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
+                        updateMoveAccumulator(board, m, 0, playerAccumulator);
                     }
                 }
                 break;
@@ -465,13 +462,15 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
-                updateAccumulatorFromTable(board, playerAccumulator, playingRefreshTable);
+                loadInputAccumulator(board, playerAccumulator, WHITE);
+                loadInputAccumulator(board, playerAccumulator, BLACK);
                 float eval = forwardPropagate(board, playerAccumulator);
                 printf("%f\n", eval);
                 break;
             }
             else if(strcmp(str, "netinfo") == 0)
             {
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 print_network_statistics();
                 break;
             }
@@ -489,7 +488,6 @@ int main(int argc, char** argv)
     if(int_weights) free(int_weights);
     if(playerAccumulator) free(playerAccumulator);
     if(threadContext) free(threadContext);
-    destroyRefreshTable(playingRefreshTable);
     destroy_hashTable_tt(transpositionTable);
     tb_free();
     if(board) free(board);
@@ -515,10 +513,8 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
 
     if(!transpositionTable) transpositionTable = create_hashTable_tt();
     if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));
-    if(!playingRefreshTable) playingRefreshTable = createRefreshTable();
     
     context->accumulator = playerAccumulator;
-    context->accumulatorTable = playingRefreshTable;
 
     if(*useBook) loadBook();
     else unloadBook();

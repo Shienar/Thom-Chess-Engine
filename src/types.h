@@ -109,68 +109,30 @@ typedef struct magic {
 #define QA 255
 #define QB 64
 
-#define INPUT_BITS 12800
+#define INPUT_BITS 1536
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
-#define SECOND_HIDDEN_LAYER_NODES 32
-#define THIRD_HIDDEN_LAYER_NODES 32
-#define OUTPUT_BUCKETS 1
 
-#define TRACKED_PIECES 10 //12 for halfKA, 10 for halfKP
-#define BITS_PER_BUCKET (64 * TRACKED_PIECES)
-#define KING_BUCKETS 10
-#define BITBOARDS_PER_INPUT_SIDE (KING_BUCKETS * TRACKED_PIECES)
-
-extern int kingBuckets[64];
-extern int kingBucketMap[KING_BUCKETS];
-
-/**
- * Weights are stored as w[output][input] to make SIMD possible for the hidden layers.
- * 
- * The sparse input layer is stored as w[input][output] instead since we are jumping
- * to the few active inputs. Output layer weights are w[bucket][output], not w[input][output].
- * 
- * Output bucket: 0-7, calculated with ((piece count - 1) / 4)
- * 
- * Training will get started with all inputs forced into the same input and
- * output buckets. Later, weights1 get broadcasted and multiple input king
- * buckets are allowed. Output buckets can get introduced later on towards the
- * very end of training. There might be a better way to do this, but it saved
- * me a lot of training time.
- */
+// 2x(768 -> 256) -> 1
 typedef struct quantized_weights {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int8_t weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
-    int32_t weights2_bias[SECOND_HIDDEN_LAYER_NODES];
-    int8_t weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
-    int32_t weights3_bias[THIRD_HIDDEN_LAYER_NODES];
-    int8_t weights4[OUTPUT_BUCKETS][THIRD_HIDDEN_LAYER_NODES];
-    int32_t weights4_bias[OUTPUT_BUCKETS];
+    int8_t weights2[ACCUMULATOR_NODES];
+    int32_t weights2_bias;
 } quantized_weights;
 typedef struct training_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    float weights2[SECOND_HIDDEN_LAYER_NODES][ACCUMULATOR_NODES];
-    float weights2_bias[SECOND_HIDDEN_LAYER_NODES];
-    float weights3[THIRD_HIDDEN_LAYER_NODES][SECOND_HIDDEN_LAYER_NODES];
-    float weights3_bias[THIRD_HIDDEN_LAYER_NODES];
-    float weights4[OUTPUT_BUCKETS][THIRD_HIDDEN_LAYER_NODES];
-    float weights4_bias[OUTPUT_BUCKETS];
+    float weights2[ACCUMULATOR_NODES];
+    float weights2_bias;
 } training_weights;
 
 typedef struct accumulator {
-    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
+    uint64_t inputNodes[24];
     uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
     int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
-
-typedef struct accumulatorRefreshTable {
-    bitboard* boards[2][64];
-    accumulator accumulators[2][64];
-    uint8_t initialized[2][64];
-} accumulatorRefreshTable;
 
 typedef struct PVar {
     int length;
@@ -187,7 +149,6 @@ typedef struct searchThreadContext {
     bitboard* board;
     volatile clock_t* endTime;
     accumulator* accumulator;
-    accumulatorRefreshTable* accumulatorTable;
     move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
     move killerMoves[MAX_PLY][2]; //Killer heuristic
     int16_t historyTable[2][6][64]; //History heuristic

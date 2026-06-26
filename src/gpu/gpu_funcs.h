@@ -21,23 +21,23 @@
 //but using ping-pong buffers increases positions/second by 9.375%. Probably because
 //it can safely overlap copying with kernel execution since its copying into a buffer
 //that isn't being used.
-#define INPUT_GROUP(block) (block%2)
+#define INPUT_GROUP(block) (block&1)
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
 /**
  * cosine annealing is done using timestamp in enqueueKernels()
  */
-#define MAX_LR 8e-6f
+#define MAX_LR 8e-4f
 #define MIN_LR 2.5e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
 #define MAX_INTERVALS 20
 #define LOOKAHEAD_RANGE 10
 
-#define KERNEL_COUNT 10
-#define MEM_COUNT 56
-#define EVENT_TRACKED_KERNELS 9
+#define KERNEL_COUNT 8
+#define MEM_COUNT 29
+#define EVENT_TRACKED_KERNELS (KERNEL_COUNT - 1)
 typedef struct {
     int deviceID;
     hipStream_t queue;
@@ -51,8 +51,6 @@ typedef struct {
             hipFunction_t calculateAccumulator;
             hipFunction_t forwardPropagate;
             hipFunction_t backpropagate;
-            hipFunction_t calculateGradient4;
-            hipFunction_t calculateGradient3;
             hipFunction_t calculateGradient2;
             hipFunction_t calculateGradient1;
             hipFunction_t adamw;
@@ -76,67 +74,43 @@ typedef struct {
 
             void* weights1_fast;
             void* weights2_fast;
-            void* weights3_fast;
-            void* weights4_fast;
 
             void* bias1_fast;
             void* bias2_fast;
-            void* bias3_fast;
-            void* bias4_fast;
-            
+
             void* weights1_slow;
             void* weights2_slow;
-            void* weights3_slow;
-            void* weights4_slow;
 
             void* bias1_slow;
             void* bias2_slow;
-            void* bias3_slow;
-            void* bias4_slow;
             
             void* accumulatorOutput;
-            void* h2Output;
-            void* h3Output;
             void* finalOutput;
             
             void* loss;
             
-            void* delta4;
-            void* delta3;
             void* delta2;
             void* delta1;
             
             void* gradient1Sum;
             void* gradient2Sum;
-            void* gradient3Sum;
-            void* gradient4Sum;
 
             void* gradientBias1Sum;
             void* gradientBias2Sum;
-            void* gradientBias3Sum;
-            void* gradientBias4Sum;
 
             //Adam first moments
             void* m_weights1;
             void* m_weights2;
-            void* m_weights3;
-            void* m_weights4;
 
             void* m_bias1;
             void* m_bias2;
-            void* m_bias3;
-            void* m_bias4;
 
             //Adam second moments
             void* v_weights1;
             void* v_weights2;
-            void* v_weights3;
-            void* v_weights4;
 
             void* v_bias1;
             void* v_bias2;
-            void* v_bias3;
-            void* v_bias4;
         };
         void* arr[MEM_COUNT];
     } mem;
@@ -153,8 +127,6 @@ typedef struct {
             hipEvent_t backprop;
             hipEvent_t gradient1;
             hipEvent_t gradient2;
-            hipEvent_t gradient3;
-            hipEvent_t gradient4;
             hipEvent_t denseUpdate;
             hipEvent_t inputUpdate;
         };
@@ -168,8 +140,6 @@ typedef struct {
             hipEvent_t backprop;
             hipEvent_t gradient1;
             hipEvent_t gradient2;
-            hipEvent_t gradient3;
-            hipEvent_t gradient4;
             hipEvent_t denseUpdate;
             hipEvent_t inputUpdate;
         };
