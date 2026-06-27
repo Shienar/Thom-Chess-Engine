@@ -1,5 +1,17 @@
 UCI-compliant NNUE chess engine created in C.
 
+### BUILDING:
+
+Simply run 'make' in the main directory to compile the program.
+- 'make clean' will remove target
+- 'make all' will compile everything.
+- 'make NEW=1' will compile with target '.\target\Thom_new.exe'. This is used for comparing changes within the engine.
+- 'make TRAIN=1' will compile the trainer into the main program (requires HIP SDK).
+- 'make TRAIN=1 KPERFT=1' will compile the trainer with kernel profiling mode enabled.
+- 'make TRAIN=1 NVIDIA=1' will attempt to compile the trainer on NVIDIA GPUs (untested).
+- 'make DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
+- 'make PROF=1' will compile with profiling flags for gmon.
+
 ### COMPATIBLITY:
 
 The engine in its current form will only work on CPUs that support AVX2 instructions. 

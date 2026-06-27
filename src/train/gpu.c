@@ -66,7 +66,6 @@ unsigned char* loadCompiledKernels(size_t* size)
     if(!input)
     {
         printf("Cannot locate compiled gpu kernels at %s\n", fileName);
-        printf("You can build them using 'make trainer'\n");
         return NULL;
     }
     

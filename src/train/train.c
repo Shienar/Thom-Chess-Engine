@@ -3,7 +3,8 @@
 #include "board/bitboard.h"
 #include "board/moves.h"
 #include "analyze/engine.h"
-#include "gpu/gpu_funcs.h"
+#include "train/gpu_funcs.h"
+#include "train/train.h"
 #include "omp.h"
 #include <string.h>
 

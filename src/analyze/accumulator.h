@@ -14,7 +14,7 @@ extern accumulator* playerAccumulator;
  */
 void loadInputAccumulator(bitboard* board, accumulator* acc, int color);
 
-void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, accumulator* acc);
+void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove, accumulator* acc);
 
 
 #endif

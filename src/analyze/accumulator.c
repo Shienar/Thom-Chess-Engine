@@ -120,10 +120,11 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
     }
 }
 
-void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, accumulator* acc)
+void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove, accumulator* acc)
 {
     assert(board);
     assert(acc);
+    assert(IS_VALID_MOVE(lastMove));
 
     for(int side = WHITE; side <= BLACK; side++)
     {
@@ -210,12 +211,18 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
         if(lastMove.capturedPiece != EMPTY_PIECE)
         {
             int capturedPieceOffset = lastMove.capturedPiece;
-            int capturedPieceSquare = lastMove.capturedPieceSquare;
+            int capturedPieceSquare = lastMove.endSquare;
+
+            if(ISPAWN(lastMove.piece) && ((!shouldUndoMove && lastMove.endSquare == lastMove.prevEnPassantSquare) || (shouldUndoMove && lastMove.endSquare == board->enPassantSquare)))
+            {
+                if(ISWHITE(lastMove.piece)) capturedPieceSquare -=8;
+                else capturedPieceSquare +=8;
+            }
 
             if(side == BLACK)
             {
-                capturedPieceOffset = FLIP_COLOR(lastMove.capturedPiece);
-                capturedPieceSquare = FLIP_SQUARE(lastMove.capturedPieceSquare);
+                capturedPieceOffset = FLIP_COLOR(capturedPieceOffset);
+                capturedPieceSquare = FLIP_SQUARE(capturedPieceSquare);
             }
 
             capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  (PIECE_COUNT / 2) + PIECE(capturedPieceOffset) / 2;
@@ -255,17 +262,24 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
         int moveDistance = lastMove.endSquare - lastMove.startSquare;
         if(ISKING(lastMove.piece) && abs(moveDistance) == 2)
         {
-            int castledRookOffset, castledRookFrom, castledRookTo;
-            
+            int castledRookFrom, castledRookTo;
             if(moveDistance == 2)
             {
-                castledRookTo = 5;
-                castledRookFrom = 7;
+                castledRookTo = lastMove.startSquare + 1;
+                castledRookFrom = lastMove.startSquare + 3;
             }
             else
             {
-                castledRookTo = 3;
-                castledRookFrom = 0;
+                castledRookTo = lastMove.startSquare - 1;
+                castledRookFrom = lastMove.startSquare - 4;
+            }
+
+            int castledRookOffset = ROOK | COLOR(lastMove.piece);
+            if(side == BLACK)
+            {
+                castledRookOffset = FLIP_COLOR(castledRookOffset);
+                castledRookFrom = FLIP_SQUARE(castledRookFrom);
+                castledRookTo = FLIP_SQUARE(castledRookTo);
             }
 
             if(shouldUndoMove)
@@ -275,18 +289,20 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int shouldUndoMove, a
                 castledRookFrom = temp;
             }
 
-            castledRookOffset = ROOK | COLOR(lastMove.piece);
-            castledRookOffset = ISWHITE(pieceOffset) ? PIECE(castledRookOffset) / 2 :  (PIECE_COUNT / 2) + PIECE(castledRookOffset) / 2;
+            castledRookOffset = ISWHITE(castledRookOffset) ? PIECE(castledRookOffset) / 2 :  (PIECE_COUNT / 2) + PIECE(castledRookOffset) / 2;
             int castleInputNodeIndex = (PIECE_COUNT * side) + castledRookOffset;
 
             uint64_t xorMask = singleBitMask(castledRookFrom) | singleBitMask(castledRookTo);
             acc->inputNodes[castleInputNodeIndex]^=xorMask;
 
+            int castledRookFromIdx = (64 * castledRookOffset) + castledRookFrom;
+            int castledRoomToIdx = (64 * castledRookOffset) + castledRookTo;
+
             for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
             {
                 __m256i v_acc   = _mm256_loadu_si256((__m256i const*)&acc->rawAccumulator[side][j]);
-                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[castledRookTo][j]);
-                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[castledRookFrom][j]);
+                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[castledRoomToIdx][j]);
+                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&int_weights->weights1[castledRookFromIdx][j]);
                 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);

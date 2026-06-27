@@ -46,7 +46,7 @@
 #define ISQUEEN(piece) ((piece&0xE) == QUEEN)
 #define ISKING(piece) ((piece&0xE) == KING)
 
-#define SCORE_WIN 1e8
+#define SCORE_WIN 32000
 #define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
 
 
@@ -74,6 +74,8 @@
 #define CHECK_B(flag) (flag|=32)
 #define UNCHECK_W(flag) (flag&=(~16))
 #define UNCHECK_B(flag) (flag&=(~32))
+
+#define NO_EP_SQUARE 127
 
 #define VICTOR_WHITE 0x1
 #define VICTOR_BLACK 0x2
@@ -195,20 +197,27 @@ void board_print(bitboard* board, int printValues);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
 
-int moves_push(bitboard* board, move m);
-move moves_pop(bitboard* board);
-static inline void createMove(move* m, int startSquare, int endSquare, int promoteTo, int piece, bitboard* board)
+int moves_push(bitboard* board, move_d m);
+move_d moves_pop(bitboard* board);
+static inline void createCompactMove(move_c* m, int startSquare, int endSquare, int promoteTo)
 {
     assert(m);
-    assert(startSquare >= 0 && startSquare <= 63);
-    assert(endSquare >= 0 && endSquare <= 63);
-
     m->startSquare = startSquare;
     m->endSquare = endSquare;
     m->promoteTo = promoteTo;
-    m->piece = piece;
-    m->capturedPiece = EMPTY_PIECE;
-    m->capturedPieceSquare = endSquare;
+}
+static inline void createDetailedMove(move_d* m, move_c c, bitboard* board)
+{
+    assert(m);
+
+    m->startSquare = c.startSquare;
+    m->endSquare = c.endSquare;
+    m->promoteTo = c.promoteTo;
+    m->piece = findPieceOnSquare(board, m->startSquare);
+
+    m->capturedPiece = findPieceOnSquare(board, m->endSquare);
+    if(m->capturedPiece == EMPTY_PIECE && ISPAWN(m->piece) && board->enPassantSquare == m->capturedPiece)
+        m->capturedPiece = FLIP_COLOR(m->piece);
 
     m->previousMovesSinceLastChange = board->movesSinceLastChange;
     m->prevEnPassantSquare = board->enPassantSquare;

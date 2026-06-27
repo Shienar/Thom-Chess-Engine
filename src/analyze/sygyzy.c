@@ -1,23 +1,20 @@
 #include "analyze/sygyzy.h"
 
-void getFromPyrrhic(bitboard* board, move* dest, unsigned result)
+void getFromPyrrhic(bitboard* board, move_c* dest, unsigned result)
 {
     dest->endSquare = TB_RESULT_TO(result);
     dest->startSquare = TB_RESULT_FROM(result);
-    dest->piece = findPieceOnSquare(board, dest->startSquare);
+    int piece = findPieceOnSquare(board, dest->startSquare);
 
-    if(!ISPAWN(dest->piece)) dest->promoteTo = 0;
+    if(!ISPAWN(piece)) dest->promoteTo = 0;
     else if(TB_RESULT_IS_QPROMO(result)) dest->promoteTo = QUEEN;
     else if(TB_RESULT_IS_RPROMO(result)) dest->promoteTo = ROOK;
     else if(TB_RESULT_IS_BPROMO(result)) dest->promoteTo = BISHOP;
     else if(TB_RESULT_IS_NPROMO(result)) dest->promoteTo = KNIGHT;
     else dest->promoteTo = 0;
-
-    dest->capturedPiece = findPieceOnSquare(board, dest->endSquare);
-    if(dest->capturedPiece) dest->capturedPieceSquare = dest->endSquare;
 }
 
-void filterSygyzyMoves(bitboard* board, move* requiredMoves)
+void filterSygyzyMoves(bitboard* board, move_c* requiredMoves)
 {
     //3-n man sygyzy endgame with no castling rights.
     if(__builtin_popcountll(board->pieces_all) > sygyzyProbeLimit || (IS_IN_CHECK_ANY(board->flags))) return;

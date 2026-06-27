@@ -238,12 +238,12 @@ int main(int argc, char** argv)
 
                     if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
                     {
-                        move m;
+                        move_c m;
                         while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
                             board->historyIndex = 0;
                             m = getStructFromString(board, str);
-                            moveFromStruct(board, &m);
+                            moveFromStruct(board, m);
                         }
                     }
 
@@ -270,7 +270,7 @@ int main(int argc, char** argv)
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
                 threadContext->isPonder = 0;
-                memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move));
+                memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
                 int play = 0;
 
                 short searchedMoveCount = 0;
@@ -351,21 +351,7 @@ int main(int argc, char** argv)
                 if(play)
                 {
                     THREAD_WAIT(calculateThread);
-                    moveFromStruct(board, &threadContext->pv.line[0]);
-                }
-                break;
-            }
-            else if(strcmp(str, "move") == 0)
-            {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    move m = getStructFromString(board, str);
-                    if(IS_VALID_MOVE(m)) 
-                    {
-                        moveFromStruct(board, &m);
-                        updateMoveAccumulator(board, m, 0, playerAccumulator);
-                    }
+                    moveFromStruct(board, threadContext->pv.line[0]);
                 }
                 break;
             }
@@ -393,6 +379,7 @@ int main(int argc, char** argv)
                 }
                 
             }
+            #ifdef TRAIN
             else if(strcmp(str, "train") == 0)
             {
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
@@ -408,6 +395,7 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            #endif
             else if(strcmp(str, "perft") == 0)
             {
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
@@ -446,13 +434,6 @@ int main(int argc, char** argv)
                     double NPS = result / seconds;
                     printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
                 }
-                break;
-            }
-            else if(strcmp(str, "*moveerror*") == 0)
-            {
-                char FEN[128] = {'\0'};
-                export_fen_from_board(board, FEN);
-                DEBUG_ERROR("Move error received on FEN %s", FEN);
                 break;
             }
             else if(strcmp(str, "print") == 0)

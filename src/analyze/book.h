@@ -17,6 +17,6 @@ void loadBook();
 void unloadBook();
 
 //Returns a newly allocated move struct.
-move getBookMove(bitboard* board);
+move_c getBookMove(bitboard* board);
 
 #endif

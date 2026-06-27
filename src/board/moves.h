@@ -31,9 +31,8 @@
 
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
-#define ARE_EQUAL_MOVES(m1, m2) (m1.startSquare == m2.startSquare && m1.endSquare == m2.endSquare)
 
-int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
+int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 
 #define TT_MOVE_SCORE 30000
 #define PV_MOVE_SCORE 20000
@@ -41,8 +40,8 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 #define KILLER_2_SCORE 9500
 #define MAX_HISTORY_SCORE 5000 //+- max bound
 #define CAPTURE_SCORE 5000 //+- min bound
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move* pvMove, move* ttMove, move* requiredMoves, move* killerMoves, int16_t history[2][6][64]);
-move* iterate_next_move(moveIterator* iter);
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64]);
+move_c* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 
 
@@ -57,15 +56,15 @@ uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
 uint64_t pyrrhicKingAttacks(int square);
 uint64_t kingMoves(bitboard* board, int square, int color);
 
-int movePiece(bitboard *board, move* m);
+int movePiece(bitboard *board, move_c compactMove);
 
 //Assigns captured piece.
-int moveFromStruct(bitboard* board, move* m);
-move getStructFromString(bitboard* board, char* str);
+int moveFromStruct(bitboard* board, move_c m);
+move_c getStructFromString(bitboard* board, char* str);
 
 //2 Calls result in an unchanged board state.
 void applyNullMove(bitboard* board);
 
-move unmove(bitboard *board);
+move_d unmove(bitboard *board);
 
 #endif

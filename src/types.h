@@ -16,22 +16,35 @@
 #define singleBitMask(x) (1ull << (x))
 #define MAX_MOVES 218
 
-typedef struct move {
-    int8_t startSquare;
-    int8_t endSquare;
-    int8_t piece;
-    int8_t promoteTo;
-    int8_t capturedPiece;
-    int8_t capturedPieceSquare; //Not always the same as endsquare because of en passant
-    
-    int8_t prevEnPassantSquare;
-    uint8_t previousMovesSinceLastChange;
-    uint8_t prevFlags;
-    uint16_t lastChangeIndex;
-} move;
+//Compact move contains the bare minimum move information.
+typedef union move_c {
+    uint16_t raw;
+    struct {
+        uint16_t startSquare : 6;
+        uint16_t endSquare : 6;
+        uint16_t promoteTo: 4;
+    };
+} move_c;
+
+//Detailed move contains information necessary for unmoving. 
+typedef union move_d {
+    uint64_t raw;
+    uint16_t arr[4]; // Compare arr[0] to see if two moves' start/end square & piece are equal.
+    struct {
+        uint64_t startSquare                    :  6;
+        uint64_t endSquare                      :  6;
+        uint64_t piece                          :  4;
+        uint64_t promoteTo                      :  4;
+        uint64_t capturedPiece                  :  4;
+        uint64_t prevEnPassantSquare            :  7;
+        uint64_t previousMovesSinceLastChange   :  7;
+        uint64_t prevFlags                      :  6;
+        uint64_t lastChangeIndex                : 16;
+    };
+} move_d;
 
 typedef struct moveIterator {
-    move* moveList;
+    move_c* moveList;
     int16_t* moveScores;
     uint8_t count;
     uint8_t visitedCount;
@@ -39,11 +52,16 @@ typedef struct moveIterator {
 
 typedef struct table_entry_tt {
     uint64_t hashCode;
-    float evaluation;
-    uint8_t depth;
-    int8_t nodeType; //PV-node = score is exact; All-node = score is upper bound; Cut-node = score is lower bound.
-    move bestMove;
-    uint8_t checkSum;
+    union {
+        uint64_t data;
+        struct {
+            uint16_t age;
+            uint16_t bestMove;
+            int16_t evaluation;
+            uint8_t depth;
+            uint8_t nodeType;
+        };
+    };
 } table_entry_tt;
 
 typedef struct hashtable_tt {
@@ -83,7 +101,7 @@ typedef struct bitboard {
 
     uint8_t movesSinceLastChange;
 
-    move history[MAX_PLY];
+    move_d history[MAX_PLY];
     uint8_t historyIndex;
     uint64_t repetitionHashCodes[4096];
     uint16_t repetitionIndex;
@@ -136,23 +154,34 @@ typedef struct accumulator {
 
 typedef struct PVar {
     int length;
-    move line[MAX_PLY];
+    move_c line[MAX_PLY];
 } PVar;
 
 #define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
+    //UCI Thread settings or info
     int isPonder;
     int maxDepth, seldepth, completedDepth, deepeningSkip;
     int maxNodes, countedNodes;
-    int score;
     clock_t startTime;
-    bitboard* board;
     volatile clock_t* endTime;
+    move_c searchedMoves[MAX_REQUIRED_MOVES];
+
+    //Necessary search information
+    int16_t score;
+    bitboard* board;
     accumulator* accumulator;
-    move searchedMoves[MAX_REQUIRED_MOVES]; //search only these at depth 1
-    move killerMoves[MAX_PLY][2]; //Killer heuristic
-    int16_t historyTable[2][6][64]; //History heuristic
     PVar pv;
+    
+    //Improving heuristic
+    int evalHistory[MAX_PLY];
+    int8_t improving[MAX_PLY];
+
+    //Killer heuristic
+    move_c killerMoves[MAX_PLY][2];
+
+    //History heuristic
+    int16_t historyTable[2][6][64];
 } searchThreadContext;
 
 #endif

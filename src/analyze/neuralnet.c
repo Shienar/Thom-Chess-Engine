@@ -3,7 +3,6 @@
 #include "board/bitboard.h"
 #include "board/moves.h"
 #include "analyze/engine.h"
-#include "gpu/gpu_funcs.h"
 #include "omp.h"
 #include <float.h>
 #include <string.h>
@@ -88,7 +87,7 @@ void loadQuantizedWeights()
     if(int_weights) return;
     int_weights = calloc(1, sizeof(quantized_weights));
 
-    FILE* input = fopen(PROJECT_CWD "/import/quantized_1.nnue", "rb");
+    FILE* input = fopen(PROJECT_CWD "/import/quantized.nnue", "rb");
     if(input)
     {
         size_t size = fread(int_weights, sizeof(quantized_weights), 1, input);
@@ -96,7 +95,7 @@ void loadQuantizedWeights()
         if(size == 1) return;
     }
 
-    DEBUG_ERROR("Failed to load raw neural network weights from file.");
+    DEBUG_ERROR("Failed to load quantized neural network weights from file.");
     loadRawWeights();
     quantizeWeights(raw_weights, int_weights);
     saveQuantizedWeights();

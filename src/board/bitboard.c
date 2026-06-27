@@ -77,7 +77,7 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
     if(QUEENSIDE_CASTLE_BLACK(board->flags)) castlingRights[writeIndex] = 'q';
 
     char enPassantSquare[3] = {'\0'};
-    if(board->enPassantSquare == -1) enPassantSquare[0] = '-';
+    if(board->enPassantSquare == NO_EP_SQUARE) enPassantSquare[0] = '-';
     else getSquareName(board->enPassantSquare, enPassantSquare);
 
     sprintf(outputFenString, "%s/%s/%s/%s/%s/%s/%s/%s %c %s %s %d %d", rows[7], rows[6], rows[5], rows[4], rows[3], rows[2], rows[1], rows[0],
@@ -236,11 +236,11 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
 
     
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
-    else board->enPassantSquare = -1;
+    else board->enPassantSquare = NO_EP_SQUARE;
 
     board->hashCode = getHashCode(board);
 
-    memset(board->history, 0, MAX_PLY * sizeof(move));
+    memset(board->history, 0, MAX_PLY * sizeof(move_d));
     board->historyIndex = 0;
 
     memset(board->repetitionHashCodes, 0, 4096 * sizeof(uint64_t));
@@ -382,7 +382,7 @@ void values_print(bitboard* board)
     }
 
     printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->movesSinceLastChange);
-    if(board->enPassantSquare != -1) printf("En passant square: %d\n", board->enPassantSquare);
+    if(board->enPassantSquare != NO_EP_SQUARE) printf("En passant square: %d\n", board->enPassantSquare);
     printf("Hashcode: 0x%016" PRIx64 "\n", board->hashCode);
     char FEN[128];
     export_fen_from_board(board, FEN);  
@@ -423,7 +423,7 @@ void bitmask_print(uint64_t mask, char fill)
 }
 
 
-int moves_push(bitboard* board, move m)
+int moves_push(bitboard* board, move_d m)
 {
     assert(board);
 
@@ -436,11 +436,11 @@ int moves_push(bitboard* board, move m)
     return board->historyIndex;
 }
 
-move moves_pop(bitboard* board)
+move_d moves_pop(bitboard* board)
 {
     assert(board);
 
-    if(board->historyIndex == 0) return (move){0};
+    if(board->historyIndex == 0) return (move_d){0};
 
     return board->history[--board->historyIndex];
 }

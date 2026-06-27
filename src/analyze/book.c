@@ -49,12 +49,12 @@ void unloadBook()
     }
 }
 
-move getBookMove(bitboard* board)
+move_c getBookMove(bitboard* board)
 {
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
-    move potentialMoves[512] = {0};
+    move_c potentialMoves[512] = {0};
     uint16_t moveWeights[512] = {0};
     int moveCount = 0;
 
@@ -81,30 +81,28 @@ move getBookMove(bitboard* board)
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
             int promoteTo = ((moveBits&0x7000)>>12) + 1;
             
-            move* tempMove = &potentialMoves[moveCount];
+            move_c* tempMove = &potentialMoves[moveCount];
             moveWeights[moveCount] = __builtin_bswap16(entry->weight);
             totalWeight+= moveWeights[moveCount];
 
             tempMove->promoteTo = promoteTo;
             tempMove->startSquare = startSquare;
             tempMove->endSquare = endSquare;
-            tempMove->piece = findPieceOnSquare(board, startSquare);
+            int piece = findPieceOnSquare(board, startSquare);
 
             //Overwrite the polyglot castling syntax with our own.
-            if(ISKING(tempMove->piece))
+            if(ISKING(piece))
             {
                 if(tempMove->startSquare - tempMove->endSquare == 4) tempMove->endSquare+=2;
                 if(tempMove->startSquare - tempMove->endSquare == -3) tempMove->endSquare-=1;
             }
-
-            if((tempMove->capturedPiece = findPieceOnSquare(board, endSquare))) tempMove->capturedPieceSquare = endSquare;
 
             moveCount++;
             if(moveCount >= 512) break;
         }
     }
 
-    if(moveCount == 0) return (move){0};
+    if(moveCount == 0) return (move_c){0};
 
     uint32_t randomValue = (((uint32_t)rand()) & 0xFFFF) | ((((uint32_t)rand()) & 0xFFFF) << 16);
     randomValue = randomValue%totalWeight;

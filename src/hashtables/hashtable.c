@@ -248,7 +248,7 @@ void initZobristPieceKeys()
 
 uint64_t getEnPassantHash(bitboard* board)
 {
-    if(board->enPassantSquare == -1) return 0;
+    if(board->enPassantSquare == NO_EP_SQUARE) return 0;
 
     int epSquare = board->enPassantSquare;
     int epRow = getRow(epSquare);
