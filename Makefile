@@ -48,16 +48,16 @@ ifdef TRAIN
 			CFLAGS +=-D__HIP_PLATFORM_NVIDIA__
 			KC = nvcc
 			KFLAGS = -O3 --ptx -D__HIP_PLATFORM_NVIDIA__
-			KTARGET = $(OBJ_DIR)/gpu/kernels.nvptx
+			KTARGET = $(OBJ_DIR)/train/kernels.nvptx
 		else
 			CFLAGS +=-D__HIP_PLATFORM_AMD__
 			KC = hipcc
-			KFLAGS = -O3 --genco -D__HIP_PLATFORM_AMD__
-			KTARGET = $(OBJ_DIR)/gpu/kernels.hsaco
+			KFLAGS = -O3 --genco --offload-arch=native -D__HIP_PLATFORM_AMD__
+			KTARGET = $(OBJ_DIR)/train/kernels.hsaco
 		endif
 	endif
 
-	SRCFILES += $(wildcard src/gpu/*.c)
+	SRCFILES += $(wildcard src/train/*.c)
 	CFLAGS += -DTRAIN
 
 	ifdef KPERFT

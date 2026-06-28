@@ -243,5 +243,7 @@ int forwardPropagate(bitboard* board, accumulator* acc)
         side_them = acc->accumulator[WHITE];
     }
 
-    return calculateOutputLayer(side_us, side_them, int_weights->weights2, int_weights->weights2_bias);
+    int output = calculateOutputLayer(side_us, side_them, int_weights->weights2, int_weights->weights2_bias);
+
+    return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 }

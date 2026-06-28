@@ -2,6 +2,7 @@
 #define NEURALNET_TRAIN
 
 #include "analyze/neuralnet.h"
+#include "train/gpu_funcs.h"
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
@@ -31,7 +32,7 @@
  *  - Lookahead
  *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
  */
-void train( int maxIterations, float maxAllowedError);
+void train(int maxIterations, float maxAllowedError);
 
 #pragma pack(push, 1) // no padding
 typedef struct {

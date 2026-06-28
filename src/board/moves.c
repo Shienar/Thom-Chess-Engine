@@ -429,10 +429,14 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
         move_d m;
         createDetailedMove(&m, iter->moveList[i], board);
 
-        if(ttMove && m.arr[0] == ttMove->raw)
-            iter->moveScores[i] = TT_MOVE_SCORE;
-        else if(pvMove && m.arr[0] == pvMove->raw)
+        if(pvMove && m.arr[0] == pvMove->raw)
             iter->moveScores[i] = PV_MOVE_SCORE;
+        else if(ttMove && m.arr[0] == ttMove->raw)
+            iter->moveScores[i] = TT_MOVE_SCORE;
+        else if(killerMoves && m.arr[0] == killerMoves[0].raw)
+            iter->moveScores[i] = KILLER_1_SCORE;
+        else if(killerMoves && m.arr[0] == killerMoves[1].raw)
+            iter->moveScores[i] = KILLER_2_SCORE;
         else if(m.capturedPiece != EMPTY_PIECE)
         {
             int seeValue = staticExchangeEvaluation(board, m);
@@ -440,10 +444,8 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
-        else if(killerMoves && m.arr[0] == killerMoves[0].raw)
-            iter->moveScores[i] = KILLER_1_SCORE;
-        else if(killerMoves && m.arr[0] == killerMoves[1].raw)
-            iter->moveScores[i] = KILLER_2_SCORE;
+        else if(m.promoteTo)
+            iter->moveScores[i] = CAPTURE_SCORE;
         else if(history)
             iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;

@@ -6,6 +6,7 @@
 #include "analyze/neuralnet.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/engine.h"
+#include "train/train.h"
 #include <string.h>
 #include <omp.h>
 
@@ -379,9 +380,9 @@ int main(int argc, char** argv)
                 }
                 
             }
-            #ifdef TRAIN
             else if(strcmp(str, "train") == 0)
             {
+                #ifdef TRAIN
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
                 loadRawWeights();
                 
@@ -393,9 +394,11 @@ int main(int argc, char** argv)
                     sscanf(str, "%d", &epochCount);
                     train(epochCount, 5e-4f);
                 }
+                #else
+                printf("Cannot train engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'");
+                #endif
                 break;
             }
-            #endif
             else if(strcmp(str, "perft") == 0)
             {
                 readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
@@ -407,7 +410,7 @@ int main(int argc, char** argv)
                     int pdepth;
                     sscanf(str, "%d", &pdepth);
                     clock_t startTime = clock();
-                    int result = perft(board, pdepth, pdepth, 0);
+                    int result = perft(board, pdepth, 0);
                     clock_t duration = clock() - startTime;
                     double seconds = ((double) duration / CLOCKS_PER_SEC);
                     double NPS = result / seconds;
@@ -428,7 +431,7 @@ int main(int argc, char** argv)
                     int pdepth;
                     sscanf(str, "%d", &pdepth);
                     clock_t startTime = clock();
-                    int result = perft(board, pdepth, pdepth, 1);
+                    int result = perft(board, pdepth, 1);
                     clock_t duration = clock() - startTime;
                     double seconds = ((double) duration / CLOCKS_PER_SEC);
                     double NPS = result / seconds;

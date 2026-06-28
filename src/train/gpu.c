@@ -57,9 +57,9 @@ unsigned char* loadCompiledKernels(size_t* size)
     char* fileName;
 
     #if defined(__HIP_PLATFORM_NVIDIA__)
-        fileName = PROJECT_CWD "/target/obj/gpu/kernels.nvptx";
+        fileName = PROJECT_CWD "/target/obj/train/kernels.nvptx";
     #else
-        fileName = PROJECT_CWD "/target/obj/gpu/kernels.hsaco";
+        fileName = PROJECT_CWD "/target/obj/train/kernels.hsaco";
     #endif
 
     FILE* input = fopen(fileName, "rb"); 

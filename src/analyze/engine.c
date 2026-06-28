@@ -16,7 +16,7 @@ int reductionTable[MAX_PLY][MAX_MOVES] = {0};
 
 void initLMTable()
 {
-    if(reductionTable[25][25]) return;
+    if(reductionTable[4][10]) return;
 
     for(int depth = 0; depth < MAX_PLY; depth++)
     {
@@ -30,7 +30,7 @@ void initLMTable()
     }
 }
 
-int perft(bitboard* board, int depth, int maxDepth, int verbose)
+int perft(bitboard* board, int depth, int verbose)
 {
     if(!depth) return 1;
     int nodes = 0;
@@ -41,7 +41,7 @@ int perft(bitboard* board, int depth, int maxDepth, int verbose)
     {
         if(!moveFromStruct(board, moveList[index]))
         {
-            int branchNodes = perft(board, depth - 1, maxDepth, 0);
+            int branchNodes = perft(board, depth - 1, 0);
             nodes += branchNodes;
             if(verbose) 
             {
@@ -139,7 +139,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     return best;
 }
 
-int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int maxDepth, int depth, int ply, PVar* myPV)
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV)
 {
     assert(context);
     context->countedNodes++;
@@ -165,11 +165,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         return evaluateEndstate(board, ply);
     if(ply >= MAX_PLY - 1) 
         return forwardPropagate(board, context->accumulator);
-    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && maxDepth > 1))
+    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && ply >= 1))
         return quiescentSearch(context, alpha, beta, ply);
 
     //Mate distance pruning for non-root nodes.
-    if(maxDepth != depth)
+    if(ply != 0)
     {
         int a = _max(alpha, -SCORE_WIN + ply);
         int b = _min(beta, SCORE_WIN - ply - 1);
@@ -199,11 +199,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(old_tt_entry.nodeType == NODE_TYPE_CUT && old_tt_entry.evaluation >= beta) return beta;
         }
     }
-
-    //Improving
-    if(IS_IN_CHECK_ANY(board->flags)) context->improving[ply] = 0;
-    else context->improving[ply] = (ply >= 2) ? (score > context->evalHistory[ply - 2]) : 1;
-    
     
     //Sygyzy
     if(depth >= sygyzyProbeDepth)
@@ -233,7 +228,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         transposition_table_set(transpositionTable, shallowEntry, ply);
     }
 
-    if(!pvNode && !inCheck)
+    //Improving
+    if(IS_IN_CHECK_ANY(board->flags)) context->improving[ply] = 0;
+    else context->improving[ply] = (ply >= 2) ? (score > context->evalHistory[ply - 2]) : 1;
+
+    if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
         //Reverse Futility Pruning
         if(depth <= REVERSE_FUTILITY_PRUNING_DEPTH)
@@ -248,7 +247,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         //Futility pruning
         if(depth <= FUTILITY_PRUNING_DEPTH && (score + FUTILITY_MARGIN) <= alpha )
         {
-            return score;
+            return alpha;
         }
 
         //Null move pruning
@@ -256,14 +255,61 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             int r = 3;
             applyNullMove(board);
-            int nullScore = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, depth - r, ply + 1, &childPV);
+            int nullScore = -principalVariationSearch(context, -alpha - 1, -alpha, depth - r, ply + 1, &childPV);
             applyNullMove(board);
             if(nullScore >= beta) return nullScore;
         }
+
+        //Probcut
+        if(depth >= PROBCUT_DEPTH)
+        {
+            int nextDepth = depth - PROBCUT_DEPTH_REDUCTION;
+            int pBeta = (context->improving[ply]) ? beta + PROBCUT_OFFSET_IMPROVING: beta + PROBCUT_OFFSET;
+
+            if(pBeta < MIN_MATE_SCORE && (!hit || old_tt_entry.depth < nextDepth))
+            {
+                int probCutScore = INT32_MIN;
+                moveIterator* iter = create_move_iterator(board, 1, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
+                if(iter)
+                {
+                    move_c* currentMove;
+                    while((currentMove = iterate_next_move(iter)) != NULL)
+                    {
+                        if(!moveFromStruct(board, *currentMove))
+                        {
+                            move_d detailedMove = board->history[board->historyIndex - 1];
+                            updateMoveAccumulator(board, detailedMove, 0, context->accumulator);
+
+                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV);
+
+                            unmove(board);
+                            updateMoveAccumulator(board, detailedMove, 1, context->accumulator);
+
+                            if(probCutScore >= pBeta)
+                            {
+                                if(!hit || old_tt_entry.depth < nextDepth)
+                                {
+                                    table_entry_tt shallowEntry = {
+                                        .depth = nextDepth,
+                                        .hashCode = board->hashCode,
+                                        .nodeType = NODE_TYPE_CUT,
+                                        .evaluation = beta,
+                                        .age = board->halfMoveCount
+                                    };
+                                    transposition_table_set(transpositionTable, shallowEntry, ply);
+                                }
+                                destroy_move_iterator(iter);
+                                return beta;
+                            }
+                        }   
+                    }   
+                    destroy_move_iterator(iter);
+                }
+            }
+        }
     }
 
-    moveIterator* iter;
-    iter = create_move_iterator(board, 0, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
+    moveIterator* iter = create_move_iterator(board, 0, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
     if(iter)
     {
         move_c* currentMove;
@@ -285,21 +331,21 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 
                 if(isQuietMove && !context->improving[ply]) next_depth -= reductionTable[depth][validMovesVisited];
 
-                if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
                 else
                 {
                     //Scout
-                    score = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                    score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
 
                     //LMR Re-search
                     if (score > alpha && next_depth < depth - 1)
                     {
                         next_depth = depth - 1;
-                        score = -principalVariationSearch(context, -alpha - 1, -alpha, maxDepth, next_depth, ply + 1, &childPV);
+                        score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
                     }
                     
                     //PVS Re-search
-                    if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -score, maxDepth, next_depth, ply + 1, &childPV);
+                    if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -score, next_depth, ply + 1, &childPV);
                 }
                 
                 unmove(board);
@@ -358,6 +404,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             //Don't save a bestmove since we couldn't find one that fits in window.
             new_tt_entry.nodeType = NODE_TYPE_ALL;
             new_tt_entry.evaluation = bestScore;
+            new_tt_entry.bestMove = 0;
             transposition_table_set(transpositionTable, new_tt_entry, ply);
         }
         destroy_move_iterator(iter);
@@ -446,7 +493,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     {
         loadInputAccumulator(board, acc, WHITE);
         loadInputAccumulator(board, acc, BLACK);
-        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, currentDepth, 0, &context->pv);
+        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &context->pv);
         context->completedDepth = currentDepth;
     }
     else
@@ -461,7 +508,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
             loadInputAccumulator(board, acc, WHITE);
             loadInputAccumulator(board, acc, BLACK);
-            int score = principalVariationSearch(context, alpha, beta, currentDepth, currentDepth, 0, &context->pv);
+            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &context->pv);
 
             if(score <= alpha)
             {
@@ -472,7 +519,6 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             {
                 beta+= aspiration_margin;
                 aspiration_margin*=ASPIRATION_MARGIN_MULT_FACTOR;
-                context->completedDepth = currentDepth;
             }
             else
             {
@@ -523,6 +569,8 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     {
         for(int i = 0; i < threadCount - 1; i++)
         {
+            totalNodes += helperThreads[i].countedNodes;
+
             if(!IS_VALID_MOVE(helperThreads[i].pv.line[0])) continue;
             int curDepth = helperThreads[i].completedDepth;
             int curScore = helperThreads[i].score;
@@ -534,7 +582,6 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
                 bestScore = best->score;
             }
 
-            totalNodes += helperThreads[i].countedNodes;
         }
     }
     
@@ -555,40 +602,23 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
         printf(" score mate %d", mateInMoves);
     }
     else printf(" score cp %d", bestScore);
-    if(bestDepth)
+
+    printf(" pv");
+    for(int i = 0; i < best->pv.length; i++)
     {
-        printf(" pv");
-        for(int i = 0; i < best->pv.length; i++)
-        {
-            move_c m = best->pv.line[i];
-            if(!IS_VALID_MOVE(m)) break;
-            char startSq[3] = {'\0'};
-            char endSq[3] = {'\0'};
-            getSquareName(m.startSquare, startSq);
-            getSquareName(m.endSquare, endSq);
-            printf(" %s%s", startSq, endSq);
-            if(m.promoteTo)
-            {
-                switch(m.promoteTo)
-                {
-                    case QUEEN:
-                        printf("q");
-                        break;
-                    case KNIGHT:
-                        printf("n");
-                        break;
-                    case ROOK:
-                        printf("r");
-                        break;
-                    case BISHOP:
-                        printf("b");
-                        break;
-                    default:
-                        break;
-                }
-            }
-        }
+        move_c m = best->pv.line[i];
+        if(!IS_VALID_MOVE(m)) break;
+        char startSq[3] = {'\0'};
+        char endSq[3] = {'\0'};
+        getSquareName(m.startSquare, startSq);
+        getSquareName(m.endSquare, endSq);
+        printf(" %s%s", startSq, endSq);
+        if(m.promoteTo == QUEEN) printf("q");
+        else if(m.promoteTo == ROOK) printf("r");
+        else if(m.promoteTo == BISHOP) printf("b");
+        else if(m.promoteTo == KNIGHT) printf("n");
     }
+
     printf("\n");
     fflush(stdout);
 }
@@ -664,53 +694,34 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
 
-        if(abs(context->score) >= MIN_MATE_SCORE) break;
-
-
-        if(currentDepth < maxDepth)
+        int totalNodes = context->countedNodes;
+        for(int i = 0; i < helperThreadCount; i++) totalNodes += helperThreadContext[i].countedNodes; //very volatile, basically a best-guess until the cleanup.
+        int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
+        milliseconds = _max(milliseconds, 1);
+        int NPS = totalNodes / (milliseconds / 1000.0);
+        printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
+        assert(abs(context->score) <= SCORE_WIN);
+        printf(" score cp %d", context->score);
+        printf(" pv");
+        for(int i = 0; i < context->pv.length; i++)
         {
-            int totalNodes = context->countedNodes;
-            for(int i = 0; i < helperThreadCount; i++) totalNodes += helperThreadContext[i].countedNodes; //very volatile, basically a best-guess until the cleanup.
-            int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
-            milliseconds = _max(milliseconds, 1);
-            int NPS = totalNodes / (milliseconds / 1000.0);
-            printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
-            assert(abs(context->score) <= SCORE_WIN);
-            printf(" score cp %d", context->score);
-            printf(" pv");
-            for(int i = 0; i < context->pv.length; i++)
-            {
-                move_c m = context->pv.line[i];
-                if(!IS_VALID_MOVE(m)) break;
-                char startSq[3] = {'\0'};
-                char endSq[3] = {'\0'};
-                getSquareName(m.startSquare, startSq);
-                getSquareName(m.endSquare, endSq);
-                printf(" %s%s", startSq, endSq);
-                if(m.promoteTo)
-                {
-                    switch(m.promoteTo)
-                    {
-                        case QUEEN:
-                            printf("q");
-                            break;
-                        case KNIGHT:
-                            printf("n");
-                            break;
-                        case ROOK:
-                            printf("r");
-                            break;
-                        case BISHOP:
-                            printf("b");
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-            printf("\n");
-            fflush(stdout);
+            move_c m = context->pv.line[i];
+            if(!IS_VALID_MOVE(m)) break;
+            char startSq[3] = {'\0'};
+            char endSq[3] = {'\0'};
+            getSquareName(m.startSquare, startSq);
+            getSquareName(m.endSquare, endSq);
+            printf(" %s%s", startSq, endSq);
+            if(m.promoteTo == QUEEN) printf("q");
+            else if(m.promoteTo == ROOK) printf("r");
+            else if(m.promoteTo == BISHOP) printf("b");
+            else if(m.promoteTo == KNIGHT) printf("n");
         }
+        printf("\n");
+        fflush(stdout);
+
+        
+        if(abs(context->score) >= MIN_MATE_SCORE) break;
     }
     if(helperThreadCount > 0)
     {
@@ -719,8 +730,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         {
             THREAD_WAIT(helperThreads[i]);
         }
+        findBestThread(context, helperThreadContext, &bestMove, &ponderMove);
     }
-    findBestThread(context, helperThreadContext, &bestMove, &ponderMove);
 
     free(threadBoards);
     free(helperThreads);

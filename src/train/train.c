@@ -1,9 +1,7 @@
-#include "analyze/neuralnet.h"
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
 #include "analyze/engine.h"
-#include "train/gpu_funcs.h"
 #include "train/train.h"
 #include "omp.h"
 #include <string.h>
