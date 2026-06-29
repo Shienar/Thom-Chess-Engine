@@ -5,6 +5,9 @@
 
 extern uint64_t tt_size_entries;
 
+//0-depth evaluation.
+#define NODE_TYPE_UNKNOWN 0
+
 //The searched node's evaluation falls in the range of (alpha, beta)
 //The saved score is exact for the given depth.
 #define NODE_TYPE_PV 1 

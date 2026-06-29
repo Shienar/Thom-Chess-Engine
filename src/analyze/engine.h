@@ -39,7 +39,7 @@ extern int isCalculating;
 
 #define LARGE_DELTA 500
 
-void initLMTable();
+void initSearchTables();
 int perft(bitboard* board, int depth, int verbose);
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply);
 int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV);

@@ -1,6 +1,7 @@
 #include "hashtables/transpositiontable.h"
 #include "debug.h"
 #include "board/bitboard.h"
+#include "board/moves.h"
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;
@@ -65,7 +66,7 @@ table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_
     return (table_entry_tt){0};
 }
 
-
+//TODO - TT results in +200 elo, but also causes 1-move blunders.
 void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
 {
     assert(tt);
@@ -73,10 +74,22 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
     size_t index = entry.hashCode%tt->capacity;
 
     table_entry_tt existingEntry = {
-        .data = tt->array[index].data
+        .data = tt->array[index].data,
+        .hashCode = tt->array[index].hashCode
     };
 
-    if(entry.age < existingEntry.age + entry.depth || entry.depth < existingEntry.depth) return;
+    if(entry.nodeType != NODE_TYPE_UNKNOWN && existingEntry.hashCode) 
+        return;
+
+    //Replacement rules for same position.
+    if(entry.hashCode == (existingEntry.hashCode ^ existingEntry.data))
+    {
+        if(existingEntry.depth >= entry.depth + 2)
+            return;
+        
+        if(!IS_VALID_MOVE(((move_c) entry.bestMove)))
+            entry.bestMove = existingEntry.bestMove;
+    }
 
     if(entry.evaluation > MIN_MATE_SCORE) entry.evaluation += ply; 
     else if(entry.evaluation < -MIN_MATE_SCORE)  entry.evaluation -= ply;

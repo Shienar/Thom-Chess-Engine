@@ -486,7 +486,7 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
     *isReady = 1;
     if(zobrist_piece_keys[0][0] == 0) initZobristPieceKeys();
     
-    initLMTable();
+    initSearchTables();
 
     if(rookTable[0] == 0) initMagics();
     if(pawnAttacks[0][0] == 0) initPawnAttacks();

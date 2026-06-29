@@ -108,7 +108,6 @@ typedef struct bitboard {
     uint16_t lastChangeIndex;
 
     //A pawn can capture to this square.
-    //[0,63] OR -1 if empty.
     int8_t enPassantSquare;
 
     //Other

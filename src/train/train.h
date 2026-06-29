@@ -6,8 +6,6 @@
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
-#define ADAM_EPSILON 1e-8f
-#define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
 #define OUTPUT_SCALE 16
@@ -34,7 +32,7 @@
  */
 void train(int maxIterations, float maxAllowedError);
 
-#pragma pack(push, 1) // no padding
+#pragma pack(push, 1)
 typedef struct {
     uint64_t occupancy;   // Bitboard of all pieces
     uint8_t  pieces[16];  // 4-bits per piece (bits then low bits)
