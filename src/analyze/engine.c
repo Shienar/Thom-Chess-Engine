@@ -377,7 +377,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 }
                 
                 //PVS Re-search
-                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -score, next_depth, ply + 1, &childPV);
+                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
             }
             
             unmove(board);
@@ -745,7 +745,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         for(int i = 0; i < context->pv.length; i++)
         {
             move_c m = context->pv.line[i];
-            if(!IS_VALID_MOVE(m)) break;
             char startSq[3] = {'\0'};
             char endSq[3] = {'\0'};
             getSquareName(m.startSquare, startSq);
