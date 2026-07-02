@@ -8,7 +8,6 @@
 #define ADAM_BETA2 0.999f
 
 #define EVAL_SCALE 400.0f
-#define OUTPUT_SCALE 16
 #define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
@@ -18,19 +17,43 @@
 //Every FEN_SKIPth entry is saved. Offsets are set to minibatchNumber%FEN_SKIP
 #define FEN_SKIP 25
 
+//N in 1000 chance to shift the king or output bucket.
+//An attempt at blending the difference between neighboring buckets.
+#define PERMUTE_BUCKET_PROBABILITY 200
+
+//Only train and use part of the network, broadcast trained weights to other buckets.
+#define COMPRESS_KING_BUCKET
+#define COMPRESS_OUTPUT_BUCKET
+
 /**
- * Ranger
- *      - https://arxiv.org/pdf/2106.13731
+ * 2 x ((10 x 768) -> 512) -> (8 x 1)
  * 
- *  - Adaptive Moment Estimation 
+ * Training progression (Train until plateau at each, then continue with QAT, then make it pass SPRT):
+ * 1. Force single input/output buckets
+ *      - 2 x (768->512) -> 1.
+ * 2. Expand to multiple king buckets.
+ *      - 2 x ((10 x 768) -> 512) -> 1
+ * 3. Expand to multiple output buckets
+ *      - 2 x ((10 x 768) -> 512) -> (8 x 1)
+ * 
+ * References / Algorithms:
+ * 
+ *      Ranger
+ *          - https://arxiv.org/pdf/2106.13731
+ *      - Adaptive Moment Estimation 
  *          - https://arxiv.org/abs/1412.6980v8
- *  - Weight Decay
- *  - RAdam
+ *      - Weight Decay
+ *      - RAdam
  *          - https://arxiv.org/pdf/1908.03265
- *  - Lookahead
+ *      - Lookahead
  *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
  */
 void train(int maxIterations, float maxAllowedError);
+
+void compressKingBucket(training_weights* weights);
+void compressOutputBucket(training_weights* weights);
+void broadcastKingBucket(training_weights* weights);
+void broadcastOutputBucket(training_weights* weights);
 
 #pragma pack(push, 1)
 typedef struct {

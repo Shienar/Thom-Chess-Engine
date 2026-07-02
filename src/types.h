@@ -125,31 +125,44 @@ typedef struct magic {
 
 #define QA 255
 #define QB 64
+#define QA_RSHIFT 8
+#define QB_RSHIFT 6
+#define OUTPUT_SCALE_RSHIFT 4
 
-#define INPUT_BITS 1536
+#define KING_BUCKETS 10
+#define BITS_PER_KING_BUCKET 768
+#define OUTPUT_BUCKETS 8
+#define BITBOARDS_PER_INPUT_SIDE (PIECE_COUNT * KING_BUCKETS)
+
+#define INPUT_BITS (2 * BITS_PER_KING_BUCKET * KING_BUCKETS)
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
-#define ACCUMULATOR_NODES 512
+#define ACCUMULATOR_NODES 1024
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 
-// 2x(768 -> 256) -> 1
 typedef struct quantized_weights {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int8_t weights2[ACCUMULATOR_NODES];
-    int32_t weights2_bias;
+    int8_t weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
+    int32_t weights2_bias[OUTPUT_BUCKETS];
 } quantized_weights;
 typedef struct training_weights {
     float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    float weights2[ACCUMULATOR_NODES];
-    float weights2_bias;
+    float weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
+    float weights2_bias[OUTPUT_BUCKETS];
 } training_weights;
 
 typedef struct accumulator {
-    uint64_t inputNodes[24];
+    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
     uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
     int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
+
+typedef struct accumulatorRefreshTable {
+    bitboard* boards[2][64];
+    accumulator accumulators[2][64];
+    uint8_t initialized[2][64];
+} accumulatorRefreshTable;
 
 typedef struct PVar {
     int length;
@@ -170,6 +183,7 @@ typedef struct searchThreadContext {
     int16_t score;
     bitboard* board;
     accumulator* accumulator;
+    accumulatorRefreshTable* refreshTable;
     PVar pv;
     
     //Improving heuristic

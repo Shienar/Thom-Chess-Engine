@@ -40,14 +40,16 @@ size_t bias2Count = sizeof(((training_weights*)0)->weights2_bias) / sizeof(float
 
 short* host_activeInputs_A = NULL; 
 float* host_expectedOutputs_A = NULL;
+char* host_outputBuckets_A = NULL;
 short* host_activeInputs_B = NULL;
 float* host_expectedOutputs_B = NULL;
+char* host_outputBuckets_B = NULL;
 float* host_lossbuffer = NULL;
 
 void* calculateAccumulatorArgs[4];
-void* fpropArgs[4];
-void* backpropArgs[7];
-void* grad2Args[4];
+void* fpropArgs[5];
+void* backpropArgs[8];
+void* grad2Args[5];
 void* grad1Args[4];
 void* inputAdamArgs[8];
 void* denseAdamArgs[16];
@@ -94,10 +96,11 @@ unsigned char* loadCompiledKernels(size_t* size)
     return binary;
 }
 
-hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A,
-                                                        short** h_active_B, float** h_expected_B,
+hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A, char** h_bucket_A,
+                                                        short** h_active_B, float** h_expected_B, char** h_bucket_B,
                                                         float** h_lossbuffer)
 {
+
     cosineIntervalLength = FIRST_INTERVAL;
     cosineTimestamp = 0;
     timestamp = 0;
@@ -147,20 +150,26 @@ hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_
     //Host pinning (Staging buffers)
     hipHostMalloc((void**)&host_activeInputs_A, 64 * MINIBATCH_SIZE * sizeof(short), hipHostMallocDefault);
     hipHostMalloc((void**)&host_expectedOutputs_A, MINIBATCH_SIZE * sizeof(float), hipHostMallocDefault);
+    hipHostMalloc((void**)&host_outputBuckets_A, MINIBATCH_SIZE * sizeof(char), hipHostMallocDefault);
     hipHostMalloc((void**)&host_activeInputs_B, 64 * MINIBATCH_SIZE * sizeof(short), hipHostMallocDefault);
     hipHostMalloc((void**)&host_expectedOutputs_B, MINIBATCH_SIZE * sizeof(float), hipHostMallocDefault);
+    hipHostMalloc((void**)&host_outputBuckets_B, MINIBATCH_SIZE * sizeof(char), hipHostMallocDefault);
     hipHostMalloc((void**)&host_lossbuffer, MINIBATCH_SIZE * sizeof(float), hipHostMallocDefault);
     //Export pointers
     *h_active_A = host_activeInputs_A;
     *h_expected_A = host_expectedOutputs_A;
+    *h_bucket_A = host_outputBuckets_A;
     *h_active_B = host_activeInputs_B;
     *h_expected_B = host_expectedOutputs_B;
+    *h_bucket_B = host_outputBuckets_B;
     *h_lossbuffer = host_lossbuffer;
     //gpu buffers (copied from host-pinning)
     hipMalloc(&hip_mem.mem.activeInputs_A, 64 * MINIBATCH_SIZE * sizeof(short));
     hipMalloc(&hip_mem.mem.activeInputs_B, 64 * MINIBATCH_SIZE * sizeof(short));
     hipMalloc(&hip_mem.mem.expectedOutput_A, MINIBATCH_SIZE * sizeof(float));
     hipMalloc(&hip_mem.mem.expectedOutput_B, MINIBATCH_SIZE * sizeof(float));
+    hipMalloc(&hip_mem.mem.outputBucket_A, MINIBATCH_SIZE * sizeof(char));
+    hipMalloc(&hip_mem.mem.outputBucket_B, MINIBATCH_SIZE * sizeof(char));
     hipMalloc(&hip_mem.mem.loss, MINIBATCH_SIZE * sizeof(float));
     //Fast weights
     hipMalloc(&hip_mem.mem.weights1_fast, weight1Size);
@@ -237,6 +246,7 @@ hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_
     fpropArgs[1] = &hip_mem.mem.weights2_fast;
     fpropArgs[2] = &hip_mem.mem.bias2_fast;
     fpropArgs[3] = &hip_mem.mem.finalOutput;
+    //fpropArgs[4] = output bucket
 
     backpropArgs[0]  = &hip_mem.mem.finalOutput;
     //backpropArgs[1] = expectedOutput;
@@ -245,11 +255,13 @@ hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_
     backpropArgs[4] = &hip_mem.mem.delta2;
     backpropArgs[5] = &hip_mem.mem.delta1;
     backpropArgs[6] = &hip_mem.mem.loss;
+    //backpropArgs[7] = output bucket
 
     grad2Args[0] = &hip_mem.mem.delta2;
     grad2Args[1] = &hip_mem.mem.accumulatorOutput;
     grad2Args[2] = &hip_mem.mem.gradient2Sum;
     grad2Args[3] = &hip_mem.mem.gradientBias2Sum;
+    //grad2Args[4] = output bucket
 
     //grad1Args[0] = active inputs;
     grad1Args[1] = &hip_mem.mem.delta1;
@@ -302,12 +314,16 @@ void freeHIP()
     if(host_activeInputs_B) hipHostFree(host_activeInputs_B);
     if(host_expectedOutputs_A) hipHostFree(host_expectedOutputs_A);
     if(host_expectedOutputs_B) hipHostFree(host_expectedOutputs_B);
+    if(host_outputBuckets_A) hipHostFree(host_outputBuckets_A);
+    if(host_outputBuckets_B) hipHostFree(host_outputBuckets_B);
     if(host_lossbuffer) hipHostFree(host_lossbuffer);
 
     host_activeInputs_A = NULL;
     host_activeInputs_B = NULL;
     host_expectedOutputs_A = NULL;
     host_expectedOutputs_B = NULL;
+    host_outputBuckets_A = NULL;
+    host_outputBuckets_B = NULL;
     host_lossbuffer = NULL;
 
     for (int i = 0; i < MEM_COUNT; i++) 
@@ -355,6 +371,9 @@ void enqueueKernels(int bufferSide, int doBackprop)
     hipMemcpyAsync((bufferSide == INPUT_GROUP_A) ? hip_mem.mem.expectedOutput_A : hip_mem.mem.expectedOutput_B, 
                     (bufferSide == INPUT_GROUP_A) ? host_expectedOutputs_A : host_expectedOutputs_B, 
                     MINIBATCH_SIZE * sizeof(float), hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync((bufferSide == INPUT_GROUP_A) ? hip_mem.mem.outputBucket_A : hip_mem.mem.outputBucket_B, 
+                    (bufferSide == INPUT_GROUP_A) ? host_outputBuckets_A : host_outputBuckets_B, 
+                    MINIBATCH_SIZE * sizeof(char), hipMemcpyHostToDevice, hip_context.queue);
     
     hipMemsetAsync(hip_mem.mem.loss, 0, MINIBATCH_SIZE * sizeof(float), hip_context.queue);
 
@@ -367,6 +386,7 @@ void enqueueKernels(int bufferSide, int doBackprop)
 
     ENQUEUE_EVENT(hip_events.endEvents.calcAccum, hip_context.queue);
 
+    fpropArgs[4] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.outputBucket_A : &hip_mem.mem.outputBucket_B;
     ENQUEUE_EVENT(hip_events.startEvents.fprop, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.forwardPropagate,
                             MINIBATCH_SIZE, 1, 1,
@@ -376,6 +396,7 @@ void enqueueKernels(int bufferSide, int doBackprop)
 
 
     backpropArgs[1] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.expectedOutput_A : &hip_mem.mem.expectedOutput_B;
+    backpropArgs[7] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.outputBucket_A : &hip_mem.mem.outputBucket_B;
     ENQUEUE_EVENT(hip_events.startEvents.backprop, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.backpropagate,
                             MINIBATCH_SIZE, 1, 1,
@@ -388,9 +409,10 @@ void enqueueKernels(int bufferSide, int doBackprop)
     hipEventRecord(hip_events.readLoss, hip_context.queue); 
     if(!doBackprop) return;
 
+    grad2Args[4] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.outputBucket_A : &hip_mem.mem.outputBucket_B;
     ENQUEUE_EVENT(hip_events.startEvents.gradient2, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculateGradient2,
-                            512, 1, 1,
+                            OUTPUT_BUCKETS * ACCUMULATOR_NODES, 1, 1,
                             32,  1, 1,
                             0, hip_context.queue, grad2Args, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.gradient2, hip_context.queue);
@@ -399,7 +421,7 @@ void enqueueKernels(int bufferSide, int doBackprop)
     grad1Args[0] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.activeInputs_A: &hip_mem.mem.activeInputs_B;
     ENQUEUE_EVENT(hip_events.startEvents.gradient1, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculateGradient1,
-                            MINIBATCH_SIZE, 1, 1,
+                            MINIBATCH_SIZE,             1, 1,
                             ACCUMULATOR_NODES_PER_SIDE, 1, 1,
                             0, hip_context.queue, grad1Args, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.gradient1, hip_context.queue);

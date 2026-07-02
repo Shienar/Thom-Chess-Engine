@@ -38,7 +38,7 @@ void loadTrainingData(CompactPosition data, bitboard* board, float* expectedOutp
         if(offset % 2) piece = piece&0xF;
         else piece >>= 4;
 
-        uint64_t sqMask = (1ull << sq);
+        uint64_t sqMask = singleBitMask(sq);
         board->pieces_all |= sqMask;
         board->pieces_side[COLOR(piece)] |= sqMask;
         board->pieces[piece] |= sqMask;
@@ -65,8 +65,7 @@ void shuffle_long(uint64_t* arr, int count)
     }
 }
 
-
-static inline float sumLoss(float* loss)
+inline float sumLoss(float* loss)
 {
     __m256 tempSum1 = _mm256_setzero_ps();
     __m256 tempSum2 = _mm256_setzero_ps();
@@ -82,6 +81,27 @@ static inline float sumLoss(float* loss)
     sum128 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128)); 
     sum128 = _mm_add_ss(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 1, 1, 1))); 
     return _mm_cvtss_f32(sum128);
+}
+
+int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
+{
+    uint64_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    *state = x;
+    int y = x % 1000;
+    if(y < PERMUTE_BUCKET_PROBABILITY)
+    {
+        if(kingBucket >= 0)
+            return neighboringKingBuckets[kingBucket][y % 5];
+        else
+        {
+            if(y < PERMUTE_BUCKET_PROBABILITY / 2) return -1;
+            else return 1;
+        }
+    }
+    return 0;
 }
 
 void train(int maxIterations, float maxAllowedError)
@@ -104,15 +124,28 @@ void train(int maxIterations, float maxAllowedError)
     uint64_t* blockIndices = calloc(blockCount,  sizeof(uint64_t));
     for (int i = 0; i < blockCount; i++) 
         blockIndices[i] = (MINIBATCH_SIZE * FEN_SKIP) * i * sizeof(CompactPosition);
+        
+    shuffle_long(blockIndices, blockCount);
+    int nextReadIndex = 0;
+
+    #ifdef COMPRESS_KING_BUCKET
+    compressKingBucket(raw_weights);
+    #endif
+    #ifdef COMPRESS_OUTPUT_BUCKET
+    compressOutputBucket(raw_weights);
+    #endif
     
     short* activeInputs_A = NULL;
     float* expectedOutputs_A = NULL;
+    char* outputBuckets_A = NULL;
 
     short* activeInputs_B = NULL;
     float* expectedOutputs_B = NULL;
+    char* outputBuckets_B = NULL;
+
     float* loss_buffer = NULL;
     
-    int cl_errorcode = initHIP(raw_weights, &activeInputs_A, &expectedOutputs_A, &activeInputs_B, &expectedOutputs_B, &loss_buffer);
+    int cl_errorcode = initHIP(raw_weights, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
     if(cl_errorcode != hipSuccess) 
     {
         DEBUG_ERROR("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
@@ -154,6 +187,9 @@ void train(int maxIterations, float maxAllowedError)
         {
             bitboard* board = create_board(NULL);
             
+            #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+            uint32_t xorRNGState = (uint32_t) time(NULL);
+            #endif
             #pragma omp for schedule(static)
             for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
             {
@@ -174,8 +210,21 @@ void train(int maxIterations, float maxAllowedError)
                     inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
                 }
 
+                if(getColumn(board->kingSquare_w) > 3)
+                    for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+                if(getColumn(board->kingSquare_b) > 3)
+                    for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+
                 for(int color = 0; color < 2; color++)
                 {
+                    #ifndef COMPRESS_KING_BUCKET
+                    int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+                    baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
+                    baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
+                    baseIndex *= BITS_PER_KING_BUCKET;
+                    #else
+                    int baseIndex = 0;
+                    #endif
                     int trackedInputs = 0;
 
                     //First half matches side to move.
@@ -187,13 +236,23 @@ void train(int maxIterations, float maxAllowedError)
                         uint64_t mask = inputs[PIECE_COUNT * color + piece];
                         while(mask)
                         {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
-                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
+                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
                             trackedInputs++;
                             mask&=(mask - 1);
                         }
                     }
                     
+                    #ifndef COMPRESS_OUTPUT_BUCKET
+                    int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
+                    outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
+                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
+                    else outputBuckets_B[entryNumber] = outputBucket;
+                    #else
+                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
+                    else outputBuckets_B[entryNumber] = 0;
+                    #endif
+
                     //-1 padding
                     while(trackedInputs < 32)
                     {
@@ -224,7 +283,6 @@ void train(int maxIterations, float maxAllowedError)
     do{
         totalLoss = 0.0;
 
-        shuffle_long(blockIndices, blockCount);
         startTime = clock();
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {    
@@ -232,7 +290,13 @@ void train(int maxIterations, float maxAllowedError)
             int offset = minibatchNumber%FEN_SKIP;
             if(offset == 0)
             {
-                fseek_64(trainingDataFile, blockIndices[minibatchNumber / FEN_SKIP], SEEK_SET);
+                fseek_64(trainingDataFile, blockIndices[nextReadIndex++], SEEK_SET);
+                if(nextReadIndex >= blockCount)
+                {
+                    shuffle_long(blockIndices, blockCount);
+                    nextReadIndex = 0;
+                }
+
                 size_t size = fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
                 if(size < MINIBATCH_SIZE * FEN_SKIP) { DEBUG_ERROR("Failed reading trainingData from file."); continue; }
             }
@@ -248,6 +312,10 @@ void train(int maxIterations, float maxAllowedError)
             {
                 bitboard* board = create_board(NULL);
                 
+                #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+                uint32_t xorRNGState = (uint32_t) time(NULL);;
+                #endif
+
                 #pragma omp for schedule(static)
                 for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
                 {
@@ -268,8 +336,22 @@ void train(int maxIterations, float maxAllowedError)
                         inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
                     }
 
+                    if(getColumn(board->kingSquare_w) > 3)
+                        for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+                    if(getColumn(board->kingSquare_b) > 3)
+                        for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+                    
                     for(int color = 0; color < 2; color++)
                     {
+                        #ifndef COMPRESS_KING_BUCKET
+                        int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+                        baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
+                        baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
+                        baseIndex *= BITS_PER_KING_BUCKET;
+                        #else
+                        int baseIndex = 0;
+                        #endif
+
                         int trackedInputs = 0;
 
                         //First half matches side to move.
@@ -281,13 +363,23 @@ void train(int maxIterations, float maxAllowedError)
                             uint64_t mask = inputs[PIECE_COUNT * color + piece];
                             while(mask)
                             {
-                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
-                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
+                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
                                 trackedInputs++;
                                 mask&=(mask - 1);
                             }
                         }
-                        
+
+                        #ifndef COMPRESS_OUTPUT_BUCKET
+                        int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
+                        outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
+                        else outputBuckets_B[entryNumber] = outputBucket;
+                        #else
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
+                        else outputBuckets_B[entryNumber] = 0;
+                        #endif
+
                         //-1 padding
                         while(trackedInputs < 32)
                         {
@@ -307,7 +399,7 @@ void train(int maxIterations, float maxAllowedError)
             float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
 
-            if((minibatchNumber + 1) % 50 == 0) printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
+            if((minibatchNumber + 1) % 25 == 0) printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
         }
         totalIterations++;
         endTime = clock();
@@ -330,6 +422,10 @@ void train(int maxIterations, float maxAllowedError)
             #pragma omp parallel
             {
                 bitboard* board = create_board(NULL);
+
+                #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+                uint32_t xorRNGState = (uint32_t) time(NULL);;
+                #endif
                 
                 #pragma omp for schedule(static)
                 for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
@@ -350,9 +446,23 @@ void train(int maxIterations, float maxAllowedError)
                         inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
                         inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
                     }
+                    
+                    if(getColumn(board->kingSquare_w) > 3)
+                        for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+                    if(getColumn(board->kingSquare_b) > 3)
+                        for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
 
                     for(int color = 0; color < 2; color++)
                     {
+                        #ifndef COMPRESS_KING_BUCKET
+                        int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+                        baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
+                        baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
+                        baseIndex *= BITS_PER_KING_BUCKET;
+                        #else
+                        int baseIndex = 0;
+                        #endif
+
                         int trackedInputs = 0;
 
                         //First half matches side to move.
@@ -364,12 +474,22 @@ void train(int maxIterations, float maxAllowedError)
                             uint64_t mask = inputs[PIECE_COUNT * color + piece];
                             while(mask)
                             {
-                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
-                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = 64 * piece + __builtin_ctzll(mask);
+                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
                                 trackedInputs++;
                                 mask&=(mask - 1);
                             }
                         }
+
+                        #ifndef COMPRESS_OUTPUT_BUCKET
+                        int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
+                        outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
+                        else outputBuckets_B[entryNumber] = outputBucket;
+                        #else
+                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
+                        else outputBuckets_B[entryNumber] = 0;
+                        #endif
 
                         //-1 padding
                         while(trackedInputs < 32)
@@ -398,6 +518,12 @@ void train(int maxIterations, float maxAllowedError)
         if(validationLoss < minimumLoss)
         {
             getWeights(raw_weights);
+            #ifdef COMPRESS_KING_BUCKET
+            broadcastKingBucket(raw_weights);
+            #endif
+            #ifdef COMPRESS_OUTPUT_BUCKET
+            broadcastOutputBucket(raw_weights);
+            #endif
             saveRawWeights();
             quantizeWeights(raw_weights, int_weights);
             saveQuantizedWeights();
@@ -422,4 +548,57 @@ void train(int maxIterations, float maxAllowedError)
     free(unsortedData);
 
     freeHIP();
+}
+
+void compressKingBucket(training_weights* weights)
+{
+    int weightsPerKingBucket = BITS_PER_KING_BUCKET * ACCUMULATOR_NODES_PER_SIDE;
+    float* flatWeightPtr = &weights->weights1[0][0];
+    for(int weightIndex = 0; weightIndex < weightsPerKingBucket; weightIndex++)
+    {
+        float sum = 0.0f;
+        for(int b = 0; b < KING_BUCKETS; b++)
+        {
+            sum += flatWeightPtr[b * weightsPerKingBucket + weightIndex];
+        }
+        flatWeightPtr[weightIndex] = sum / KING_BUCKETS;
+    }
+}
+
+void compressOutputBucket(training_weights* weights)
+{
+    for(int weightIndex = 0; weightIndex < ACCUMULATOR_NODES; weightIndex++)
+    {
+        float sum = 0.0f;
+        for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        {
+            sum += weights->weights2[b][weightIndex];
+        }
+        weights->weights2[0][weightIndex] = sum / OUTPUT_BUCKETS;
+    }
+    
+    float biasSum = 0.0f;
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        biasSum += weights->weights2_bias[b];
+    
+    weights->weights2_bias[0] = biasSum / OUTPUT_BUCKETS;
+}
+
+void broadcastKingBucket(training_weights* weights)
+{
+    int weightsPerKingBucket = BITS_PER_KING_BUCKET * ACCUMULATOR_NODES_PER_SIDE;
+    float* flatWeightPtr = &weights->weights1[0][0];
+    for(int offset = weightsPerKingBucket; offset < KING_BUCKETS * weightsPerKingBucket; offset += weightsPerKingBucket)
+    {
+        memcpy(&flatWeightPtr[offset], &flatWeightPtr[0], weightsPerKingBucket * sizeof(float));
+    }
+}
+
+void broadcastOutputBucket(training_weights* weights)
+{
+    for(int b = 1; b < OUTPUT_BUCKETS; b++)
+    {
+        memcpy(weights->weights2[b], weights->weights2[0], sizeof(weights->weights2[0]));
+        memcpy(&weights->weights2_bias[b], &weights->weights2_bias[0], sizeof(weights->weights2_bias[0]));
+    }
 }

@@ -1,21 +1,21 @@
 #include <hip/hip_runtime.h>
 
 #define MINIBATCH_SIZE 16384
-#define INPUT_BITS 1536
+#define INPUT_BITS (2 * 10 * 768)
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
-#define ACCUMULATOR_NODES 512
+#define ACCUMULATOR_NODES 1024
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 #define VECTOR_ACCUMULATOR_NODES (ACCUMULATOR_NODES / 4)
 #define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 4)
-#define OUTPUT_BUCKETS 1
+#define OUTPUT_BUCKETS 8
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 #define ADAM_EPSILON 1e-8f
 #define ADAM_WEIGHT_DECAY 1e-3f
+#define OUTPUT_SCALE 16
 
 #define EVAL_SCALE 400.0f
-#define OUTPUT_SCALE 16.0f
 
 #define LOOKAHEAD_ALPHA 0.5f
 
@@ -42,7 +42,7 @@ __device__ inline float sigmoid(float x) { return 1.0f / (1.0f + __expf(-x)); }
 
 
 //Only bring in fake quantization towards the end of training
-//#define #QAT
+#define QAT
 #ifdef QAT
 __device__ inline float fake_quantize(float val, float scale, float min_int, float max_int) { return  fminf(max_int, fmaxf(min_int, rintf(val * scale))) / scale; }
 __device__ inline float4 fake_quantize4(float4 val, float scale, float min_int, float max_int) {
@@ -59,27 +59,30 @@ __device__ inline float4 fake_quantize4(float4 val, float scale, float min_int, 
 #endif
 
 /******* Forward Propagation *******/
-//~ 0.55 ms
-//Grid Dimensions:  MINIBATCH_SIZE * 2, 1, 1
-//Block Dimensions: 32,                 1, 1
-extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [MINIBATCH_SIZE][2][32] - max 32 active features
-                                                const float4* weights, //shared
-                                                const float4* bias,    //shared
-                                                float4* output)  //contains every raw output in entire batch
+//Grid Dimensions:  MINIBATCH_SIZE * 2,         1, 1
+//Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
+extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [MINIBATCH_SIZE][2][32]
+                                                const float4* weights,
+                                                const float4* bias,
+                                                float4* output)
 {
     int groupID = blockIdx.x;  // 2 groups per batch item
-    int localID = threadIdx.x;  // 0 to 31
+    int localID = threadIdx.x;
 
     int batchIndex = groupID >> 1;      // groupId / 2
     int side       = groupID & 1;       // groupId % 2
 
     int offset = batchIndex * 64 + 32 * side;
 
-    int vector1Index = localID * 2;
-    int vector2Index = localID * 2 + 1; 
+    int vector1Index = localID * 4;
+    int vector2Index = localID * 4 + 1; 
+    int vector3Index = localID * 4 + 2;
+    int vector4Index = localID * 4 + 3; 
 
     float4 sum1 = fake_quantize4(bias[vector1Index], QA, -32768.0f, 32767.0f);
     float4 sum2 = fake_quantize4(bias[vector2Index], QA, -32768.0f, 32767.0f);
+    float4 sum3 = fake_quantize4(bias[vector3Index], QA, -32768.0f, 32767.0f);
+    float4 sum4 = fake_quantize4(bias[vector4Index], QA, -32768.0f, 32767.0f);
 
     int baseIndex;
 
@@ -97,22 +100,27 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
 
         float4 w1 = fake_quantize4(weights[baseIndex + vector1Index], QA, -32768.0f, 32767.0f);
         float4 w2 = fake_quantize4(weights[baseIndex + vector2Index], QA, -32768.0f, 32767.0f);
+        float4 w3 = fake_quantize4(weights[baseIndex + vector3Index], QA, -32768.0f, 32767.0f);
+        float4 w4 = fake_quantize4(weights[baseIndex + vector4Index], QA, -32768.0f, 32767.0f);
 
         sum1.x += w1.x;  sum1.y += w1.y;  sum1.z += w1.z;  sum1.w += w1.w;
         sum2.x += w2.x;  sum2.y += w2.y;  sum2.z += w2.z;  sum2.w += w2.w;
+        sum3.x += w3.x;  sum3.y += w3.y;  sum3.z += w3.z;  sum3.w += w3.w;
+        sum4.x += w4.x;  sum4.y += w4.y;  sum4.z += w4.z;  sum4.w += w4.w;
     }
 
     baseIndex = groupID * VECTOR_ACCUMULATOR_NODES_PER_SIDE;
     output[baseIndex + vector1Index] = sum1;
     output[baseIndex + vector2Index] = sum2;
+    output[baseIndex + vector3Index] = sum3;
+    output[baseIndex + vector4Index] = sum4;
 }
 
-//~0.35ms
 //Grid Dimensions:  MINIBATCH_SIZE, 1, 1
 //Block Dimensions: 32,             1, 1
 extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
                                             float* output_weights, float* output_bias,
-                                            float* outputs)
+                                            float* outputs, char* outputBucket)
 {
     int batchIndex = blockIdx.x;
     int localID = threadIdx.x; //0-32
@@ -120,11 +128,12 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
     int baseIndex = batchIndex * ACCUMULATOR_NODES;
 
     float myOutputContribution = 0.0f;
+    int bucket = outputBucket[batchIndex];
 
     #pragma unroll
     for(int i = localID; i < ACCUMULATOR_NODES; i+= 32)
     {
-        myOutputContribution += fake_quantize(screlu(accumulatorOutput[baseIndex + i]), QA, 0.0f, QA) * output_weights[i];
+        myOutputContribution += fake_quantize(screlu(accumulatorOutput[baseIndex + i]), QA, 0.0f, QA) * output_weights[bucket * ACCUMULATOR_NODES + i];
     }
 
     __syncthreads();
@@ -138,9 +147,8 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
 
     if(localID == 0)  
     {
-        float finalOutput = myOutputContribution + fake_quantize(*output_bias, QA * QB, -2147483648.0f, 2147483647.0f);
+        float finalOutput = myOutputContribution + fake_quantize(output_bias[bucket], QA * QB, -2147483648.0f, 2147483647.0f);
         
-        //32 float weights in range of [-2, 1.98] cannot reach expected outputs in range of +-10,000 so we must scale the output.
         //Scale by the relative scale of the quantized output node during fprop.
         finalOutput *= (QA / OUTPUT_SCALE);
 
@@ -150,7 +158,6 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
 
 /******* Backpropagation (Delta calculations) *******/
 
-//~0.66 ms
 //Grid Dimensions:  MINIBATCH_SIZE,             1, 1
 //Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
 extern "C" __global__ void backpropagate( const float* outputNodes, const float* expectedOutputs,
@@ -158,10 +165,13 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
                             const float* weights2,
                             float* delta2,
                             float* delta1,
-                            float* loss)
+                            float* loss, 
+                            char* outputBucket)
 {
     int batchIndex = blockIdx.x; //0-16383
-    int localID = threadIdx.x; //0-255
+    int localID = threadIdx.x; //0-511
+
+    int bucket = outputBucket[batchIndex];
 
     __shared__ float shared_d2;
 
@@ -181,25 +191,28 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
     __syncthreads();
 
     //delta 1
-    //512 delta / 256 threads = 2 deltas per
-    for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=256) 
+    //1024 delta / 512 threads = 2 deltas per
+    for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=ACCUMULATOR_NODES_PER_SIDE) 
     {
-        float sum = shared_d2 * fake_quantize(weights2[nodeIndex], QB, -128.0f, 127.0f);
+        float sum = shared_d2 * fake_quantize(weights2[bucket * ACCUMULATOR_NODES + nodeIndex], QB, -128.0f, 127.0f);
         delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
     }
 }
 
 /******* Calculate & Accumulate Edge Weight Gradients *******/
 
-//~2.2 ms
-//Grid Dimensions:  512, 1, 1
-//Block Dimensions: 32, 1, 1
-extern "C" __global__ void calculateGradient2(const float* delta2, //1 per batch sample
-                                    const float* h1, //ACCUMULATOR_NODES per batch sample
-                                    float* gradient2_Sum, //ACCUMULATOR_NODES per batch sample shared
-                                    float* bias2_Sum)
+//Grid Dimensions:  OUTPUT_BUCKETS * ACCUMULATOR_NODES, 1, 1
+//Block Dimensions: 32,                                 1, 1
+extern "C" __global__ void calculateGradient2(const float* delta2,
+                                    const float* h1,
+                                    float* gradient2_Sum,
+                                    float* bias2_Sum,
+                                    char* outputBucket)
 {
     int weightIndex = blockIdx.x;
+    int bucketWeightIndex = weightIndex % ACCUMULATOR_NODES;
+    int weightBucket = weightIndex / ACCUMULATOR_NODES;
+
     int localID = threadIdx.x;
 
     float partialSum = 0.0f;
@@ -208,14 +221,18 @@ extern "C" __global__ void calculateGradient2(const float* delta2, //1 per batch
     for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex += 32) 
     {
         float d2 = delta2[batchIndex];
+        int bucket = outputBucket[batchIndex];
 
-        partialSum += d2 * fake_quantize(screlu(h1[512 * batchIndex + weightIndex]), QA, 0.0f, QA);
-        if(weightIndex == 0) partialBiasSum += d2;
+        if(bucket == weightBucket)
+        {
+            partialSum += d2 * fake_quantize(screlu(h1[ACCUMULATOR_NODES * batchIndex + bucketWeightIndex]), QA, 0.0f, QA);
+            if(weightIndex == 0) partialBiasSum += d2;
+        }
     }
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
-    for (int offset = 16; offset > 0; offset /= 2) 
+    for (int offset = 16; offset > 0; offset /= 2)
     {
         partialSum += __shfl_down_sync(mask_32, partialSum, offset, 32);
         if(weightIndex == 0) partialBiasSum += __shfl_down_sync(mask_32, partialBiasSum, offset, 32);
@@ -228,39 +245,38 @@ extern "C" __global__ void calculateGradient2(const float* delta2, //1 per batch
     }
 }
 
-//~3.9ms.
 //Grid Dimensions:  MINIBATCH_SIZE,             1, 1
 //Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
-extern "C" __global__ void calculateGradient1(const short* activeInputs,       //contains indexes of weights of every active input in entire batch - [MINIBATCH_SIZE][2][32] - max 32 active features
-                                    const float* delta1, // ACCUMULATOR_NODES per batch sample
-                                    float* gradient1_Sum, // ACCUMULATOR_NODES_PER_SIDE * HALF_INPUT_BITS shared
-                                    float* bias1_Sum)    // ACCUMULATOR_NODES_PER_SIDE shared
+extern "C" __global__ void calculateGradient1(const short* activeInputs, //[MINIBATCH_SIZE][2][32]
+                                    const float* delta1, 
+                                    float* gradient1_Sum, 
+                                    float* bias1_Sum)
 {
     int batchIndex = blockIdx.x;
     int localID = threadIdx.x;
 
     // Shared storage for the 64 active features of this board position
     __shared__ short sharedFeatures[64];
-    __shared__ float d1[512];
+    __shared__ float d1[ACCUMULATOR_NODES];
 
     if(localID < 64) sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
     
     int offset = batchIndex * ACCUMULATOR_NODES;
     
     #pragma unroll
-    for(int i= localID; i < ACCUMULATOR_NODES; i+=256)
+    for(int i = localID; i < ACCUMULATOR_NODES; i+=ACCUMULATOR_NODES_PER_SIDE)
     {
         d1[i] = delta1[offset + i];
     }
     __syncthreads();
 
-    __shared__ float local_grad_sum_A[256];
-    __shared__ float local_grad_sum_B[256];
+    __shared__ float local_grad_sum_A[ACCUMULATOR_NODES_PER_SIDE];
+    __shared__ float local_grad_sum_B[ACCUMULATOR_NODES_PER_SIDE];
 
     int f = 0;
     while(sharedFeatures[f] != -1 && f < 32)
     {
-        //Local accumulation and featureA/B saves 0.2ms.
+        //Local accumulation and featureA/B saves a small amount of time.
         local_grad_sum_A[localID] = d1[localID];
         local_grad_sum_B[localID] = d1[ACCUMULATOR_NODES_PER_SIDE + localID];
         __syncthreads();
@@ -289,15 +305,12 @@ extern "C" __global__ void calculateGradient1(const short* activeInputs,       /
         if(rectificationTerm > 0.0f) { \
             float denominator = sqrtf(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON; \
             weight[i] -= lr * rectificationTerm * (correctedFirstMoment / denominator); \
-        } else { \
-            weight[i] -= lr * correctedFirstMoment; \
-        } \
+        } else weight[i] -= lr * correctedFirstMoment; \
         weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
         weight[i] = fminf(max, fmaxf(min, weight[i])); \
         gradientSum[i] = 0.0f; \
     }
 
-//~0.1 ms
 //Grid Dimensions:  weight2Count / 32, 1, 1
 //Block Dimensions: 32,                1, 1
 extern "C" __global__ void adamW(float* w2, float* g2, float* m2, float* v2,
@@ -306,14 +319,13 @@ extern "C" __global__ void adamW(float* w2, float* g2, float* m2, float* v2,
                                     float lr, float biasCorrection1, float biasCorrection2, float rectificationTerm) 
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-
-    UPDATE_ADAMW(w2, g2, m2, v2, 512, QB_8_MIN, QB_8_MAX);
-    UPDATE_ADAMW(b1, gb1, mb1, vb1, 256, QA_16_MIN, QA_16_MAX);
-    UPDATE_ADAMW(b2, gb2, mb2, vb2, 32, B_32_MIN, B_32_MAX);
+    
+    UPDATE_ADAMW(w2, g2, m2, v2, (OUTPUT_BUCKETS * ACCUMULATOR_NODES), QB_8_MIN, QB_8_MAX);
+    UPDATE_ADAMW(b1, gb1, mb1, vb1, ACCUMULATOR_NODES_PER_SIDE, QA_16_MIN, QA_16_MAX);
+    UPDATE_ADAMW(b2, gb2, mb2, vb2, OUTPUT_BUCKETS, B_32_MIN, B_32_MAX);
     
 }
 
-//~0.1ms
 //Grid Dimensions:  weight1Count / 32, 1, 1
 //Block Dimensions: 32,                1, 1
 extern "C" __global__ void inputAdamW(float* w1, float* g1, float* m1, float* v1,

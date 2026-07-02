@@ -11,6 +11,7 @@ Simply run 'make' in the main directory to compile the program.
 - 'make TRAIN=1 NVIDIA=1' will attempt to compile the trainer on NVIDIA GPUs (untested).
 - 'make DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
 - 'make PROF=1' will compile with profiling flags for gmon.
+- 'make SPSA=1' will compile with uci options for Simultaneous Perturbation Stochastic Approximation
 
 ### COMPATIBLITY:
 
@@ -19,9 +20,9 @@ The training kernels require HIP SDK to run. They were created specifically for 
 
 ### ACKNOWLEDGEMENTS:
 
-- The engine uses komodo's opening book binary file by Salvo Spitaleri, which is available at https://komodochess.com/downloads.htm
+- The engine uses the gm2600.bin polyglot opening book from Scid vs PC.
 - Ronald de Man's sygyzy tablebase is used for endgame analysis. A tablebase generator is available at https://github.com/syzygy1/tb
 - Andy Grant's sygyzy probing tool Pyrrhic is used to probe the sygyzy files. It is available at https://github.com/AndyGrant/Pyrrhic
 - The chess programming wiki (https://www.chessprogramming.org/) contains a lot of valuable information that was very helpful to me when I started this project.
 - Dominik Klein's book "Neural Networks for Chess" helped me get started on understanding chess NNUEs. You can find it at https://github.com/asdfjkl/neural_network_chess
-- Training data from https://robotmoon.com/nnue-training-data/ was used during the extensive debugging & optimization of the training kernels. The first version of the engine was made using this data, and subsequent versions are going to be created with self-generated data.
+- Training data from https://robotmoon.com/nnue-training-data/ was used during the extensive debugging & optimization of the training kernels. Pre-release neural nets were trained solely from this data, with later versions using self-generated data.

@@ -14,6 +14,10 @@ ifdef PROF
 	CFLAGS += -pg -no-pie
 endif
 
+ifdef SPSA
+	CFLAGS += -DSPSA
+endif
+
 SRC_DIR = src
 TGT_DIR = target
 OBJ_DIR = $(TGT_DIR)/obj

@@ -18,26 +18,24 @@
 #endif
 
 //CPU fills one group while gpu uses other group.
-//All copy instructinos get placed in a queue so this might seem redundant, 
-//but using ping-pong buffers increases positions/second by 9.375%. Probably because
-//it can safely overlap copying with kernel execution since its copying into a buffer
-//that isn't being used.
+//All copy instructinos get placed in a queue so this seema redundant, 
+//but using ping-pong buffers increases positions/second by approximately 9.375%. 
+//I'd guess that this is because it can safely overlap copying with kernel execution since
+//its copying into a buffer that isn't being used, but I can't be certain. Weight updates are
+//at the end of the queue for a minibatch and they don't use the shared buffers.
 #define INPUT_GROUP(block) (block&1)
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
-/**
- * cosine annealing is done using timestamp in enqueueKernels()
- */
 #define MAX_LR 8e-5f
 #define MIN_LR 2.5e-6f
 #define INTERVAL_SCALE 1.5f
 #define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
-#define MAX_INTERVALS 20
+#define MAX_INTERVALS 12
 #define LOOKAHEAD_RANGE 10
 
 #define KERNEL_COUNT 8
-#define MEM_COUNT 29
+#define MEM_COUNT 31
 #define EVENT_TRACKED_KERNELS (KERNEL_COUNT - 1)
 typedef struct {
     int deviceID;
@@ -69,9 +67,11 @@ typedef struct {
         {
             void* activeInputs_A;
             void* expectedOutput_A;
+            void* outputBucket_A;
 
             void* activeInputs_B;
             void* expectedOutput_B;
+            void* outputBucket_B;
 
             void* weights1_fast;
             void* weights2_fast;
@@ -152,8 +152,8 @@ extern hipContext hip_context;
 extern hipKernelArgs hip_args;
 extern hipEvents hip_events;
 
-hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A,
-                                                        short** h_active_B, float** h_expected_B,
+hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_expected_A, char** h_bucket_A,
+                                                        short** h_active_B, float** h_expected_B, char** h_bucket_B,
                                                         float** h_lossbuffer);
 void freeHIP();
 

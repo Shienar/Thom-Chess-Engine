@@ -204,7 +204,7 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
         
         if(board->enPassantSquare != NO_EP_SQUARE)
         {
-            uint64_t epMask = 1ull << board->enPassantSquare;
+            uint64_t epMask = singleBitMask(board->enPassantSquare);
             mask = EN_PASSANT_ATTACKERS_BLACK(epMask, board);
             while(mask)
             {

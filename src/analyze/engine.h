@@ -14,30 +14,30 @@ extern int isCalculating;
 #define MIN_THREADS 1
 #define MAX_THREADS 64
 
-#define MIN_ASPIRATION_DEPTH 5
-#define INITIAL_ASPIRATION_MARGIN 20
-#define MAXIMUM_ASPIRATION_MARGIN 160
-#define ASPIRATION_MARGIN_MULT_FACTOR 2
+extern const int min_aspiration_depth;
+extern const int reverse_futility_pruning_depth;
+extern const int futility_pruning_depth;
+extern const int nullmove_pruning_depth;
+extern const int probcut_depth;
+extern const int probcut_depth_reduction;
+extern const int lm_depth;
 
-#define REVERSE_FUTILITY_PRUNING_DEPTH 4
-#define REVERSE_FUTILITY_MARGIN 200
-#define REVERSE_FUTILITY_MARGIN_IMPROVING 125
+extern int initial_aspiration_margin;
+extern int maximum_aspiration_margin;
+extern float aspiration_margin_mult_factor;
 
-#define FUTILITY_PRUNING_DEPTH 2
-#define FUTILITY_MARGIN 350
+extern int reverse_futility_margin;
+extern int reverse_futility_margin_improving;
 
-#define NULLMOVE_PRUNING_DEPTH 5
+extern int futility_margin;
 
-#define PROBCUT_DEPTH 8
-#define PROBCUT_DEPTH_REDUCTION 4
-#define PROBCUT_OFFSET 400
-#define PROBCUT_OFFSET_IMPROVING 300
+extern int probcut_offset;
+extern int probcut_offset_improving;
 
-#define LM_DEPTH 4
-#define LM_BASE 2.0f
-#define LM_SCALE 0.5f
+extern float lm_base;
+extern float lm_scale;
 
-#define LARGE_DELTA 500
+extern int delta_pruning_offset;
 
 void initSearchTables();
 int perft(bitboard* board, int depth, int verbose);

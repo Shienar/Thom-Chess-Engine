@@ -60,6 +60,22 @@ int main(int argc, char** argv)
                 printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
+                #ifdef SPSA
+                printf("option name initial_aspiration_margin type spin default 38 min 10 max 100\n");
+                printf("option name maximum_aspiration_margin type spin default 150 min 50 max 200\n");
+                printf("option name aspiration_margin_mult_factor type spin default 2.0 min 1.2 max 3.0\n");
+
+                printf("option name reverse_futility_margin type spin default 150 min 100 max 400\n");
+                printf("option name reverse_futility_margin_improving type spin default 125 min 50 max 200\n");
+                printf("option name futility_margin type spin default 350 min 150 max 450\n");
+                printf("option name delta_pruning_offset type spin default 500 min 200 max 600\n");
+
+                printf("option name probcut_offset type spin default 400 min 200 max 600\n");
+                printf("option name probcut_offset_improving type spin default 300 min 200 max 500\n");
+
+                printf("option name lm_base type spin default 2.0 min 1.0 max 4.0\n");
+                printf("option name lm_scale type spin default 0.5 min 0.2 max 1.0\n");
+                #endif
                 printf("uciok\n");
                 fflush(stdout);
                 break;
@@ -84,63 +100,47 @@ int main(int argc, char** argv)
                     {
                         if(strcmp(str, "Hash") == 0)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "value") == 0)
-                                {
-                                    str = _strtok(NULL, delim, &strtok_ptr);
-                                    uint64_t byteSize;
-                                    sscanf(str, "%" PRIu64 "", &byteSize);
-                                    tt_size_entries = (byteSize * 1024 * 1024) / sizeof(table_entry_tt);
-                                    destroy_hashTable_tt(transpositionTable);
-                                    transpositionTable = create_hashTable_tt();
-                                }
+                                uint64_t byteSize;
+                                sscanf(str, "%" PRIu64 "", &byteSize);
+                                tt_size_entries = (byteSize * 1024 * 1024) / sizeof(table_entry_tt);
+                                destroy_hashTable_tt(transpositionTable);
+                                transpositionTable = create_hashTable_tt();
                             }
-                            
                             break;
                         }
                         else if(strcmp(str, "Threads") == 0)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "value") == 0)
+                                if(isCalculating)
                                 {
-                                    str = _strtok(NULL, delim, &strtok_ptr);
-                                    if(isCalculating)
-                                    {
-                                        DEBUG_ERROR("Cannot change thread count while calculating.");
-                                        break;
-                                    }
-                                    sscanf(str, "%d", &threadCount);
-                                    threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
-                                    omp_set_num_threads(threadCount); 
+                                    DEBUG_ERROR("Cannot change thread count while calculating.");
+                                    break;
                                 }
+                                sscanf(str, "%d", &threadCount);
+                                threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
+                                omp_set_num_threads(threadCount); 
                             }
                             
                             break;
                         }
                         else if(strcmp(str, "Ponder") == 0)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "value") == 0)
-                                {
-                                    str = _strtok(NULL, delim, &strtok_ptr);
-                                    if(strcmp(str, "true") == 0) { enablePonder = 1; }
-                                    else { enablePonder = 0; }
-                                }
+                                if(strcmp(str, "true") == 0) { enablePonder = 1; }
+                                else { enablePonder = 0; }
                             }
                             break;
-                        }else if(strcmp(str, "OwnBook") == 0)
+                        }
+                        else if(strcmp(str, "OwnBook") == 0)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "value") == 0)
-                                {
-                                    str = _strtok(NULL, delim, &strtok_ptr);
-                                    if(strcmp(str, "true") == 0) { useBook = 1; loadBook(); }
-                                    else { useBook = 0; unloadBook(); }
-                                }
+                                if(strcmp(str, "true") == 0) { useBook = 1; loadBook(); }
+                                else { useBook = 0; unloadBook(); }
                             }
                             break;
                         }
@@ -155,34 +155,93 @@ int main(int argc, char** argv)
                         }
                         else if(strcmp(str, "SygyzyPath") == 0)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "value") == 0)
-                                {
-                                    if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) 
-                                    {
-                                        strncpy(sygyzyPath, str, 1023);
-                                        sygyzyPath[1023] = '\0';
-                                        isPathDirty = 1;
-                                    }
-                                }
+                                strncpy(sygyzyPath, str, 1023);
+                                sygyzyPath[1023] = '\0';
+                                isPathDirty = 1;
                             }
                             break;
                         }
                         else if(strcmp(str, "SygyzyProbeLimit") == 0)
                         {
-                            str = _strtok(NULL, delim, &strtok_ptr);
-                            if(str) sscanf(str, "%d", &sygyzyProbeLimit);
-                            sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            {
+                                sscanf(str, "%d", &sygyzyProbeLimit);
+                                sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
+                            }
                             break;
                         }
                         else if(strcmp(str, "SyzygyProbeDepth") == 0)
                         {
-                            str = _strtok(NULL, delim, &strtok_ptr);
-                            if(str) sscanf(str, "%d", &sygyzyProbeDepth);
-                            sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                            {
+                                if(str) sscanf(str, "%d", &sygyzyProbeDepth);
+                                sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
+                            }
                             break;
                         }
+                        #ifdef SPSA
+                        else if(strcmp(str, "initial_aspiration_margin") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &initial_aspiration_margin);
+                            break;
+                        }
+                        else if(strcmp(str, "maximum_aspiration_margin") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &maximum_aspiration_margin);
+                        }
+                        else if(strcmp(str, "aspiration_margin_mult_factor") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%f", &aspiration_margin_mult_factor);
+                            break;
+                        }
+                        else if(strcmp(str, "reverse_futility_margin") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &reverse_futility_margin);
+                            break;
+                        }
+                        else if(strcmp(str, "reverse_futility_margin_improving") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &reverse_futility_margin_improving);
+                            break;
+                        }
+                        else if(strcmp(str, "futility_margin") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &futility_margin);
+                            break;
+                        }
+                        else if(strcmp(str, "probcut_offset") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &probcut_offset);
+                            break;
+                        }
+                        else if(strcmp(str, "probcut_offset_improving") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &probcut_offset_improving);
+                            break;
+                        }
+                        else if(strcmp(str, "lm_base") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%f", &lm_base);
+                            break;
+                        }
+                        else if(strcmp(str, "lm_scale") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%f", &lm_scale);
+                            break;
+                        }
+                        #endif
                         break;
                     }
                 }
@@ -497,8 +556,10 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
 
     if(!transpositionTable) transpositionTable = create_hashTable_tt();
     if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));
+    if(!playingRefreshTable) playingRefreshTable = createRefreshTable();
     
     context->accumulator = playerAccumulator;
+    context->refreshTable = playingRefreshTable;
 
     if(*useBook) loadBook();
     else unloadBook();

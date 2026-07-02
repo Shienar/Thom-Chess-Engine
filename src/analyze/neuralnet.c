@@ -38,15 +38,16 @@ void loadRawWeights()
 
     //Biases get left at 0.0 from calloc.
 
-    double standardDeviation = sqrt(2.0/30.0);
+    double standardDeviation = sqrt(2.0/32.0);
     
     for(int i = 0; i < HALF_INPUT_BITS; i++)
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
             sampleNormalDistribution(&raw_weights->weights1[i][j], standardDeviation);
 
-    standardDeviation = sqrt(2.0 / 512.0);
-    for(int i = 0; i < ACCUMULATOR_NODES; i++)
-        sampleNormalDistribution(&raw_weights->weights2[i], standardDeviation);
+    standardDeviation = sqrt(2.0 / ACCUMULATOR_NODES);
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        for(int i = 0; i < ACCUMULATOR_NODES; i++)
+            sampleNormalDistribution(&raw_weights->weights2[b][i], standardDeviation);
 
     saveRawWeights();
 }
@@ -71,15 +72,17 @@ void quantizeWeights(training_weights* inputFloats, quantized_weights* outputInt
     for(int i = 0; i < HALF_INPUT_BITS; i++)
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
             outputInts->weights1[i][j] = (int16_t) clamp(lroundf(inputFloats->weights1[i][j] * QA), INT16_MIN, INT16_MAX);
-
-    for(int i = 0; i < ACCUMULATOR_NODES; i++)
-            outputInts->weights2[i] = (int8_t) clamp(lroundf(inputFloats->weights2[i] * QB), INT8_MIN, INT8_MAX);
+    
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        for(int i = 0; i < ACCUMULATOR_NODES; i++)
+                outputInts->weights2[b][i] = (int8_t) clamp(lroundf(inputFloats->weights2[b][i] * QB), INT8_MIN, INT8_MAX);
             
     //bias 1-4
     for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++) 
         outputInts->weights1_bias[i] = (int16_t) clamp(lroundf(inputFloats->weights1_bias[i] * QA), INT16_MIN, INT16_MAX);
 
-    outputInts->weights2_bias = (int32_t) clamp(lroundf(inputFloats->weights2_bias * QA * QB), INT32_MIN, INT32_MAX);
+    for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        outputInts->weights2_bias[b] = (int32_t) clamp(lroundf(inputFloats->weights2_bias[b] * QA * QB), INT32_MIN, INT32_MAX);
 }
 
 void loadQuantizedWeights()
@@ -179,12 +182,12 @@ void print_weight_stats(const char* name, const float* data, size_t size)
 
 void print_network_statistics() 
 {
-    if(!raw_weights) return;
+    if(!raw_weights) loadRawWeights();
 
     print_weight_stats("weights1", &raw_weights->weights1[0][0], sizeof(raw_weights->weights1) / sizeof(float));
     print_weight_stats("weights1_bias", raw_weights->weights1_bias, sizeof(raw_weights->weights1_bias) / sizeof(float));
-    print_weight_stats("weights2", &raw_weights->weights2[0], sizeof(raw_weights->weights2) / sizeof(float));
-    print_weight_stats("weights2_bias", &raw_weights->weights2_bias,sizeof(raw_weights->weights2_bias) / sizeof(float));
+    print_weight_stats("weights2", &raw_weights->weights2[0][0], sizeof(raw_weights->weights2) / sizeof(float));
+    print_weight_stats("weights2_bias", &raw_weights->weights2_bias[0],sizeof(raw_weights->weights2_bias) / sizeof(float));
 }
 
 /*** Inference ***/
@@ -218,16 +221,17 @@ int calculateOutputLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, int8_t we
     
     //QB downscaling
     //No activation
+    //Output Scaling - Why this this necessary? If I train my network with an output scaled to (QA / 16) and downshift here,
+    //my engine will be significantly stronger than if I don't. More testing/information is needed, maybe my engine's pruning
+    //values work better with this version since it has a smaller range.
     int output = _mm_cvtsi128_si32(sum128) + bias;
-
-    //QB = 2^6.
-    //Output Scale = 2^4
-    return (output >> 10);
+    return (output >> (QB_RSHIFT + OUTPUT_SCALE_RSHIFT));
 }
 
 int forwardPropagate(bitboard* board, accumulator* acc)
 {
     int turn = board->turn;
+    int bucket = (__builtin_popcountll(board->pieces_all) - 1) / 4;
 
     uint8_t* side_us;
     uint8_t* side_them;
@@ -243,7 +247,7 @@ int forwardPropagate(bitboard* board, accumulator* acc)
         side_them = acc->accumulator[WHITE];
     }
 
-    int output = calculateOutputLayer(side_us, side_them, int_weights->weights2, int_weights->weights2_bias);
+    int output = calculateOutputLayer(side_us, side_them, int_weights->weights2[bucket], int_weights->weights2_bias[bucket]);
 
     return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 }
