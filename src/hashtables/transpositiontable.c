@@ -66,7 +66,6 @@ table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_
     return (table_entry_tt){0};
 }
 
-//TODO - TT results in +200 elo, but also causes 1-move blunders.
 void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
 {
     assert(tt);
@@ -78,7 +77,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
         .hashCode = tt->array[index].hashCode
     };
 
-    if(entry.nodeType != NODE_TYPE_UNKNOWN && existingEntry.hashCode) 
+    if(entry.nodeType == NODE_TYPE_UNKNOWN && existingEntry.hashCode) 
         return;
 
     //Replacement rules for same position.

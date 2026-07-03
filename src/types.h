@@ -97,8 +97,6 @@ typedef struct bitboard {
 
     uint8_t turn;
 
-    uint8_t victor;
-
     uint8_t movesSinceLastChange;
 
     move_d history[MAX_PLY];

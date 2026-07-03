@@ -28,6 +28,53 @@ int popLSB(uint64_t *bitboard)
     return LSB_Index;
 }
 
+int isDraw(bitboard* board)
+{
+    //Repetition
+    if(containsRepetition(board)) return VICTOR_DRAW_THREEFOLD;
+    //50-move rule
+    else if(board->movesSinceLastChange >= 100) return VICTOR_DRAW_FIFTY_MOVE_RULE; //Variable stores half-moves
+    //Trivial insufficent material
+    else if((board->pieces[BLACK_KING]|board->pieces[WHITE_KING]) == board->pieces_all) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+    //Other insufficient material
+    else
+    {
+        //King + Minor Piece vs King
+        if(board->pieces_side[BLACK] == board->pieces[BLACK_KING] && board->pieces[WHITE_PAWN] == 0 && board->pieces[WHITE_ROOK] == 0 && board->pieces[WHITE_QUEEN] == 0)
+        {
+            if(__builtin_popcountll(board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT]) <= 1) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+        }
+        else if(board->pieces_side[WHITE] == board->pieces[WHITE_KING] && board->pieces[BLACK_PAWN] == 0 && board->pieces[BLACK_ROOK] == 0 && board->pieces[BLACK_QUEEN] == 0)
+        {
+            if(__builtin_popcountll(board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT]) <= 1) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+        }
+        //King + Bishops vs King + Bishops (Same color bishops)
+        else if(board->pieces_all == (board->pieces[WHITE_KING]|board->pieces[WHITE_BISHOP]|board->pieces[BLACK_KING]|board->pieces[BLACK_BISHOP]) && 
+                ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&LIGHT_SQUARES) ||
+                 (board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&DARK_SQUARES))) 
+        {
+            return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+        }
+    }
+
+    return 0;
+}
+
+//Only called when it has already been determined that there's no legal moves.
+int getMateResult(bitboard* board)
+{
+    if(board->turn == WHITE)
+    {
+        if(IS_IN_CHECK_W(board->flags)) return VICTOR_BLACK;
+        else return VICTOR_DRAW_STALEMATE_WHITE;
+    }
+    else
+    {
+        if(IS_IN_CHECK_B(board->flags)) return VICTOR_WHITE;
+        else return VICTOR_DRAW_STALEMATE_BLACK;
+    }
+}
+
 void export_fen_from_board(bitboard* board, char* outputFenString)
 {
     assert(board && outputFenString);
@@ -247,8 +294,6 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     board->repetitionIndex = 0;
     board->lastChangeIndex = 0;
     board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
-
-    board->victor = 0;
 }
 
 //Resets the board to an opening position

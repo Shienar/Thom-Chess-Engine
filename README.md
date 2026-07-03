@@ -13,6 +13,8 @@ Simply run 'make' in the main directory to compile the program.
 - 'make PROF=1' will compile with profiling flags for gmon.
 - 'make SPSA=1' will compile with uci options for Simultaneous Perturbation Stochastic Approximation
 
+The engine's executable can be moved away from the target folder. The project's directory gets compiled into the engine with make, and the absolute paths are used to open the weight/book files in the import folder.
+
 ### COMPATIBLITY:
 
 The engine in its current form will only work on CPUs that support AVX2 instructions. 

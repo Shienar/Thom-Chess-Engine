@@ -5,12 +5,6 @@
 
 int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
 {
-    if(board->victor) 
-    {
-        DEBUG_ERROR("Cannot generate moves for terminated game; Victor=%d", board->victor);
-        return 0;
-    }
-
     int size = 0;
     uint64_t allies, enemies, knights, bishop, rook, queen, king;
     if(ISWHITE(board->turn))
@@ -827,7 +821,6 @@ move_c getStructFromString(bitboard* board, char* str)
 int moveFromStruct(bitboard* board, move_c m)
 {   
     assert(board);
-    assert(!board->victor);
     assert(IS_VALID_MOVE(m));
 
     if(movePiece(board, m) != 0) 
@@ -843,65 +836,10 @@ int moveFromStruct(bitboard* board, move_c m)
         return -1;
     }
 
-    //3-fold repetition check
-    if(containsRepetition(board)) board->victor = VICTOR_DRAW_THREEFOLD;
-    else if(board->movesSinceLastChange >= 100) board->victor = VICTOR_DRAW_FIFTY_MOVE_RULE; //Variable stores half-moves
-    else if((board->pieces[BLACK_KING]|board->pieces[WHITE_KING]) == board->pieces_all) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
-    else 
-    {
-        //Look for legal moves - calculate checkmate / stalemate.
-        int existsLegalMove = 0;
-        move_c moveList[MAX_MOVES];
-        int entryCount = generateMoveList(moveList, board, 0);
-        if(!entryCount) existsLegalMove = 0;
-        else
-        {
-            for(int index = 0; index < entryCount; index++)
-            {
-                if(movePiece(board, moveList[index]) != 0) continue;
-
-                if((ISWHITE(board->turn) && !isThreatened(board, board->kingSquare_b, BLACK)) || (ISBLACK(board->turn) && !isThreatened(board, board->kingSquare_w, WHITE)))
-                    existsLegalMove = 1;
-
-                unmove(board);
-                if(existsLegalMove) break;
-            }
-        }
-        
-
-        if(!existsLegalMove)
-        {
-            if(board->turn == WHITE)
-            {
-                if(IS_IN_CHECK_W(board->flags)) board->victor = VICTOR_BLACK;
-                else board->victor = VICTOR_DRAW_STALEMATE_WHITE;
-            }
-            else
-            {
-                if(IS_IN_CHECK_B(board->flags)) board->victor = VICTOR_WHITE;
-                else board->victor = VICTOR_DRAW_STALEMATE_BLACK;
-            }
-        }
-        /* Other Drawn INSUFFICIENT_MATERIALs */
-        //King + Minor Piece vs King
-        else if(board->pieces_side[BLACK] == board->pieces[BLACK_KING] && board->pieces[WHITE_PAWN] == 0 && board->pieces[WHITE_ROOK] == 0 && board->pieces[WHITE_QUEEN] == 0)
-        {
-            if(__builtin_popcountll(board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT]) <= 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
-        }
-        else if(board->pieces_side[WHITE] == board->pieces[WHITE_KING] && board->pieces[BLACK_PAWN] == 0 && board->pieces[BLACK_ROOK] == 0 && board->pieces[BLACK_QUEEN] == 0)
-        {
-            if(__builtin_popcountll(board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT]) <= 1) board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
-        }
-        //King + Bishops vs King + Bishops (Same color bishops)
-        else if(board->pieces_all == (board->pieces[WHITE_KING]|board->pieces[WHITE_BISHOP]|board->pieces[BLACK_KING]|board->pieces[BLACK_BISHOP]) && 
-                ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&LIGHT_SQUARES) ||
-                 (board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&DARK_SQUARES))) 
-        {
-            board->victor = VICTOR_DRAW_INSUFFICIENT_MATERIAL;
-        }
-    }
+    //Terminal gamestate validations have been moved to engine.c search functions.
 
     /*
+    #ifndef NDEBUG
     uint64_t hc = getHashCode(board);
     if(board->hashCode != hc)
     {
@@ -915,6 +853,7 @@ int moveFromStruct(bitboard* board, move_c m)
         board_print(board, 1);
         exit(0);
     }
+    #endif
     */
 
     return 0;
@@ -982,7 +921,6 @@ move_d unmove(bitboard *board)
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
     
-    board->victor = 0;
     board->halfMoveCount--;
 
     return m;

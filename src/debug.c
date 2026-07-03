@@ -43,7 +43,13 @@ void dbg_msg(const char* fileName, int lineNumber, const char* type, const char*
            fileName, 
            lineNumber);
     vfprintf(dbg_file, str, args);
-    va_end(args);
     fprintf(dbg_file, "\n");
     fflush(dbg_file);
+    va_end(args);
+
+    va_start(args, str);
+    printf("info string ");
+    vprintf(str, args);
+    printf("\n");
+    va_end(args);
 }

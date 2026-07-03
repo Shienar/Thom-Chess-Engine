@@ -24,17 +24,13 @@ int initial_aspiration_margin = 38;
 int maximum_aspiration_margin = 150;
 float aspiration_margin_mult_factor = 2.0f;
 
-int reverse_futility_margin = 200;
-int reverse_futility_margin_improving = 125;
-int delta_pruning_offset = 500;
-
-int futility_margin = 350;
+int reverse_futility_margin = 205;
+int reverse_futility_margin_improving = 120;
+int futility_margin = 375;
+int delta_pruning_offset = 475;
 
 int probcut_offset = 400;
-int probcut_offset_improving = 300;
-
-float lm_base = 2.0f;
-float lm_scale = 0.5f;
+int probcut_offset_improving = 250;
 
 
 int reductionTable[MAX_PLY][MAX_MOVES] = {0};
@@ -45,16 +41,17 @@ void initSearchTables()
 
     for(int depth = 0; depth < MAX_PLY; depth++)
     {
-        int count = lm_base + lm_scale * depth * depth;
+        int count = 2.0f + 0.5f * depth * depth;
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
         {
             if(depth >= lm_depth && moveCount >= count)
-                reductionTable[depth][moveCount] = (int)(0.99 + log(depth) * log(moveCount) / 3.14);
+                reductionTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.14f);
             else reductionTable[depth][moveCount] = 0;
         }
     }
 }
 
+//Draws get ignored. Naturally stops depth at checkmate/stalemate positions.
 int perft(bitboard* board, int depth, int verbose)
 {
     if(!depth) return 1;
@@ -78,26 +75,8 @@ int perft(bitboard* board, int depth, int verbose)
         }
         unmove(board);
     }
+    
     return nodes;
-}
-
-int evaluateEndstate(bitboard* board, int ply)
-{
-    assert(board->victor);
-
-    if(board->victor == VICTOR_WHITE)
-    {
-        return (board->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
-    }
-    else if(board->victor == VICTOR_BLACK)
-    {
-        return (board->turn == BLACK) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
-    }
-    else
-    {
-        //Not going to worry about contempt with negamax.
-        return 0;
-    }
 }
 
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
@@ -106,9 +85,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     
     bitboard* board = context->board;
 
-    if(board->victor) return evaluateEndstate(board, ply);
-
-    if((context->endTime && clock() > *context->endTime) || ply >= MAX_PLY - 1) return forwardPropagate(board, context->accumulator);
+    if(isDraw(board))
+        return 0;
+    if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime)) 
+        return forwardPropagate(board, context->accumulator);
 
     int lowestBound = alpha;
     move_c* tt_move = NULL;
@@ -130,7 +110,6 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         temp.raw = entry.bestMove;
         tt_move = &temp;
         best = entry.evaluation;
-
     }
     else 
     {
@@ -153,12 +132,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     if(delta_pruning_offset + best < alpha) return best;
 
     moveIterator* iter = create_move_iterator(board, 1, NULL, tt_move, NULL, NULL, NULL);
+    int validMovesVisited = 0;
     if(iter)
     {
         move_c* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
             if(moveFromStruct(board, *currentMove)) continue;
+            validMovesVisited++;
 
             move_d detailedMove = board->history[board->historyIndex - 1];
             updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
@@ -181,6 +162,17 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             }
         }
         destroy_move_iterator(iter);
+    }
+    
+    if(!iter || validMovesVisited == 0)
+    {
+        int victor = getMateResult(board);
+        if(victor == VICTOR_WHITE)
+            return (board->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+        else if(victor == VICTOR_BLACK)
+            return (board->turn == BLACK) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+        else
+            return 0;
     }
     
     table_entry_tt shallowEntry = {
@@ -216,8 +208,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(board->victor) 
-        return evaluateEndstate(board, ply);
+    if(isDraw(board))
+        return 0;
     if(ply >= MAX_PLY - 1) 
         return forwardPropagate(board, context->accumulator);
     if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && ply >= 1))
@@ -365,10 +357,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     moveIterator* iter = create_move_iterator(board, 0, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
+    int validMovesVisited = 0;
     if(iter)
     {
         move_c* currentMove;
-        int validMovesVisited = 0;
         int bestScore = -INT32_MAX;
 
         while((currentMove = iterate_next_move(iter)) != NULL)
@@ -463,6 +455,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             transposition_table_set(transpositionTable, new_tt_entry, ply);
         }
         destroy_move_iterator(iter);
+    }
+    
+    if(!iter || validMovesVisited == 0)
+    {
+        int victor = getMateResult(board);
+        if(victor == VICTOR_WHITE)
+            return (board->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+        else if(victor == VICTOR_BLACK)
+            return (board->turn == BLACK) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
+        else
+            return 0;
     }
     return alpha;
 }
@@ -693,7 +696,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     int helperThreadCount = threadCount - 1;
 
     bitboard* board = context->board;
-    assert(!board->victor);
     board->historyIndex = 0;
     context->countedNodes = 0;
     context->seldepth = 0;

@@ -60,21 +60,19 @@ int main(int argc, char** argv)
                 printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
+                //Bounds & defaults handled by SPSA program weather-factory
                 #ifdef SPSA
-                printf("option name initial_aspiration_margin type spin default 38 min 10 max 100\n");
-                printf("option name maximum_aspiration_margin type spin default 150 min 50 max 200\n");
-                printf("option name aspiration_margin_mult_factor type spin default 2.0 min 1.2 max 3.0\n");
+                printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
+                printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
+                printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
 
-                printf("option name reverse_futility_margin type spin default 150 min 100 max 400\n");
-                printf("option name reverse_futility_margin_improving type spin default 125 min 50 max 200\n");
-                printf("option name futility_margin type spin default 350 min 150 max 450\n");
-                printf("option name delta_pruning_offset type spin default 500 min 200 max 600\n");
+                printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
+                printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
+                printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
+                printf("option name delta_pruning_offset type spin default %d min 200 max 600\n", delta_pruning_offset);
 
-                printf("option name probcut_offset type spin default 400 min 200 max 600\n");
-                printf("option name probcut_offset_improving type spin default 300 min 200 max 500\n");
-
-                printf("option name lm_base type spin default 2.0 min 1.0 max 4.0\n");
-                printf("option name lm_scale type spin default 0.5 min 0.2 max 1.0\n");
+                printf("option name probcut_offset type spin default %d min 200 max 600\n", probcut_offset);
+                printf("option name probcut_offset_improving type spin default %d min 200 max 500\n", probcut_offset_improving);
                 #endif
                 printf("uciok\n");
                 fflush(stdout);
@@ -196,7 +194,11 @@ int main(int argc, char** argv)
                         else if(strcmp(str, "aspiration_margin_mult_factor") == 0)
                         {
                             if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%f", &aspiration_margin_mult_factor);
+                            {
+                                int temp;
+                                sscanf(str, "%d", &temp);
+                                aspiration_margin_mult_factor = temp / 1000.0;
+                            }
                             break;
                         }
                         else if(strcmp(str, "reverse_futility_margin") == 0)
@@ -227,18 +229,6 @@ int main(int argc, char** argv)
                         {
                             if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                                 sscanf(str, "%d", &probcut_offset_improving);
-                            break;
-                        }
-                        else if(strcmp(str, "lm_base") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%f", &lm_base);
-                            break;
-                        }
-                        else if(strcmp(str, "lm_scale") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%f", &lm_scale);
                             break;
                         }
                         #endif
@@ -331,7 +321,6 @@ int main(int argc, char** argv)
                 int isInfinite = 0;
                 threadContext->isPonder = 0;
                 memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
-                int play = 0;
 
                 short searchedMoveCount = 0;
                 while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
@@ -386,33 +375,24 @@ int main(int argc, char** argv)
                             searchedMoveCount++;
                         }
                     }
-                    else if(strcmp(str, "play") == 0) play = 1;
                 }
 
                 //Finished parsing command modifers, setup & launch thread.
                 if(fixedMoveTime) endTime = clock() + (fixedMoveTime * CLOCKS_PER_SEC) / 1000; 
+                else if(isInfinite)
+                {
+                    endTime = LONG_MAX;
+                    threadContext->maxDepth = MAX_PLY;
+                }
                 else
                 {
-                    if(isInfinite) 
-                    {
-                        endTime = LONG_MAX;
-                        threadContext->maxDepth = MAX_PLY;
-                    }
-                    else
-                    {
-                        if(ISWHITE(board->turn)) endTime = (whiteTime / 40) + (whiteIncrement / 2);
-                        else endTime = (blackTime / 40) + (blackIncrement / 2);
-                        endTime = (clock() + (endTime * CLOCKS_PER_SEC) / 1000)  - 50; //Subtracting UCI overhead from move time.
-                    } 
+                    if(ISWHITE(board->turn)) endTime = (whiteTime / 20) + (whiteIncrement / 2);
+                    else endTime = (blackTime / 20) + (blackIncrement / 2);
+                    endTime = (clock() + (endTime * CLOCKS_PER_SEC) / 1000)  - 50; //Subtracting UCI overhead from move time.
                 }
 
                 THREAD_START(calculateThread, calculateBestMove, threadContext);
 
-                if(play)
-                {
-                    THREAD_WAIT(calculateThread);
-                    moveFromStruct(board, threadContext->pv.line[0]);
-                }
                 break;
             }
             else if(strcmp(str, "ponderhit") == 0)
@@ -507,8 +487,8 @@ int main(int argc, char** argv)
             {
                 loadInputAccumulator(board, playerAccumulator, WHITE);
                 loadInputAccumulator(board, playerAccumulator, BLACK);
-                float eval = forwardPropagate(board, playerAccumulator);
-                printf("%f\n", eval);
+                int eval = forwardPropagate(board, playerAccumulator);
+                printf("%d\n", eval);
                 break;
             }
             else if(strcmp(str, "netinfo") == 0)

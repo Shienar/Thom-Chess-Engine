@@ -77,13 +77,14 @@
 
 #define NO_EP_SQUARE 127
 
-#define VICTOR_WHITE 0x1
-#define VICTOR_BLACK 0x2
-#define VICTOR_DRAW_INSUFFICIENT_MATERIAL 0x4
-#define VICTOR_DRAW_THREEFOLD 0x8
-#define VICTOR_DRAW_STALEMATE_WHITE 0x10
-#define VICTOR_DRAW_STALEMATE_BLACK 0x20
-#define VICTOR_DRAW_FIFTY_MOVE_RULE 0x40
+#define VICTOR_NONE 0
+#define VICTOR_WHITE 1
+#define VICTOR_BLACK 2
+#define VICTOR_DRAW_INSUFFICIENT_MATERIAL 3
+#define VICTOR_DRAW_THREEFOLD 4
+#define VICTOR_DRAW_STALEMATE_WHITE 5
+#define VICTOR_DRAW_STALEMATE_BLACK 6
+#define VICTOR_DRAW_FIFTY_MOVE_RULE 7
 
 #define columnNames "abcdefgh"
 
@@ -109,6 +110,9 @@
 void getSquareName(int square, char* target);
 int getSquareNumber(char* squareName);
 #define findPieceOnSquare(board, square) (board->pieceArr[square])
+
+int isDraw(bitboard* board);
+int getMateResult(bitboard* board);
 
 //Required by pyrrhic.
 //Return index of popped bit in range [0,63]

@@ -36,7 +36,7 @@
 /**
  * 2 x ((10 x 768) -> 512) -> (8 x 1)
  * 
- * Training progression (Train until plateau at each, then continue with QAT, then make it pass SPRT):
+ * Training progression (Train until plateau at each, then continue with QAT, then verify it with SPRT):
  * 1. Force single input/output buckets
  *      - 2 x (768->512) -> 1.
  * 2. Expand to multiple king buckets.
