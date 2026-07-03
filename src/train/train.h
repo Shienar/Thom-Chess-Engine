@@ -4,6 +4,13 @@
 #include "analyze/neuralnet.h"
 #include "train/gpu_funcs.h"
 
+#define MAX_LR 8e-5f
+#define MIN_LR 2.5e-6f
+#define INTERVAL_SCALE 1.5f
+#define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
+#define MAX_INTERVALS 12
+#define LOOKAHEAD_RANGE 10
+
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 
@@ -22,8 +29,9 @@
 #define PERMUTE_BUCKET_PROBABILITY 200
 
 //Only train and use part of the network, broadcast trained weights to other buckets.
-#define COMPRESS_KING_BUCKET
-#define COMPRESS_OUTPUT_BUCKET
+//These get left commented out once a compressed version gets trained. Uncommenting them will overwrite any bucketed waights.
+//#define COMPRESS_KING_BUCKET
+//#define COMPRESS_OUTPUT_BUCKET
 
 /**
  * 2 x ((10 x 768) -> 512) -> (8 x 1)

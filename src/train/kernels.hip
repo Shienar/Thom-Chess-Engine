@@ -299,16 +299,18 @@ extern "C" __global__ void calculateGradient1(const short* activeInputs, //[MINI
     if(i < size) \
     { \
         float grad = gradientSum[i] / MINIBATCH_SIZE; \
-        firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad; \
-        secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad; \
-        float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1); \
-        if(rectificationTerm > 0.0f) { \
-            float denominator = sqrtf(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON; \
-            weight[i] -= lr * rectificationTerm * (correctedFirstMoment / denominator); \
-        } else weight[i] -= lr * correctedFirstMoment; \
-        weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
-        weight[i] = fminf(max, fmaxf(min, weight[i])); \
-        gradientSum[i] = 0.0f; \
+        if(grad) { \
+            firstMoment[i] = ADAM_BETA1 * firstMoment[i] + (1.0f - ADAM_BETA1) * grad; \
+            secondMoment[i] = ADAM_BETA2 * secondMoment[i] + (1.0f - ADAM_BETA2) * grad * grad; \
+            float correctedFirstMoment = firstMoment[i] / (1.0f - biasCorrection1); \
+            if(rectificationTerm > 0.0f) { \
+                float denominator = sqrtf(secondMoment[i] / (1.0f - biasCorrection2)) + ADAM_EPSILON; \
+                weight[i] -= lr * rectificationTerm * (correctedFirstMoment / denominator); \
+            } else weight[i] -= lr * correctedFirstMoment; \
+            weight[i] -= lr * ADAM_WEIGHT_DECAY * weight[i]; \
+            weight[i] = fminf(max, fmaxf(min, weight[i])); \
+            gradientSum[i] = 0.0f; \
+        } \
     }
 
 //Grid Dimensions:  weight2Count / 32, 1, 1

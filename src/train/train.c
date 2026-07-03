@@ -187,7 +187,7 @@ void train(int maxIterations, float maxAllowedError)
         {
             bitboard* board = create_board(NULL);
             
-            #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+            #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
             uint32_t xorRNGState = (uint32_t) time(NULL);
             #endif
             #pragma omp for schedule(static)
@@ -312,7 +312,7 @@ void train(int maxIterations, float maxAllowedError)
             {
                 bitboard* board = create_board(NULL);
                 
-                #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+                #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
                 uint32_t xorRNGState = (uint32_t) time(NULL);;
                 #endif
 
@@ -423,7 +423,7 @@ void train(int maxIterations, float maxAllowedError)
             {
                 bitboard* board = create_board(NULL);
 
-                #if !defined(COMPRESS_KING_BUCKET) && !defined(COMPRESS_OUTPUT_BUCKET)
+                #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
                 uint32_t xorRNGState = (uint32_t) time(NULL);;
                 #endif
                 

@@ -223,7 +223,8 @@ int calculateOutputLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, int8_t we
     //No activation
     //Output Scaling - Why this this necessary? If I train my network with an output scaled to (QA / 16) and downshift here,
     //my engine will be significantly stronger than if I don't. More testing/information is needed, maybe my engine's pruning
-    //values work better with this version since it has a smaller range.
+    //values work better with this version since it has a smaller range. A lack of training output scaling will fail completely,
+    //but why does (QA / 16) work so much better than QA?
     int output = _mm_cvtsi128_si32(sum128) + bias;
     return (output >> (QB_RSHIFT + OUTPUT_SCALE_RSHIFT));
 }
