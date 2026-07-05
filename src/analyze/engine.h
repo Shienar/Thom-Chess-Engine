@@ -11,6 +11,7 @@
 extern int threadCount;
 extern int enablePonder;
 extern int isCalculating;
+extern int suppressUCIMessages;
 #define MIN_THREADS 1
 #define MAX_THREADS 64
 
@@ -18,6 +19,7 @@ extern const int min_aspiration_depth;
 extern const int reverse_futility_pruning_depth;
 extern const int futility_pruning_depth;
 extern const int nullmove_pruning_depth;
+extern const int tt_reduction_depth;
 extern const int probcut_depth;
 extern const int probcut_depth_reduction;
 extern const int lm_depth;

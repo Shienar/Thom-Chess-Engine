@@ -7,6 +7,7 @@
 #include "pyrrhic/tbprobe.h"
 #include "analyze/engine.h"
 #include "train/train.h"
+#include "binpack/generate.h"
 #include <string.h>
 #include <omp.h>
 
@@ -87,7 +88,7 @@ int main(int argc, char** argv)
                     THREAD_WAIT(calculateThread);
                 }
                 clear_tt(transpositionTable);
-                if(useBook) loadBook();
+                if(useBook) loadBook(GENERAL_BOOK);
                 break;
             }
             else if(strcmp(str, "setoption") == 0) 
@@ -137,7 +138,7 @@ int main(int argc, char** argv)
                         {
                             if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "true") == 0) { useBook = 1; loadBook(); }
+                                if(strcmp(str, "true") == 0) { useBook = 1; loadBook(GENERAL_BOOK); }
                                 else { useBook = 0; unloadBook(); }
                             }
                             break;
@@ -283,7 +284,7 @@ int main(int argc, char** argv)
                     }
                     else if(strcmp(str, "startpos") == 0)
                     {
-                        load_fen_string_to_board(board, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+                        load_fen_string_to_board(board, STARTPOS_FEN);
                     }
 
                     if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
@@ -320,6 +321,7 @@ int main(int argc, char** argv)
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
                 threadContext->isPonder = 0;
+                threadContext->maxNodes = INT32_MAX;
                 memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
 
                 short searchedMoveCount = 0;
@@ -434,7 +436,17 @@ int main(int argc, char** argv)
                     train(epochCount, 5e-4f);
                 }
                 #else
-                printf("Cannot train engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'");
+                printf("Cannot train engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'\n");
+                #endif
+                break;
+            }
+            else if(strcmp(str, "generate") == 0)
+            {
+                #ifdef TRAIN
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                generate();
+                #else
+                printf("Cannot generate moves for engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'\n");
                 #endif
                 break;
             }
@@ -514,7 +526,7 @@ int main(int argc, char** argv)
     destroy_hashTable_tt(transpositionTable);
     tb_free();
     if(board) free(board);
-    unloadBook();
+    unloadBook(GENERAL_BOOK);
     disableDebugMessages();  //closes file if open.
 }
 
@@ -534,14 +546,18 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
 
     loadQuantizedWeights();
 
-    if(!transpositionTable) transpositionTable = create_hashTable_tt();
+    if(!transpositionTable) 
+    {
+        transpositionTable = create_hashTable_tt();
+        context->tt = transpositionTable;
+    }
     if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));
     if(!playingRefreshTable) playingRefreshTable = createRefreshTable();
     
     context->accumulator = playerAccumulator;
     context->refreshTable = playingRefreshTable;
 
-    if(*useBook) loadBook();
+    if(*useBook) loadBook(GENERAL_BOOK);
     else unloadBook();
     
     if(*isPathDirty)

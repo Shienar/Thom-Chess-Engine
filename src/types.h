@@ -92,6 +92,7 @@ typedef struct bitboard {
      * flags&8 == canQueensideCastle_b
      * flags&16 == in_check_w
      * flags&32 == in_check_b
+     * flags&64 == in book.
      */ 
     uint8_t flags;
 
@@ -108,7 +109,6 @@ typedef struct bitboard {
     //A pawn can capture to this square.
     int8_t enPassantSquare;
 
-    //Other
     uint16_t halfMoveCount;
 
     uint64_t hashCode;
@@ -182,6 +182,7 @@ typedef struct searchThreadContext {
     bitboard* board;
     accumulator* accumulator;
     accumulatorRefreshTable* refreshTable;
+    hashtable_tt* tt;
     PVar pv;
     
     //Improving heuristic

@@ -74,17 +74,22 @@
 #define CHECK_B(flag) (flag|=32)
 #define UNCHECK_W(flag) (flag&=(~16))
 #define UNCHECK_B(flag) (flag&=(~32))
+#define IS_IN_BOOK_OPENING(flag) (flag&64)
+#define LEAVE_BOOK_OPENING(flag) (flag&=(~64))
 
-#define NO_EP_SQUARE 127
+#define NO_EP_SQUARE 64
 
 #define VICTOR_NONE 0
 #define VICTOR_WHITE 1
 #define VICTOR_BLACK 2
-#define VICTOR_DRAW_INSUFFICIENT_MATERIAL 3
-#define VICTOR_DRAW_THREEFOLD 4
-#define VICTOR_DRAW_STALEMATE_WHITE 5
-#define VICTOR_DRAW_STALEMATE_BLACK 6
-#define VICTOR_DRAW_FIFTY_MOVE_RULE 7
+#define VICTOR_DRAW_GENERIC 3
+#define VICTOR_DRAW_INSUFFICIENT_MATERIAL 4
+#define VICTOR_DRAW_THREEFOLD 5
+#define VICTOR_DRAW_STALEMATE_WHITE 6
+#define VICTOR_DRAW_STALEMATE_BLACK 7
+#define VICTOR_DRAW_FIFTY_MOVE_RULE 8
+
+#define STARTPOS_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 #define columnNames "abcdefgh"
 

@@ -13,7 +13,8 @@ typedef struct polyglot_book_entry {
 extern uint64_t entryCount;
 extern polyglot_book_entry *entries;
 
-void loadBook();
+#define GENERAL_BOOK PROJECT_CWD "/import/gm2600.bin"
+void loadBook(const char* path);
 void unloadBook();
 
 //Returns a newly allocated move struct.

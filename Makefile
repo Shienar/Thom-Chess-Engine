@@ -62,6 +62,7 @@ ifdef TRAIN
 	endif
 
 	SRCFILES += $(wildcard src/train/*.c)
+ 	SRCFILES += $(wildcard src/binpack/*c)
 	CFLAGS += -DTRAIN
 
 	ifdef KPERFT

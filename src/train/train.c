@@ -65,7 +65,7 @@ void shuffle_long(uint64_t* arr, int count)
     }
 }
 
-inline float sumLoss(float* loss)
+float sumLoss(float* loss)
 {
     __m256 tempSum1 = _mm256_setzero_ps();
     __m256 tempSum2 = _mm256_setzero_ps();

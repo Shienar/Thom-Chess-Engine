@@ -34,25 +34,6 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     {
         if(!capturesOnly)
         {
-            mask = WHITE_PAWN_PUSH_MASK(board);
-            while(mask)
-            {
-                int endSquare = __builtin_ctzll(mask);
-                int startSquare = endSquare - 8;
-
-                if(endSquare >= 56)
-                {
-                    //Promotion
-                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP); 
-                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);     
-                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-                }
-                else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-
-                mask&=(mask - 1);
-            }
-
             mask = WHITE_PAWN_DOUBLEPUSH_MASK(board);
             while(mask)
             {
@@ -64,6 +45,29 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
                 mask&=(mask - 1);
             }
         }
+
+        //Treat promotions as captures for quiescent search
+        mask = WHITE_PAWN_PUSH_MASK(board);
+        if(capturesOnly) mask &= 0xFF00000000000000;
+        while(mask)
+        {
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare - 8;
+
+            if(endSquare >= 56)
+            {
+                //Promotion
+                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP); 
+                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);     
+                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+            }
+            else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+
+            mask&=(mask - 1);
+        }
+
+        
 
         mask = WHITE_PAWN_LEFTATTACKS(board);
         while(mask)
@@ -120,25 +124,6 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     {
         if(!capturesOnly)
         {
-            mask = BLACK_PAWN_PUSH_MASK(board);
-            while(mask)
-            {
-                int endSquare = __builtin_ctzll(mask);
-                int startSquare = endSquare + 8;
-
-                if(endSquare <= 7)
-                {
-                    //Promotion
-                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP); 
-                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);     
-                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-                }
-                else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-
-                mask&=(mask - 1);
-            }
-
             mask = BLACK_PAWN_DOUBLEPUSH_MASK(board);
             while(mask)
             {
@@ -150,6 +135,27 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
                 mask&=(mask - 1);
             }
         }
+
+        mask = BLACK_PAWN_PUSH_MASK(board);
+        if(capturesOnly) mask &= 0xFF;
+        while(mask)
+        {
+            int endSquare = __builtin_ctzll(mask);
+            int startSquare = endSquare + 8;
+
+            if(endSquare <= 7)
+            {
+                //Promotion
+                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP); 
+                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);     
+                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+            }
+            else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+
+            mask&=(mask - 1);
+        }
+        
 
         mask = BLACK_PAWN_LEFTATTACKS(board);
         while(mask)
@@ -348,7 +354,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
 
     if(ISPAWN(m.piece) || ISBISHOP(m.piece) || ISROOK(m.piece) || ISQUEEN(m.piece))
     {
-        attackers |= getAttackers(board, m.endSquare, occupied);
+        attackers |= getSlidingAttackers(board, m.endSquare, occupied);
     }
 
     while(ply < MAX_PLY - 1)
@@ -379,7 +385,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
 
     while(ply > 0)
     {
-        if(gain[ply] < 0) gain[ply - 1] = 0;
+        if(gain[ply] < 0) gain[ply - 1] = 0; //Capture not worth it, stop the seqquence early.
         else
         {
             int capture = -gain[ply];

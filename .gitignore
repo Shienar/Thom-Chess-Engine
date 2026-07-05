@@ -1,6 +1,7 @@
 .vscode/
 trainingData.bin
 validationData.bin
+*.viri
 *.sh
 *.log
 *.pgn

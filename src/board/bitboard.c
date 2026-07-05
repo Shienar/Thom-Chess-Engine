@@ -255,7 +255,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     for(int pc = 1; pc < PIECE_COUNT; pc+=2) board->pieces_side[BLACK] |= board->pieces[pc];
     board->pieces_all = board->pieces_side[BLACK]|board->pieces_side[WHITE];
 
-    board->flags = 0;
+    board->flags = 64;
     //Castling Rights
     if(castlingAvailability[0] != '-')
     {
@@ -299,7 +299,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
 //Resets the board to an opening position
 bitboard* create_board(const char* fenString)
 {
-    if(!fenString) fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    if(!fenString) fenString = STARTPOS_FEN;
     bitboard* board = calloc(1, sizeof(bitboard));
     load_fen_string_to_board(board, fenString);
     return board;

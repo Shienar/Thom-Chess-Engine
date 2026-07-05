@@ -7,10 +7,10 @@
 uint64_t entryCount = 0;
 polyglot_book_entry *entries = NULL;
 
-void loadBook()
+void loadBook(const char* path)
 {
     if(entries) return;
-    FILE* input = fopen(PROJECT_CWD "/import/gm2600.bin", "rb");
+    FILE* input = fopen(path, "rb");
     if(!input)
     {
         DEBUG_ERROR("Failed to read book file.");
@@ -51,6 +51,7 @@ void unloadBook()
 
 move_c getBookMove(bitboard* board)
 {
+    if(!IS_IN_BOOK_OPENING(board->flags) || !entries) return (move_c) {0};
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
@@ -102,7 +103,11 @@ move_c getBookMove(bitboard* board)
         }
     }
 
-    if(moveCount == 0) return (move_c){0};
+    if(moveCount == 0) 
+    {
+        LEAVE_BOOK_OPENING(board->flags);
+        return (move_c){0};
+    }
 
     uint32_t randomValue = (((uint32_t)rand()) & 0xFFFF) | ((((uint32_t)rand()) & 0xFFFF) << 16);
     randomValue = randomValue%totalWeight;

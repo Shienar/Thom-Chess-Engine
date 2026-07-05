@@ -77,17 +77,22 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
         .hashCode = tt->array[index].hashCode
     };
 
-    if(entry.nodeType == NODE_TYPE_UNKNOWN && existingEntry.hashCode) 
-        return;
 
-    //Replacement rules for same position.
-    if(entry.hashCode == (existingEntry.hashCode ^ existingEntry.data))
+    if(existingEntry.hashCode)
     {
-        if(existingEntry.depth >= entry.depth + 2)
+        //Don't overwrite existing with unknown nodes
+        if(entry.nodeType == NODE_TYPE_UNKNOWN)
             return;
         
-        if(!IS_VALID_MOVE(((move_c) entry.bestMove)))
-            entry.bestMove = existingEntry.bestMove;
+        //Replacement rules for same position.
+        if(entry.hashCode == (existingEntry.hashCode ^ existingEntry.data))
+        {
+            if(existingEntry.depth >= entry.depth + 2)
+                return;
+            
+            if(!IS_VALID_MOVE(((move_c) entry.bestMove)))
+                entry.bestMove = existingEntry.bestMove;
+        }
     }
 
     if(entry.evaluation > MIN_MATE_SCORE) entry.evaluation += ply; 

@@ -25,6 +25,13 @@
     #define THREAD_WAIT(thread) WaitForSingleObject(thread, INFINITE); \
                                 CloseHandle(thread)
     #define THREAD_START(thread, func, arg) thread = CreateThread(NULL, 0, func, arg, 0, NULL)
+
+    #define mutex_t HANDLE
+    #define CREATE_MUTEX(mutex) mutex = CreateMutex(NULL, FALSE, NULL)
+    #define LOCK_MUTEX(mutex) WaitForSingleObject(mutex, INFINITE)
+    #define UNLOCK_MUTEX(mutex) ReleaseMutex(mutex)
+    #define DESTROY_MUTEX(mutex) CloseHandle(mutex)
+    
 #else
     #include <pthread.h>
     #include <unistd.h>
@@ -48,6 +55,12 @@
     
     #define THREAD_START(thread, func, arg) pthread_create(&thread, NULL, func, (void*)arg)
     #define THREAD_WAIT(thread) pthread_join(thread, NULL)
+
+    #define mutex_t pthread_mutex_t
+    #define CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL)
+    #define LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
+    #define UNLOCK_MUTEX(mutex) pthread_mutex_unlock(&mutex)
+    #define DESTROY_MUTEX(mutex) pthread_mutex_destroy(&mutex)
 #endif
 
 #endif
