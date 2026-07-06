@@ -16,10 +16,8 @@ hipEvents hip_events = {
 };
 
 float lr = MAX_LR;
-int64_t cosineIntervalLength;
 uint64_t cosineTimestamp;
 uint64_t timestamp;
-int intervalCount;
 float rho_inf = (2.0 / (1.0 - ADAM_BETA2)) - 1.0;
 float rho_timestamp = 0.0;
 float rectificationTerm = 0.0;
@@ -101,10 +99,8 @@ hipError_t initHIP(training_weights* raw_weights, short** h_active_A, float** h_
                                                         float** h_lossbuffer)
 {
 
-    cosineIntervalLength = FIRST_INTERVAL;
     cosineTimestamp = 0;
     timestamp = 0;
-    intervalCount = 0;
 
     hipError_t err;
 
@@ -357,13 +353,8 @@ float print_prof(const char* name, hipEvent_t start, hipEvent_t stop)
 void enqueueKernels(int bufferSide, int doBackprop)
 {
     //cosine annealing
-    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / cosineIntervalLength));
-    if(cosineTimestamp >= cosineIntervalLength && intervalCount < MAX_INTERVALS)
-    {
-        cosineTimestamp = 0;
-        cosineIntervalLength*=INTERVAL_SCALE;
-        intervalCount++;
-    }
+    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / MAX_COSINE_ANNEAL_TIMESTAMP));
+    lr = clamp(lr, MIN_LR, MAX_LR);
 
     hipMemcpyAsync((bufferSide == INPUT_GROUP_A) ? hip_mem.mem.activeInputs_A : hip_mem.mem.activeInputs_B, 
                     (bufferSide == INPUT_GROUP_A) ? host_activeInputs_A : host_activeInputs_B, 

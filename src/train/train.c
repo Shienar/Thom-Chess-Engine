@@ -4,55 +4,11 @@
 #include "analyze/engine.h"
 #include "train/train.h"
 #include "omp.h"
+#include "binpack/viri_binpack.h"
 #include <string.h>
+#include <float.h>
 
 /*** Training Weights ***/
-
-void loadTrainingData(CompactPosition data, bitboard* board, float* expectedOutput)
-{
-
-    // bit 0 = turn
-    // bit 1 = win for side to move
-    // bit 2 = loss for side to move
-    // bit 3 = draw
-    board->turn = data.flags & 1;
-
-    float result = 0.5;
-    if(data.flags & 2) result = 1.0;
-    else if(data.flags & 4) result = 0.0; 
-    *expectedOutput = LAMBDA * (SIGMOID(data.evaluation / EVAL_SCALE)) + (1.0f - LAMBDA) * result;
-
-    //Clear board (HalfKP only cares about piece positions)
-    memset(board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
-    memset(board->pieces, 0, 12 * sizeof(uint64_t));
-    memset(board->pieces_side, 0, 2 * sizeof(uint64_t));
-    board->pieces_all = 0;
-
-    uint64_t mask = data.occupancy;
-    int offset = 0;
-    while(mask)
-    {
-        int sq = __builtin_ctzll(mask);
-        int byteIndex = offset / 2;
-        int piece = data.pieces[byteIndex];
-        if(offset % 2) piece = piece&0xF;
-        else piece >>= 4;
-
-        uint64_t sqMask = singleBitMask(sq);
-        board->pieces_all |= sqMask;
-        board->pieces_side[COLOR(piece)] |= sqMask;
-        board->pieces[piece] |= sqMask;
-
-        if(ISKING(piece))
-        {
-            if(ISBLACK(piece)) board->kingSquare_b = sq;
-            else board->kingSquare_w = sq;
-        }
-
-        offset++;
-        mask &= (mask - 1);
-    }
-}
 
 void shuffle_long(uint64_t* arr, int count)
 {
@@ -104,29 +60,106 @@ int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
     return 0;
 }
 
+void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* board, uint32_t* xorRNGState,
+                            short* activeInputs_A, float* expectedOutputs_A, char* outputBuckets_A,
+                            short* activeInputs_B, float* expectedOutputs_B, char* outputBuckets_B)
+{
+    for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
+    {
+        Viri_Score score;
+        uint8_t result;
+        binpack_next(details, board, &score, &result, 1);
+        float relativeResult = 0.5f;
+        if(result == VIRI_DRAW) relativeResult = 0.5f;
+        else if(result == VIRI_WHITE_WIN)
+        {
+            if(board->turn == WHITE) relativeResult = 1.0f;
+            else relativeResult = 0.0f;
+        }
+        else if(result == VIRI_BLACK_WIN)
+        {
+            if(board->turn == BLACK) relativeResult = 1.0f;
+            else relativeResult = 0.0f;
+        }
+
+        if(inputGroup == INPUT_GROUP_A) 
+            expectedOutputs_A[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
+        else 
+            expectedOutputs_B[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
+
+        uint64_t inputs[2 * PIECE_COUNT] = {0};
+
+        int trackedPiecesPerColor = PIECE_COUNT / 2;
+        for(int i = 0; i < PIECE_COUNT / 2; i++)
+        {
+            //White's perspective
+            inputs[i] = board->pieces[2 * i];
+            inputs[trackedPiecesPerColor + i] = board->pieces[2 * i + 1];
+
+            //Black's perspective
+            inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
+            inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
+        }
+
+        if(getColumn(board->kingSquare_w) > 3)
+            for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+        if(getColumn(board->kingSquare_b) > 3)
+            for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
+        
+        for(int color = 0; color < 2; color++)
+        {
+            #ifndef COMPRESS_KING_BUCKET
+            int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+            baseIndex += offsetGenerator_xorshift32(xorRNGState, baseIndex);
+            baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
+            baseIndex *= BITS_PER_KING_BUCKET;
+            #else
+            int baseIndex = 0;
+            #endif
+
+            int trackedInputs = 0;
+
+            //First half matches side to move.
+            // side = 0 if color matches board->turn
+            int side = (color != board->turn);
+            
+            for(int piece = 0; piece < PIECE_COUNT; piece++)
+            {
+                uint64_t mask = inputs[PIECE_COUNT * color + piece];
+                while(mask)
+                {
+                    if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                    else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
+                    trackedInputs++;
+                    mask&=(mask - 1);
+                }
+            }
+
+            #ifndef COMPRESS_OUTPUT_BUCKET
+            int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(xorRNGState, -1);
+            outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
+            if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
+            else outputBuckets_B[entryNumber] = outputBucket;
+            #else
+            if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
+            else outputBuckets_B[entryNumber] = 0;
+            #endif
+
+            //-1 padding
+            while(trackedInputs < 32)
+            {
+                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
+                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
+                trackedInputs++;
+            }
+        }
+    }
+}
+
 void train(int maxIterations, float maxAllowedError)
 {
-    FILE* trainingDataFile = fopen(PROJECT_CWD "/import/trainingData.bin", "rb");
-    if(!trainingDataFile)
-    {
-        DEBUG_ERROR("Failed to open training data file.");
-        return;
-    }
-    fseek_64(trainingDataFile, 0, SEEK_END);
-    uint64_t file_size = ftell_64(trainingDataFile);
-    rewind(trainingDataFile);
-
-    uint64_t positionCount = file_size / sizeof(CompactPosition);
-
-    //Used to skip to random position in the .bin file.
-    //The division in blockcount effectively truncates extraneous positions that don't fit within a full MINIBATCH_SIZE * MINIBATCHES_PER_SHUFFLE_BLOCK block.
-    int blockCount = positionCount /  (MINIBATCH_SIZE * FEN_SKIP);
-    uint64_t* blockIndices = calloc(blockCount,  sizeof(uint64_t));
-    for (int i = 0; i < blockCount; i++) 
-        blockIndices[i] = (MINIBATCH_SIZE * FEN_SKIP) * i * sizeof(CompactPosition);
-        
-    shuffle_long(blockIndices, blockCount);
-    int nextReadIndex = 0;
+    binpackDetails trainingBinpack = binpack_open(TRAINING_DATA_PATH, 0);
+    binpackDetails validationBinpack = binpack_open(VALIDATION_DATA_PATH, 0);
 
     #ifdef COMPRESS_KING_BUCKET
     compressKingBucket(raw_weights);
@@ -149,250 +182,57 @@ void train(int maxIterations, float maxAllowedError)
     if(cl_errorcode != hipSuccess) 
     {
         DEBUG_ERROR("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
-        fclose(trainingDataFile);
-        free(blockIndices);
+        binpack_close(&trainingBinpack);
+        binpack_close(&validationBinpack);
         return;
     }
 
     int totalIterations = 0;
-
     float totalLoss = 0.0; //accumulated value per iteration
-
     clock_t startTime, endTime;
     double duration_sec;
-
-    //Read data for next few minibatches, then shuffle data amongst them.
-    CompactPosition* batchData = calloc(MINIBATCH_SIZE, sizeof(CompactPosition));
-    CompactPosition* unsortedData = calloc(MINIBATCH_SIZE * FEN_SKIP, sizeof(CompactPosition));
-
-    FILE* validationData = fopen(PROJECT_CWD  "/import/validationData.bin", "rb");
-
-    fseek_64(validationData, 0, SEEK_END);
-    int validationEntries = ftell_64(validationData) / sizeof(CompactPosition);
-    validationEntries -= (validationEntries % MINIBATCH_SIZE);
-    int validationBlocks = validationEntries / MINIBATCH_SIZE;
-    float validationLoss = 0.0;
-    rewind(validationData);
-
     int inputGroup = INPUT_GROUP_A;
+    bitboard* board = create_board(NULL);
 
     startTime = clock();
-    for(int i = 0; i < validationBlocks; i++)
+    for(int i = 0; i < VALIDATION_BINPACK_MINIBATCHES; i++)
     {
-        size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
-        if(size < MINIBATCH_SIZE) { DEBUG_ERROR("Failed reading validation Data"); continue; }
         inputGroup ^= 1;
+        uint32_t xorRNGState = time(NULL);
+        prepareMinibatchData(&validationBinpack, inputGroup, board, &xorRNGState,
+                                activeInputs_A, expectedOutputs_A, outputBuckets_A,
+                                activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
-        #pragma omp parallel
-        {
-            bitboard* board = create_board(NULL);
-            
-            #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
-            uint32_t xorRNGState = (uint32_t) time(NULL);
-            #endif
-            #pragma omp for schedule(static)
-            for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
-            {
-                if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
-                else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
-
-                uint64_t inputs[2 * PIECE_COUNT] = {0};
-
-                int trackedPiecesPerColor = PIECE_COUNT / 2;
-                for(int i = 0; i < PIECE_COUNT / 2; i++)
-                {
-                    //White's perspective
-                    inputs[i] = board->pieces[2 * i];
-                    inputs[trackedPiecesPerColor + i] = board->pieces[2 * i + 1];
-
-                    //Black's perspective
-                    inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
-                    inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
-                }
-
-                if(getColumn(board->kingSquare_w) > 3)
-                    for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-                if(getColumn(board->kingSquare_b) > 3)
-                    for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-
-                for(int color = 0; color < 2; color++)
-                {
-                    #ifndef COMPRESS_KING_BUCKET
-                    int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
-                    baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
-                    baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
-                    baseIndex *= BITS_PER_KING_BUCKET;
-                    #else
-                    int baseIndex = 0;
-                    #endif
-                    int trackedInputs = 0;
-
-                    //First half matches side to move.
-                    // side = 0 if color matches board->turn
-                    int side = (color != board->turn);
-                    
-                    for(int piece = 0; piece < PIECE_COUNT; piece++)
-                    {
-                        uint64_t mask = inputs[PIECE_COUNT * color + piece];
-                        while(mask)
-                        {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                            trackedInputs++;
-                            mask&=(mask - 1);
-                        }
-                    }
-                    
-                    #ifndef COMPRESS_OUTPUT_BUCKET
-                    int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
-                    outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
-                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
-                    else outputBuckets_B[entryNumber] = outputBucket;
-                    #else
-                    if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
-                    else outputBuckets_B[entryNumber] = 0;
-                    #endif
-
-                    //-1 padding
-                    while(trackedInputs < 32)
-                    {
-                        if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                        else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                        trackedInputs++;
-                    }
-                }
-            }
-            
-            free(board);
-        }
-
+                                
         enqueueKernels(inputGroup, 0);
         hipEventSynchronize(hip_events.readLoss);
-
-        validationLoss+=sumLoss(loss_buffer);
+        
+        float loss = sumLoss(loss_buffer);
+        totalLoss+=loss;
     }
     endTime = clock();
-    duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
-    validationLoss /= validationEntries;
-    float minimumLoss = validationLoss;
+    duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
+    totalLoss = totalLoss/(MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES);
+    float minimumLoss = totalLoss;
 
     //Yellow text
     //Validation pos/sec is roughly double that of training. It doesn't have to perform backprop.
-    printf("Initial Validation Loss = \033[0;33m%e\033[0m (%.1fs at %d pos/sec)\n", validationLoss, duration_sec, (int) (validationEntries / duration_sec));
+    printf("Initial Validation Loss = \033[0;33m%e\033[0m (%.1fs at %d pos/sec)\n", totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES) / duration_sec));
 
     do{
         totalLoss = 0.0;
 
         startTime = clock();
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
-        {    
-
-            int offset = minibatchNumber%FEN_SKIP;
-            if(offset == 0)
-            {
-                fseek_64(trainingDataFile, blockIndices[nextReadIndex++], SEEK_SET);
-                if(nextReadIndex >= blockCount)
-                {
-                    shuffle_long(blockIndices, blockCount);
-                    nextReadIndex = 0;
-                }
-
-                size_t size = fread(unsortedData, sizeof(CompactPosition), MINIBATCH_SIZE * FEN_SKIP, trainingDataFile);
-                if(size < MINIBATCH_SIZE * FEN_SKIP) { DEBUG_ERROR("Failed reading trainingData from file."); continue; }
-            }
-
-            for(int i = 0; i < MINIBATCH_SIZE; i++)
-            {
-                batchData[i] = unsortedData[offset + i * FEN_SKIP];
-            }
-
+        {
             inputGroup ^= 1;
+            uint32_t xorRNGState = (uint32_t) time(NULL);
+            prepareMinibatchData(&trainingBinpack, inputGroup, board, &xorRNGState,
+                                    activeInputs_A, expectedOutputs_A, outputBuckets_A,
+                                    activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
-            #pragma omp parallel
-            {
-                bitboard* board = create_board(NULL);
-                
-                #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
-                uint32_t xorRNGState = (uint32_t) time(NULL);;
-                #endif
-
-                #pragma omp for schedule(static)
-                for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
-                {
-                    if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
-                    else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
-
-                    uint64_t inputs[2 * PIECE_COUNT] = {0};
-
-                    int trackedPiecesPerColor = PIECE_COUNT / 2;
-                    for(int i = 0; i < PIECE_COUNT / 2; i++)
-                    {
-                        //White's perspective
-                        inputs[i] = board->pieces[2 * i];
-                        inputs[trackedPiecesPerColor + i] = board->pieces[2 * i + 1];
-
-                        //Black's perspective
-                        inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
-                        inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
-                    }
-
-                    if(getColumn(board->kingSquare_w) > 3)
-                        for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-                    if(getColumn(board->kingSquare_b) > 3)
-                        for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-                    
-                    for(int color = 0; color < 2; color++)
-                    {
-                        #ifndef COMPRESS_KING_BUCKET
-                        int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
-                        baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
-                        baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
-                        baseIndex *= BITS_PER_KING_BUCKET;
-                        #else
-                        int baseIndex = 0;
-                        #endif
-
-                        int trackedInputs = 0;
-
-                        //First half matches side to move.
-                        // side = 0 if color matches board->turn
-                        int side = (color != board->turn);
-                        
-                        for(int piece = 0; piece < PIECE_COUNT; piece++)
-                        {
-                            uint64_t mask = inputs[PIECE_COUNT * color + piece];
-                            while(mask)
-                            {
-                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                                trackedInputs++;
-                                mask&=(mask - 1);
-                            }
-                        }
-
-                        #ifndef COMPRESS_OUTPUT_BUCKET
-                        int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
-                        outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
-                        else outputBuckets_B[entryNumber] = outputBucket;
-                        #else
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
-                        else outputBuckets_B[entryNumber] = 0;
-                        #endif
-
-                        //-1 padding
-                        while(trackedInputs < 32)
-                        {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                            trackedInputs++;
-                        }
-                    }
-                }
-                
-                free(board);
-            }
-
+            //If we comment out hipEventSynchronize and enqueueKernels, we end up with 1.4 million positions/second.
+            //This is primarily bounded by input processing speed, not binpack I/O.
             enqueueKernels(inputGroup, 1);
             hipEventSynchronize(hip_events.readLoss);
             
@@ -405,117 +245,32 @@ void train(int maxIterations, float maxAllowedError)
         endTime = clock();
         duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
 
-        //If we comment out hipEventSynchronize, we end up with 17.4 million positions/second.
-        //Commenting out enqueueKernels as well nets us 18.4 million positions/second.
-        //This is the upper limit bounded by the CPU I/O, and it is far above the current GPU-bound pos/sec.
-        printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec)", totalIterations, totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH), duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
+        totalLoss = totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH);
+        printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec); ", totalIterations, totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
 
-        //Validation
-        rewind(validationData);
+        totalLoss = 0.0;
+
         startTime = clock();
-        for(int i = 0; i < validationBlocks; i++)
+        for(int i = 0; i < VALIDATION_BINPACK_MINIBATCHES; i++)
         {
-            size_t size = fread(batchData, sizeof(CompactPosition), MINIBATCH_SIZE, validationData);
-            if(size < MINIBATCH_SIZE) { DEBUG_ERROR("Failed reading validation Data"); continue; }
             inputGroup ^= 1;
+            uint32_t xorRNGState = time(NULL);
+            prepareMinibatchData(&validationBinpack, inputGroup, board, &xorRNGState,
+                                    activeInputs_A, expectedOutputs_A, outputBuckets_A,
+                                    activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
-            #pragma omp parallel
-            {
-                bitboard* board = create_board(NULL);
-
-                #if !defined(COMPRESS_KING_BUCKET) || !defined(COMPRESS_OUTPUT_BUCKET)
-                uint32_t xorRNGState = (uint32_t) time(NULL);;
-                #endif
-                
-                #pragma omp for schedule(static)
-                for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
-                {
-                    if(inputGroup == INPUT_GROUP_A)  loadTrainingData(batchData[entryNumber], board, &expectedOutputs_A[entryNumber]);
-                    else loadTrainingData(batchData[entryNumber], board, &expectedOutputs_B[entryNumber]);
-
-                    uint64_t inputs[2 * PIECE_COUNT] = {0};
-
-                    int trackedPiecesPerColor = PIECE_COUNT / 2;
-                    for(int i = 0; i < PIECE_COUNT / 2; i++)
-                    {
-                        //White's perspective
-                        inputs[i] = board->pieces[2 * i];
-                        inputs[trackedPiecesPerColor + i] = board->pieces[2 * i + 1];
-
-                        //Black's perspective
-                        inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
-                        inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
-                    }
-                    
-                    if(getColumn(board->kingSquare_w) > 3)
-                        for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-                    if(getColumn(board->kingSquare_b) > 3)
-                        for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-
-                    for(int color = 0; color < 2; color++)
-                    {
-                        #ifndef COMPRESS_KING_BUCKET
-                        int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
-                        baseIndex += offsetGenerator_xorshift32(&xorRNGState, baseIndex);
-                        baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
-                        baseIndex *= BITS_PER_KING_BUCKET;
-                        #else
-                        int baseIndex = 0;
-                        #endif
-
-                        int trackedInputs = 0;
-
-                        //First half matches side to move.
-                        // side = 0 if color matches board->turn
-                        int side = (color != board->turn);
-                        
-                        for(int piece = 0; piece < PIECE_COUNT; piece++)
-                        {
-                            uint64_t mask = inputs[PIECE_COUNT * color + piece];
-                            while(mask)
-                            {
-                                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                                trackedInputs++;
-                                mask&=(mask - 1);
-                            }
-                        }
-
-                        #ifndef COMPRESS_OUTPUT_BUCKET
-                        int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(&xorRNGState, -1);
-                        outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
-                        else outputBuckets_B[entryNumber] = outputBucket;
-                        #else
-                        if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
-                        else outputBuckets_B[entryNumber] = 0;
-                        #endif
-
-                        //-1 padding
-                        while(trackedInputs < 32)
-                        {
-                            if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                            else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                            trackedInputs++;
-                        }
-                    }
-                }
-                
-                free(board);
-            }
-        
+                                    
             enqueueKernels(inputGroup, 0);
             hipEventSynchronize(hip_events.readLoss);
-
-            validationLoss+=sumLoss(loss_buffer);
+            
+            float loss = sumLoss(loss_buffer);
+            totalLoss+=loss;
         }
-        
         endTime = clock();
-        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC;
+        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
+        totalLoss = totalLoss/(MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES);
 
-        validationLoss /= validationEntries;
-
-        if(validationLoss < minimumLoss)
+        if(totalLoss < minimumLoss)
         {
             getWeights(raw_weights);
             #ifdef COMPRESS_KING_BUCKET
@@ -527,27 +282,24 @@ void train(int maxIterations, float maxAllowedError)
             saveRawWeights();
             quantizeWeights(raw_weights, int_weights);
             saveQuantizedWeights();
-            minimumLoss = validationLoss;
+            minimumLoss = totalLoss;
 
             //Green text
-            printf("; Validation Loss = \033[0;32m%e\033[0m", validationLoss);
+            printf("Validation Loss = \033[0;32m%e\033[0m (%.1fs at %d pos/sec)\n", totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES) / duration_sec));
         }
-        else 
+        else
         {
             //Red text
-            printf("; Validation Loss = \033[0;31m%e\033[0m", validationLoss);
+            printf("Validation Loss = \033[0;31m%e\033[0m (%.1fs at %d pos/sec)\n", totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES) / duration_sec));
         }
-        printf(" (%.1fs at %d pos/sec)\n", duration_sec, (int) (validationEntries / duration_sec));
-    } while(validationLoss > maxAllowedError && totalIterations < maxIterations);
+        
 
-    
-    fclose(trainingDataFile);
-    fclose(validationData);
-    free(blockIndices);
-    free(batchData);
-    free(unsortedData);
+    } while(minimumLoss > maxAllowedError && totalIterations < maxIterations);
 
+    free(board);
     freeHIP();
+    binpack_close(&trainingBinpack);
+    binpack_close(&validationBinpack);
 }
 
 void compressKingBucket(training_weights* weights)

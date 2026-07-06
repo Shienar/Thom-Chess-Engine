@@ -2,10 +2,9 @@
 #define DATA_GENERATOR
 
 #include "types.h"
-#include "src/binpack/viri_binpack.h"
+#include "binpack/viri_binpack.h"
 
 #define MAX_POSITIONS_PER_GAME 250
-
 
 void generate();
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param);

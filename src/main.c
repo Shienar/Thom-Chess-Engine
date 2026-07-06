@@ -106,6 +106,7 @@ int main(int argc, char** argv)
                                 tt_size_entries = (byteSize * 1024 * 1024) / sizeof(table_entry_tt);
                                 destroy_hashTable_tt(transpositionTable);
                                 transpositionTable = create_hashTable_tt();
+                                threadContext->tt = transpositionTable;
                             }
                             break;
                         }
@@ -415,6 +416,7 @@ int main(int argc, char** argv)
                 //Reap the thread, which will print out its results as it terminates.
                 if(isCalculating)
                 {
+                    threadContext->isPonder = 0;
                     endTime = 0;
                     isCalculating = 0;
                     THREAD_WAIT(calculateThread);
@@ -509,6 +511,15 @@ int main(int argc, char** argv)
                 print_network_statistics();
                 break;
             }
+            #ifdef TRAIN
+            else if(strcmp(str, "binpackinfo") == 0)
+            {
+                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                binpackPrintInfo(VALIDATION_DATA_PATH);
+                binpackPrintInfo(TRAINING_DATA_PATH);
+                break;
+            }
+            #endif
             else if(strcmp(str, "quit") == 0) 
             {
                 quit = 1;

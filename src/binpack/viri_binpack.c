@@ -1,37 +1,31 @@
-#include "src/binpack/viri_binpack.h"
-#include "src/board/bitboard.h"
-#include "src/board/moves.h"
+#include "binpack/viri_binpack.h"
+#include "board/bitboard.h"
+#include "board/moves.h"
 #include "debug.h"
+
+#define _FILE_OFFSET_BITS 64
+#define _LARGEFILE64_SOURCE
 #include <io.h>
 
-mutex_t mutex = THREAD_INIT;
-FILE* binpackFile = NULL;
-bitboard board;
-
-Viri_PackedBoard packedBoard;
-uint8_t currentGameWinner;
 uint8_t pieceMappingsFromViri[16];
 uint8_t pieceMappingsToViri[16];
 uint8_t promoteMappingsFromViri[4];
 uint8_t promoteMappingsToViri[10];
 uint8_t rookSqToFlag[64];
-int writtenThisSession = 0;
-clock_t lastPrintTime;
-clock_t startTime;
 
-int readPackedBoard()
+int readPackedBoard(binpackDetails* details)
 {
-    fread(&packedBoard.occupancy, sizeof(packedBoard.occupancy), 1, binpackFile);
+    fread(&details->packedBoard.occupancy, sizeof(details->packedBoard.occupancy), 1, details->binpack);
 
-    if(packedBoard.occupancy)
-        fread((uint8_t*) &packedBoard + sizeof(packedBoard.occupancy), sizeof(packedBoard) - sizeof(packedBoard.occupancy), 1, binpackFile);
+    if(details->packedBoard.occupancy)
+        fread((uint8_t*) &details->packedBoard + sizeof(details->packedBoard.occupancy), sizeof(details->packedBoard) - sizeof(details->packedBoard.occupancy), 1, details->binpack);
     else
     {
         uint16_t extension_id = 0;
         uint16_t payload_length = 0;
 
-        fread(&extension_id, sizeof(extension_id), 1, binpackFile);
-        fread(&payload_length, sizeof(payload_length), 1, binpackFile);
+        fread(&extension_id, sizeof(extension_id), 1, details->binpack);
+        fread(&payload_length, sizeof(payload_length), 1, details->binpack);
         
         #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
         extension_id = __builtin_bswap16(extension_id);
@@ -41,9 +35,9 @@ int readPackedBoard()
         long bytes_to_skip = (long)payload_length + 4;
 
         //Skip past the reserved extensions.
-        fseek_64(binpackFile, bytes_to_skip, SEEK_CUR);
+        fseek_64(details->binpack, bytes_to_skip, SEEK_CUR);
 
-        fread(&packedBoard, sizeof(Viri_PackedBoard), 1, binpackFile);
+        fread(&details->packedBoard, sizeof(Viri_PackedBoard), 1, details->binpack);
     }
 
     #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
@@ -52,54 +46,54 @@ int readPackedBoard()
     packedBoard.score = __bultin_bswap16(packedBoard.score);
     #endif
 
-    board.turn = packedBoard.stm == VIRI_BLACK_STM;
+    details->board.turn = details->packedBoard.stm == VIRI_BLACK_STM;
 
-    if(packedBoard.result == VIRI_WHITE_WIN) currentGameWinner = VICTOR_WHITE;
-    else if(packedBoard.result == VIRI_BLACK_WIN) currentGameWinner = VICTOR_BLACK;
-    else currentGameWinner = VICTOR_DRAW_GENERIC;
+    if(details->packedBoard.result == VIRI_WHITE_WIN) details->currentGameWinner = VICTOR_WHITE;
+    else if(details->packedBoard.result == VIRI_BLACK_WIN) details->currentGameWinner = VICTOR_BLACK;
+    else details->currentGameWinner = VICTOR_DRAW_GENERIC;
 
-    board.halfMoveCount = 2 * (packedBoard.fullMoveCounter) + board.turn;
-    board.movesSinceLastChange = packedBoard.halfmoveClock;
+    details->board.halfMoveCount = 2 * (details->packedBoard.fullMoveCounter) + details->board.turn;
+    details->board.movesSinceLastChange = details->packedBoard.halfmoveClock;
 
     //Clear board
-    memset(&board.pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
-    memset(&board.pieces, 0, PIECE_COUNT * sizeof(uint64_t));
-    memset(&board.pieces_side, 0, 2 * sizeof(uint64_t));
-    board.pieces_all = 0;
+    memset(&details->board.pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
+    memset(&details->board.pieces, 0, PIECE_COUNT * sizeof(uint64_t));
+    memset(&details->board.pieces_side, 0, 2 * sizeof(uint64_t));
+    details->board.pieces_all = 0;
 
-    uint64_t mask = packedBoard.occupancy;
+    uint64_t mask = details->packedBoard.occupancy;
     int offset = 0;
     while(mask)
     {
         int sq = __builtin_ctzll(mask);
         int byteIndex = offset / 2;
-        int piece = packedBoard.pieces[byteIndex];
+        int piece = details->packedBoard.pieces[byteIndex];
         if(offset % 2) piece = piece&0xF;
         else piece >>= 4;
 
         if(piece&6)
-            board.flags |= rookSqToFlag[sq];
+            details->board.flags |= rookSqToFlag[sq];
 
         piece = pieceMappingsFromViri[piece];
 
         uint64_t sqMask = singleBitMask(sq);
-        board.pieces_all |= sqMask;
-        board.pieces_side[COLOR(piece)] |= sqMask;
-        board.pieces[piece] |= sqMask;
-        board.pieceArr[sq] = piece;
+        details->board.pieces_all |= sqMask;
+        details->board.pieces_side[COLOR(piece)] |= sqMask;
+        details->board.pieces[piece] |= sqMask;
+        details->board.pieceArr[sq] = piece;
 
         if(ISKING(piece))
         {
-            if(ISBLACK(piece)) board.kingSquare_b = sq;
-            else board.kingSquare_w = sq;
+            if(ISBLACK(piece)) details->board.kingSquare_b = sq;
+            else details->board.kingSquare_w = sq;
         }
 
         offset++;
         mask &= (mask - 1);
     }
     
-    if(isThreatened(&board, board.kingSquare_w, WHITE)) board.flags|=16;
-    else if(isThreatened(&board, board.kingSquare_b, BLACK)) board.flags|=32;
+    if(isThreatened(&details->board, details->board.kingSquare_w, WHITE)) details->board.flags|=16;
+    else if(isThreatened(&details->board, details->board.kingSquare_b, BLACK)) details->board.flags|=32;
 
     return 0;
 }
@@ -146,15 +140,15 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 }
 
 //Truncate the newly opened file if it doesn't end in four zero bytes.
-void clearCorruptedGame()
+void clearCorruptedGame(binpackDetails* details)
 {
-    fseek(binpackFile, 0, SEEK_END);
-    long file_size = ftell(binpackFile);
+    fseek(details->binpack, 0, SEEK_END);
+    long file_size = ftell(details->binpack);
     if(file_size < 4) return;
 
     uint32_t tail;
-    fseek(binpackFile, -4, SEEK_END);
-    fread(&tail, sizeof(uint32_t), 1, binpackFile);
+    fseek(details->binpack, -4, SEEK_END);
+    fread(&tail, sizeof(uint32_t), 1, details->binpack);
 
     //File terminates correctly
     if(!tail) return;
@@ -165,9 +159,9 @@ void clearCorruptedGame()
 
     while(search_pos >= 0) 
     {
-        fseek(binpackFile, search_pos, SEEK_SET);
+        fseek(details->binpack, search_pos, SEEK_SET);
         uint8_t byte;
-        fread(&byte, 1, 1, binpackFile);
+        fread(&byte, 1, 1, details->binpack);
         
         window = (window << 8) | byte;
         
@@ -180,15 +174,15 @@ void clearCorruptedGame()
     }
 
     #ifdef _WIN32
-        _chsize_s(_fileno(binpackFile), clean_offset);
+        _chsize_s(_fileno(details->binpack), clean_offset);
     #else
-        ftruncate(fileno(binpackFile), clean_offset);
+        ftruncate(fileno(details->binpack), clean_offset);
     #endif
 }
 
-void binpack_open(const char* fileName, int writer)
+binpackDetails binpack_open(const char* fileName, int writer)
 {
-    binpackFile = fopen(fileName, "rb+");
+    FILE* binpackFile = fopen(fileName, "rb+");
     if(!binpackFile)
     {
         binpackFile = fopen(fileName, "wb+");
@@ -198,6 +192,7 @@ void binpack_open(const char* fileName, int writer)
             exit(1);
         }
     }
+    mutex_t mutex = THREAD_INIT;
     CREATE_MUTEX(mutex);
 
     pieceMappingsFromViri[VIRI_PAWN] = WHITE_PAWN;
@@ -259,99 +254,116 @@ void binpack_open(const char* fileName, int writer)
     rookSqToFlag[56] = 8;
     rookSqToFlag[63] = 4;
 
-    writtenThisSession = 0;
-    startTime = clock();
+    binpackDetails d = {0};
+    d.binpack = binpackFile;
+    d.lock = mutex;
 
-    clearCorruptedGame();
+    clearCorruptedGame(&d);
     if(!writer)
     {
         rewind(binpackFile);
-        readPackedBoard();
+        readPackedBoard(&d);
     }
+
+    return d;
 }
 
-void binpack_close()
+void binpack_close(binpackDetails* details)
 {
-    if(binpackFile) 
+    if(details->binpack) 
     {
-        fclose(binpackFile);
-        binpackFile = NULL;
+        fclose(details->binpack);
+        details->binpack = NULL;
 
-        DESTROY_MUTEX(mutex);
-        mutex = THREAD_INIT;
+        DESTROY_MUTEX(details->lock);
+        details->lock = THREAD_INIT;
 
-        lastPrintTime = clock();
-        double duration = (double) ((lastPrintTime - startTime) / CLOCKS_PER_SEC);
-        printf("\rGenerated %d positions this session (%.2f pos/sec)\n", writtenThisSession, writtenThisSession / duration);
+        if(details->writtenThisSession)
+        {
+            details->lastPrintTime = clock();
+            double duration = (double) ((details->lastPrintTime - details->startTime) / CLOCKS_PER_SEC);
+            printf("\rGenerated %d positions this session (%.2f pos/sec)\n", details->writtenThisSession, details->writtenThisSession / duration);
+            details->writtenThisSession = 0;
+        }
     }
 }
 
-void binpack_next(bitboard* brd, Viri_Score* eval, uint8_t* result)
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop)
 {
-    assert(binpackFile);
     Viri_MoveScorePair pair = {0};
+    int skippedCount = 0;
 
     //Break once we find a good move.
     while(1)
     {
-        if(fread(&pair, sizeof(Viri_MoveScorePair), 1, binpackFile) < 1)
+        if(fread(&pair, sizeof(Viri_MoveScorePair), 1, details->binpack) < 1)
         {
-            fseek_64(binpackFile, 0, SEEK_SET);
-            readPackedBoard();
+            if(loop)
+            {
+                fseek_64(details->binpack, 0, SEEK_SET);
+                readPackedBoard(details);
+            }
+            else 
+                return (skippedCount > 0) ? skippedCount : -1;
         }
         else
         {
-
             if(pair.move.raw == 0)
             {
-                readPackedBoard();
-                continue;
+                readPackedBoard(details);
             }
-
-            #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-            pair.move.raw = __builtin_bswap16(pair.move.raw);
-            #endif
-
-
-            //For the purpose of speed, bypass the legal-move checks in moveFromStruct
-            move_c m = {
-                .startSquare = pair.move.startSquare,
-                .endSquare = pair.move.endSquare
-            };
-            if(pair.move.moveType == VIRI_MOVE_TYPE_PROMOTIONS)
-                m.promoteTo = promoteMappingsToViri[pair.move.promotePiece];
-            else 
+            else
             {
-                int fromPc = findPieceOnSquare((&board), m.startSquare);
-                int toPc = findPieceOnSquare((&board), m.endSquare);
 
-                //Viriformat castling is king takes rook
-                if(toPc != EMPTY_PIECE && COLOR(fromPc) == COLOR(toPc))
+                #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+                pair.move.raw = __builtin_bswap16(pair.move.raw);
+                #endif
+
+
+                //For the purpose of speed, bypass the legal-move checks in moveFromStruct
+                move_c m = {
+                    .startSquare = pair.move.startSquare,
+                    .endSquare = pair.move.endSquare
+                };
+                if(pair.move.moveType == VIRI_MOVE_TYPE_PROMOTIONS)
+                    m.promoteTo = promoteMappingsToViri[pair.move.promotePiece];
+                else
                 {
-                    if(m.endSquare < m.startSquare)
-                        m.endSquare += 2 - (m.endSquare & 0x7);
-                    else
-                        m.endSquare += 6 - (m.endSquare & 0x7);
-                }
-            }
+                    int fromPc = findPieceOnSquare((&details->board), m.startSquare);
+                    int toPc = findPieceOnSquare((&details->board), m.endSquare);
 
-            board.repetitionIndex = 0;
-            board.historyIndex = 0;
+                    //Viriformat castling is king takes rook
+                    if(toPc != EMPTY_PIECE && COLOR(fromPc) == COLOR(toPc))
+                    {
+                        if(m.endSquare < m.startSquare)
+                            m.endSquare += 2 - (m.endSquare & 0x7);
+                        else
+                            m.endSquare += 6 - (m.endSquare & 0x7);
+                    }
+                }
+
+                details->board.repetitionIndex = 0;
+                details->board.historyIndex = 0;
+                if(movePiece(&details->board, m)) continue;;
+            }
         }
 
         if(abs(pair.score) <= 10000 && 
             pair.move.moveType == 0 &&
-            !IS_IN_CHECK_ANY(board.flags) &&
-            board.halfMoveCount > 12)
+            !IS_IN_CHECK_ANY(details->board.flags) &&
+            details->board.halfMoveCount > 6)
                 break;
+        
+        skippedCount++;
     }
 
-    *result = currentGameWinner;
-    *eval = pair.score;
-    *brd =  board;
+    *result = details->currentGameWinner;
+    *eval = (ISWHITE(details->board.turn)) ? pair.score : -pair.score;
+    *brd =  details->board;
+    return skippedCount;
 }
 
-void binpack_writeGame(Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count)
+void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count)
 {
 
     #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
@@ -360,9 +372,9 @@ void binpack_writeGame(Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairLi
     packedBoard->score = __bultin_bswap16(packedBoard->score);
     #endif
 
-    LOCK_MUTEX(mutex);
+    LOCK_MUTEX(details->lock);
 
-    fwrite(packedBoard, sizeof(Viri_PackedBoard), 1, binpackFile);
+    fwrite(packedBoard, sizeof(Viri_PackedBoard), 1, details->binpack);
     #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
         for(int i = 0; i < count; i++)
         {
@@ -371,19 +383,77 @@ void binpack_writeGame(Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairLi
         }
     #endif
 
-    fwrite(pairList, sizeof(Viri_MoveScorePair), count, binpackFile);
+    fwrite(pairList, sizeof(Viri_MoveScorePair), count, details->binpack);
 
     uint32_t zero = 0;
-    fwrite(&zero, 4, 1, binpackFile);
+    fwrite(&zero, 4, 1, details->binpack);
 
-    writtenThisSession+=count;
+    details->writtenThisSession+=count;
 
-    if((clock() - lastPrintTime) / CLOCKS_PER_SEC > 10)
+    if((clock() - details->lastPrintTime) / CLOCKS_PER_SEC > 10)
     {
-        lastPrintTime = clock();
-        double duration = (double) ((lastPrintTime - startTime) / CLOCKS_PER_SEC);
-        printf("\rGenerated %d positions this session (%.2f pos/sec)", writtenThisSession, writtenThisSession / duration);
+        details->lastPrintTime = clock();
+        double duration = (double) ((details->lastPrintTime - details->startTime) / CLOCKS_PER_SEC);
+        printf("\rGenerated %d positions this session (%.2f pos/sec)", details->writtenThisSession, details->writtenThisSession / duration);
     }
 
-    UNLOCK_MUTEX(mutex);
+    UNLOCK_MUTEX(details->lock);
+}
+
+//Normally 21-22m positions per second (mostly usable)/
+//GPU is the biggest bottleneck, followed by CPU input proccessing, followed by CPU binpack I/O
+void binpackPrintInfo(const char* fileName)
+{
+    binpackDetails details = binpack_open(fileName, 0);
+    uint64_t usedCount = 1;
+    uint64_t skippedCount = 0;
+    
+    int temp;
+    bitboard b;
+    Viri_Score s;
+    uint8_t r;
+
+    printf("Binpack statistics:\n");
+    printf("\tUsable: %llu\n", usedCount);
+    printf("\tSkipped: %llu\n", skippedCount);
+    printf("\tTotal: %llu\n", usedCount + skippedCount);
+    fflush(stdout);
+
+    int i = 0;
+    clock_t readStartTime = clock();
+    while((temp = binpack_next(&details, &b, &s, &r, 0)) != -1)
+    {
+        skippedCount += temp;
+        usedCount++;
+
+        //Printout every 1,000,000 usable entries.
+        if((i = i + 1) % 1000000 == 0)
+        {
+            printf("\033[4A");
+            printf("\033[2K\rBinpack statistics:\n");
+            printf("\033[2K\r\tTotal: %llu\n", usedCount + skippedCount);
+            printf("\033[2K\r\tUsable: %llu\n", usedCount);
+            printf("\033[2K\r\tSkipped: %llu\n", skippedCount);
+            fflush(stdout);
+        }
+    }
+    clock_t readEndTime = clock();
+    double duration = (readEndTime - readStartTime) /  (double) CLOCKS_PER_SEC;
+    uint64_t totalCount = usedCount + skippedCount;
+    double positionsPerSecond = totalCount / duration;
+
+    uint64_t byteLength = ftell_64(details.binpack);
+    float positionsPerByte = (float) byteLength / totalCount;
+
+    printf("\033[4A");
+    printf("\033[2K\rBinpack statistics:\n");
+    printf("\033[2K\r\tTotal: %llu\n", totalCount);
+    printf("\033[2K\r\tUsable: %llu\n", usedCount);
+    printf("\033[2K\r\tSkipped: %llu\n", skippedCount);
+    printf("\033[2K\r\tDuration: %.4f\n", duration);
+    printf("\033[2K\r\tPositions per second: %.4f\n", positionsPerSecond);
+    printf("\033[2K\r\tByte Size: %llu\n", (unsigned long long)byteLength);
+    printf("\033[2K\r\tPositions per Byte: %.4f\n", positionsPerByte);
+
+    binpack_close(&details);
 }

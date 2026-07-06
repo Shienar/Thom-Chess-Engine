@@ -1,10 +1,13 @@
-#include "src/binpack/generate.h"
-#include "src/analyze/book.h"
-#include "src/analyze/engine.h"
-#include "src/board/bitboard.h"
+#include "binpack/generate.h"
+#include "analyze/book.h"
+#include "analyze/engine.h"
+#include "board/bitboard.h"
+
+binpackDetails details;
 
 void generate()
 {
+    binpackPrintInfo(TRAINING_DATA_PATH);
     unloadBook();
     int concurrency = threadCount;
     threadCount = 1;
@@ -15,7 +18,7 @@ void generate()
     searchThreadContext* contextList = calloc(concurrency, sizeof(searchThreadContext));
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
-    binpack_open(PROJECT_CWD "/import/data.viri", 1);
+    details = binpack_open(TRAINING_DATA_PATH, 1);
 
     clock_t endTime = LONG_MAX;
     for(int i = 0; i < concurrency; i++)
@@ -60,12 +63,14 @@ void generate()
         free(contextList[i].board);
         free(contextList[i].accumulator);
     }
-    printf("Stopped generating data.\n");
     threadCount = concurrency;
     suppressUCIMessages = 0;
-    binpack_close();
+    binpack_close(&details);
     if(wasDebugEnabled) enableDebugMessages();
     loadBook(GENERAL_BOOK);
+    printf("Stopped generating data.\n");
+    
+    binpackPrintInfo(TRAINING_DATA_PATH);
 }
 
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
@@ -107,7 +112,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             else
                 packedBoard->result = VIRI_WHITE_WIN;
 
-            binpack_writeGame(packedBoard, pairList, movesThisGame);
+            binpack_writeGame(&details, packedBoard, pairList, movesThisGame);
             movesThisGame = 0;
             isNewGame = 1;
             
@@ -151,7 +156,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             if(findPieceOnSquare(context->board, bestMove.endSquare) != EMPTY_PIECE)
                 pairList[movesThisGame].score = 32002;
             else
-                pairList[movesThisGame].score = rootEntry.evaluation;
+                //White-relative
+                pairList[movesThisGame].score = (ISWHITE(context->board->turn)) ? rootEntry.evaluation : -rootEntry.evaluation;
 
             movesThisGame++;
         }
@@ -178,7 +184,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             }
             else
                 packedBoard->result = VIRI_DRAW;;
-            binpack_writeGame(packedBoard, pairList, movesThisGame);
+            binpack_writeGame(&details, packedBoard, pairList, movesThisGame);
             movesThisGame = 0;
             isNewGame = 1;
             

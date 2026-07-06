@@ -26,7 +26,7 @@ void loadRawWeights()
     if(raw_weights) return;
     raw_weights = calloc(1, sizeof(training_weights));
 
-    FILE* input = fopen(PROJECT_CWD "/import/raw.nnue", "rb");
+    FILE* input = fopen(RAW_PATH, "rb");
     if(input)
     {
         size_t size = fread(raw_weights, sizeof(training_weights), 1, input);
@@ -54,7 +54,7 @@ void loadRawWeights()
 
 void saveRawWeights()
 {
-    FILE* output = fopen(PROJECT_CWD "/import/raw.nnue", "wb");
+    FILE* output = fopen(RAW_PATH, "wb");
     if(output) 
     {
         fwrite(raw_weights, sizeof(training_weights), 1, output);
@@ -90,7 +90,7 @@ void loadQuantizedWeights()
     if(int_weights) return;
     int_weights = calloc(1, sizeof(quantized_weights));
 
-    FILE* input = fopen(PROJECT_CWD "/import/quantized.nnue", "rb");
+    FILE* input = fopen(QUANTIZED_PATH, "rb");
     if(input)
     {
         size_t size = fread(int_weights, sizeof(quantized_weights), 1, input);
@@ -106,7 +106,7 @@ void loadQuantizedWeights()
 
 void saveQuantizedWeights()
 {
-    FILE* output = fopen(PROJECT_CWD "/import/quantized.nnue", "wb");
+    FILE* output = fopen(QUANTIZED_PATH, "wb");
     if(output)
     {
         fwrite(int_weights, sizeof(quantized_weights), 1, output);

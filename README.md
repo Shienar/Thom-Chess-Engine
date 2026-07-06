@@ -27,4 +27,4 @@ The training kernels require HIP SDK to run. They were created specifically for 
 - Andy Grant's sygyzy probing tool Pyrrhic is used to probe the sygyzy files. It is available at https://github.com/AndyGrant/Pyrrhic
 - The chess programming wiki (https://www.chessprogramming.org/) contains a lot of valuable information that was very helpful to me when I started this project.
 - Dominik Klein's book "Neural Networks for Chess" helped me get started on understanding chess NNUEs. You can find it at https://github.com/asdfjkl/neural_network_chess
-- Training data from https://robotmoon.com/nnue-training-data/ was used during the extensive debugging & optimization of the training kernels. Pre-release neural nets were trained solely from this data, with later versions using self-generated data.
+- Training data from https://robotmoon.com/nnue-training-data/ was used during the extensive debugging & optimization of the training kernels. Uninitialized weights received stockfish data training as a kickstart, but the aim is to create data for self-improvement, although this is taking some time.

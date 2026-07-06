@@ -6,6 +6,8 @@
 #include <immintrin.h>
 #include "board/bitboard.h"
 
+#define RAW_PATH PROJECT_CWD "/import/raw.nnue"
+#define QUANTIZED_PATH PROJECT_CWD "/import/quantized.nnue"
 #define PI 3.141592653589793
 
 #define FLIP_SQUARE(x) (x^56)

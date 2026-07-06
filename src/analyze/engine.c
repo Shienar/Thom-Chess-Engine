@@ -197,12 +197,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(isDraw(board))
-        return 0;
-    if(ply >= MAX_PLY - 1) 
-        return forwardPropagate(board, context->accumulator);
-    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && ply >= 1))
-        return quiescentSearch(context, alpha, beta, ply);
+    if(isDraw(board)) return 0;
 
     //Mate distance pruning for non-root nodes.
     if(ply != 0)
@@ -224,7 +219,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     table_entry_tt old_tt_entry = transposition_table_get(board, context->tt, &hit, ply);
     if(hit) 
     {
-        if(old_tt_entry.depth >= depth && !pvNode) 
+        if(old_tt_entry.depth >= depth && (!pvNode || depth == 0)) 
         {
             if(old_tt_entry.nodeType == NODE_TYPE_PV ||
                (old_tt_entry.nodeType == NODE_TYPE_ALL && old_tt_entry.evaluation <= alpha) ||
@@ -236,6 +231,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         tt_move = &temp;
         score = old_tt_entry.evaluation;
     }
+
+    if(ply >= MAX_PLY - 1) 
+        return forwardPropagate(board, context->accumulator);
+    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && ply >= 1))
+        return quiescentSearch(context, alpha, beta, ply);
     
     //Sygyzy
     if(!pvNode && depth >= sygyzyProbeDepth)
@@ -271,6 +271,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(inCheck) context->improving[ply] = 0;
     else context->improving[ply] = (ply >= 2) ? (score > context->evalHistory[ply - 2]) : 1;
 
+    context->killerMoves[ply+1][0].raw = context->killerMoves[ply+1][1].raw = 0;
+
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
         //Reverse Futility Pruning
@@ -283,12 +285,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(reducedVal >= beta) return beta;
         }
 
-        //Futility pruning (move to hot loop)
+        //Futility pruning
         if(depth <= futility_pruning_depth && (score + futility_margin) <= alpha)
             return alpha;
 
         //Null move pruning
-        if(score >= beta && depth >= nullmove_pruning_depth && 
+        if(score >= beta && depth >= nullmove_pruning_depth &&
             (board->pieces_all ^ (board->pieces[WHITE_KING] | board->pieces[BLACK_KING] | board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN])))
         {
             int r = 3 + depth / 6;
@@ -565,11 +567,15 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
             if(score <= alpha)
             {
+                beta = (alpha + beta) / 2;
+
                 aspiration_margin*=aspiration_margin_mult_factor;
                 alpha = score - aspiration_margin;
             }
             else if(score >= beta)
             {
+                alpha = (alpha + beta) / 2;
+
                 aspiration_margin*=aspiration_margin_mult_factor;
                 beta = score + aspiration_margin;
             }
@@ -699,9 +705,12 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     context->completedDepth = 0;
 
     //Book moves
-    context->pv.line[0] = getBookMove(board);
-    if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move_c){0}, 1); isCalculating = 0; return 0; }
-    
+    if(!context->isPonder)
+    {
+        context->pv.line[0] = getBookMove(board);
+        if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move_c){0}, 1); isCalculating = 0; return 0; }
+    }
+
     //Sygyzy move recommendations
     filterSygyzyMoves(board, context->searchedMoves);
 

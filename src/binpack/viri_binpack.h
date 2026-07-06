@@ -8,6 +8,9 @@
 
 typedef int16_t Viri_Score; //White-relative
 
+#define TRAINING_DATA_PATH PROJECT_CWD "/import/trainingData.viri"
+#define VALIDATION_DATA_PATH PROJECT_CWD "/import/validationData.viri"
+
 #define VIRI_PAWN 0
 #define VIRI_KNIGHT 1
 #define VIRI_BISHOP 2
@@ -56,7 +59,18 @@ typedef struct {
     Viri_Move move;
     Viri_Score score;
 } Viri_MoveScorePair;
-#pragma pack(pop);
+#pragma pack(pop)
+
+typedef struct {
+    FILE* binpack;
+    mutex_t lock;
+    bitboard board;
+    Viri_PackedBoard packedBoard;
+    uint8_t currentGameWinner;
+    int writtenThisSession;
+    clock_t lastPrintTime;
+    clock_t startTime;
+} binpackDetails;
 
 extern uint8_t pieceMappingsFromViri[16];
 extern uint8_t pieceMappingsToViri[16];
@@ -65,10 +79,12 @@ extern uint8_t promoteMappingsToViri[10];
 extern uint8_t rookSqToFlag[64];
 
 //Same file pointer for all functions. The assumption is that you will either only read or only write.
-void binpack_open(const char* fileName, int writer);
-void binpack_close();
-void binpack_next(bitboard* brd, Viri_Score* eval, uint8_t* result);
+binpackDetails binpack_open(const char* fileName, int writer);
+void binpack_close(binpackDetails* details);
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop);
 
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
-void binpack_writeGame(Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count);
+void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count);
+
+void binpackPrintInfo(const char* fileName);
 #endif

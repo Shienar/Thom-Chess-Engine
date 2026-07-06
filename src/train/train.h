@@ -4,25 +4,23 @@
 #include "analyze/neuralnet.h"
 #include "train/gpu_funcs.h"
 
-#define MAX_LR 8e-5f
+#define MAX_LR 8e-4f
 #define MIN_LR 2.5e-6f
-#define INTERVAL_SCALE 1.5f
-#define FIRST_INTERVAL MINIBATCHES_PER_EPOCH
-#define MAX_INTERVALS 12
+#define MAX_COSINE_ANNEAL_TIMESTAMP (180 * MINIBATCHES_PER_EPOCH)
 #define LOOKAHEAD_RANGE 10
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 
 #define EVAL_SCALE 400.0f
-#define LAMBDA 0.9f
+#define LAMBDA 0.75f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // 6,104 * 16,384 = 100,007,936
 
-//Every FEN_SKIPth entry is saved. Offsets are set to minibatchNumber%FEN_SKIP
-#define FEN_SKIP 25
+//Binpack will have a larger size, just make sure this many positions are valid with binpackinfo
+#define VALIDATION_BINPACK_MINIBATCHES (1000000 / MINIBATCH_SIZE)
 
 //N in 1000 chance to shift the king or output bucket.
 //An attempt at blending the difference between neighboring buckets.
@@ -62,14 +60,5 @@ void compressKingBucket(training_weights* weights);
 void compressOutputBucket(training_weights* weights);
 void broadcastKingBucket(training_weights* weights);
 void broadcastOutputBucket(training_weights* weights);
-
-#pragma pack(push, 1)
-typedef struct {
-    uint64_t occupancy;   // Bitboard of all pieces
-    uint8_t  pieces[16];  // 4-bits per piece (bits then low bits)
-    uint8_t  flags;  // LSB=Turn, bits 1,2,3 for Win/Loss/Draw
-    int16_t  evaluation;  // Score
-} CompactPosition;
-#pragma pack(pop)
 
 #endif
