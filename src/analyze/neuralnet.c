@@ -135,7 +135,7 @@ void print_weight_stats(const char* name, const float* data, size_t size)
     size_t zeroCount = 0;
     size_t infinityCount = 0;
 
-    for (size_t i = 0; i < size; i++) 
+    for(size_t i = 0; i < size; i++) 
     {
         //Raw
         float val = data[i];
@@ -231,24 +231,12 @@ int calculateOutputLayer(uint8_t* inputValuesA, uint8_t* inputValuesB, int8_t we
 
 int forwardPropagate(bitboard* board, accumulator* acc)
 {
-    int turn = board->turn;
     int bucket = (__builtin_popcountll(board->pieces_all) - 1) / 4;
 
-    uint8_t* side_us;
-    uint8_t* side_them;
-
-    if(ISWHITE(turn))
-    {
-        side_us = acc->accumulator[WHITE];
-        side_them = acc->accumulator[BLACK];
-    }
-    else
-    {
-        side_us = acc->accumulator[BLACK];
-        side_them = acc->accumulator[WHITE];
-    }
-
-    int output = calculateOutputLayer(side_us, side_them, int_weights->weights2[bucket], int_weights->weights2_bias[bucket]);
+    int output = calculateOutputLayer(acc->accumulator[board->turn], 
+                                      acc->accumulator[FLIP_COLOR(board->turn)], 
+                                      int_weights->weights2[bucket], 
+                                      int_weights->weights2_bias[bucket]);
 
     return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 }

@@ -88,7 +88,7 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
-    for (int f = 0; f < 32; f++) 
+    for(int f = 0; f < 32; f++) 
     {
         //This is executed within a single wavefront so shared local 
         //group buffer / broadcast is slower than just loading it directly.
@@ -140,7 +140,7 @@ extern "C" __global__ void forwardPropagate(const float* accumulatorOutput,
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
-    for (int offset = 16; offset > 0; offset /= 2) 
+    for(int offset = 16; offset > 0; offset /= 2) 
     {
         myOutputContribution += __shfl_down_sync(mask_32, myOutputContribution, offset, 32);
     }
@@ -192,7 +192,7 @@ extern "C" __global__ void backpropagate( const float* outputNodes, const float*
 
     //delta 1
     //1024 delta / 512 threads = 2 deltas per
-    for (int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=ACCUMULATOR_NODES_PER_SIDE) 
+    for(int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=ACCUMULATOR_NODES_PER_SIDE) 
     {
         float sum = shared_d2 * fake_quantize(weights2[bucket * ACCUMULATOR_NODES + nodeIndex], QB, -128.0f, 127.0f);
         delta1[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(h1[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
@@ -232,7 +232,7 @@ extern "C" __global__ void calculateGradient2(const float* delta2,
 
     unsigned long long mask_32 = 0x00000000FFFFFFFF;
     #pragma unroll
-    for (int offset = 16; offset > 0; offset /= 2)
+    for(int offset = 16; offset > 0; offset /= 2)
     {
         partialSum += __shfl_down_sync(mask_32, partialSum, offset, 32);
         if(weightIndex == 0) partialBiasSum += __shfl_down_sync(mask_32, partialBiasSum, offset, 32);

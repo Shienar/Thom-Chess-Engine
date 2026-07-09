@@ -46,7 +46,7 @@ int neighboringKingBuckets[KING_BUCKETS][5] = {
 //full refresh of raw values.
 void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, quantized_weights* weights, int kingBucketOffset)
 {
-    for (int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=16) 
+    for(int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=16) 
     {
         __m256i v_output = _mm256_loadu_si256((const __m256i*)&weights->weights1_bias[outputIndex]);
 
@@ -73,7 +73,7 @@ void activateAccumulator(int16_t* rawValues, uint8_t* activatedValues)
     const __m256i v_min = _mm256_setzero_si256();
     const __m256i v_max = _mm256_set1_epi16(QA);
 
-    for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 32) 
+    for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 32) 
     {
         //Clamp
         __m256i v_clamped = _mm256_max_epi16(_mm256_min_epi16(_mm256_loadu_si256((const __m256i*)&rawValues[i]), v_max), v_min); 
@@ -146,9 +146,9 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
 
     //Mirroring
     if(getColumn(board->kingSquare_w) > 3)
-        for (int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
+        for(int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
     if(getColumn(board->kingSquare_b) > 3)
-        for (int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
+        for(int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
 
     if(ISWHITE(color)) 
     {
@@ -402,7 +402,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
 
             if(wasAdded) 
             {
-                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
+                for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
                 {
                     __m256i v_acc = _mm256_loadu_si256((__m256i const*)&targetAcc[i]);
                     __m256i v_weight = _mm256_loadu_si256((__m256i const*)&targetWeights[i]);
@@ -414,7 +414,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
             } 
             else 
             {
-                for (int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
+                for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i += 16) 
                 {
                     __m256i v_acc = _mm256_loadu_si256((__m256i const*)&targetAcc[i]);
                     __m256i v_w   = _mm256_loadu_si256((__m256i const*)&targetWeights[i]);

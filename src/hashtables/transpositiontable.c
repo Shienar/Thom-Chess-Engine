@@ -55,8 +55,8 @@ table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_
                 .data = existingData
             };
 
-            if (hitEntry.evaluation > MIN_MATE_SCORE) hitEntry.evaluation -= ply;
-            else if (hitEntry.evaluation < -MIN_MATE_SCORE) hitEntry.evaluation += ply;
+            if(hitEntry.evaluation > MIN_MATE_SCORE) hitEntry.evaluation -= ply;
+            else if(hitEntry.evaluation < -MIN_MATE_SCORE) hitEntry.evaluation += ply;
 
             return hitEntry;
         }

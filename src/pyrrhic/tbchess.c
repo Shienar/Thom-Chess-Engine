@@ -105,7 +105,7 @@ uint64_t pyrrhic_pieces_by_type(const PyrrhicPosition *pos, int colour, int piec
 
 int pyrrhic_char_to_piece_type(char c) {
 
-    for (int i = PYRRHIC_PAWN; i <= PYRRHIC_KING; i++)
+    for(int i = PYRRHIC_PAWN; i <= PYRRHIC_KING; i++)
         if(c == pyrrhic_piece_to_char[i])
             return i;
     return 0;
@@ -153,7 +153,7 @@ uint64_t pyrrhic_calc_key_from_pieces(uint8_t *pieces, int length) {
     };
 
     uint64_t key = 0;
-    for (int i = 0; i < length; i++)
+    for(int i = 0; i < length; i++)
         key += PyrrhicPrimes[pieces[i]];
 
     return key;
@@ -196,27 +196,27 @@ PyrrhicMove* pyrrhic_gen_captures(const PyrrhicPosition *pos, PyrrhicMove *moves
     uint64_t b, att;
 
     // Generate captures for the King
-    for (b = us & pos->kings; b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_KING_ATTACKS(PYRRHIC_LSB(b)) & them; att; PYRRHIC_POPLSB(&att))
+    for(b = us & pos->kings; b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_KING_ATTACKS(PYRRHIC_LSB(b)) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate captures for the Rooks & Queens
-    for (b = us & (pos->rooks | pos->queens); b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_ROOK_ATTACKS(PYRRHIC_LSB(b), us | them) & them; att; PYRRHIC_POPLSB(&att))
+    for(b = us & (pos->rooks | pos->queens); b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_ROOK_ATTACKS(PYRRHIC_LSB(b), us | them) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate captures for the Bishops & Queens
-    for (b = us & (pos->bishops | pos->queens); b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_BISHOP_ATTACKS(PYRRHIC_LSB(b), us | them) & them; att; PYRRHIC_POPLSB(&att))
+    for(b = us & (pos->bishops | pos->queens); b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_BISHOP_ATTACKS(PYRRHIC_LSB(b), us | them) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate captures for the Knights
-    for (b = us & pos->knights; b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_KNIGHT_ATTACKS(PYRRHIC_LSB(b)) & them; att; PYRRHIC_POPLSB(&att))
+    for(b = us & pos->knights; b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_KNIGHT_ATTACKS(PYRRHIC_LSB(b)) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate captures for the Pawns
-    for (b = us & pos->pawns; b; PYRRHIC_POPLSB(&b)) {
+    for(b = us & pos->pawns; b; PYRRHIC_POPLSB(&b)) {
 
         unsigned from = PYRRHIC_LSB(b);
 
@@ -225,7 +225,7 @@ PyrrhicMove* pyrrhic_gen_captures(const PyrrhicPosition *pos, PyrrhicMove *moves
             moves = pyrrhic_add_move(moves, false, true, from, pos->ep);
 
         // Generate non-Enpassant Captures
-        for (att = PYRRHIC_PAWN_ATTACKS(from, pos->turn) & them; att; PYRRHIC_POPLSB(&att))
+        for(att = PYRRHIC_PAWN_ATTACKS(from, pos->turn) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, pyrrhic_promo_square(PYRRHIC_LSB(att)), false, from, PYRRHIC_LSB(att));
     }
 
@@ -241,27 +241,27 @@ PyrrhicMove* pyrrhic_gen_moves(const PyrrhicPosition *pos, PyrrhicMove *moves) {
     uint64_t b, att;
 
     // Generate moves for the King
-    for (b = us & pos->kings; b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_KING_ATTACKS(PYRRHIC_LSB(b)) & ~us; att; PYRRHIC_POPLSB(&att))
+    for(b = us & pos->kings; b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_KING_ATTACKS(PYRRHIC_LSB(b)) & ~us; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate moves for the Rooks
-    for (b = us & (pos->rooks | pos->queens); b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_ROOK_ATTACKS(PYRRHIC_LSB(b), us | them) & ~us; att; PYRRHIC_POPLSB(&att))
+    for(b = us & (pos->rooks | pos->queens); b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_ROOK_ATTACKS(PYRRHIC_LSB(b), us | them) & ~us; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate moves for the Bishops
-    for (b = us & (pos->bishops | pos->queens); b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_BISHOP_ATTACKS(PYRRHIC_LSB(b), us | them) & ~us; att; PYRRHIC_POPLSB(&att))
+    for(b = us & (pos->bishops | pos->queens); b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_BISHOP_ATTACKS(PYRRHIC_LSB(b), us | them) & ~us; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate moves for the Knights
-    for (b = us & pos->knights; b; PYRRHIC_POPLSB(&b))
-        for (att = PYRRHIC_KNIGHT_ATTACKS(PYRRHIC_LSB(b)) & ~us; att; PYRRHIC_POPLSB(&att))
+    for(b = us & pos->knights; b; PYRRHIC_POPLSB(&b))
+        for(att = PYRRHIC_KNIGHT_ATTACKS(PYRRHIC_LSB(b)) & ~us; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, false, false, PYRRHIC_LSB(b), PYRRHIC_LSB(att));
 
     // Generate moves for the Pawns
-    for (b = us & pos->pawns; b; PYRRHIC_POPLSB(&b)) {
+    for(b = us & pos->pawns; b; PYRRHIC_POPLSB(&b)) {
 
         unsigned from = PYRRHIC_LSB(b);
 
@@ -280,7 +280,7 @@ PyrrhicMove* pyrrhic_gen_moves(const PyrrhicPosition *pos, PyrrhicMove *moves) {
             moves = pyrrhic_add_move(moves, false, false, from, from + 2 * Forward);
 
         // Generate non-Enpassant Captures
-        for (att = PYRRHIC_PAWN_ATTACKS(from, pos->turn) & them; att; PYRRHIC_POPLSB(&att))
+        for(att = PYRRHIC_PAWN_ATTACKS(from, pos->turn) & them; att; PYRRHIC_POPLSB(&att))
             moves = pyrrhic_add_move(moves, pyrrhic_promo_square(PYRRHIC_LSB(att)), false, from, PYRRHIC_LSB(att));
     }
 
@@ -293,7 +293,7 @@ PyrrhicMove* pyrrhic_gen_legal(const PyrrhicPosition *pos, PyrrhicMove *moves) {
     PyrrhicMove *end = pyrrhic_gen_moves(pos, _moves);
     PyrrhicMove *results = moves;
 
-    for (PyrrhicMove *m = _moves; m < end; m++)
+    for(PyrrhicMove *m = _moves; m < end; m++)
         if(pyrrhic_legal_move(pos, *m))
             *results++ = *m;
     return results;
@@ -350,7 +350,7 @@ bool pyrrhic_is_mate(const PyrrhicPosition *pos) {
     PyrrhicMove *moves = moves0;
     PyrrhicMove *end = pyrrhic_gen_moves(pos, moves);
 
-    for (; moves < end; moves++)
+    for(; moves < end; moves++)
         if(pyrrhic_do_move(&pos1, pos, *moves))
             return 0;
     return 1;

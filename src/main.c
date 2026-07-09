@@ -41,8 +41,6 @@ int main(int argc, char** argv)
 
     THREADTYPE calculateThread = THREAD_INIT;
 
-    enableDebugMessages();
-
     while(!quit)
     {
         memset(buffer, 0, 4096 * sizeof(char));

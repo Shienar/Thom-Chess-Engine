@@ -307,7 +307,7 @@ bitboard* create_board(const char* fenString)
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
 {
-    while (piece) {
+    while(piece) {
         int square = __builtin_ctzll(piece);
         boardArray[getRow(square)][getColumn(square)] = printChar;
         piece &= (piece - 1);

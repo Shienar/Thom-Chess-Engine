@@ -18,7 +18,7 @@ void generate()
     searchThreadContext* contextList = calloc(concurrency, sizeof(searchThreadContext));
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
-    details = binpack_open(TRAINING_DATA_PATH, 1);
+    details = binpack_open(TRAINING_DATA_PATH, 0);
 
     clock_t endTime = LONG_MAX;
     for(int i = 0; i < concurrency; i++)
@@ -27,7 +27,7 @@ void generate()
         contextList[i].board = create_board(NULL);
         contextList[i].endTime = &endTime;
         contextList[i].maxDepth = 9;
-        contextList[i].maxNodes = 10000;
+        contextList[i].maxNodes = 5000;
         contextList[i].refreshTable = createRefreshTable();
         contextList[i].tt = create_hashTable_tt();
 
@@ -39,12 +39,12 @@ void generate()
     char* strtok_ptr;
     const char* delim = " \t\r\n";
 
-    while (fgets(buffer, sizeof(buffer), stdin) != NULL)
+    while(fgets(buffer, sizeof(buffer), stdin) != NULL)
     {
         char* token = _strtok(buffer, delim, &strtok_ptr);
-        while (token != NULL) 
+        while(token != NULL) 
         {
-            if (strcmp(token, "stop") == 0) 
+            if(strcmp(token, "stop") == 0) 
                 goto cleanup;
             
             token = _strtok(NULL, delim, &strtok_ptr);

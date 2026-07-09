@@ -13,18 +13,21 @@
 #define ADAM_BETA2 0.999f
 
 #define EVAL_SCALE 400.0f
-#define LAMBDA 0.75f
+#define LAMBDA 0.9f
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // 6,104 * 16,384 = 100,007,936
 
-//Binpack will have a larger size, just make sure this many positions are valid with binpackinfo
+//Binpack should have a larger size to account for fen skipping & variety.
 #define VALIDATION_BINPACK_MINIBATCHES (1000000 / MINIBATCH_SIZE)
+
+#define FEN_SKIP_TRAINING 15
+#define FEN_SKIP_VALIDATION 25
 
 //N in 1000 chance to shift the king or output bucket.
 //An attempt at blending the difference between neighboring buckets.
-#define PERMUTE_BUCKET_PROBABILITY 200
+#define PERMUTE_BUCKET_PROBABILITY 50
 
 //Only train and use part of the network, broadcast trained weights to other buckets.
 //These get left commented out once a compressed version gets trained. Uncommenting them will overwrite any bucketed waights.

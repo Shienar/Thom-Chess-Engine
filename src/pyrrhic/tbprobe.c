@@ -93,7 +93,7 @@ typedef HANDLE map_t;
         #define UNLOCK(x) pthread_mutex_unlock(&(x))
     #else
         #define LOCK_T HANDLE
-        #define LOCK_INIT(x) do { x = CreateMutex(NULL, FALSE, NULL); } while (0)
+        #define LOCK_INIT(x) do { x = CreateMutex(NULL, FALSE, NULL); } while(0)
         #define LOCK_DESTROY(x) CloseHandle(x)
         #define LOCK(x) WaitForSingleObject(x, INFINITE)
         #define UNLOCK(x) ReleaseMutex(x)
@@ -152,7 +152,7 @@ static FD open_tb(const char *str, const char *suffix)
   FD fd;
   char *file;
 
-  for (i = 0; i < numPaths; i++) {
+  for(i = 0; i < numPaths; i++) {
     file = (char*)malloc(strlen(paths[i]) + strlen(str) +
                          strlen(suffix) + 2);
     strcpy(file, paths[i]);
@@ -458,14 +458,14 @@ static void prt_str(const PyrrhicPosition *pos, char *str, int flip) {
 
     int color = flip ? PYRRHIC_BLACK : PYRRHIC_WHITE;
 
-    for (int pt = PYRRHIC_KING; pt >= PYRRHIC_PAWN; pt--)
-        for (int i = PYRRHIC_POPCOUNT(pyrrhic_pieces_by_type(pos, color, pt)); i > 0; i--)
+    for(int pt = PYRRHIC_KING; pt >= PYRRHIC_PAWN; pt--)
+        for(int i = PYRRHIC_POPCOUNT(pyrrhic_pieces_by_type(pos, color, pt)); i > 0; i--)
             *str++ = pyrrhic_piece_to_char[pt];
 
     *str++ = 'v';
 
-    for (int pt = PYRRHIC_KING; pt >= PYRRHIC_PAWN; pt--)
-        for (int i = PYRRHIC_POPCOUNT(pyrrhic_pieces_by_type(pos, color^1, pt)); i > 0; i--)
+    for(int pt = PYRRHIC_KING; pt >= PYRRHIC_PAWN; pt--)
+        for(int i = PYRRHIC_POPCOUNT(pyrrhic_pieces_by_type(pos, color^1, pt)); i > 0; i--)
             *str++ = pyrrhic_piece_to_char[pt];
     *str++ = 0;
 }
@@ -510,7 +510,7 @@ static void add_to_hash(struct BaseEntry *ptr, uint64_t key) {
     int idx;
 
     idx = key >> (64 - TB_HASHBITS);
-    while (tbHash[idx].ptr)
+    while(tbHash[idx].ptr)
         idx = (idx + 1) & ((1 << TB_HASHBITS) - 1);
 
     tbHash[idx].key = key;
@@ -526,10 +526,10 @@ static void init_tb(char *str)
     return;
 
   int pcs[16];
-  for (int i = 0; i < 16; i++)
+  for(int i = 0; i < 16; i++)
     pcs[i] = 0;
   int color = 0;
-  for (char *s = str; *s; s++)
+  for(char *s = str; *s; s++)
     if(*s == 'v')
       color = 8;
     else {
@@ -551,7 +551,7 @@ static void init_tb(char *str)
   be->key = key;
   be->symmetric = key == key2;
   be->num = 0;
-  for (int i = 0; i < 16; i++)
+  for(int i = 0; i < 16; i++)
     be->num += pcs[i];
 
   numWdl++;
@@ -566,12 +566,12 @@ static void init_tb(char *str)
       TB_MaxCardinalityDTM = be->num;
     }
 
-  for (int type = 0; type < 3; type++)
+  for(int type = 0; type < 3; type++)
     atomic_init(&be->ready[type], false);
 
   if(!be->hasPawns) {
     int j = 0;
-    for (int i = 0; i < 16; i++)
+    for(int i = 0; i < 16; i++)
       if(pcs[i] == 1) j++;
     be->kk_enc = j == 2;
   } else {
@@ -603,12 +603,12 @@ struct EncInfo *first_ei(struct BaseEntry *be, const int type)
 
 static void free_tb_entry(struct BaseEntry *be)
 {
-  for (int type = 0; type < 3; type++) {
+  for(int type = 0; type < 3; type++) {
     if(atomic_load_explicit(&be->ready[type], memory_order_relaxed)) {
       unmap_file((void*)(be->data[type]), be->mapping[type]);
       int num = num_tables(be, type);
       struct EncInfo *ei = first_ei(be, type);
-      for (int t = 0; t < num; t++) {
+      for(int t = 0; t < num; t++) {
         free(ei[t].precomp);
         if(type != DTZ)
           free(ei[num + t].precomp);
@@ -635,9 +635,9 @@ bool tb_init(const char *path)
     free(pathString);
     free(paths);
 
-    for (int i = 0; i < tbNumPiece; i++)
+    for(int i = 0; i < tbNumPiece; i++)
       free_tb_entry((struct BaseEntry *)&pieceEntry[i]);
-    for (int i = 0; i < tbNumPawn; i++)
+    for(int i = 0; i < tbNumPawn; i++)
       free_tb_entry((struct BaseEntry *)&pawnEntry[i]);
 
     LOCK_DESTROY(tbMutex);
@@ -653,19 +653,19 @@ bool tb_init(const char *path)
   pathString = (char*)malloc(strlen(p) + 1);
   strcpy(pathString, p);
   numPaths = 0;
-  for (int i = 0;; i++) {
+  for(int i = 0;; i++) {
     if(pathString[i] != SEP_CHAR)
       numPaths++;
-    while (pathString[i] && pathString[i] != SEP_CHAR)
+    while(pathString[i] && pathString[i] != SEP_CHAR)
       i++;
     if(!pathString[i]) break;
     pathString[i] = 0;
   }
   paths = (char**)malloc(numPaths * sizeof(*paths));
-  for (int i = 0, j = 0; i < numPaths; i++) {
-    while (!pathString[j]) j++;
+  for(int i = 0, j = 0; i < numPaths; i++) {
+    while(!pathString[j]) j++;
     paths[i] = &pathString[j];
-    while (pathString[j]) j++;
+    while(pathString[j]) j++;
   }
 
   LOCK_INIT(tbMutex);
@@ -682,7 +682,7 @@ bool tb_init(const char *path)
     }
   }
 
-  for (int i = 0; i < (1 << TB_HASHBITS); i++) {
+  for(int i = 0; i < (1 << TB_HASHBITS); i++) {
     tbHash[i].key = 0;
     tbHash[i].ptr = NULL;
   }
@@ -690,33 +690,33 @@ bool tb_init(const char *path)
   char str[16];
   int i, j, k, l, m;
 
-  for (i = 0; i < 5; i++) {
+  for(i = 0; i < 5; i++) {
     snprintf(str, 16, "K%cvK", tb_pchr(i));
     init_tb(str);
   }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++) {
       snprintf(str, 16, "K%cvK%c", tb_pchr(i), tb_pchr(j));
       init_tb(str);
     }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++) {
       snprintf(str, 16, "K%c%cvK", tb_pchr(i), tb_pchr(j));
       init_tb(str);
     }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = 0; k < 5; k++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = 0; k < 5; k++) {
         snprintf(str, 16, "K%c%cvK%c", tb_pchr(i), tb_pchr(j), tb_pchr(k));
         init_tb(str);
       }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++) {
         snprintf(str, 16, "K%c%c%cvK", tb_pchr(i), tb_pchr(j), tb_pchr(k));
         init_tb(str);
       }
@@ -725,26 +725,26 @@ bool tb_init(const char *path)
   if(sizeof(size_t) < 8 || TB_PIECES < 6)
     goto finished;
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = i; k < 5; k++)
-        for (l = (i == k) ? j : k; l < 5; l++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = i; k < 5; k++)
+        for(l = (i == k) ? j : k; l < 5; l++) {
           snprintf(str, 16, "K%c%cvK%c%c", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l));
           init_tb(str);
         }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++)
-        for (l = 0; l < 5; l++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++)
+        for(l = 0; l < 5; l++) {
           snprintf(str, 16, "K%c%c%cvK%c", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l));
           init_tb(str);
         }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++)
-        for (l = k; l < 5; l++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++)
+        for(l = k; l < 5; l++) {
           snprintf(str, 16, "K%c%c%c%cvK", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l));
           init_tb(str);
         }
@@ -752,29 +752,29 @@ bool tb_init(const char *path)
   if(TB_PIECES < 7)
     goto finished;
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++)
-        for (l = k; l < 5; l++)
-          for (m = l; m < 5; m++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++)
+        for(l = k; l < 5; l++)
+          for(m = l; m < 5; m++) {
             snprintf(str, 16, "K%c%c%c%c%cvK", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l), tb_pchr(m));
             init_tb(str);
           }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++)
-        for (l = k; l < 5; l++)
-          for (m = 0; m < 5; m++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++)
+        for(l = k; l < 5; l++)
+          for(m = 0; m < 5; m++) {
             snprintf(str, 16, "K%c%c%c%cvK%c", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l), tb_pchr(m));
             init_tb(str);
           }
 
-  for (i = 0; i < 5; i++)
-    for (j = i; j < 5; j++)
-      for (k = j; k < 5; k++)
-        for (l = 0; l < 5; l++)
-          for (m = l; m < 5; m++) {
+  for(i = 0; i < 5; i++)
+    for(j = i; j < 5; j++)
+      for(k = j; k < 5; k++)
+        for(l = 0; l < 5; l++)
+          for(m = l; m < 5; m++) {
             snprintf(str, 16, "K%c%c%cvK%c%c", tb_pchr(i), tb_pchr(j), tb_pchr(k), tb_pchr(l), tb_pchr(m));
             init_tb(str);
           }
@@ -992,20 +992,20 @@ static void init_indices(void)
   int i, j, k;
 
   // Binomial[k][n] = Bin(n, k)
-  for (i = 0; i < 7; i++)
-    for (j = 0; j < 64; j++) {
+  for(i = 0; i < 7; i++)
+    for(j = 0; j < 64; j++) {
       size_t f = 1;
       size_t l = 1;
-      for (k = 0; k < i; k++) {
+      for(k = 0; k < i; k++) {
         f *= (j - k);
         l *= (k + 1);
       }
       Binomial[i][j] = f / l;
     }
 
-  for (i = 0; i < 6; i++) {
+  for(i = 0; i < 6; i++) {
     size_t s = 0;
-    for (j = 0; j < 24; j++) {
+    for(j = 0; j < 24; j++) {
       PawnIdx[0][i][j] = s;
       s += Binomial[i][PawnTwist[0][(1 + (j % 6)) * 8 + (j / 6)]];
       if((j + 1) % 6 == 0) {
@@ -1015,9 +1015,9 @@ static void init_indices(void)
     }
   }
 
-  for (i = 0; i < 6; i++) {
+  for(i = 0; i < 6; i++) {
     size_t s = 0;
-    for (j = 0; j < 24; j++) {
+    for(j = 0; j < 24; j++) {
       PawnIdx[1][i][j] = s;
       s += Binomial[i][PawnTwist[1][(1 + (j / 4)) * 8 + (j % 4)]];
       if((j + 1) % 4 == 0) {
@@ -1030,7 +1030,7 @@ static void init_indices(void)
 
 int leading_pawn(int *p, struct BaseEntry *be, const int enc)
 {
-  for (int i = 1; i < be->pawns[0]; i++)
+  for(int i = 1; i < be->pawns[0]; i++)
     if(Flap[enc-1][p[0]] > Flap[enc-1][p[i]])
       PYRRHIC_SWAP(p[0], p[i]);
 
@@ -1045,18 +1045,18 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
   int k;
 
   if(p[0] & 0x04)
-    for (int i = 0; i < n; i++)
+    for(int i = 0; i < n; i++)
       p[i] ^= 0x07;
 
   if(enc == PIECE_ENC) {
     if(p[0] & 0x20)
-      for (int i = 0; i < n; i++)
+      for(int i = 0; i < n; i++)
         p[i] ^= 0x38;
 
-    for (int i = 0; i < n; i++)
+    for(int i = 0; i < n; i++)
       if(OffDiag[p[i]]) {
         if(OffDiag[p[i]] > 0 && i < (be->kk_enc ? 2 : 3))
-          for (int j = 0; j < n; j++)
+          for(int j = 0; j < n; j++)
             p[j] = FlipDiag[p[j]];
         break;
       }
@@ -1080,28 +1080,28 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
     }
     idx *= ei->factor[0];
   } else {
-    for (int i = 1; i < be->pawns[0]; i++)
-      for (int j = i + 1; j < be->pawns[0]; j++)
+    for(int i = 1; i < be->pawns[0]; i++)
+      for(int j = i + 1; j < be->pawns[0]; j++)
         if(PawnTwist[enc-1][p[i]] < PawnTwist[enc-1][p[j]])
           PYRRHIC_SWAP(p[i], p[j]);
 
     k = be->pawns[0];
     idx = PawnIdx[enc-1][k-1][Flap[enc-1][p[0]]];
-    for (int i = 1; i < k; i++)
+    for(int i = 1; i < k; i++)
       idx += Binomial[k-i][PawnTwist[enc-1][p[i]]];
     idx *= ei->factor[0];
 
     // Pawns of other color
     if(be->pawns[1]) {
       int t = k + be->pawns[1];
-      for (int i = k; i < t; i++)
-        for (int j = i + 1; j < t; j++)
+      for(int i = k; i < t; i++)
+        for(int j = i + 1; j < t; j++)
           if(p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
       size_t s = 0;
-      for (int i = k; i < t; i++) {
+      for(int i = k; i < t; i++) {
         int sq = p[i];
         int skips = 0;
-        for (int j = 0; j < k; j++)
+        for(int j = 0; j < k; j++)
           skips += (sq > p[j]);
         s += Binomial[i - k + 1][sq - skips - 8];
       }
@@ -1110,16 +1110,16 @@ size_t encode(int *p, struct EncInfo *ei, struct BaseEntry *be,
     }
   }
 
-  for (; k < n;) {
+  for(; k < n;) {
     int t = k + ei->norm[k];
-    for (int i = k; i < t; i++)
-      for (int j = i + 1; j < t; j++)
+    for(int i = k; i < t; i++)
+      for(int j = i + 1; j < t; j++)
         if(p[i] > p[j]) PYRRHIC_SWAP(p[i], p[j]);
     size_t s = 0;
-    for (int i = k; i < t; i++) {
+    for(int i = k; i < t; i++) {
       int sq = p[i];
       int skips = 0;
-      for (int j = 0; j < k; j++)
+      for(int j = 0; j < k; j++)
         skips += (sq > p[j]);
       s += Binomial[i - k + 1][sq - skips];
     }
@@ -1150,7 +1150,7 @@ static size_t subfactor(size_t k, size_t n)
 {
   size_t f = n;
   size_t l = 1;
-  for (size_t i = 1; i < k; i++) {
+  for(size_t i = 1; i < k; i++) {
     f *= n - i;
     l *= i + 1;
   }
@@ -1163,7 +1163,7 @@ static size_t init_enc_info(struct EncInfo *ei, struct BaseEntry *be,
 {
   bool morePawns = enc != PIECE_ENC && be->pawns[1] > 0;
 
-  for (int i = 0; i < be->num; i++) {
+  for(int i = 0; i < be->num; i++) {
     ei->pieces[i] = (tb[i + 1 + morePawns] >> shift) & 0x0f;
     ei->norm[i] = 0;
   }
@@ -1179,14 +1179,14 @@ static size_t init_enc_info(struct EncInfo *ei, struct BaseEntry *be,
     k += ei->norm[k];
   }
 
-  for (int i = k; i < be->num; i += ei->norm[i])
-    for (int j = i; j < be->num && ei->pieces[j] == ei->pieces[i]; j++)
+  for(int i = k; i < be->num; i += ei->norm[i])
+    for(int j = i; j < be->num && ei->pieces[j] == ei->pieces[i]; j++)
       ei->norm[i]++;
 
   int n = 64 - k;
   size_t f = 1;
 
-  for (int i = 0; k < be->num || i == order || i == order2; i++) {
+  for(int i = 0; k < be->num || i == order || i == order2; i++) {
     if(i == order) {
       ei->factor[0] = f;
       f *=  enc == FILE_ENC ? PawnFactorFile[ei->norm[0] - 1][t]
@@ -1263,18 +1263,18 @@ static struct PairsData *setup_pairs(uint8_t **ptr, size_t tb_size,
   assert(numSyms < TB_MAX_SYMS);
   char tmp[TB_MAX_SYMS];
   memset(tmp, 0, numSyms);
-  for (uint32_t s = 0; s < numSyms; s++)
+  for(uint32_t s = 0; s < numSyms; s++)
     if(!tmp[s])
       calc_symLen(d, s, tmp);
 
   d->base[h - 1] = 0;
-  for (int i = h - 2; i >= 0; i--)
+  for(int i = h - 2; i >= 0; i--)
     d->base[i] = (d->base[i + 1] + read_le_u16((uint8_t *)(d->offset + i)) - read_le_u16((uint8_t *)(d->offset + i + 1))) / 2;
 #ifdef DECOMP64
-  for (int i = 0; i < h; i++)
+  for(int i = 0; i < h; i++)
     d->base[i] <<= 64 - (minLen + i);
 #else
-  for (int i = 0; i < h; i++)
+  for(int i = 0; i < h; i++)
     d->base[i] <<= 32 - (minLen + i);
 #endif
   d->offset -= d->minLen;
@@ -1306,7 +1306,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   struct EncInfo *ei = first_ei(be, type);
   int enc = !be->hasPawns ? PIECE_ENC : type != DTM ? FILE_ENC : RANK_ENC;
 
-  for (int t = 0; t < num; t++) {
+  for(int t = 0; t < num; t++) {
     tb_size[t][0] = init_enc_info(&ei[t], be, data, 0, t, enc);
     if(split)
       tb_size[t][1] = init_enc_info(&ei[num + t], be, data, 4, t, enc);
@@ -1315,7 +1315,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
   data += (uintptr_t)data & 1;
 
   size_t size[6][2][3];
-  for (int t = 0; t < num; t++) {
+  for(int t = 0; t < num; t++) {
     uint8_t flags;
     ei[t].precomp = setup_pairs(&data, tb_size[t][0], size[t][0], &flags, type);
     if(type == DTZ) {
@@ -1335,13 +1335,13 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     *(be->hasPawns ? &PAWNENTRY(be)->dtmMap : &PIECEENTRY(be)->dtmMap) = map;
     uint16_t (*mapIdx)[2][2] = be->hasPawns ? &PAWNENTRY(be)->dtmMapIdx[0]
                                              : &PIECEENTRY(be)->dtmMapIdx;
-    for (int t = 0; t < num; t++) {
-      for (int i = 0; i < 2; i++) {
+    for(int t = 0; t < num; t++) {
+      for(int i = 0; i < 2; i++) {
         mapIdx[t][0][i] = (uint16_t)(data + 1 - (uint8_t*)map);
         data += 2 + 2 * read_le_u16(data);
       }
       if(split) {
-        for (int i = 0; i < 2; i++) {
+        for(int i = 0; i < 2; i++) {
           mapIdx[t][1][i] = (uint16_t)(data + 1 - (uint8_t*)map);
           data += 2 + 2 * read_le_u16(data);
         }
@@ -1356,16 +1356,16 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
                                           : &PIECEENTRY(be)->dtzMapIdx;
     uint8_t *flags = be->hasPawns ? &PAWNENTRY(be)->dtzFlags[0]
                                   : &PIECEENTRY(be)->dtzFlags;
-    for (int t = 0; t < num; t++) {
+    for(int t = 0; t < num; t++) {
       if(flags[t] & 2) {
         if(!(flags[t] & 16)) {
-          for (int i = 0; i < 4; i++) {
+          for(int i = 0; i < 4; i++) {
             mapIdx[t][i] = (uint16_t)(data + 1 - (uint8_t *)map);
             data += 1 + data[0];
           }
         } else {
           data += (uintptr_t)data & 0x01;
-          for (int i = 0; i < 4; i++) {
+          for(int i = 0; i < 4; i++) {
             mapIdx[t][i] = (uint16_t)((uint16_t*)data + 1 - (uint16_t *)map);
             data += 2 + 2 * read_le_u16(data);
           }
@@ -1375,7 +1375,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     data += (uintptr_t)data & 0x01;
   }
 
-  for (int t = 0; t < num; t++) {
+  for(int t = 0; t < num; t++) {
     ei[t].precomp->indexTable = data;
     data += size[t][0][0];
     if(split) {
@@ -1384,7 +1384,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     }
   }
 
-  for (int t = 0; t < num; t++) {
+  for(int t = 0; t < num; t++) {
     ei[t].precomp->sizeTable = (uint16_t *)data;
     data += size[t][0][1];
     if(split) {
@@ -1393,7 +1393,7 @@ static bool init_table(struct BaseEntry *be, const char *str, int type)
     }
   }
 
-  for (int t = 0; t < num; t++) {
+  for(int t = 0; t < num; t++) {
     data = (uint8_t *)(((uintptr_t)data + 0x3f) & ~0x3f);
     ei[t].precomp->data = data;
     data += size[t][0][2];
@@ -1426,10 +1426,10 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
   litIdx += from_le_u16(idxOffset);
 
   if(litIdx < 0)
-    while (litIdx < 0)
+    while(litIdx < 0)
       litIdx += d->sizeTable[--block] + 1;
   else
-    while (litIdx > d->sizeTable[block])
+    while(litIdx > d->sizeTable[block])
       litIdx -= d->sizeTable[block++] + 1;
 
   uint32_t *ptr = (uint32_t *)(d->data + ((size_t)block << d->blockSize));
@@ -1445,9 +1445,9 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
 
   ptr += 2;
   bitCnt = 0; // number of "empty bits" in code
-  for (;;) {
+  for(;;) {
     int l = m;
-    while (code < base[l]) l++;
+    while(code < base[l]) l++;
     sym = from_le_u16(offset[l]);
     sym += (uint32_t)((code - base[l]) >> (64 - l));
     if(litIdx < (int)symLen[sym] + 1) break;
@@ -1465,9 +1465,9 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
   uint32_t data = *ptr++;
   uint32_t code = from_be_u32(data);
   bitCnt = 0; // number of bits in next
-  for (;;) {
+  for(;;) {
     int l = m;
-    while (code < base[l]) l++;
+    while(code < base[l]) l++;
     sym = offset[l] + ((code - base[l]) >> (32 - l));
     if(litIdx < (int)symLen[sym] + 1) break;
     litIdx -= (int)symLen[sym] + 1;
@@ -1487,7 +1487,7 @@ static uint8_t *decompress_pairs(struct PairsData *d, size_t idx)
   }
 #endif
   uint8_t *symPat = d->symPat;
-  while (symLen[sym] != 0) {
+  while(symLen[sym] != 0) {
     uint8_t *w = symPat + (3 * sym);
     int s1 = ((w[1] & 0xf) << 8) | w[0];
     if(litIdx < (int)symLen[s1] + 1)
@@ -1515,7 +1515,7 @@ inline static int fill_squares(const PyrrhicPosition *pos, uint8_t *pc, bool fli
   do {
     sq = PYRRHIC_POPLSB(&bb);
     p[i++] = sq ^ mirror;
-  } while (bb);
+  } while(bb);
   return i;
 }
 
@@ -1530,7 +1530,7 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
     return 0;
 
   int hashIdx = key >> (64 - TB_HASHBITS);
-  while (tbHash[hashIdx].key && tbHash[hashIdx].key != key)
+  while(tbHash[hashIdx].key && tbHash[hashIdx].key != key)
     hashIdx = (hashIdx + 1) & ((1 << TB_HASHBITS) - 1);
   if(!tbHash[hashIdx].ptr) {
     *success = 0;
@@ -1588,7 +1588,7 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
       }
     }
     ei = type != DTZ ? &ei[bside] : ei;
-    for (int i = 0; i < be->num;)
+    for(int i = 0; i < be->num;)
       i = fill_squares(pos, ei->pieces, flip, 0, p, i);
     idx = encode_piece(p, ei, be);
   } else {
@@ -1603,7 +1603,7 @@ int probe_table(const PyrrhicPosition *pos, int s, int *success, const int type)
     }
     ei =  type == WDL ? &ei[t + 4 * bside]
         : type == DTM ? &ei[t + 6 * bside] : &ei[t];
-    while (i < be->num)
+    while(i < be->num)
       i = fill_squares(pos, ei->pieces, flip, flip ? 0x38 : 0, p, i);
     idx = type != DTM ? encode_pawn_f(p, ei, be) : encode_pawn_r(p, ei, be);
   }
@@ -1659,7 +1659,7 @@ static int probe_ab(const PyrrhicPosition *pos, int alpha, int beta, int *succes
   // Generate (at least) all legal captures including (under)promotions.
   // It is OK to generate more, as long as they are filtered out below.
   PyrrhicMove *end = pyrrhic_gen_captures(pos, m);
-  for (; m < end; m++) {
+  for(; m < end; m++) {
     PyrrhicPosition pos1;
     PyrrhicMove move = *m;
     if(!pyrrhic_is_capture(pos, move))
@@ -1709,7 +1709,7 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
   // capture without ep rights and letting bestEp keep track of still
   // better ep captures if they exist.
 
-  for (; m < end; m++) {
+  for(; m < end; m++) {
     PyrrhicPosition pos1;
     PyrrhicMove move = *m;
     if(!pyrrhic_is_capture(pos, move))
@@ -1762,7 +1762,7 @@ int probe_wdl(PyrrhicPosition *pos, int *success)
     PyrrhicMove moves[TB_MAX_MOVES];
     PyrrhicMove *end2 = pyrrhic_gen_moves(pos, moves);
     // Check for stalemate in the position with ep captures.
-    for (m = moves; m < end2; m++) {
+    for(m = moves; m < end2; m++) {
       if(!pyrrhic_is_en_passant(pos,*m) && pyrrhic_legal_move(pos, *m)) break;
     }
     if(m == end2 && !pyrrhic_is_check(pos)) {
@@ -1830,7 +1830,7 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
     // (The following call in fact generates all moves.)
     end = pyrrhic_gen_legal(pos, moves);
 
-    for (m = moves; m < end; m++) {
+    for(m = moves; m < end; m++) {
       PyrrhicMove move = *m;
       if(!pyrrhic_is_pawn_move(pos, move) || pyrrhic_is_capture(pos, move))
          continue;
@@ -1868,7 +1868,7 @@ int probe_dtz(PyrrhicPosition *pos, int *success)
   }
   assert(end != NULL);
 
-  for (m = moves; m < end; m++) {
+  for(m = moves; m < end; m++) {
     PyrrhicMove move = *m;
     // We can skip pawn moves and captures.
     // If wdl > 0, we already caught them. If wdl < 0, the initial value
@@ -1909,7 +1909,7 @@ int root_probe_dtz(const PyrrhicPosition *pos, bool hasRepeated, struct TbRootMo
   PyrrhicMove * end = pyrrhic_gen_legal(pos,rootMoves);
   rm->size = (unsigned)(end-rootMoves);
   PyrrhicPosition pos1;
-  for (unsigned i = 0; i < rm->size; i++) {
+  for(unsigned i = 0; i < rm->size; i++) {
     struct TbRootMove *m = &(rm->moves[i]);
     m->move = rootMoves[i];
     pyrrhic_do_move(&pos1, pos, m->move);
@@ -1960,7 +1960,7 @@ int root_probe_wdl(const PyrrhicPosition *pos, bool useRule50, struct TbRootMove
   PyrrhicMove *end = pyrrhic_gen_legal(pos,moves);
   rm->size = (unsigned)(end-moves);
   PyrrhicPosition pos1;
-  for (unsigned i = 0; i < rm->size; i++) {
+  for(unsigned i = 0; i < rm->size; i++) {
     struct TbRootMove *m = &rm->moves[i];
     m->move = moves[i];
     pyrrhic_do_move(&pos1, pos, m->move);
@@ -1995,7 +1995,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
     size_t len = end - moves;
     size_t num_draw = 0;
     unsigned j = 0;
-    for (unsigned i = 0; i < len; i++)
+    for(unsigned i = 0; i < len; i++)
     {
         PyrrhicPosition pos1;
         if(!pyrrhic_do_move(&pos1, pos, moves[i]))
@@ -2048,7 +2048,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
     {
         int best = TB_BEST_NONE;
         uint16_t best_move = 0;
-        for (unsigned i = 0; i < len; i++)
+        for(unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
             if(v == TB_SCORE_ILLEGAL)
@@ -2065,7 +2065,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
     {
         int best = 0;
         uint16_t best_move = 0;
-        for (unsigned i = 0; i < len; i++)
+        for(unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
             if(v == TB_SCORE_ILLEGAL)
@@ -2087,7 +2087,7 @@ static uint16_t probe_root(PyrrhicPosition *pos, int *score, unsigned *results)
         // Select a "random" move that preserves the draw.
         // Uses calc_key as the PRNG.
         size_t count = pyrrhic_calc_key(pos, !pos->turn) % num_draw;
-        for (unsigned i = 0; i < len; i++)
+        for(unsigned i = 0; i < len; i++)
         {
             int v = scores[i];
             if(v == TB_SCORE_ILLEGAL)

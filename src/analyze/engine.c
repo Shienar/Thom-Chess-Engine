@@ -89,7 +89,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     bitboard* board = context->board;
 
     if(isDraw(board))
-        return 0;
+        return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime)) 
         return forwardPropagate(board, context->accumulator);
 
@@ -102,13 +102,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     table_entry_tt entry = transposition_table_get(board, context->tt, &tt_hit, ply);
     if(tt_hit)
     {
-        if(entry.depth > 1)
-        {
-            if(entry.nodeType == NODE_TYPE_PV ||
-              (entry.nodeType == NODE_TYPE_ALL && entry.evaluation <= alpha) ||
-              (entry.nodeType == NODE_TYPE_CUT && entry.evaluation >= beta)) 
-                    return entry.evaluation;
-        }
+        if(entry.nodeType == NODE_TYPE_PV ||
+          (entry.nodeType == NODE_TYPE_ALL && entry.evaluation <= alpha) ||
+          (entry.nodeType == NODE_TYPE_CUT && entry.evaluation >= beta)) 
+            return entry.evaluation;
 
         temp.raw = entry.bestMove;
         tt_move = &temp;
@@ -134,7 +131,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     //Delta pruning
     if(delta_pruning_offset + best < alpha) return best;
 
-    moveIterator* iter = create_move_iterator(board, 1, NULL, tt_move, NULL, NULL, NULL);
+    moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_PROMOTIONS, NULL, tt_move, NULL, NULL, NULL);
     int validMovesVisited = 0;
     if(iter)
     {
@@ -197,7 +194,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(ply > context->seldepth) context->seldepth = ply;
     
-    if(isDraw(board)) return 0;
+    if(isDraw(board)) return (ply & 3) - 1;
 
     //Mate distance pruning for non-root nodes.
     if(ply != 0)
@@ -306,10 +303,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int nextDepth = depth - probcut_depth_reduction;
             int pBeta = (context->improving[ply]) ? beta + probcut_offset_improving: beta + probcut_offset;
 
-            if(pBeta < MIN_MATE_SCORE && (!hit || old_tt_entry.depth < nextDepth))
+            if(score >= pBeta && pBeta < MIN_MATE_SCORE && (!hit || old_tt_entry.depth < nextDepth))
             {
                 int probCutScore = INT32_MIN;
-                moveIterator* iter = create_move_iterator(board, 1, pvMove, tt_move, NULL, context->killerMoves[ply], context->historyTable);
+                moveIterator* iter = create_move_iterator(board, GET_WINNING_CAPTURES, pvMove, tt_move, NULL, context->killerMoves[ply], context->historyTable);
                 if(iter)
                 {
                     move_c* currentMove;
@@ -352,12 +349,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(depth >= tt_reduction_depth && pvNode && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
         depth -= 1;
 
-    moveIterator* iter = create_move_iterator(board, 0, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
+    moveIterator* iter = create_move_iterator(board, GET_ALL_MOVES, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable);
     int validMovesVisited = 0;
+    int bestScore = -INT32_MAX;
     if(iter)
     {
         move_c* currentMove;
-        int bestScore = -INT32_MAX;
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
@@ -382,7 +379,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
 
                 //LMR Re-search
-                if (score > alpha && next_depth < depth - 1)
+                if(score > alpha && next_depth < depth - 1)
                 {
                     next_depth = depth - 1;
                     score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
@@ -463,7 +460,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         else
             return 0;
     }
-    return alpha;
+    return bestScore;
 }
 
 void printResultingMoves(move_c bestMove, move_c ponderMove, int isBookMove)

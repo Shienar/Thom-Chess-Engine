@@ -4,6 +4,11 @@
 #include "types.h"
 #include "board/magic.h"
 
+#define GET_ALL_MOVES 0
+#define GET_CAPTURES_AND_PROMOTIONS 1
+#define GET_CAPTURES 2
+#define GET_WINNING_CAPTURES 3
+
 #define THREAT_TYPE_NONE 0
 #define THREAT_TYPE_PAWN 1
 #define THREAT_TYPE_KNIGHT 2

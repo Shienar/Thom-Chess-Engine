@@ -304,7 +304,7 @@ void freeHIP()
     }
 
     if(hip_context.module) { hipModuleUnload(hip_context.module); hip_context.module = NULL; }
-    for (int i = 0; i < KERNEL_COUNT; i++) { hip_context.kernels.arr[i] = NULL; }
+    for(int i = 0; i < KERNEL_COUNT; i++) { hip_context.kernels.arr[i] = NULL; }
 
     if(host_activeInputs_A) hipHostFree(host_activeInputs_A);
     if(host_activeInputs_B) hipHostFree(host_activeInputs_B);
@@ -322,7 +322,7 @@ void freeHIP()
     host_outputBuckets_B = NULL;
     host_lossbuffer = NULL;
 
-    for (int i = 0; i < MEM_COUNT; i++) 
+    for(int i = 0; i < MEM_COUNT; i++) 
     {
         if(hip_mem.mem.arr[i]) 
         {

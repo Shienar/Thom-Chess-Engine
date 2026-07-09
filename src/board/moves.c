@@ -48,7 +48,8 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
 
         //Treat promotions as captures for quiescent search
         mask = WHITE_PAWN_PUSH_MASK(board);
-        if(capturesOnly) mask &= 0xFF00000000000000;
+        if(capturesOnly == GET_CAPTURES_AND_PROMOTIONS) mask &= 0xFF00000000000000;
+        else if(capturesOnly >= GET_CAPTURES) mask = 0;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -137,7 +138,8 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
         }
 
         mask = BLACK_PAWN_PUSH_MASK(board);
-        if(capturesOnly) mask &= 0xFF;
+        if(capturesOnly == GET_CAPTURES_AND_PROMOTIONS) mask &= 0xFF;
+        else if(capturesOnly >= GET_CAPTURES) mask = 0;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -385,15 +387,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
 
     while(ply > 0)
     {
-        if(gain[ply] < 0) gain[ply - 1] = 0; //Capture not worth it, stop the seqquence early.
-        else
-        {
-            int capture = -gain[ply];
-            if(capture < gain[ply - 1])
-            {
-                gain[ply - 1] = capture;
-            }
-        }
+        if(gain[ply] > 0) gain[ply - 1] -= gain[ply];
         ply--;
     }
     return gain[0];
@@ -442,6 +436,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             int seeValue = staticExchangeEvaluation(board, m);
 
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
+            else if(capturesOnly == GET_WINNING_CAPTURES) iter->moveScores[i] = INT16_MIN;
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
         else if(m.promoteTo)
@@ -462,7 +457,7 @@ move_c* iterate_next_move(moveIterator* iter)
     int bestIndex = -1;
     int maxScoreRemaining = INT16_MIN;
 
-    for (int j = 0; j < iter->count; j++) 
+    for(int j = 0; j < iter->count; j++) 
     {
         if(iter->moveScores[j] > maxScoreRemaining) 
         {
@@ -602,9 +597,9 @@ uint64_t kingMoves(bitboard* board, int square, int color)
 
 int movePiece(bitboard *board, move_c compactMove)
 {
+    assert(board);
     move_d m;
     createDetailedMove(&m, compactMove, board);
-    assert(board);
     assert(m.startSquare >= 0 && m.startSquare <= 63 && m.endSquare >= 0 && m.endSquare <= 63);
 
     //Clear the en passant hash early. clear the en passant square later.
@@ -804,7 +799,7 @@ move_c getStructFromString(bitboard* board, char* str)
     createCompactMove(&m, startSquare, endSquare, promoteTo);
 
     move_c moveList[MAX_MOVES];
-    int count = generateMoveList(moveList, board, 0);
+    int count = generateMoveList(moveList, board, GET_ALL_MOVES);
     int isPotentialMove = 0;
     for(int index = 0; index < count; index++)
     {
@@ -843,7 +838,6 @@ int moveFromStruct(bitboard* board, move_c m)
     }
 
     //Terminal gamestate validations have been moved to engine.c search functions.
-
     /*
     #ifndef NDEBUG
     uint64_t hc = getHashCode(board);
@@ -861,7 +855,7 @@ int moveFromStruct(bitboard* board, move_c m)
     }
     #endif
     */
-
+   
     return 0;
 }
 

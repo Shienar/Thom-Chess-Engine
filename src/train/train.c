@@ -5,6 +5,7 @@
 #include "train/train.h"
 #include "omp.h"
 #include "binpack/viri_binpack.h"
+#include "train/data_queue.h"
 #include <string.h>
 #include <float.h>
 
@@ -39,127 +40,14 @@ float sumLoss(float* loss)
     return _mm_cvtss_f32(sum128);
 }
 
-int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
-{
-    uint64_t x = *state;
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    *state = x;
-    int y = x % 1000;
-    if(y < PERMUTE_BUCKET_PROBABILITY)
-    {
-        if(kingBucket >= 0)
-            return neighboringKingBuckets[kingBucket][y % 5];
-        else
-        {
-            if(y < PERMUTE_BUCKET_PROBABILITY / 2) return -1;
-            else return 1;
-        }
-    }
-    return 0;
-}
-
-void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* board, uint32_t* xorRNGState,
-                            short* activeInputs_A, float* expectedOutputs_A, char* outputBuckets_A,
-                            short* activeInputs_B, float* expectedOutputs_B, char* outputBuckets_B)
-{
-    for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
-    {
-        Viri_Score score;
-        uint8_t result;
-        binpack_next(details, board, &score, &result, 1);
-        float relativeResult = 0.5f;
-        if(result == VIRI_DRAW) relativeResult = 0.5f;
-        else if(result == VIRI_WHITE_WIN)
-        {
-            if(board->turn == WHITE) relativeResult = 1.0f;
-            else relativeResult = 0.0f;
-        }
-        else if(result == VIRI_BLACK_WIN)
-        {
-            if(board->turn == BLACK) relativeResult = 1.0f;
-            else relativeResult = 0.0f;
-        }
-
-        if(inputGroup == INPUT_GROUP_A) 
-            expectedOutputs_A[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
-        else 
-            expectedOutputs_B[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
-
-        uint64_t inputs[2 * PIECE_COUNT] = {0};
-
-        int trackedPiecesPerColor = PIECE_COUNT / 2;
-        for(int i = 0; i < PIECE_COUNT / 2; i++)
-        {
-            //White's perspective
-            inputs[i] = board->pieces[2 * i];
-            inputs[trackedPiecesPerColor + i] = board->pieces[2 * i + 1];
-
-            //Black's perspective
-            inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
-            inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board->pieces[2 * i]);
-        }
-
-        if(getColumn(board->kingSquare_w) > 3)
-            for(int p = 0; p < PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-        if(getColumn(board->kingSquare_b) > 3)
-            for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) inputs[p] = mirrorBoard(inputs[p]);
-        
-        for(int color = 0; color < 2; color++)
-        {
-            #ifndef COMPRESS_KING_BUCKET
-            int baseIndex = (color == WHITE) ? kingBuckets[board->kingSquare_w] : kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
-            baseIndex += offsetGenerator_xorshift32(xorRNGState, baseIndex);
-            baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
-            baseIndex *= BITS_PER_KING_BUCKET;
-            #else
-            int baseIndex = 0;
-            #endif
-
-            int trackedInputs = 0;
-
-            //First half matches side to move.
-            // side = 0 if color matches board->turn
-            int side = (color != board->turn);
-            
-            for(int piece = 0; piece < PIECE_COUNT; piece++)
-            {
-                uint64_t mask = inputs[PIECE_COUNT * color + piece];
-                while(mask)
-                {
-                    if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                    else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = baseIndex + 64 * piece + __builtin_ctzll(mask);
-                    trackedInputs++;
-                    mask&=(mask - 1);
-                }
-            }
-
-            #ifndef COMPRESS_OUTPUT_BUCKET
-            int outputBucket = ((trackedInputs - 1) / 4) + offsetGenerator_xorshift32(xorRNGState, -1);
-            outputBucket = clamp(outputBucket, 0, OUTPUT_BUCKETS - 1)
-            if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = outputBucket;
-            else outputBuckets_B[entryNumber] = outputBucket;
-            #else
-            if(inputGroup == INPUT_GROUP_A) outputBuckets_A[entryNumber] = 0;
-            else outputBuckets_B[entryNumber] = 0;
-            #endif
-
-            //-1 padding
-            while(trackedInputs < 32)
-            {
-                if(inputGroup == INPUT_GROUP_A) activeInputs_A[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                else activeInputs_B[entryNumber * 64 + 32 * side + trackedInputs] = -1;
-                trackedInputs++;
-            }
-        }
-    }
-}
-
+//Currently bottlenecked by single-threaded binpack I/O & processing, not gpu kernels.
 void train(int maxIterations, float maxAllowedError)
 {
-    binpackDetails trainingBinpack = binpack_open(TRAINING_DATA_PATH, 0);
-    binpackDetails validationBinpack = binpack_open(VALIDATION_DATA_PATH, 0);
+    //I'm not too worried about opening 2 * threadCount threads since
+    //half should wait once their queue fills up.
+    const int BINPACK_READERS = threadCount;
+    binpackDetails trainingBinpack = binpack_open(TRAINING_DATA_PATH, BINPACK_READERS);
+    binpackDetails validationBinpack = binpack_open(VALIDATION_DATA_PATH, BINPACK_READERS);
 
     #ifdef COMPRESS_KING_BUCKET
     compressKingBucket(raw_weights);
@@ -187,22 +75,68 @@ void train(int maxIterations, float maxAllowedError)
         return;
     }
 
-    int totalIterations = 0;
+    //Each queue gets one reader that continuously generates data.
+    MinibatchQueue* trainingQueue = calloc(1, sizeof(MinibatchQueue));
+    MinibatchQueue* validationQueue = calloc(1, sizeof(MinibatchQueue));
+    
+    queue_init(validationQueue);
+    queue_init(trainingQueue);
+    
+    dataWorkerArgs* trainingDataParserArgs = calloc(BINPACK_READERS, sizeof(dataWorkerArgs));
+    dataWorkerArgs* validationDataParserArgs = calloc(BINPACK_READERS, sizeof(dataWorkerArgs));
+
+    for(int i = 0; i < BINPACK_READERS; i++)
+    {
+        trainingDataParserArgs[i].details = &trainingBinpack;
+        trainingDataParserArgs[i].queue = trainingQueue;
+        trainingDataParserArgs[i].fenSkip = FEN_SKIP_TRAINING;
+        trainingDataParserArgs[i].seed = time(NULL);
+        trainingDataParserArgs[i].readerIndex = i;
+        
+        validationDataParserArgs[i].details = &validationBinpack;
+        validationDataParserArgs[i].queue = validationQueue;
+        validationDataParserArgs[i].fenSkip = FEN_SKIP_TRAINING;
+        validationDataParserArgs[i].seed = time(NULL);
+        validationDataParserArgs[i].readerIndex = i;
+    }
+
+
+    THREADTYPE trainDataThread[BINPACK_READERS];
+    THREADTYPE validationDataThread[BINPACK_READERS];
+    
+    for(int i = 0; i < BINPACK_READERS; i++)
+    {
+        THREAD_START(validationDataThread[i], fillMinibatchQueue, &validationDataParserArgs[i]);
+        THREAD_START(trainDataThread[i], fillMinibatchQueue, &trainingDataParserArgs[i]);
+    }
+    
+    PreparedMinibatch* readyMinibatch = calloc(1, sizeof(PreparedMinibatch));
+
+    int totalEpochs = 0;
     float totalLoss = 0.0; //accumulated value per iteration
     clock_t startTime, endTime;
     double duration_sec;
     int inputGroup = INPUT_GROUP_A;
-    bitboard* board = create_board(NULL);
 
     startTime = clock();
     for(int i = 0; i < VALIDATION_BINPACK_MINIBATCHES; i++)
     {
         inputGroup ^= 1;
-        uint32_t xorRNGState = time(NULL);
-        prepareMinibatchData(&validationBinpack, inputGroup, board, &xorRNGState,
-                                activeInputs_A, expectedOutputs_A, outputBuckets_A,
-                                activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
+        queue_pop(validationQueue, readyMinibatch);
+
+        if(inputGroup == INPUT_GROUP_A) 
+        {
+            memcpy(activeInputs_A, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+            memcpy(expectedOutputs_A, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+            memcpy(outputBuckets_A, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+        } 
+        else 
+        {
+            memcpy(activeInputs_B, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+            memcpy(expectedOutputs_B, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+            memcpy(outputBuckets_B, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+        }
                                 
         enqueueKernels(inputGroup, 0);
         hipEventSynchronize(hip_events.readLoss);
@@ -211,6 +145,7 @@ void train(int maxIterations, float maxAllowedError)
         totalLoss+=loss;
     }
     endTime = clock();
+
     duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
     totalLoss = totalLoss/(MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES);
     float minimumLoss = totalLoss;
@@ -226,13 +161,22 @@ void train(int maxIterations, float maxAllowedError)
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {
             inputGroup ^= 1;
-            uint32_t xorRNGState = (uint32_t) time(NULL);
-            prepareMinibatchData(&trainingBinpack, inputGroup, board, &xorRNGState,
-                                    activeInputs_A, expectedOutputs_A, outputBuckets_A,
-                                    activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
-            //If we comment out hipEventSynchronize and enqueueKernels, we end up with 1.4 million positions/second.
-            //This is primarily bounded by input processing speed, not binpack I/O.
+            queue_pop(trainingQueue, readyMinibatch);
+
+            if(inputGroup == INPUT_GROUP_A) 
+            {
+                memcpy(activeInputs_A, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+                memcpy(expectedOutputs_A, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+                memcpy(outputBuckets_A, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+            } 
+            else
+            {
+                memcpy(activeInputs_B, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+                memcpy(expectedOutputs_B, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+                memcpy(outputBuckets_B, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+            }
+
             enqueueKernels(inputGroup, 1);
             hipEventSynchronize(hip_events.readLoss);
             
@@ -241,24 +185,33 @@ void train(int maxIterations, float maxAllowedError)
 
             if((minibatchNumber + 1) % 25 == 0) printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
         }
-        totalIterations++;
         endTime = clock();
-        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
 
+        duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
         totalLoss = totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH);
-        printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec); ", totalIterations, totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
+        printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec); ", ++totalEpochs, totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
 
         totalLoss = 0.0;
 
         startTime = clock();
         for(int i = 0; i < VALIDATION_BINPACK_MINIBATCHES; i++)
         {
-            inputGroup ^= 1;
-            uint32_t xorRNGState = time(NULL);
-            prepareMinibatchData(&validationBinpack, inputGroup, board, &xorRNGState,
-                                    activeInputs_A, expectedOutputs_A, outputBuckets_A,
-                                    activeInputs_B, expectedOutputs_B, outputBuckets_B);
+             inputGroup ^= 1;
 
+            queue_pop(validationQueue, readyMinibatch);
+
+            if(inputGroup == INPUT_GROUP_A) 
+            {
+                memcpy(activeInputs_A, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+                memcpy(expectedOutputs_A, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+                memcpy(outputBuckets_A, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+            } 
+            else 
+            {
+                memcpy(activeInputs_B, &readyMinibatch->activeInputs, sizeof(readyMinibatch->activeInputs));
+                memcpy(expectedOutputs_B, &readyMinibatch->expectedOutputs, sizeof(readyMinibatch->expectedOutputs));
+                memcpy(outputBuckets_B, &readyMinibatch->outputBuckets, sizeof(readyMinibatch->outputBuckets));
+            }
                                     
             enqueueKernels(inputGroup, 0);
             hipEventSynchronize(hip_events.readLoss);
@@ -294,12 +247,29 @@ void train(int maxIterations, float maxAllowedError)
         }
         
 
-    } while(minimumLoss > maxAllowedError && totalIterations < maxIterations);
+    } while(minimumLoss > maxAllowedError && totalEpochs < maxIterations);
 
-    free(board);
+    validationQueue->stop_signal = 1;
+    trainingQueue->stop_signal = 1;
+    BROADCAST_COND_VARIABLE(validationQueue->not_full);
+    BROADCAST_COND_VARIABLE(validationQueue->not_empty);
+    BROADCAST_COND_VARIABLE(trainingQueue->not_full);
+    BROADCAST_COND_VARIABLE(trainingQueue->not_empty);
+
     freeHIP();
+
+    free(trainingQueue);
+    free(validationQueue);
+    free(readyMinibatch);
+
     binpack_close(&trainingBinpack);
     binpack_close(&validationBinpack);
+
+    for(int i = 0; i < BINPACK_READERS; i++)
+    {
+        THREAD_WAIT(validationDataThread[i]);
+        THREAD_WAIT(trainDataThread[i]);
+    }
 }
 
 void compressKingBucket(training_weights* weights)
