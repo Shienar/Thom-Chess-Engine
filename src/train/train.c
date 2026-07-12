@@ -117,7 +117,7 @@ void train(int maxIterations, float maxAllowedError)
     clock_t startTime, endTime;
     double duration_sec;
     int inputGroup = INPUT_GROUP_A;
-
+    
     startTime = clock();
     for(int i = 0; i < VALIDATION_BINPACK_MINIBATCHES; i++)
     {
@@ -245,8 +245,6 @@ void train(int maxIterations, float maxAllowedError)
             //Red text
             printf("Validation Loss = \033[0;31m%e\033[0m (%.1fs at %d pos/sec)\n", totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * VALIDATION_BINPACK_MINIBATCHES) / duration_sec));
         }
-        
-
     } while(minimumLoss > maxAllowedError && totalEpochs < maxIterations);
 
     validationQueue->stop_signal = 1;

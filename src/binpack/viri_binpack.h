@@ -55,9 +55,12 @@ typedef union {
     };
 } Viri_Move;
 
-typedef struct {
-    Viri_Move move;
-    Viri_Score score;
+typedef union {
+    uint32_t raw;
+    struct {
+        Viri_Move move;
+        Viri_Score score;
+    };
 } Viri_MoveScorePair;
 #pragma pack(pop)
 
@@ -80,6 +83,8 @@ typedef struct {
     mmap_handle_t mmap_file;
     uint8_t* start_ptr;
     uint8_t* end_ptr;
+    int64_t* headerOffsets;
+    int headerEntries; //To save space, every 50th entry is saved.
 
     //Writing
     FILE* binpack; 
@@ -100,8 +105,10 @@ binpackDetails binpack_open(const char* fileName, int numReaders);
 void binpack_close(binpackDetails* details);
 int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips);
 
+int readPackedBoard(binpackDetails* details, int readerIndex);
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
 void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count);
 
 void binpackPrintInfo(const char* fileName);
+int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries);
 #endif

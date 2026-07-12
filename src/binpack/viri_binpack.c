@@ -12,7 +12,7 @@ int mmap_open(const char* filename, mmap_handle_t* handle)
     handle->data = NULL;
     handle->size = 0;
 
-    handle->file_handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_RANDOM_ACCESS, NULL);
+    handle->file_handle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
     if(handle->file_handle == INVALID_HANDLE_VALUE) return -1;
 
     LARGE_INTEGER file_size;
@@ -71,7 +71,7 @@ int mmap_open(const char* filename, mmap_handle_t* handle)
         close(handle->fd);
         return -1;
     }
-    madvise(handle->data, handle->size, MADV_SEQUENTIAL);
+    madvise(handle->data, handle->size, MADV_RANDOM);
 
     return 0;
 }
@@ -158,107 +158,6 @@ void initViriTables()
     rookSqToFlag[63] = 4;
 }
 
-int readPackedBoard(binpackDetails* details, int readerIndex)
-{
-    assert(readerIndex < details->numReaders);
-    readerDetails* rDetails = &details->readerInfo[readerIndex];
-
-    if(rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) > details->end_ptr)
-        return -1;
-        
-    memcpy(&rDetails->packedBoard->occupancy, rDetails->current_ptr, sizeof(rDetails->packedBoard->occupancy));
-    
-    if(rDetails->packedBoard->occupancy)
-    {
-        if(rDetails->current_ptr + sizeof(*rDetails->packedBoard) > rDetails->end_section)
-            return -1;
-
-        memcpy((uint8_t*)rDetails->packedBoard + sizeof(rDetails->packedBoard->occupancy), 
-               rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), 
-               sizeof(*rDetails->packedBoard) - sizeof(rDetails->packedBoard->occupancy));
-               
-        rDetails->current_ptr += sizeof(*rDetails->packedBoard);
-    }
-    else
-    {
-        uint16_t extension_id = 0;
-        uint16_t payload_length = 0;
-
-        memcpy(&extension_id, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), sizeof(extension_id));
-        memcpy(&payload_length, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) + sizeof(extension_id), sizeof(payload_length));
-
-        #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-        extension_id = __builtin_bswap16(extension_id);
-        payload_length = __builtin_bswap16(payload_length);
-        #endif
-
-        size_t total_extension_bytes = sizeof(rDetails->packedBoard->occupancy) + 4 + payload_length;
-        
-        if(rDetails->current_ptr + total_extension_bytes + sizeof(Viri_PackedBoard) > details->end_ptr) return -1;
-
-        rDetails->current_ptr += total_extension_bytes;
-        memcpy(&rDetails->packedBoard, rDetails->current_ptr, sizeof(Viri_PackedBoard));
-        rDetails->current_ptr += sizeof(Viri_PackedBoard);
-    }
-
-    #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-    packedBoard->occupancy = __builtin_bswap64(packedBoard->occupancy);
-    packedBoard->fullMoveCounter = __bultin_bswap16(packedBoard->fullMoveCounter);
-    packedBoard->score = __bultin_bswap16(packedBoard->score);
-    #endif
-
-    rDetails->board->turn = rDetails->packedBoard->stm == VIRI_BLACK_STM;
-
-    if(rDetails->packedBoard->result == VIRI_WHITE_WIN) rDetails->currentGameWinner = VICTOR_WHITE;
-    else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
-    else rDetails->currentGameWinner = VICTOR_DRAW_GENERIC;
-
-    rDetails->board->halfMoveCount = 2 * (rDetails->packedBoard->fullMoveCounter) + rDetails->board->turn;
-    rDetails->board->movesSinceLastChange = rDetails->packedBoard->halfmoveClock;
-
-    //Clear board
-    memset(&rDetails->board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
-    memset(&rDetails->board->pieces, 0, PIECE_COUNT * sizeof(uint64_t));
-    memset(&rDetails->board->pieces_side, 0, 2 * sizeof(uint64_t));
-    rDetails->board->pieces_all = 0;
-
-    uint64_t mask = rDetails->packedBoard->occupancy;
-    int offset = 0;
-    while(mask)
-    {
-        int sq = __builtin_ctzll(mask);
-        int byteIndex = offset / 2;
-        int piece = rDetails->packedBoard->pieces[byteIndex];
-        if(offset % 2) piece = piece&0xF;
-        else piece >>= 4;
-
-        if(piece&6)
-            rDetails->board->flags |= rookSqToFlag[sq];
-
-        piece = pieceMappingsFromViri[piece];
-
-        uint64_t sqMask = singleBitMask(sq);
-        rDetails->board->pieces_all |= sqMask;
-        rDetails->board->pieces_side[COLOR(piece)] |= sqMask;
-        rDetails->board->pieces[piece] |= sqMask;
-        rDetails->board->pieceArr[sq] = piece;
-
-        if(ISKING(piece))
-        {
-            if(ISBLACK(piece)) rDetails->board->kingSquare_b = sq;
-            else rDetails->board->kingSquare_w = sq;
-        }
-
-        offset++;
-        mask &= (mask - 1);
-    }
-    
-    if(isThreatened(rDetails->board, rDetails->board->kingSquare_w, WHITE)) rDetails->board->flags|=16;
-    else if(isThreatened(rDetails->board, rDetails->board->kingSquare_b, BLACK)) rDetails->board->flags|=32;
-
-    return 0;
-}
-
 //Doesn't set score or game result, that can be done later by the caller.
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 {
@@ -298,6 +197,119 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 
     packedBoard->halfmoveClock = board->movesSinceLastChange;
     packedBoard->fullMoveCounter = board->halfMoveCount / 2;
+}
+
+void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
+{
+    board->turn = packedBoard->stm == VIRI_BLACK_STM;
+
+    board->halfMoveCount = 2 * (packedBoard->fullMoveCounter) + board->turn;
+    board->movesSinceLastChange = packedBoard->halfmoveClock;
+
+    //Clear board
+    memset(&board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
+    memset(&board->pieces, 0, PIECE_COUNT * sizeof(uint64_t));
+    memset(&board->pieces_side, 0, 2 * sizeof(uint64_t));
+    board->pieces_all = 0;
+
+    board->kingSquare_b = 64;
+    board->kingSquare_w = 64;
+
+    uint64_t mask = packedBoard->occupancy;
+    int offset = 0;
+    while(mask)
+    {
+        int sq = __builtin_ctzll(mask);
+        int byteIndex = offset / 2;
+        int piece = packedBoard->pieces[byteIndex];
+        if(offset % 2) piece = piece&0xF;
+        else piece >>= 4;
+
+        if(piece&6)
+            board->flags |= rookSqToFlag[sq];
+
+        piece = pieceMappingsFromViri[piece];
+
+        uint64_t sqMask = singleBitMask(sq);
+        board->pieces_all |= sqMask;
+        board->pieces_side[COLOR(piece)] |= sqMask;
+        board->pieces[piece] |= sqMask;
+        board->pieceArr[sq] = piece;
+
+        if(ISKING(piece))
+        {
+            if(ISBLACK(piece)) board->kingSquare_b = sq;
+            else board->kingSquare_w = sq;
+        }
+
+        offset++;
+        mask &= (mask - 1);
+    }
+    
+    //IsThreatened can attempt to index out of bounds and segfault on invalid king squares.
+    assert(board->kingSquare_w != 64);
+    assert(board->kingSquare_b != 64);
+
+    if(isThreatened(board, board->kingSquare_w, WHITE)) board->flags|=16;
+    else if(isThreatened(board, board->kingSquare_b, BLACK)) board->flags|=32;
+}
+
+int readPackedBoard(binpackDetails* details, int readerIndex)
+{
+    assert(readerIndex < details->numReaders);
+    readerDetails* rDetails = &details->readerInfo[readerIndex];
+
+    if(rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) > details->end_ptr)
+        return -1;
+        
+    memcpy(&rDetails->packedBoard->occupancy, rDetails->current_ptr, sizeof(rDetails->packedBoard->occupancy));
+    
+    if(rDetails->packedBoard->occupancy)
+    {
+        if(rDetails->current_ptr + sizeof(*rDetails->packedBoard) > rDetails->end_section)
+            return -1;
+
+        memcpy((uint8_t*)rDetails->packedBoard + sizeof(rDetails->packedBoard->occupancy), 
+               rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), 
+               sizeof(*rDetails->packedBoard) - sizeof(rDetails->packedBoard->occupancy));
+               
+        rDetails->current_ptr += sizeof(*rDetails->packedBoard);
+    }
+    else
+    {
+        uint16_t extension_id = 0;
+        uint16_t payload_length = 0;
+
+        memcpy(&extension_id, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), sizeof(extension_id));
+        memcpy(&payload_length, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) + sizeof(extension_id), sizeof(payload_length));
+
+        #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+        extension_id = __builtin_bswap16(extension_id);
+        payload_length = __builtin_bswap16(payload_length);
+        #endif
+
+        uint64_t total_extension_bytes = sizeof(rDetails->packedBoard->occupancy) + 4 + payload_length;
+        
+        if(rDetails->current_ptr + total_extension_bytes + sizeof(Viri_PackedBoard) > details->end_ptr) return -1;
+
+        rDetails->current_ptr += total_extension_bytes;
+        memcpy(rDetails->packedBoard, rDetails->current_ptr, sizeof(Viri_PackedBoard));
+        rDetails->current_ptr += sizeof(Viri_PackedBoard);
+    }
+
+    #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+    packedBoard->occupancy = __builtin_bswap64(packedBoard->occupancy);
+    packedBoard->fullMoveCounter = __bultin_bswap16(packedBoard->fullMoveCounter);
+    packedBoard->score = __bultin_bswap16(packedBoard->score);
+    #endif
+    
+    if(rDetails->packedBoard->result == VIRI_WHITE_WIN) rDetails->currentGameWinner = VICTOR_WHITE;
+    else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
+    else rDetails->currentGameWinner = VICTOR_DRAW_GENERIC;
+
+    packedBoardToBoard(rDetails->board, rDetails->packedBoard);
+
+    return 0;
 }
 
 //Truncate the newly opened file if it doesn't end in four zero bytes.
@@ -376,35 +388,19 @@ binpackDetails binpack_open(const char* fileName, int numReaders)
         details.start_ptr = (uint8_t*)details.mmap_file.data;
         details.end_ptr = details.start_ptr + details.mmap_file.size;
 
+        details.headerOffsets = binpack_acquireHeaderIndices(fileName, &details.headerEntries);
+
         details.readerInfo = calloc(numReaders, sizeof(readerDetails));
 
-        size_t sectionSize = details.mmap_file.size / numReaders;
+        size_t sectionSize = details.headerEntries / numReaders;
 
         for(int i = 0; i < numReaders; i++)
         {
             details.readerInfo[i].board = calloc(1, sizeof(bitboard));
             details.readerInfo[i].packedBoard = calloc(1, sizeof(Viri_PackedBoard));
-            details.readerInfo[i].start_section = details.start_ptr + i * sectionSize;
+            details.readerInfo[i].start_section = details.start_ptr + details.headerOffsets[i * sectionSize];
             details.readerInfo[i].current_ptr = details.readerInfo[i].start_section;
-            details.readerInfo[i].end_section = details.start_ptr + (i + 1) * sectionSize;
-
-            //We just jumped to some random point in the file. Lets seek forward for the start of next game.
-            if(i > 0)
-            {
-                while(details.readerInfo[i].start_section + 4 <= details.readerInfo[i].end_section) 
-                {
-                    uint32_t value;
-                    memcpy(&value, details.readerInfo[i].start_section, 4);
-                    
-                    if (value == 0) 
-                        break;
-                    details.readerInfo[i].start_section++;
-                }
-
-                details.readerInfo[i].start_section += 4;
-
-                details.readerInfo[i].current_ptr = details.readerInfo[i].start_section;
-            }
+            details.readerInfo[i].end_section = details.start_ptr + details.headerOffsets[(i + 1) * sectionSize - 1];
 
             readPackedBoard(&details, i);
         }
@@ -431,6 +427,7 @@ void binpack_close(binpackDetails* details)
             free(details->readerInfo[i].packedBoard);
         }
         free(details->readerInfo);
+        free(details->headerOffsets);
     }
 
     DESTROY_MUTEX(details->lock);
@@ -474,7 +471,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
             pair.move.raw = __builtin_bswap16(pair.move.raw);
             #endif
 
-            if(pair.move.raw == 0)
+            if(pair.raw == 0)
             {
                 if(readPackedBoard(details, readerIndex))
                     return (skippedCount > 0) ? skippedCount : -1;
@@ -530,7 +527,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
             abs(pair.score) <= 10000 && 
             pair.move.moveType == 0 &&
             !IS_IN_CHECK_ANY(rDetails->board->flags) &&
-            rDetails->board->halfMoveCount > 12)
+            rDetails->board->halfMoveCount > 16)
                 break;
         
         skippedCount++;
@@ -579,8 +576,6 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
     UNLOCK_MUTEX(details->lock);
 }
 
-//Normally 21-22m positions per second (mostly usable)/
-//GPU is the biggest bottleneck, followed by CPU input proccessing, followed by CPU binpack I/O
 void binpackPrintInfo(const char* fileName)
 {
     binpackDetails details = binpack_open(fileName, 1);
@@ -641,4 +636,64 @@ void binpackPrintInfo(const char* fileName)
     printf("\033[2K\r\tPositions per Byte: %.4f\n", positionsPerByte);
 
     binpack_close(&details);
+}
+
+
+//Doesn't yet handle the 0-bitboard special entries.
+int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries) 
+{
+    char dataFileName[256];
+    char* extension = strstr(fileName, ".viri");
+    size_t base_len = extension - fileName;
+    snprintf(dataFileName, sizeof(dataFileName), "%.*s.head", (int)base_len, fileName);
+
+    FILE* headerIndices = fopen(dataFileName, "rb");
+    if(!headerIndices)
+    {
+        printf("Generating missing .head file...\n");
+
+        headerIndices = fopen(dataFileName, "wb");
+        FILE* binpack = fopen(fileName, "rb");
+
+        Viri_MoveScorePair pairBuffer;
+        Viri_PackedBoard packedBoardBuffer;
+
+        int64_t offsetIndex = ftell_64(binpack);
+        fwrite(&offsetIndex, sizeof(int64_t), 1, headerIndices);
+        fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack);
+
+        int gameCount = 1;
+        *headerEntries = 1;
+
+        while(1)
+        {
+            if(fread(&pairBuffer, sizeof(Viri_MoveScorePair), 1, binpack) < 1)
+                break;
+            else if(pairBuffer.raw == 0)
+            {
+                if(++gameCount % 1000 == 0)
+                {
+                    offsetIndex = ftell_64(binpack);
+                    fwrite(&offsetIndex, sizeof(int64_t), 1, headerIndices);
+                    if(gameCount % 1000000 == 0) printf("\rPre-processing Games: %d", gameCount);
+                    *headerEntries = *headerEntries + 1;
+                }
+                fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack);
+            }
+        }
+        printf("\rPre-processing Games: %d\n", gameCount);\
+
+        fclose(binpack);
+        fclose(headerIndices);
+        headerIndices = fopen(dataFileName, "rb");
+    }
+
+    fseek_64(headerIndices, 0, SEEK_END);
+    *headerEntries = ftell_64(headerIndices) / sizeof(int64_t);
+    rewind(headerIndices);
+    int64_t* indices = calloc(*headerEntries, sizeof(int64_t));
+    fread(indices, sizeof(int64_t), *headerEntries, headerIndices);
+    fclose(headerIndices);
+    return indices;
+
 }

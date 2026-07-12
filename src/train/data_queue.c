@@ -51,14 +51,18 @@ int queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped)
     return 1;
 }
 
-int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
+uint32_t rng_xorshift32(uint32_t* state)
 {
-    uint64_t x = *state;
+    uint32_t x = *state;
     x ^= x << 13;
     x ^= x >> 7;
     x ^= x << 17;
     *state = x;
-    int y = x % 1000;
+    return x;
+}
+int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
+{
+    uint32_t y = (rng_xorshift32(state)) % 1000;
     if(y < PERMUTE_BUCKET_PROBABILITY)
     {
         if(kingBucket >= 0)
@@ -74,7 +78,19 @@ int offsetGenerator_xorshift32(uint32_t* state, int kingBucket)
 
 void processSingleMinibatch(binpackDetails* details, PreparedMinibatch* batch, uint32_t* xorRNGState, int readerIndex, int fenSkip)
 {
-    bitboard board; 
+    bitboard board;
+
+    //Jump to a random game in the reader's section.
+    uint64_t sectionSize = details->headerEntries / details->numReaders;
+    uint64_t indexOffset = rng_xorshift32(xorRNGState) % sectionSize;
+    uint64_t byteOffset = details->headerOffsets[readerIndex * sectionSize + indexOffset];
+    
+    details->readerInfo[readerIndex].current_ptr = details->start_ptr + byteOffset;
+
+    assert(details->readerInfo[readerIndex].current_ptr >= details->readerInfo[readerIndex].start_section);
+    assert(details->readerInfo[readerIndex].current_ptr <= details->readerInfo[readerIndex].end_section);
+    
+    readPackedBoard(details, readerIndex);
 
     for(int entryNumber = 0; entryNumber < MINIBATCH_SIZE; entryNumber++)
     {
@@ -84,18 +100,18 @@ void processSingleMinibatch(binpackDetails* details, PreparedMinibatch* batch, u
         binpack_next(details, readerIndex, &board, &score, &result, 1, fenSkip);
 
         float relativeResult = 0.5f;
-        if(result == VIRI_DRAW) relativeResult = 0.5f;
-        else if(result == VIRI_WHITE_WIN)
+        if(result == VICTOR_DRAW_GENERIC) relativeResult = 0.5f;
+        else if(result == VICTOR_WHITE)
         {
             if(board.turn == WHITE) relativeResult = 1.0f;
             else relativeResult = 0.0f;
         }
-        else if(result == VIRI_BLACK_WIN)
+        else if(result == VICTOR_BLACK)
         {
             if(board.turn == BLACK) relativeResult = 1.0f;
             else relativeResult = 0.0f;
         }
-
+        
         batch->expectedOutputs[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
 
         uint64_t inputs[2 * PIECE_COUNT] = {0};

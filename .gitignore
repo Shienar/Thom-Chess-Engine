@@ -3,6 +3,7 @@
 *.sh
 *.log
 *.pgn
+*.head
 target/
 tests/
 sygyzy/

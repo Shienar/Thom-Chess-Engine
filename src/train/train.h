@@ -30,14 +30,14 @@
 #define PERMUTE_BUCKET_PROBABILITY 50
 
 //Only train and use part of the network, broadcast trained weights to other buckets.
-//These get left commented out once a compressed version gets trained. Uncommenting them will overwrite any bucketed waights.
+//These get left commented out once the compressed version gets trained. Uncommenting them will overwrite any bucketed waights.
 //#define COMPRESS_KING_BUCKET
 //#define COMPRESS_OUTPUT_BUCKET
 
 /**
  * 2 x ((10 x 768) -> 512) -> (8 x 1)
  * 
- * Training progression (Train until plateau at each, then continue with QAT, then verify it with SPRT):
+ * Training progression (Train until loss stops decreasing, then move on; don't spend too much time at early steps):
  * 1. Force single input/output buckets
  *      - 2 x (768->512) -> 1.
  * 2. Expand to multiple king buckets.
