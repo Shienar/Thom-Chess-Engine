@@ -11,7 +11,7 @@
 #include <string.h>
 #include <omp.h>
 
-void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
+void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
 {
@@ -25,7 +25,6 @@ int main(int argc, char** argv)
     char* strtok_ptr = NULL;
     
     int quit = 0;
-    int useBook = 0;
     int isReady = 0;
     
     char sygyzyPath[1024] = PROJECT_CWD "/sygyzy/";
@@ -79,14 +78,13 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ucinewgame") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 if(isCalculating)
                 {
                     endTime = 0;
                     THREAD_WAIT(calculateThread);
                 }
                 clear_tt(transpositionTable);
-                if(useBook) loadBook(GENERAL_BOOK);
                 break;
             }
             else if(strcmp(str, "setoption") == 0) 
@@ -137,8 +135,8 @@ int main(int argc, char** argv)
                         {
                             if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                             {
-                                if(strcmp(str, "true") == 0) { useBook = 1; loadBook(GENERAL_BOOK); }
-                                else { useBook = 0; unloadBook(); }
+                                if(strcmp(str, "true") == 0) { useBook = 1; }
+                                else { useBook = 0; }
                             }
                             break;
                         }
@@ -238,7 +236,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "isready") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 printf("readyok\n");
                 fflush(stdout);
             }
@@ -253,7 +251,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "position") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 if(isCalculating)
                 {
                     endTime = 0;
@@ -311,7 +309,7 @@ int main(int argc, char** argv)
                     THREAD_WAIT(calculateThread);
                 }
                 isCalculating = 1;
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
 
                 int whiteTime = INT32_MAX;
                 int blackTime = INT32_MAX;
@@ -421,38 +419,9 @@ int main(int argc, char** argv)
                 }
                 
             }
-            else if(strcmp(str, "train") == 0)
-            {
-                #ifdef TRAIN
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
-                loadRawWeights();
-                
-                //Not a part of UCI.
-                //Format: "train <epoch count>"
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    int epochCount;
-                    sscanf(str, "%d", &epochCount);
-                    train(epochCount, 5e-4f);
-                }
-                #else
-                printf("Cannot train engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'\n");
-                #endif
-                break;
-            }
-            else if(strcmp(str, "generate") == 0)
-            {
-                #ifdef TRAIN
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
-                generate();
-                #else
-                printf("Cannot generate moves for engine since necessary files have not been compiled into binary. Try 'make clean all TRAIN=1'\n");
-                #endif
-                break;
-            }
             else if(strcmp(str, "perft") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
 
                 //Not a part of UCI.
                 //Format: "perft <depth>"
@@ -472,7 +441,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perftv") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
 
                 //verbose perft
                 //Not a part of UCI.
@@ -505,16 +474,36 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "netinfo") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 print_network_statistics();
                 break;
             }
             #ifdef TRAIN
             else if(strcmp(str, "binpackinfo") == 0)
             {
-                readyUp(&isPathDirty, &useBook, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 binpackPrintInfo(VALIDATION_DATA_PATH);
                 binpackPrintInfo(TRAINING_DATA_PATH);
+                break;
+            }
+            else if(strcmp(str, "train") == 0)
+            {
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                
+                //Not a part of UCI.
+                //Format: "train <epoch count>"
+                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                {
+                    int epochCount;
+                    sscanf(str, "%d", &epochCount);
+                    train(epochCount, 5e-4f);
+                }
+                break;
+            }
+            else if(strcmp(str, "generate") == 0)
+            {
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                generate();
                 break;
             }
             #endif
@@ -535,11 +524,11 @@ int main(int argc, char** argv)
     destroy_hashTable_tt(transpositionTable);
     tb_free();
     if(board) free(board);
-    unloadBook(GENERAL_BOOK);
+    unloadBook(BOOK_PATH);
     disableDebugMessages();  //closes file if open.
 }
 
-void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board)
+void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board)
 {
     if(*isReady) return;
 
@@ -554,6 +543,9 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
     if(kingAttacks[0] == 0) initKingMoveTable();
 
     loadQuantizedWeights();
+    #ifdef TRAIN
+    loadRawWeights();
+    #endif
 
     if(!transpositionTable) 
     {
@@ -566,8 +558,7 @@ void readyUp(int *isPathDirty, int *useBook, int *isReady, char* sygyzyPath, sea
     context->accumulator = playerAccumulator;
     context->refreshTable = playingRefreshTable;
 
-    if(*useBook) loadBook(GENERAL_BOOK);
-    else unloadBook();
+    loadBook(BOOK_PATH);
     
     if(*isPathDirty)
     {

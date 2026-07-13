@@ -67,7 +67,7 @@ void generate()
     suppressUCIMessages = 0;
     binpack_close(&details);
     if(wasDebugEnabled) enableDebugMessages();
-    loadBook(GENERAL_BOOK);
+    loadBook(BOOK_PATH);
     printf("Stopped generating data.\n");
     
     binpackPrintInfo(TRAINING_DATA_PATH);

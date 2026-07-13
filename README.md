@@ -2,18 +2,16 @@ UCI-compliant NNUE chess engine created in C.
 
 ### BUILDING:
 
-Simply run 'make' in the main directory to compile the program.
+A release version of the engine should be compiled with 'make -j RELEASE=1'. It can exist outside of the compiled folder and won't attempt any file opening/read/writing for debug logs, opening books, or network weights.
 - 'make clean' will remove target
-- 'make all' will compile everything.
-- 'make NEW=1' will compile with target '.\target\Thom_new.exe'. This is used for comparing changes within the engine.
-- 'make TRAIN=1' will compile the trainer into the main program (requires HIP SDK).
-- 'make TRAIN=1 KPERFT=1' will compile the trainer with kernel profiling mode enabled.
-- 'make TRAIN=1 NVIDIA=1' will attempt to compile the trainer on NVIDIA GPUs (untested).
-- 'make DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
-- 'make PROF=1' will compile with profiling flags for gmon.
-- 'make SPSA=1' will compile with uci options for Simultaneous Perturbation Stochastic Approximation
-
-The engine's executable can be moved away from the target folder. The project's directory gets compiled into the engine with make, and the absolute paths are used to open the weight/book files in the import folder.
+- 'make -j all' will compile everything.
+- 'make -j NEW=1' will compile with target '.\target\Thom_new.exe'. This is used for comparing changes within the engine.
+- 'make -j TRAIN=1' will compile the trainer into the main program (requires HIP SDK).
+- 'make -j TRAIN=1 KPERFT=1' will compile the trainer with kernel profiling mode enabled.
+- 'make -j TRAIN=1 NVIDIA=1' will attempt to compile the trainer on NVIDIA GPUs (untested).
+- 'make -j DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
+- 'make -j SPSA=1' will compile with uci options for Simultaneous Perturbation Stochastic Approximation (SPSA)
+- 'make -j RELEASE=1' will compile quantized weights & book into the executable. Disables debug log file.
 
 ### COMPATIBLITY:
 

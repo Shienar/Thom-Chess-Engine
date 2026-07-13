@@ -13,6 +13,10 @@
 #define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
+#ifdef RELEASE
+extern const unsigned char int_weights_bin[];
+#endif
+
 extern training_weights* raw_weights;
 extern quantized_weights* int_weights;
 

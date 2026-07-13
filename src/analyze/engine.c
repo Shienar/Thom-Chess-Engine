@@ -40,7 +40,7 @@ int reductionTable[MAX_PLY][MAX_MOVES] = {0};
 
 void initSearchTables()
 {
-    if(reductionTable[4][10]) return;
+    if(reductionTable[lm_depth][10]) return;
 
     for(int depth = 0; depth < MAX_PLY; depth++)
     {
@@ -90,7 +90,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 
     if(isDraw(board))
         return (ply & 3) - 1;
-    if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime)) 
+    if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes)) 
         return forwardPropagate(board, context->accumulator);
 
     int lowestBound = alpha;
@@ -192,7 +192,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int searchedQuietIndices[MAX_MOVES] = {0};
     int searchedQuietCount = 0;
 
-    if(ply > context->seldepth) context->seldepth = ply;
+    context->seldepth = _max(context->seldepth, ply);
     
     if(isDraw(board)) return (ply & 3) - 1;
 
@@ -231,7 +231,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(ply >= MAX_PLY - 1) 
         return forwardPropagate(board, context->accumulator);
-    if(depth <= 0 || (context->isPonder == 0 && context->endTime && clock() > *context->endTime && ply >= 1))
+    if(depth <= 0 || (ply >= 1 && ((context->isPonder == 0 && context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes))))
         return quiescentSearch(context, alpha, beta, ply);
     
     //Sygyzy

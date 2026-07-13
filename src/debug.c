@@ -10,8 +10,11 @@ void enableDebugMessages()
 {
     printDebugMessages = 1;
     this_pid = (int) GETPID();
+    #ifndef RELEASE
     dbg_file = fopen(PROJECT_CWD "/debug.log", "a");
+    #endif
 }
+
 void disableDebugMessages() 
 {
     printDebugMessages = 0;
@@ -26,10 +29,12 @@ void dbg_msg(const char* fileName, int lineNumber, const char* type, const char*
 {
     if(!printDebugMessages) return;
 
-    time_t t = time(NULL);
-    struct tm *local_time = localtime(&t);
 
     va_list args;
+    #ifndef RELEASE
+    time_t t = time(NULL);
+    struct tm *local_time = localtime(&t);
+    
     va_start(args, str);
     fprintf(dbg_file, "%06d | %02d-%02d-%04d %02d:%02d:%02d | %s: %s: %d -- ", 
            this_pid,
@@ -46,6 +51,7 @@ void dbg_msg(const char* fileName, int lineNumber, const char* type, const char*
     fprintf(dbg_file, "\n");
     fflush(dbg_file);
     va_end(args);
+    #endif
 
     va_start(args, str);
     printf("info string ");

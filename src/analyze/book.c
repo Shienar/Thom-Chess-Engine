@@ -4,12 +4,22 @@
 #include "hashtables/hashtable.h"
 #include <stdint.h>
 
+int initBook = 0;
+int useBook = 0;
 uint64_t entryCount = 0;
 polyglot_book_entry *entries = NULL;
 
 void loadBook(const char* path)
 {
-    if(entries) return;
+    if(initBook) return;
+    initBook = 1;
+
+    #ifdef RELEASE
+    entries = (polyglot_book_entry*) book_bin_start;
+    entryCount = (uint64_t) (book_bin_end - book_bin_start);
+    entryCount /= sizeof(polyglot_book_entry);
+
+    #else
     FILE* input = fopen(path, "rb");
     if(!input)
     {
@@ -30,7 +40,6 @@ void loadBook(const char* path)
 
     entryCount/=sizeof(polyglot_book_entry);
     entries = calloc(entryCount, sizeof(polyglot_book_entry));
-
     
     rewind(input);
 
@@ -38,20 +47,23 @@ void loadBook(const char* path)
 
     if(entryCount < readItems) DEBUG_ERROR("%lld/%lld entries imported.", entryCount, readItems);
     fclose(input);
+    #endif
 }
 
 void unloadBook()
 {
+    #ifndef RELEASE
     if(entries)
     {
         free(entries);
         entries = NULL;
     }
+    #endif
 }
 
 move_c getBookMove(bitboard* board)
 {
-    if(!IS_IN_BOOK_OPENING(board->flags) || !entries) return (move_c) {0};
+    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook) return (move_c) {0};
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;

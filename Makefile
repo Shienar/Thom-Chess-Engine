@@ -1,6 +1,18 @@
+# Compiler and flags
 CC = gcc
 CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
 
+#release is incompatible with trainer & debug, check here.
+ifneq ($(origin RELEASE),undefined)
+  ifneq ($(origin TRAIN),undefined)
+    $(error Trainer is incompatible with release's read-only weights)
+  endif
+  ifneq ($(origin DEBUG),undefined)
+    $(error Release version and debug version incompatible)
+  endif
+endif
+
+# Add debug or optimization flags to compiler flags
 ifdef DEBUG
 	CFLAGS += -g
 else
@@ -8,40 +20,40 @@ else
 	CFLAGS += -DNDEBUG
 endif
 
-# Profiling
-# gprof .\target\Thom.exe -P_mcount_private -P__fentry__ -b > output.txt
-ifdef PROF
-	CFLAGS += -pg -no-pie
-endif
-
+# Define SPSA to compile with extra uci options.
 ifdef SPSA
 	CFLAGS += -DSPSA
 endif
 
+# define PROJECT_CWD as a string literal evaluating to the current path.
+CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
+
+# Declare & include source/target.
 SRC_DIR = src
 TGT_DIR = target
 OBJ_DIR = $(TGT_DIR)/obj
 
 CFLAGS += -I$(SRC_DIR)
 
-# Use "make NEW=1" to create a copy. Used for testing elo differences between versions.
+# Simple method to compile a copy for SPRT testing.
 ifdef NEW
 	TARGET = $(TGT_DIR)/Thom_new.exe
 else
 	TARGET = $(TGT_DIR)/Thom.exe
 endif
 
-# define PROJECT_CWD as a string literal evaluating to the current path. Used for fopen-ing.
-CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
-
 SRCFILES = $(wildcard src/*.c) \
 		   $(wildcard src/analyze/*.c) \
 		   $(wildcard src/board/*.c) \
 		   $(wildcard src/hashtables/*.c) \
 		   $(wildcard src/pyrrhic/tbprobe.c)
+ASMFILES = 
+ifdef RELEASE
+	CFLAGS += -DRELEASE
+	ASMFILES += src/incbin.S
+endif
 
 ifdef TRAIN
-
 	ifdef HIP_PATH
 	HIP_ROOT = $(subst \,/,$(HIP_PATH))
 	CFLAGS += -I"$(HIP_ROOT)/include"
@@ -71,6 +83,8 @@ ifdef TRAIN
 endif
 
 OBJFILES := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCFILES))
+ASMOBJFILES := $(patsubst $(SRC_DIR)/%.S, $(OBJ_DIR)/%.o, $(ASMFILES))
+OBJFILES += $(ASMOBJFILES)
 DEPS     := $(OBJFILES:.o=.d)
 
 OBJ_DIRS := $(sort $(dir $(OBJFILES)))
@@ -95,7 +109,10 @@ endif
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c Makefile | directories
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.S | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 directories:

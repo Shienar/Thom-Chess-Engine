@@ -8,7 +8,12 @@
 #include <string.h>
 
 training_weights* raw_weights = NULL;
+#ifdef RELEASE
+quantized_weights* int_weights = (quantized_weights*) int_weights_bin;
+#else
 quantized_weights* int_weights = NULL;
+#endif
+
 
 /*** Creating/loading weights ***/
 //Box-Muller transform.
@@ -24,6 +29,7 @@ void sampleNormalDistribution(float* dest, double standardDeviation)
 void loadRawWeights()
 {
     if(raw_weights) return;
+
     raw_weights = calloc(1, sizeof(training_weights));
 
     FILE* input = fopen(RAW_PATH, "rb");
@@ -99,9 +105,14 @@ void loadQuantizedWeights()
     }
 
     DEBUG_ERROR("Failed to load quantized neural network weights from file.");
+    #ifdef TRAIN
     loadRawWeights();
     quantizeWeights(raw_weights, int_weights);
     saveQuantizedWeights();
+    #else
+    printf("Failed to load quantized neural network weights from file.\n");
+    exit(1);
+    #endif
 }
 
 void saveQuantizedWeights()
@@ -182,8 +193,6 @@ void print_weight_stats(const char* name, const float* data, size_t size)
 
 void print_network_statistics() 
 {
-    if(!raw_weights) loadRawWeights();
-
     print_weight_stats("weights1", &raw_weights->weights1[0][0], sizeof(raw_weights->weights1) / sizeof(float));
     print_weight_stats("weights1_bias", raw_weights->weights1_bias, sizeof(raw_weights->weights1_bias) / sizeof(float));
     print_weight_stats("weights2", &raw_weights->weights2[0][0], sizeof(raw_weights->weights2) / sizeof(float));
