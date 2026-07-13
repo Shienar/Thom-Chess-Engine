@@ -447,11 +447,13 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
     readerDetails* rDetails = &details->readerInfo[readerIndex];
 
     Viri_MoveScorePair pair = {0};
-    int skippedCount = 0;
+    int skippedUnusable = 0;
+    int skippedUsable = 0;
 
     //Break once we find a good move.
     while(1)
     {
+        int isCapture = 0;
         if(rDetails->current_ptr + sizeof(Viri_MoveScorePair) > rDetails->end_section)
         {
             if(loop)
@@ -460,7 +462,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                 readPackedBoard(details, readerIndex);
             }
             else
-                return (skippedCount > 0) ? skippedCount : -1;
+                return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
         }
         else
         {
@@ -474,7 +476,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
             if(pair.raw == 0)
             {
                 if(readPackedBoard(details, readerIndex))
-                    return (skippedCount > 0) ? skippedCount : -1;
+                    return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
             }
             else
             {
@@ -484,22 +486,28 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                     .startSquare = pair.move.startSquare,
                     .endSquare = pair.move.endSquare
                 };
+                
                 if(pair.move.moveType == VIRI_MOVE_TYPE_PROMOTIONS)
                     m.promoteTo = promoteMappingsToViri[pair.move.promotePiece];
-                else
-                {
-                    int fromPc = findPieceOnSquare(rDetails->board, m.startSquare);
-                    int toPc = findPieceOnSquare(rDetails->board, m.endSquare);
 
+                int toPc = findPieceOnSquare(rDetails->board, m.endSquare);
+                int fromPc = findPieceOnSquare(rDetails->board, m.startSquare);
+
+                if(toPc != EMPTY_PIECE)
+                {
                     //Viriformat castling is king takes rook
-                    if(ISKING(fromPc) && toPc != EMPTY_PIECE && COLOR(fromPc) == COLOR(toPc))
+                    if(ISKING(fromPc) && COLOR(fromPc) == COLOR(toPc))
                     {
                         if(m.endSquare < m.startSquare)
                             m.endSquare += 2 - (m.endSquare & 0x7);
                         else
                             m.endSquare += 6 - (m.endSquare & 0x7);
                     }
+                    else
+                        isCapture = 1; //Doesn't include en passant, but that is handled by move type.
                 }
+                
+                    
 
                 rDetails->board->repetitionIndex = 0;
                 rDetails->board->historyIndex = 0;
@@ -517,26 +525,31 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                             break;
                         rDetails->current_ptr++;
                     }
-                    skippedCount += 1 + ((rDetails->current_ptr - start) / 4);
+                    skippedUnusable += 1 + ((rDetails->current_ptr - start) / 4);
                     continue;
                 }
             }
         }
 
-        if(skippedCount >= minimumFENSkips &&
-            abs(pair.score) <= 10000 && 
+        if(!isCapture &&
+            abs(pair.score) <= 2000 && 
             pair.move.moveType == 0 &&
             !IS_IN_CHECK_ANY(rDetails->board->flags) &&
-            rDetails->board->halfMoveCount > 16)
-                break;
-        
-        skippedCount++;
+            rDetails->board->halfMoveCount >= 8)
+            {
+                if(skippedUsable >= minimumFENSkips)
+                    break;
+                else
+                    skippedUsable++;
+            }
+            else
+                skippedUnusable++;
     }
 
     *result = rDetails->currentGameWinner;
     *eval = (ISWHITE(rDetails->board->turn)) ? pair.score : -pair.score;
     *brd =  *rDetails->board;
-    return skippedCount;
+    return skippedUnusable + skippedUsable;
 }
 
 void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count)

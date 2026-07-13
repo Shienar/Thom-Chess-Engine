@@ -22,8 +22,8 @@
 //Binpack should have a larger size to account for fen skipping & variety.
 #define VALIDATION_BINPACK_MINIBATCHES (1000000 / MINIBATCH_SIZE)
 
-#define FEN_SKIP_TRAINING 15
-#define FEN_SKIP_VALIDATION 25
+#define FEN_SKIP_TRAINING 10
+#define FEN_SKIP_VALIDATION 15
 
 //N in 1000 chance to shift the king or output bucket.
 //An attempt at blending the difference between neighboring buckets.

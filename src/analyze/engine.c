@@ -29,8 +29,8 @@ float aspiration_margin_mult_factor = 2.0f;
 
 int reverse_futility_margin = 205;
 int reverse_futility_margin_improving = 120;
-int futility_margin = 375;
-int delta_pruning_offset = 475;
+int futility_margin = 370;
+int delta_pruning_offset = 480;
 
 int probcut_offset = 400;
 int probcut_offset_improving = 250;
