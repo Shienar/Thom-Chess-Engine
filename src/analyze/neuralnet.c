@@ -3,7 +3,6 @@
 #include "board/bitboard.h"
 #include "board/moves.h"
 #include "analyze/engine.h"
-#include "omp.h"
 #include <float.h>
 #include <string.h>
 

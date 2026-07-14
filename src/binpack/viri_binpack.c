@@ -174,12 +174,12 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
         if(ISROOK(pc))
         {
             if(ISWHITE(pc) && 
-                ((KINGSIDE_CASTLE_WHITE(board->flags) && sq > board->kingSquare_w) ||
-                (QUEENSIDE_CASTLE_WHITE(board->flags) && sq < board->kingSquare_w)))
+                ((KINGSIDE_CASTLE_WHITE(board->flags) && sq > board->kingSquare[WHITE]) ||
+                (QUEENSIDE_CASTLE_WHITE(board->flags) && sq < board->kingSquare[WHITE])))
                     piece = VIRI_UNMOVED_ROOK;
             else if(ISBLACK(pc) && 
-                    ((KINGSIDE_CASTLE_BLACK(board->flags) && sq > board->kingSquare_b) ||
-                    (QUEENSIDE_CASTLE_BLACK(board->flags) && sq < board->kingSquare_b)))
+                    ((KINGSIDE_CASTLE_BLACK(board->flags) && sq > board->kingSquare[BLACK]) ||
+                    (QUEENSIDE_CASTLE_BLACK(board->flags) && sq < board->kingSquare[BLACK])))
                         piece = VIRI_UNMOVED_ROOK | VIRI_BLACK_PIECE;
         }
     
@@ -212,8 +212,8 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
     memset(&board->pieces_side, 0, 2 * sizeof(uint64_t));
     board->pieces_all = 0;
 
-    board->kingSquare_b = 64;
-    board->kingSquare_w = 64;
+    board->kingSquare[WHITE] = 64;
+    board->kingSquare[BLACK] = 64;
 
     uint64_t mask = packedBoard->occupancy;
     int offset = 0;
@@ -237,21 +237,18 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
         board->pieceArr[sq] = piece;
 
         if(ISKING(piece))
-        {
-            if(ISBLACK(piece)) board->kingSquare_b = sq;
-            else board->kingSquare_w = sq;
-        }
+            board->kingSquare[COLOR(piece)] = sq;
 
         offset++;
         mask &= (mask - 1);
     }
     
     //IsThreatened can attempt to index out of bounds and segfault on invalid king squares.
-    assert(board->kingSquare_w != 64);
-    assert(board->kingSquare_b != 64);
+    assert(board->kingSquare[WHITE] != 64);
+    assert(board->kingSquare[BLACK] != 64);
 
-    if(isThreatened(board, board->kingSquare_w, WHITE)) board->flags|=16;
-    else if(isThreatened(board, board->kingSquare_b, BLACK)) board->flags|=32;
+    if(isThreatened(board, board->kingSquare[WHITE], WHITE)) board->flags|=16;
+    else if(isThreatened(board, board->kingSquare[BLACK], BLACK)) board->flags|=32;
 }
 
 int readPackedBoard(binpackDetails* details, int readerIndex)

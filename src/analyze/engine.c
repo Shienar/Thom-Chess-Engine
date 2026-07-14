@@ -131,7 +131,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     //Delta pruning
     if(delta_pruning_offset + best < alpha) return best;
 
-    moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_PROMOTIONS, NULL, tt_move, NULL, NULL, NULL);
+    moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_CHECKS, NULL, tt_move, NULL, NULL, NULL);
     int validMovesVisited = 0;
     if(iter)
     {

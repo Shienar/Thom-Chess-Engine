@@ -6,50 +6,47 @@
 int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
 {
     int size = 0;
-    uint64_t allies, enemies, knights, bishop, rook, queen, king;
-    if(ISWHITE(board->turn))
-    {
-        allies = board->pieces_side[WHITE];
-        enemies = board->pieces_side[BLACK];
-        knights = board->pieces[WHITE_KNIGHT];
-        bishop = board->pieces[WHITE_BISHOP];
-        rook = board->pieces[WHITE_ROOK];
-        queen = board->pieces[WHITE_QUEEN];
-        king = board->pieces[WHITE_KING];
-    }
-    else
-    {
-        allies = board->pieces_side[BLACK];
-        enemies = board->pieces_side[WHITE];
-        knights = board->pieces[BLACK_KNIGHT];
-        bishop = board->pieces[BLACK_BISHOP];
-        rook = board->pieces[BLACK_ROOK];
-        queen = board->pieces[BLACK_QUEEN];
-        king = board->pieces[BLACK_KING];
-    }
+    
+    int allyColor = board->turn;
+    int enemyColor = FLIP_COLOR(board->turn);
+
+    uint64_t allies = board->pieces_side[allyColor];
+    uint64_t enemies = board->pieces_side[enemyColor];
+    uint64_t knights = board->pieces[KNIGHT | allyColor];
+    uint64_t bishop = board->pieces[BISHOP | allyColor];
+    uint64_t rook = board->pieces[ROOK | allyColor];
+    uint64_t queen = board->pieces[QUEEN | allyColor];
+    uint64_t king = board->pieces[KING | allyColor];
+
+    int enemyKingSq = board->kingSquare[enemyColor];
+    uint64_t kingThreats_Pawn = pawnAttacks[enemyColor][board->kingSquare[enemyColor]];
+    uint64_t kingThreats_Knight = knightAttacks[board->kingSquare[enemyColor]];
+    uint64_t kingThreats_Bishop = bishopMoves(enemies, allies, enemyKingSq);
+    uint64_t kingThreats_Rook = rookMoves(enemies, allies, enemyKingSq);;
+    
+    uint64_t kingThreats_Queen = kingThreats_Bishop | kingThreats_Rook;
 
     uint64_t mask = 0;
     int piece = PAWN|(board->turn);
     if(ISWHITE(piece))
     {
-        if(!capturesOnly)
+        mask = WHITE_PAWN_DOUBLEPUSH_MASK(board);
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+            mask &= kingThreats_Pawn;
+        else if(capturesOnly > GET_CAPTURES_AND_CHECKS)
+            mask = 0;
+        while(mask)
         {
-            mask = WHITE_PAWN_DOUBLEPUSH_MASK(board);
-            while(mask)
-            {
-                int endSquare = __builtin_ctzll(mask);
-                int startSquare = endSquare - 16;
-
-                createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-                
-                mask&=(mask - 1);
-            }
+            int endSquare = __builtin_ctzll(mask);
+            createCompactMove(&movesList[size++], endSquare - 16, endSquare, 0);
+            mask&=(mask - 1);
         }
 
-        //Treat promotions as captures for quiescent search
         mask = WHITE_PAWN_PUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_PROMOTIONS) mask &= 0xFF00000000000000;
-        else if(capturesOnly >= GET_CAPTURES) mask = 0;
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+            mask &= kingThreats_Pawn;
+        else if(capturesOnly >= GET_CAPTURES) 
+            mask = 0;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -69,7 +66,6 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
         }
 
         
-
         mask = WHITE_PAWN_LEFTATTACKS(board);
         while(mask)
         {
@@ -123,23 +119,24 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     }
     else
     {
-        if(!capturesOnly)
+        mask = BLACK_PAWN_DOUBLEPUSH_MASK(board);
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+            mask &= kingThreats_Pawn;
+        else if(capturesOnly >= GET_CAPTURES) 
+            mask = 0;
+        while(mask)
         {
-            mask = BLACK_PAWN_DOUBLEPUSH_MASK(board);
-            while(mask)
-            {
-                int endSquare = __builtin_ctzll(mask);
-                int startSquare = endSquare + 16;
-
-                createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-                
-                mask&=(mask - 1);
-            }
+            int endSquare = __builtin_ctzll(mask);
+            createCompactMove(&movesList[size++], endSquare + 16, endSquare, 0);
+            
+            mask&=(mask - 1);
         }
 
         mask = BLACK_PAWN_PUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_PROMOTIONS) mask &= 0xFF;
-        else if(capturesOnly >= GET_CAPTURES) mask = 0;
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+            mask &= kingThreats_Pawn;
+        else if(capturesOnly >= GET_CAPTURES) 
+            mask = 0;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -221,7 +218,10 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(knights);
         uint64_t mask = knightMoves(allies, startSquare);
-        if(capturesOnly) mask &= enemies;
+        if(capturesOnly >= GET_CAPTURES) 
+            mask &= enemies;
+        else if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+            mask &= (enemies | kingThreats_Knight);
         
         while(mask) 
         {
@@ -232,11 +232,14 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
         knights&=(knights-1);
     }
 
-    while(bishop) 
+    while(bishop)
     {
         int startSquare = __builtin_ctzll(bishop);
         uint64_t moveMask = bishopMoves(allies, enemies, startSquare);
-        if(capturesOnly) moveMask &= enemies;
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+            moveMask &= (enemies | kingThreats_Bishop);
+        else if(capturesOnly >= GET_CAPTURES)
+            moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -251,7 +254,10 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(rook);
         uint64_t moveMask = rookMoves(allies, enemies, startSquare); 
-        if(capturesOnly) moveMask &= enemies;
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+            moveMask &= (enemies | kingThreats_Rook);
+        else if(capturesOnly >= GET_CAPTURES)
+            moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -266,7 +272,10 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(queen);
         uint64_t moveMask = queenMoves(allies, enemies, startSquare); 
-        if(capturesOnly) moveMask &= enemies;
+        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+            moveMask &= (enemies | kingThreats_Queen);
+        else if(capturesOnly >= GET_CAPTURES)
+            moveMask &= enemies;
 
         while(moveMask) 
         {
@@ -292,6 +301,7 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly)
     
     return size;
 }
+
 uint64_t getSlidingAttackers(bitboard* board, int square, int occupied)
 {
     //Sliding pieces
@@ -313,7 +323,7 @@ uint64_t getAttackers(bitboard* board, int square, int occupied)
     attackers |= (knightMoves(0, square) & (board->pieces[WHITE_KNIGHT] | board->pieces[BLACK_KNIGHT]));
 
     //Kings
-    attackers |= pyrrhicKingAttacks(square) & (board->pieces[WHITE_KING] | board->pieces[BLACK_KING]);
+    attackers |= kingAttacks[square] & (board->pieces[WHITE_KING] | board->pieces[BLACK_KING]);
 
     return attackers | getSlidingAttackers(board, square, occupied);
 }
@@ -347,17 +357,13 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
     uint64_t removedMask = singleBitMask(m.startSquare);
 
     uint64_t occupied = board->pieces_all & ~removedMask;
-    uint64_t attackers = getAttackers(board, m.endSquare, occupied) & ~removedMask;
+    uint64_t attackers = getAttackers(board, m.endSquare, occupied) & (~removedMask);
 
     side = FLIP_COLOR(side);
 
     int attackerSquare;
     int attackerPiece;
-
-    if(ISPAWN(m.piece) || ISBISHOP(m.piece) || ISROOK(m.piece) || ISQUEEN(m.piece))
-    {
-        attackers |= getSlidingAttackers(board, m.endSquare, occupied);
-    }
+    int capturedPiece = m.piece;
 
     while(ply < MAX_PLY - 1)
     {
@@ -365,29 +371,25 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
         if(attackerSquare == -1) break;
 
         ply++;
-        gain[ply] = pieceValuesSEE[attackerPiece] - gain[ply - 1];
+        gain[ply] = pieceValuesSEE[capturedPiece] - gain[ply - 1];
+        capturedPiece = attackerPiece;
 
-        if(gain[ply] < 0 && -gain[ply] > pieceValuesSEE[attackerPiece])
-        {
-            ply--;
+        if(gain[ply] < 0)
             break;
-        }
 
         removedMask |= singleBitMask(attackerSquare);
         occupied &= ~removedMask;
-        if(ISPAWN(attackerPiece) || ISBISHOP(attackerPiece) || ISROOK(attackerPiece) || ISQUEEN(attackerPiece)) 
-        {
-            attackers |= getSlidingAttackers(board, m.endSquare, occupied);
-        }
-        
         attackers &= ~removedMask;
-
+        if(ISPAWN(attackerPiece) || ISBISHOP(attackerPiece) || ISROOK(attackerPiece) || ISQUEEN(attackerPiece)) 
+            attackers |= (getSlidingAttackers(board, m.endSquare, occupied) & (~removedMask));
+        
         side = FLIP_COLOR(side);
     }
 
     while(ply > 0)
     {
-        if(gain[ply] > 0) gain[ply - 1] -= gain[ply];
+        if(-gain[ply] < gain[ply - 1])
+            gain[ply - 1] = -gain[ply];
         ply--;
     }
     return gain[0];
@@ -436,11 +438,25 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             int seeValue = staticExchangeEvaluation(board, m);
 
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
-            else if(capturesOnly == GET_WINNING_CAPTURES) iter->moveScores[i] = INT16_MIN;
+            else if(capturesOnly == GET_WINNING_CAPTURES)
+            {
+                //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
+                if(i > iter->visitedCount)
+                {
+                    iter->moveScores[i] = iter->moveScores[iter->visitedCount];
+                    iter->moveScores[iter->visitedCount] = INT16_MIN;
+
+                    move_c temp = iter->moveList[iter->visitedCount];
+                    iter->moveList[iter->visitedCount] = iter->moveList[i];
+                    iter->moveList[i] = temp;
+                }
+
+                iter->visitedCount++;
+            } 
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
         else if(m.promoteTo)
-            iter->moveScores[i] = CAPTURE_SCORE;
+            iter->moveScores[i] = CAPTURE_SCORE - 1;
         else if(history)
             iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
@@ -450,6 +466,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
     return iter;
 }
 
+//A step of selection sort that returns the next move.
 move_c* iterate_next_move(moveIterator* iter)
 {
     if(iter->visitedCount >= iter->count) return NULL;
@@ -457,7 +474,8 @@ move_c* iterate_next_move(moveIterator* iter)
     int bestIndex = -1;
     int maxScoreRemaining = INT16_MIN;
 
-    for(int j = 0; j < iter->count; j++) 
+    //Select highest remaining move from those not chosen yet.
+    for(int j = iter->visitedCount; j < iter->count; j++) 
     {
         if(iter->moveScores[j] > maxScoreRemaining) 
         {
@@ -468,10 +486,20 @@ move_c* iterate_next_move(moveIterator* iter)
 
     if(bestIndex == -1) return NULL;
 
-    iter->moveScores[bestIndex] = INT16_MIN;
-    iter->visitedCount++;
+    //Move it to the front of the list where it can be skipped over in subsequent iterations.
+    if(bestIndex > iter->visitedCount)
+    {
+        iter->moveScores[bestIndex] = iter->moveScores[iter->visitedCount];
+        iter->moveScores[iter->visitedCount] = INT16_MIN; //Not really necessary. There'd be random unused junk here from old move otherwise.
+
+        move_c temp = iter->moveList[iter->visitedCount];
+        iter->moveList[iter->visitedCount] = iter->moveList[bestIndex];
+        iter->moveList[bestIndex] = temp;
+    }
+    else
+        iter->moveScores[bestIndex] = INT16_MIN;
     
-    return &iter->moveList[bestIndex];
+    return &iter->moveList[iter->visitedCount++];
 }
 
 void destroy_move_iterator(moveIterator* iter)
@@ -484,43 +512,33 @@ void destroy_move_iterator(moveIterator* iter)
     }
 }
 
-
-int isThreatened(bitboard* board, int square, int squareColor)
+int isThreatened(bitboard* board, int square, int defendingColor)
 {
-    uint64_t bishopqueen = 0;
-    uint64_t rookqueen = 0;
-    uint64_t enemyPieces = 0;
-    uint64_t allyPieces = 0;
-    if(ISWHITE(squareColor))
-    {
-        enemyPieces = board->pieces_side[BLACK];
-        allyPieces = board->pieces_side[WHITE];
-        bishopqueen = board->pieces[BLACK_BISHOP]|board->pieces[BLACK_QUEEN];
-        rookqueen = board->pieces[BLACK_ROOK]|board->pieces[BLACK_QUEEN];
-        if(square < 48 && pawnAttacks[0][square]&board->pieces[BLACK_PAWN]) return THREAT_TYPE_PAWN;
-        if(knightAttacks[square]&(board->pieces[BLACK_KNIGHT])) return THREAT_TYPE_KNIGHT;
-        if(kingAttacks[square]&(board->pieces[BLACK_KING])) return THREAT_TYPE_KING;
-    }
-    else if(ISBLACK(squareColor))
-    {
-        enemyPieces = board->pieces_side[WHITE];
-        allyPieces = board->pieces_side[BLACK];
-        bishopqueen = board->pieces[WHITE_BISHOP]|board->pieces[WHITE_QUEEN];
-        rookqueen = board->pieces[WHITE_ROOK]|board->pieces[WHITE_QUEEN];
-        if(square > 15 && pawnAttacks[1][square]&board->pieces[WHITE_PAWN]) return THREAT_TYPE_PAWN;
-        if(knightAttacks[square]&(board->pieces[WHITE_KNIGHT])) return THREAT_TYPE_KNIGHT;
-        if(kingAttacks[square]&(board->pieces[WHITE_KING])) return THREAT_TYPE_KING;
-    }
-    if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) return THREAT_TYPE_BISHOPQUEEN;
-    if(rookMoves(allyPieces, enemyPieces, square)&(rookqueen)) return THREAT_TYPE_ROOKQUEEN;
+    int attackingColor = FLIP_COLOR(defendingColor);
+
+    uint64_t enemyPieces = board->pieces_side[attackingColor];
+    uint64_t allyPieces = board->pieces_side[defendingColor];
+    if(pawnAttacks[defendingColor][square] & board->pieces[PAWN | attackingColor])
+        return THREAT_TYPE_PAWN;
+    if(knightAttacks[square] & board->pieces[KNIGHT | attackingColor])
+        return THREAT_TYPE_KNIGHT;
+    if(kingAttacks[square] & board->pieces[KING | attackingColor])
+        return THREAT_TYPE_KING;
+        
+    uint64_t bishopqueen = board->pieces[BISHOP | attackingColor] | board->pieces[QUEEN | attackingColor];
+    uint64_t rookqueen = board->pieces[ROOK | attackingColor] | board->pieces[QUEEN | attackingColor];
+
+    if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) 
+        return THREAT_TYPE_BISHOPQUEEN;
+    if(rookMoves(allyPieces, enemyPieces, square)&(rookqueen)) 
+        return THREAT_TYPE_ROOKQUEEN;
 
     return THREAT_TYPE_NONE;
 }
 
 uint64_t pyrrhicPawnAttacks(int square, int color)
 {
-    color ^= 1;
-    return pawnAttacks[color][square];
+    return pawnAttacks[FLIP_COLOR(color)][square];
 }
 
 uint64_t knightMoves(uint64_t allyPieces, int square)
@@ -688,13 +706,13 @@ int movePiece(bitboard *board, move_c compactMove)
         case KING:
             if(ISBLACK(m.piece)) 
             {
-                board->kingSquare_b = m.endSquare;
+                board->kingSquare[BLACK] = m.endSquare;
                 if(KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
                 if(QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
             }
             else 
             {
-                board->kingSquare_w = m.endSquare;
+                board->kingSquare[WHITE] = m.endSquare;
                 if(KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
                 if(QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
             }
@@ -735,12 +753,12 @@ int movePiece(bitboard *board, move_c compactMove)
     if(board->turn == WHITE)
     {
         if(IS_IN_CHECK_W(board->flags)) UNCHECK_W(board->flags);
-        if(isThreatened(board, board->kingSquare_b, BLACK)) CHECK_B(board->flags);
+        if(isThreatened(board, board->kingSquare[BLACK], BLACK)) CHECK_B(board->flags);
     }
     else
     {
         if(IS_IN_CHECK_B(board->flags)) UNCHECK_B(board->flags);
-        if(isThreatened(board, board->kingSquare_w, WHITE)) CHECK_W(board->flags);
+        if(isThreatened(board, board->kingSquare[WHITE], WHITE)) CHECK_W(board->flags);
     }
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
@@ -830,7 +848,7 @@ int moveFromStruct(bitboard* board, move_c m)
         return -1;
     }
     
-    if((ISWHITE(board->turn) && isThreatened(board, board->kingSquare_b, BLACK)) || (ISBLACK(board->turn) && isThreatened(board, board->kingSquare_w, WHITE)))
+    if((ISWHITE(board->turn) && isThreatened(board, board->kingSquare[BLACK], BLACK)) || (ISBLACK(board->turn) && isThreatened(board, board->kingSquare[WHITE], WHITE)))
     {
         //Psuedo-legal move generator created an illegal move. Fail silently.
         unmove(board);
@@ -891,8 +909,8 @@ move_d unmove(bitboard *board)
 
     if(ISKING(m.piece))
     {
-        if(ISWHITE(m.piece)) board->kingSquare_w = m.startSquare;
-        else board->kingSquare_b = m.startSquare;
+        if(ISWHITE(m.piece)) board->kingSquare[WHITE] = m.startSquare;
+        else board->kingSquare[BLACK] = m.startSquare;
         
         //undo castle
         if(abs(m.endSquare - m.startSquare) == 2)

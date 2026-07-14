@@ -130,8 +130,8 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
 
     memset(inputs, 0, 2 * BITBOARDS_PER_INPUT_SIDE * sizeof(uint64_t));
     
-    int baseIndex_w = PIECE_COUNT*kingBuckets[board->kingSquare_w];
-    int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + PIECE_COUNT*kingBuckets[FLIP_SQUARE(board->kingSquare_b)];
+    int baseIndex_w = PIECE_COUNT*kingBuckets[board->kingSquare[WHITE]];
+    int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + PIECE_COUNT*kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])];
     int trackedPiecesPerColor = PIECE_COUNT / 2;
     for(int i = 0; i < PIECE_COUNT / 2; i++)
     {
@@ -145,19 +145,19 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
     }
 
     //Mirroring
-    if(getColumn(board->kingSquare_w) > 3)
+    if(getColumn(board->kingSquare[WHITE]) > 3)
         for(int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
-    if(getColumn(board->kingSquare_b) > 3)
+    if(getColumn(board->kingSquare[BLACK]) > 3)
         for(int p = 0; p < PIECE_COUNT; p++) inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
 
     if(ISWHITE(color)) 
     {
-        calculateAccumulator(&inputs[baseIndex_w], acc->rawAccumulator[WHITE],  int_weights, BITS_PER_KING_BUCKET * kingBuckets[board->kingSquare_w]);
+        calculateAccumulator(&inputs[baseIndex_w], acc->rawAccumulator[WHITE],  int_weights, BITS_PER_KING_BUCKET * kingBuckets[board->kingSquare[WHITE]]);
         activateAccumulator(acc->rawAccumulator[WHITE], acc->accumulator[WHITE]);
     }
     if(ISBLACK(color)) 
     {
-        calculateAccumulator(&inputs[baseIndex_b], acc->rawAccumulator[BLACK], int_weights, BITS_PER_KING_BUCKET * kingBuckets[FLIP_SQUARE(board->kingSquare_b)]);
+        calculateAccumulator(&inputs[baseIndex_b], acc->rawAccumulator[BLACK], int_weights, BITS_PER_KING_BUCKET * kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])]);
         activateAccumulator(acc->rawAccumulator[BLACK], acc->accumulator[BLACK]);
     }
 }
@@ -196,7 +196,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
             fromSq = FLIP_SQUARE(fromSq);
             pieceOffset = FLIP_COLOR(pieceOffset);
         }
-        int ksq = (side == WHITE) ? board->kingSquare_w : FLIP_SQUARE(board->kingSquare_b);
+        int ksq = (side == WHITE) ? board->kingSquare[WHITE] : FLIP_SQUARE(board->kingSquare[BLACK]);
 
         //Mirroring
         if(getColumn(ksq) > 3) { MIRROR_SQUARE(fromSq); MIRROR_SQUARE(toSq); }
@@ -336,8 +336,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     assert(currentBoard);
     assert(accumulatorBoard);
     assert(acc);
-    assert(((ISBLACK(color) && currentBoard->kingSquare_b == accumulatorBoard->kingSquare_b) || 
-                (ISWHITE(color) && currentBoard->kingSquare_w == accumulatorBoard->kingSquare_w)));
+    assert(currentBoard->kingSquare[color] == accumulatorBoard->kingSquare[color]);
 
     uint64_t curBoard[PIECE_COUNT] = {0};
     uint64_t accumBoard[PIECE_COUNT] = {0};
@@ -346,7 +345,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     int trackedPiecesPerColor = PIECE_COUNT / 2;
     if(ISWHITE(color))
     {
-        ksq = accumulatorBoard->kingSquare_w;
+        ksq = accumulatorBoard->kingSquare[WHITE];
         for(int i = 0; i < PIECE_COUNT / 2; i++)
         {
             curBoard[i] = currentBoard->pieces[2 * i];
@@ -358,7 +357,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     }
     else
     {
-        ksq = FLIP_SQUARE(accumulatorBoard->kingSquare_b);
+        ksq = FLIP_SQUARE(accumulatorBoard->kingSquare[BLACK]);
         for(int i = 0; i < PIECE_COUNT / 2; i++)
         {
             curBoard[i] = FLIP_MASK(currentBoard->pieces[2 * i + 1]);
@@ -443,8 +442,8 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     assert(refreshTable);
 
     //Black square is flipped for weight index tracking, but not here in refresh table indices.
-    int kingSq_w = board->kingSquare_w;
-    int kingSq_b = board->kingSquare_b;
+    int kingSq_w = board->kingSquare[WHITE];
+    int kingSq_b = board->kingSquare[BLACK];
 
     //Update the accumulator & board in table to match given board.
     if(!refreshTable->initialized[WHITE][kingSq_w])

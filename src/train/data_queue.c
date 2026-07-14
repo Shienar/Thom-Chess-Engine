@@ -125,17 +125,17 @@ void processSingleMinibatch(binpackDetails* details, PreparedMinibatch* batch, u
             inputs[PIECE_COUNT + trackedPiecesPerColor + i] = FLIP_MASK(board.pieces[2 * i]);
         }
 
-        if(getColumn(board.kingSquare_w) > 3)
+        if(getColumn(board.kingSquare[WHITE]) > 3)
             for(int p = 0; p < PIECE_COUNT; p++) 
                 inputs[p] = mirrorBoard(inputs[p]);
-        if(getColumn(board.kingSquare_b) > 3)
+        if(getColumn(board.kingSquare[BLACK]) > 3)
             for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) 
                 inputs[p] = mirrorBoard(inputs[p]);
         
         for(int color = 0; color < 2; color++)
         {
             #ifndef COMPRESS_KING_BUCKET
-            int baseIndex = (color == WHITE) ? kingBuckets[board.kingSquare_w] : kingBuckets[FLIP_SQUARE(board.kingSquare_b)];
+            int baseIndex = (color == WHITE) ? kingBuckets[board.kingSquare[WHITE]] : kingBuckets[FLIP_SQUARE(board.kingSquare[BLACK])];
             baseIndex += offsetGenerator_xorshift32(xorRNGState, baseIndex);
             baseIndex = clamp(baseIndex, 0, KING_BUCKETS - 1);
             baseIndex *= BITS_PER_KING_BUCKET;

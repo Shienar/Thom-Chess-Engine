@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
+CFLAGS = -Wall -std=c99 -march=native
 
 #release is incompatible with trainer & debug, check here.
 ifneq ($(origin RELEASE),undefined)
@@ -25,9 +25,6 @@ ifdef SPSA
 	CFLAGS += -DSPSA
 endif
 
-# define PROJECT_CWD as a string literal evaluating to the current path.
-CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
-
 # Declare & include source/target.
 SRC_DIR = src
 TGT_DIR = target
@@ -51,6 +48,9 @@ ASMFILES =
 ifdef RELEASE
 	CFLAGS += -DRELEASE
 	ASMFILES += src/incbin.S
+else
+# 	define PROJECT_CWD as a string literal evaluating to the current path for file opening.
+	CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
 endif
 
 ifdef TRAIN

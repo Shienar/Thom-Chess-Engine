@@ -3,7 +3,6 @@
 #include "board/moves.h"
 #include "analyze/engine.h"
 #include "train/train.h"
-#include "omp.h"
 #include "binpack/viri_binpack.h"
 #include "train/data_queue.h"
 #include <string.h>

@@ -187,13 +187,13 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
                     if(currentChar == 'K')
                     {
                         board->pieces[WHITE_KING]|=singleBitMask(square);
-                        board->kingSquare_w = square;
+                        board->kingSquare[WHITE] = square;
                         board->pieceArr[square] = KING|WHITE;
                     }
                     else if(currentChar == 'k')
                     {
                         board->pieces[BLACK_KING]|=singleBitMask(square);
-                        board->kingSquare_b = columnOffset + 8*row;
+                        board->kingSquare[BLACK] = square;
                         board->pieceArr[square] = KING|BLACK;
                     }
                     else if(currentChar == 'Q') 
@@ -270,8 +270,8 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     }
 
     //Check
-    if(isThreatened(board, board->kingSquare_w, WHITE)) board->flags|=16;
-    else if(isThreatened(board, board->kingSquare_b, BLACK)) board->flags|=32;
+    if(isThreatened(board, board->kingSquare[WHITE], WHITE)) board->flags|=16;
+    else if(isThreatened(board, board->kingSquare[BLACK], BLACK)) board->flags|=32;
 
     //Turn
     if(activeColor == 'w') board->turn = WHITE;
@@ -405,7 +405,7 @@ void values_print(bitboard* board)
     if(board->pieces[WHITE_BISHOP] || board->pieces[BLACK_BISHOP]) printf("BISHOP: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_BISHOP], board->pieces[BLACK_BISHOP]);
     if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
     if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
-    printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare_w, board->kingSquare_b);
+    printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare[WHITE], board->kingSquare[BLACK]);
     
 
     if(board->flags&0xF)

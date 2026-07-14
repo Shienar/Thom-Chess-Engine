@@ -96,6 +96,24 @@
 #define DARK_SQUARES 0xAA55AA55AA55AA55
 #define LIGHT_SQUARES 0x55AA55AA55AA55AA
 
+#define FILE_A (0x0101010101010101 << 0)
+#define FILE_B (0x0101010101010101 << 1)
+#define FILE_C (0x0101010101010101 << 2)
+#define FILE_D (0x0101010101010101 << 3)
+#define FILE_E (0x0101010101010101 << 4)
+#define FILE_F (0x0101010101010101 << 5)
+#define FILE_G (0x0101010101010101 << 6)
+#define FILE_H (0x0101010101010101 << 7)
+
+#define RANK_1 (0xFFULL << 0)
+#define RANK_2 (0xFFULL << 8)
+#define RANK_3 (0xFFULL << 16)
+#define RANK_4 (0xFFULL << 24)
+#define RANK_5 (0xFFULL << 32)
+#define RANK_6 (0xFFULL << 40)
+#define RANK_7 (0xFFULL << 48)
+#define RANK_8 (0xFFULL << 56)
+
 //Background = 48; Foreground = 38
 //RGB values follow the 2;
 #define TEXT_BOLD "\033[1m"

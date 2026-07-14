@@ -1,0 +1,4 @@
+uci
+isready
+position fen r3kb1r/ppp2ppp/2n2n2/2N1p2q/Q1PP2b1/3B1N2/PP1B1PPP/R3K2R w KQkq - 0 10
+go depth 7

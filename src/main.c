@@ -9,13 +9,11 @@
 #include "train/train.h"
 #include "binpack/generate.h"
 #include <string.h>
-#include <omp.h>
 
 void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
 {
-    omp_set_num_threads(threadCount); 
     srand(time(NULL));
     
     bitboard* board = NULL;
@@ -27,7 +25,7 @@ int main(int argc, char** argv)
     int quit = 0;
     int isReady = 0;
     
-    char sygyzyPath[1024] = PROJECT_CWD "/sygyzy/";
+    char sygyzyPath[1024] = {'\0'};
     int isPathDirty = 1; //Has sygyzy been initialized with the current path?
 
     clock_t endTime; //Doubles as a terminate flag
@@ -50,15 +48,14 @@ int main(int argc, char** argv)
             if(strcmp(str, "uci") == 0) 
             {
                 printf("id name ChessBot 0.1\n");
-                printf("id author Grant\n");
+                printf("id author Grant Vizaniaris\n");
                 printf("option name Hash type spin default 4 min 1 max 4096\n");
                 printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
-                printf("option name SygyzyPath type string default " PROJECT_CWD "/sygyzy/\n");
+                printf("option name SygyzyPath type string default <empty>\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
-                //Bounds & defaults handled by SPSA program weather-factory
                 #ifdef SPSA
                 printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
                 printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
@@ -117,7 +114,6 @@ int main(int argc, char** argv)
                                 }
                                 sscanf(str, "%d", &threadCount);
                                 threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
-                                omp_set_num_threads(threadCount); 
                             }
                             
                             break;

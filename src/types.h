@@ -8,7 +8,7 @@
 
 #define clamp(originalValue, minClamp, maxClamp) _min(maxClamp, _max(minClamp, originalValue));
 
-// Should always get assigned with makefile.
+// Will get assigned by makefile in non-release builds.
 #ifndef PROJECT_CWD
 #define PROJECT_CWD ""
 #endif
@@ -81,9 +81,7 @@ typedef struct bitboard {
     uint64_t pieces_all;
 
     uint8_t pieceArr[64];
-    uint8_t kingSquare_b;
-    uint8_t kingSquare_w;
-
+    uint8_t kingSquare[2];
 
     /**
      * flags&1 == canKingsideCastle_w
