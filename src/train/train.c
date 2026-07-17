@@ -78,8 +78,8 @@ void train(int maxIterations, float maxAllowedError)
     MinibatchQueue* trainingQueue = calloc(1, sizeof(MinibatchQueue));
     MinibatchQueue* validationQueue = calloc(1, sizeof(MinibatchQueue));
     
-    queue_init(validationQueue);
-    queue_init(trainingQueue);
+    binpack_queue_init(validationQueue);
+    binpack_queue_init(trainingQueue);
     
     dataWorkerArgs* trainingDataParserArgs = calloc(BINPACK_READERS, sizeof(dataWorkerArgs));
     dataWorkerArgs* validationDataParserArgs = calloc(BINPACK_READERS, sizeof(dataWorkerArgs));
@@ -122,7 +122,7 @@ void train(int maxIterations, float maxAllowedError)
     {
         inputGroup ^= 1;
 
-        queue_pop(validationQueue, readyMinibatch);
+        binpack_queue_pop(validationQueue, readyMinibatch);
 
         if(inputGroup == INPUT_GROUP_A) 
         {
@@ -161,7 +161,7 @@ void train(int maxIterations, float maxAllowedError)
         {
             inputGroup ^= 1;
 
-            queue_pop(trainingQueue, readyMinibatch);
+            binpack_queue_pop(trainingQueue, readyMinibatch);
 
             if(inputGroup == INPUT_GROUP_A) 
             {
@@ -197,7 +197,7 @@ void train(int maxIterations, float maxAllowedError)
         {
              inputGroup ^= 1;
 
-            queue_pop(validationQueue, readyMinibatch);
+            binpack_queue_pop(validationQueue, readyMinibatch);
 
             if(inputGroup == INPUT_GROUP_A) 
             {

@@ -82,6 +82,15 @@ int perft(bitboard* board, int depth, int verbose)
     return nodes;
 }
 
+int evaluate(searchThreadContext* context)
+{
+    #ifdef NNUE
+    return forwardPropagate(context->board, context->accumulator);
+    #else
+    return hce_eval(context->board);
+    #endif
+}
+
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 {
     context->countedNodes++;
@@ -91,7 +100,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     if(isDraw(board))
         return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes)) 
-        return forwardPropagate(board, context->accumulator);
+        return evaluate(context);
 
     int lowestBound = alpha;
     move_c* tt_move = NULL;
@@ -113,7 +122,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     }
     else 
     {
-        best = forwardPropagate(board, context->accumulator);
+        best = evaluate(context);
     
         table_entry_tt shallowEntry = {
             .depth = 0,
@@ -141,12 +150,17 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             if(moveFromStruct(board, *currentMove)) continue;
             validMovesVisited++;
 
+            #ifdef NNUE
             move_d detailedMove = board->history[board->historyIndex - 1];
             updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
+            #endif
             int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
 
             unmove(board);
+
+            #ifdef NNUE
             updateMoveAccumulator(board, detailedMove, 1, context->accumulator, context->refreshTable);
+            #endif
 
             if(score > best)
             {
@@ -230,7 +244,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     if(ply >= MAX_PLY - 1) 
-        return forwardPropagate(board, context->accumulator);
+        return evaluate(context);
     if(depth <= 0 || (ply >= 1 && ((context->isPonder == 0 && context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes))))
         return quiescentSearch(context, alpha, beta, ply);
     
@@ -252,7 +266,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         if(inCheck) score = -INT32_MAX;
         else
         {
-            score = forwardPropagate(board, context->accumulator);
+            score = evaluate(context);
             table_entry_tt shallowEntry = {
                 .depth = 0,
                 .hashCode = board->hashCode,
@@ -314,13 +328,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     {
                         if(moveFromStruct(board, *currentMove)) continue;
                         
+                        #ifdef NNUE
                         move_d detailedMove = board->history[board->historyIndex - 1];
                         updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
-
+                        #endif
                         probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV);
 
                         unmove(board);
+
+                        #ifdef NNUE
                         updateMoveAccumulator(board, detailedMove, 1, context->accumulator, context->refreshTable);
+                        #endif
 
                         if(probCutScore >= pBeta)
                         {
@@ -362,8 +380,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             if(moveFromStruct(board, *currentMove)) continue;
 
+            #ifdef NNUE
             move_d detailedMove = board->history[board->historyIndex - 1];
             updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
+            #endif
 
             int next_depth = depth - 1;
             int isCapture = findPieceOnSquare(board, currentMove->endSquare) != EMPTY_PIECE || (ISPAWN(currentPiece) && board->enPassantSquare == currentMove->endSquare);
@@ -390,7 +410,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
             
             unmove(board);
+            #ifdef NNUE
             updateMoveAccumulator(board, detailedMove, 1, context->accumulator, context->refreshTable);
+            #endif
             
             if(score >= beta)
             {
@@ -537,14 +559,15 @@ void printResultingMoves(move_c bestMove, move_c ponderMove, int isBookMove)
 
 void aspiration_window(searchThreadContext* context, int currentDepth)
 {
-    bitboard* board = context->board;
     volatile clock_t* endTime = context->endTime;
-    accumulator* acc = context->accumulator;
     
     if(currentDepth < min_aspiration_depth)
     {
-        loadInputAccumulator(board, acc, WHITE);
-        loadInputAccumulator(board, acc, BLACK);
+        #ifdef NNUE
+        loadInputAccumulator(context->board, context->accumulator, WHITE);
+        loadInputAccumulator(context->board, context->accumulator, BLACK);
+        #endif
+
         context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &context->pv);
         context->completedDepth = currentDepth;
     }
@@ -558,8 +581,10 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         {
             if(context->isPonder == 0 && clock() > *endTime) break;
 
-            loadInputAccumulator(board, acc, WHITE);
-            loadInputAccumulator(board, acc, BLACK);
+            #ifdef NNUE
+            loadInputAccumulator(context->board, context->accumulator, WHITE);
+            loadInputAccumulator(context->board, context->accumulator, BLACK);
+            #endif
             int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &context->pv);
 
             if(score <= alpha)
@@ -714,8 +739,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     THREADTYPE *helperThreads = NULL;
     searchThreadContext* helperThreadContext = NULL;
     bitboard* threadBoards = NULL;
+    #ifdef NNUE
     accumulator* threadAccumulators = NULL;
     accumulatorRefreshTable** threadRefreshTables = NULL;
+    #endif
     clock_t terminateFlag = LONG_MAX;
 
     if(helperThreadCount > 0)
@@ -723,8 +750,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         helperThreads = calloc(helperThreadCount, sizeof(THREADTYPE));
         helperThreadContext = calloc(helperThreadCount, sizeof(searchThreadContext));
         threadBoards = calloc(helperThreadCount, sizeof(bitboard));
+        #ifdef NNUE
         threadAccumulators = calloc(helperThreadCount, sizeof(accumulator));
         threadRefreshTables = calloc(helperThreadCount, sizeof(accumulatorRefreshTable));
+        #endif
         
         for(int i = 0; i < helperThreadCount; i++) 
         {
@@ -734,9 +763,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             helperThreadContext[i].maxDepth = context->maxDepth;
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
 
+            #ifdef NNUE
             helperThreadContext[i].accumulator = &threadAccumulators[i];
             threadRefreshTables[i] = createRefreshTable();
             helperThreadContext[i].refreshTable = threadRefreshTables[i];
+            #endif
 
             helperThreadContext[i].tt = context->tt;
 
@@ -806,12 +837,14 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         free(helperThreads);
         free(helperThreadContext);
 
+        #ifdef NNUE
         free(threadAccumulators);
         for(int i = 0; i < helperThreadCount; i++)
         {
             destroyRefreshTable(threadRefreshTables[i]);
         }
         free(threadRefreshTables);
+        #endif
     }
 
 

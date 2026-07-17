@@ -17,17 +17,17 @@
 #define THREAT_TYPE_KING 5
 
 #define WHITE_PAWN_PUSH_MASK(board) ((board->pieces[WHITE_PAWN] << 8)&(~board->pieces_all))
-#define WHITE_PAWN_DOUBLEPUSH_MASK(board) (((WHITE_PAWN_PUSH_MASK(board) & RANK_3) << 8)&(~board->pieces_all))
-#define WHITE_PAWN_LEFTATTACKS(board)  (((board->pieces[WHITE_PAWN] & (~FILE_A)) << 7) & board->pieces_side[BLACK])
-#define WHITE_PAWN_RIGHTATTACKS(board)  (((board->pieces[WHITE_PAWN] & (~FILE_H)) << 9) & board->pieces_side[BLACK])
+#define WHITE_PAWN_DOUBLEPUSH_MASK(board) (((WHITE_PAWN_PUSH_MASK(board) & board_rank[2]) << 8)&(~board->pieces_all))
+#define WHITE_PAWN_LEFTATTACKS(board)  (((board->pieces[WHITE_PAWN] & (~board_file[0])) << 7) & board->pieces_side[BLACK])
+#define WHITE_PAWN_RIGHTATTACKS(board)  (((board->pieces[WHITE_PAWN] & (~board_file[7])) << 9) & board->pieces_side[BLACK])
 
 #define BLACK_PAWN_PUSH_MASK(board) ((board->pieces[BLACK_PAWN] >> 8)&(~board->pieces_all))
-#define BLACK_PAWN_DOUBLEPUSH_MASK(board) (((BLACK_PAWN_PUSH_MASK(board) & RANK_6) >> 8)&(~board->pieces_all))
-#define BLACK_PAWN_LEFTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~FILE_H)) >> 7) & board->pieces_side[WHITE])
-#define BLACK_PAWN_RIGHTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~FILE_A)) >> 9) & board->pieces_side[WHITE])
+#define BLACK_PAWN_DOUBLEPUSH_MASK(board) (((BLACK_PAWN_PUSH_MASK(board) & board_rank[5]) >> 8)&(~board->pieces_all))
+#define BLACK_PAWN_LEFTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~board_file[7])) >> 7) & board->pieces_side[WHITE])
+#define BLACK_PAWN_RIGHTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~board_file[0])) >> 9) & board->pieces_side[WHITE])
 
-#define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & (~FILE_A)) | ((epMask >> 9) & (~FILE_H))) & board->pieces[WHITE_PAWN])
-#define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & (~FILE_H)) | ((epMask << 9) & (~FILE_A))) & board->pieces[BLACK_PAWN])
+#define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & (~board_file[0])) | ((epMask >> 9) & (~board_file[7]))) & board->pieces[WHITE_PAWN])
+#define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & (~board_file[7])) | ((epMask << 9) & (~board_file[0]))) & board->pieces[BLACK_PAWN])
 
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)

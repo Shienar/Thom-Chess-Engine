@@ -5,6 +5,28 @@
 #include <string.h>
 #include <math.h>
 
+uint64_t board_file[8] = {
+    (0x0101010101010101 << 0),
+    (0x0101010101010101 << 1),
+    (0x0101010101010101 << 2),
+    (0x0101010101010101 << 3),
+    (0x0101010101010101 << 4),
+    (0x0101010101010101 << 5),
+    (0x0101010101010101 << 6),
+    (0x0101010101010101 << 7)
+};
+
+uint64_t board_rank[8] = {
+    (0xFFULL << 0),
+    (0xFFULL << 8),
+    (0xFFULL << 16),
+    (0xFFULL << 24),
+    (0xFFULL << 32),
+    (0xFFULL << 40),
+    (0xFFULL << 48),
+    (0xFFULL << 56)
+};
+
 void getSquareName(int square, char* target)
 {
     assert(square >= 0 && square <= 63);

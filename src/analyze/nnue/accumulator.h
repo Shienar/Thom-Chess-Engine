@@ -2,7 +2,7 @@
 #define ACCUMULATOR
 
 #include "types.h"
-#include "analyze/neuralnet.h"
+#include "analyze/nnue/neuralnet.h"
 
 //https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
 #define k1 0x5555555555555555

@@ -3,17 +3,25 @@
 #include "debug.h"
 #include "hashtables/transpositiontable.h"
 #include "analyze/book.h"
-#include "analyze/neuralnet.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/engine.h"
-#include "train/train.h"
 #include "binpack/generate.h"
+#include <omp.h>
 #include <string.h>
+
+#ifdef TRAIN
+#include "train/train.h"
+#endif
+
+#ifndef NNUE
+#include "analyze/hce/tuner.h"
+#endif
 
 void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
 {
+    omp_set_num_threads(threadCount);
     srand(time(NULL));
     
     bitboard* board = NULL;
@@ -114,6 +122,7 @@ int main(int argc, char** argv)
                                 }
                                 sscanf(str, "%d", &threadCount);
                                 threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
+                                omp_set_num_threads(threadCount);
                             }
                             
                             break;
@@ -291,8 +300,10 @@ int main(int argc, char** argv)
                         }
                     }
 
+                    #ifdef NNUE
                     loadInputAccumulator(board, playerAccumulator, WHITE);
                     loadInputAccumulator(board, playerAccumulator, BLACK);
+                    #endif
                 }
                 break; 
             }
@@ -462,12 +473,17 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
+                #ifdef NNUE
                 loadInputAccumulator(board, playerAccumulator, WHITE);
                 loadInputAccumulator(board, playerAccumulator, BLACK);
                 int eval = forwardPropagate(board, playerAccumulator);
+                #else
+                int eval = hce_eval(board);
+                #endif
                 printf("%d\n", eval);
                 break;
             }
+            #ifdef NNUE
             else if(strcmp(str, "netinfo") == 0)
             {
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
@@ -496,13 +512,56 @@ int main(int argc, char** argv)
                 }
                 break;
             }
+            #endif
+            #else
+            else if(strcmp(str, "tune") == 0)
+            {
+                //Format: 'tune <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"
+
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                
+                char inputPath[256] = {'\0'};
+                char outputPath[256] = {'\0'};
+                uint64_t epochs;
+                double max_lr;
+                double min_lr;
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                sscanf(str, "%lld", &epochs);
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                    
+                sscanf(str, "%lf", &max_lr);
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                    
+                sscanf(str, "%lf", &min_lr);
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                sscanf(str, "\"%[^\"]", inputPath);
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                
+                sscanf(str, "\"%[^\"]", outputPath);
+                Tune(inputPath, outputPath, epochs, max_lr, min_lr);
+                
+
+                break;
+            }
+            #endif
             else if(strcmp(str, "generate") == 0)
             {
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 generate();
                 break;
             }
-            #endif
             else if(strcmp(str, "quit") == 0) 
             {
                 quit = 1;
@@ -513,9 +572,11 @@ int main(int argc, char** argv)
         }
     }
 
+    #ifdef NNUE
     if(raw_weights) free(raw_weights);
     if(int_weights) free(int_weights);
     if(playerAccumulator) free(playerAccumulator);
+    #endif
     if(threadContext) free(threadContext);
     destroy_hashTable_tt(transpositionTable);
     tb_free();
@@ -538,9 +599,13 @@ void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadConte
     if(knightAttacks[0] == 0) initKnightMoveTable();
     if(kingAttacks[0] == 0) initKingMoveTable();
 
+    #ifdef NNUE
     loadQuantizedWeights();
     #ifdef TRAIN
     loadRawWeights();
+    #endif
+    #else
+    init_HCE_tables(0);
     #endif
 
     if(!transpositionTable) 
@@ -548,12 +613,13 @@ void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadConte
         transpositionTable = create_hashTable_tt();
         context->tt = transpositionTable;
     }
+    #ifdef NNUE
     if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));
     if(!playingRefreshTable) playingRefreshTable = createRefreshTable();
     
     context->accumulator = playerAccumulator;
     context->refreshTable = playingRefreshTable;
-
+    #endif
     loadBook(BOOK_PATH);
     
     if(*isPathDirty)

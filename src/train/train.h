@@ -1,7 +1,7 @@
 #ifndef NEURALNET_TRAIN
 #define NEURALNET_TRAIN
 
-#include "analyze/neuralnet.h"
+#include "analyze/nnue/neuralnet.h"
 #include "train/gpu_funcs.h"
 
 #define MAX_LR 8e-4f

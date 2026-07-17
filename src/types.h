@@ -119,6 +119,7 @@ typedef struct magic {
     int8_t shiftOffset;
 } magic;
 
+#ifdef NNUE
 #define QA 255
 #define QB 64
 #define QA_RSHIFT 8
@@ -159,6 +160,7 @@ typedef struct accumulatorRefreshTable {
     accumulator accumulators[2][64];
     uint8_t initialized[2][64];
 } accumulatorRefreshTable;
+#endif
 
 typedef struct PVar {
     int length;
@@ -178,8 +180,10 @@ typedef struct searchThreadContext {
     //Necessary search information
     int16_t score;
     bitboard* board;
+    #ifdef NNUE
     accumulator* accumulator;
     accumulatorRefreshTable* refreshTable;
+    #endif
     hashtable_tt* tt;
     PVar pv;
     

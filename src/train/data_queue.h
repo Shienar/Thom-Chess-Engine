@@ -5,7 +5,7 @@
 #include "binpack/viri_binpack.h"
 #include "train/train.h"
 
-#define QUEUE_CAPACITY 32
+#define BINPACK_QUEUE_CAPACITY 32
 typedef struct {
     short activeInputs[MINIBATCH_SIZE * 64];
     float expectedOutputs[MINIBATCH_SIZE];
@@ -13,7 +13,7 @@ typedef struct {
 } PreparedMinibatch;
 
 typedef struct {
-    PreparedMinibatch slots[QUEUE_CAPACITY];
+    PreparedMinibatch slots[BINPACK_QUEUE_CAPACITY];
     int head;
     int tail;
     int count;
@@ -31,9 +31,9 @@ typedef struct {
     int readerIndex;
 } dataWorkerArgs;
 
-void queue_init(MinibatchQueue* queue);
-void queue_push(MinibatchQueue* queue, PreparedMinibatch* batch);
-int queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped);
+void binpack_queue_init(MinibatchQueue* queue);
+void binpack_queue_push(MinibatchQueue* queue, PreparedMinibatch* batch);
+int binpack_queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped);
 
 void processSingleMinibatch(binpackDetails* details, PreparedMinibatch* batch, uint32_t* xorRNGState, int readerIndex, int fenSkip);
 

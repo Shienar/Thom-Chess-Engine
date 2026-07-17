@@ -23,12 +23,16 @@ void generate()
     clock_t endTime = LONG_MAX;
     for(int i = 0; i < concurrency; i++)
     {
-        contextList[i].accumulator = calloc(1, sizeof(accumulator));
         contextList[i].board = create_board(NULL);
         contextList[i].endTime = &endTime;
         contextList[i].maxDepth = 9;
         contextList[i].maxNodes = 5000;
+
+        #ifdef NNUE
+        contextList[i].accumulator = calloc(1, sizeof(accumulator));
         contextList[i].refreshTable = createRefreshTable();
+        #endif
+
         contextList[i].tt = create_hashTable_tt();
 
         THREAD_START(threadList[i], generateWorkerThread, &contextList[i]);
@@ -59,9 +63,11 @@ void generate()
     {
         THREAD_WAIT(threadList[i]);
         destroy_hashTable_tt(contextList[i].tt);
-        destroyRefreshTable(contextList[i].refreshTable);
         free(contextList[i].board);
+        #ifdef NNUE
+        destroyRefreshTable(contextList[i].refreshTable);
         free(contextList[i].accumulator);
+        #endif
     }
     threadCount = concurrency;
     suppressUCIMessages = 0;
@@ -153,11 +159,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             else
                 pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
 
-            if(findPieceOnSquare(context->board, bestMove.endSquare) != EMPTY_PIECE)
-                pairList[movesThisGame].score = 32002;
-            else
-                //White-relative
-                pairList[movesThisGame].score = (ISWHITE(context->board->turn)) ? rootEntry.evaluation : -rootEntry.evaluation;
+            //White-relative
+            pairList[movesThisGame].score = (ISWHITE(context->board->turn)) ? rootEntry.evaluation : -rootEntry.evaluation;
 
             movesThisGame++;
         }

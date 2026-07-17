@@ -1,9 +1,9 @@
 #include "train/data_queue.h"
 #include "binpack/viri_binpack.h"
-#include "analyze/accumulator.h"
+#include "analyze/nnue/accumulator.h"
 #include "train/train.h"
 
-void queue_init(MinibatchQueue* queue)
+void binpack_queue_init(MinibatchQueue* queue)
 {
     queue->head = 0;
     queue->tail = 0;
@@ -14,9 +14,9 @@ void queue_init(MinibatchQueue* queue)
     CREATE_COND_VARIABLE(queue->not_empty);
 }
 
-void queue_push(MinibatchQueue* queue, PreparedMinibatch* batch) {
+void binpack_queue_push(MinibatchQueue* queue, PreparedMinibatch* batch) {
     LOCK_MUTEX(queue->mutex);
-    while(queue->count == QUEUE_CAPACITY && !queue->stop_signal)
+    while(queue->count == BINPACK_QUEUE_CAPACITY && !queue->stop_signal)
         WAIT_COND_VARIABLE(queue->not_full, queue->mutex);
 
     if(queue->stop_signal) 
@@ -25,13 +25,13 @@ void queue_push(MinibatchQueue* queue, PreparedMinibatch* batch) {
         return;
     }
     queue->slots[queue->tail] = *batch;
-    queue->tail = (queue->tail + 1) % QUEUE_CAPACITY;
+    queue->tail = (queue->tail + 1) % BINPACK_QUEUE_CAPACITY;
     queue->count++;
     SIGNAL_COND_VARIABLE(queue->not_empty);
     UNLOCK_MUTEX(queue->mutex);
 }
 
-int queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped) 
+int binpack_queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped) 
 {
     LOCK_MUTEX(queue->mutex);
     while(queue->count == 0 && !queue->stop_signal)
@@ -44,7 +44,7 @@ int queue_pop(MinibatchQueue* queue, PreparedMinibatch* popped)
     }
 
     *popped = queue->slots[queue->head];
-    queue->head = (queue->head + 1) % QUEUE_CAPACITY;
+    queue->head = (queue->head + 1) % BINPACK_QUEUE_CAPACITY;
     queue->count--;
     SIGNAL_COND_VARIABLE(queue->not_full);
     UNLOCK_MUTEX(queue->mutex);
@@ -184,7 +184,7 @@ THREAD_RETURN fillMinibatchQueue(THREAD_PARAM param)
     while(!args->queue->stop_signal) 
     {
         processSingleMinibatch(args->details, localBatch, &xorRNGSeed, args->readerIndex, args->fenSkip);
-        queue_push(args->queue, localBatch);
+        binpack_queue_push(args->queue, localBatch);
     }
     free(localBatch);
     return 0;

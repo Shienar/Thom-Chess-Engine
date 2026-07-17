@@ -10,7 +10,6 @@
 #define QUANTIZED_PATH PROJECT_CWD "/import/quantized.nnue"
 #define PI 3.141592653589793
 
-#define FLIP_SQUARE(x) (x^56)
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
 #ifdef RELEASE
