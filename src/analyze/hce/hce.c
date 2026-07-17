@@ -147,6 +147,7 @@ evalParameters hce_params = {
 			}
 		}
 	},
+	.virtualMobilityBonus = {    -1,    1},
 	.mobilityBonus = {
 		{   -2,    0,    3,    0,   -3,    1},
 		{   -1,    1,    4,   -1,   -2,    2}
@@ -487,6 +488,41 @@ void evaluateMobility(bitboard* board, int* middlegameScore, int* endgameScore)
 	*middlegameScore += eval[MIDDLEGAME];
 	*endgameScore += eval[ENDGAME];
 }
+
+/*****************/
+/** King Safety **/
+/*****************/
+void evaluateKingSafety(bitboard* board, int* middlegameScore, int* endgameScore)
+{
+	int eval[2] = {0};
+
+	int allyColor = board->turn;
+	int enemyColor = FLIP_COLOR(board->turn);
+
+	uint64_t allyPieces = board->pieces_side[allyColor];
+	uint64_t enemyPieces = board->pieces_side[enemyColor];
+
+	uint64_t pieces = board->pieces[KING | allyColor];
+	int virtualMobilityScore = 0;
+	while(pieces)
+	{
+		virtualMobilityScore += __builtin_popcountll(queenMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[KING | enemyColor];
+	while(pieces)
+	{
+		virtualMobilityScore -= __builtin_popcountll(queenMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+
+	eval[MIDDLEGAME] += hce_params.virtualMobilityBonus[MIDDLEGAME] * virtualMobilityScore;
+	eval[ENDGAME] += hce_params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
+	
+	*middlegameScore += eval[MIDDLEGAME];
+	*endgameScore += eval[ENDGAME];
+}
+
 
 /******************/
 /** Tapered Eval **/

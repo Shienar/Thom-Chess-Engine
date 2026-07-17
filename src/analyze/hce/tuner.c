@@ -61,6 +61,8 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     }
     fprintf(output, "\t},\n");
     
+    fprintf(output, "\t.virtualMobilityBonus = {%5d,%5d},\n", params.virtualMobilityBonus[MIDDLEGAME], params.virtualMobilityBonus[ENDGAME]);
+
     fprintf(output, "\t.mobilityBonus = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
@@ -166,11 +168,10 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
         mask &= (mask - 1);
     }
 
-    //Mobility
 	uint64_t allyPieces = board->pieces_side[WHITE];
 	uint64_t enemyPieces = board->pieces_side[BLACK];
 
-	//Pawns
+	//Pawn Mobility
 	uint64_t allyMask =  WHITE_PAWN_PUSH_MASK(board) | 
 						 WHITE_PAWN_DOUBLEPUSH_MASK(board) | 
 						 WHITE_PAWN_LEFTATTACKS(board) | 
@@ -191,7 +192,7 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 	*mgScore += params.mobilityBonus[MIDDLEGAME][PAWN / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][PAWN / 2] * mobilityScore;
 
-	//Knights
+	//Knight Mobility
 	uint64_t pieces = board->pieces[WHITE_KNIGHT];
 	mobilityScore = 0;
 	while(pieces)
@@ -212,7 +213,7 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 	*mgScore += params.mobilityBonus[MIDDLEGAME][KNIGHT / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][KNIGHT / 2] * mobilityScore;
 
-	//Bishops
+	//Bishop Mobility
 	pieces = board->pieces[WHITE_BISHOP];
 	mobilityScore = 0;
 	while(pieces)
@@ -233,7 +234,7 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 	*mgScore += params.mobilityBonus[MIDDLEGAME][BISHOP / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][BISHOP / 2] * mobilityScore;
 
-	//Rook
+	//Rook Mobility
 	pieces = board->pieces[WHITE_ROOK];
 	mobilityScore = 0;
 	while(pieces)
@@ -254,7 +255,7 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 	*mgScore += params.mobilityBonus[MIDDLEGAME][ROOK / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][ROOK / 2] * mobilityScore;
 
-	//Queen
+	//Queen Mobility
 	pieces = board->pieces[WHITE_QUEEN];
 	mobilityScore = 0;
 	while(pieces)
@@ -275,26 +276,37 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 	*mgScore += params.mobilityBonus[MIDDLEGAME][QUEEN / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][QUEEN / 2] * mobilityScore;
 
-	//Kings
+	//King Mobility, Virtual Mobility
 	pieces = board->pieces[WHITE_KING];
+    int virtualMobilityScore = 0;
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~allyPieces));
+        int sq = __builtin_ctzll(pieces);
+		mobilityScore += __builtin_popcountll(kingAttacks[sq] & (~allyPieces));
+        virtualMobilityScore += __builtin_popcountll(queenMoves(allyPieces, enemyPieces, sq));
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_KING];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~enemyPieces));
+        int sq = __builtin_ctzll(pieces);
+		mobilityScore -= __builtin_popcountll(kingAttacks[sq] & (~enemyPieces));
+        virtualMobilityScore -= __builtin_popcountll(queenMoves(enemyPieces, allyPieces, sq));
 		pieces &= pieces - 1;
 	}
     
     coefficients->mobilityBonus[MIDDLEGAME][KING / 2] += mobilityScore;
     coefficients->mobilityBonus[ENDGAME][KING / 2] += mobilityScore;
 
+    coefficients->virtualMobilityBonus[MIDDLEGAME] += virtualMobilityScore;
+    coefficients->virtualMobilityBonus[ENDGAME] += virtualMobilityScore;
+
 	*mgScore += params.mobilityBonus[MIDDLEGAME][KING / 2] * mobilityScore;
 	*egScore += params.mobilityBonus[ENDGAME][KING / 2] * mobilityScore;
+    
+	*mgScore += params.virtualMobilityBonus[MIDDLEGAME]* virtualMobilityScore;
+	*egScore += params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
 
     //Rook open file bonuses
     uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];
