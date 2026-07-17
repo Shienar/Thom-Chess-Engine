@@ -61,6 +61,16 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     }
     fprintf(output, "\t},\n");
     
+    fprintf(output, "\t.mobilityBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t{");
+        for(int piece = 0; piece < PIECE_COUNT / 2; piece++)
+            fprintf(output, "%5d%s", params.mobilityBonus[phase][piece], (piece == (PIECE_COUNT / 2) - 1) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+
     fprintf(output, "\t.openFileRookBonus = {\n");
     for(int phase = 0; phase < 2; phase++) 
     {
@@ -155,6 +165,136 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 
         mask &= (mask - 1);
     }
+
+    //Mobility
+	uint64_t allyPieces = board->pieces_side[WHITE];
+	uint64_t enemyPieces = board->pieces_side[BLACK];
+
+	//Pawns
+	uint64_t allyMask =  WHITE_PAWN_PUSH_MASK(board) | 
+						 WHITE_PAWN_DOUBLEPUSH_MASK(board) | 
+						 WHITE_PAWN_LEFTATTACKS(board) | 
+						 WHITE_PAWN_RIGHTATTACKS(board) | 
+						 EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
+
+	uint64_t enemyMask = BLACK_PAWN_PUSH_MASK(board) | 
+						 BLACK_PAWN_DOUBLEPUSH_MASK(board) | 
+						 BLACK_PAWN_LEFTATTACKS(board) | 
+						 BLACK_PAWN_RIGHTATTACKS(board) | 
+						 EN_PASSANT_ATTACKERS_BLACK(singleBitMask(board->enPassantSquare), board);
+
+    int mobilityScore = __builtin_popcountll(allyMask) - __builtin_popcountll(enemyMask);
+
+    coefficients->mobilityBonus[MIDDLEGAME][PAWN / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][PAWN / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][PAWN / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][PAWN / 2] * mobilityScore;
+
+	//Knights
+	uint64_t pieces = board->pieces[WHITE_KNIGHT];
+	mobilityScore = 0;
+	while(pieces)
+	{
+		mobilityScore += __builtin_popcountll(knightMoves(allyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[BLACK_KNIGHT];
+	while(pieces)
+	{
+		mobilityScore -= __builtin_popcountll(knightMoves(enemyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+    
+    coefficients->mobilityBonus[MIDDLEGAME][KNIGHT / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][KNIGHT / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][KNIGHT / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][KNIGHT / 2] * mobilityScore;
+
+	//Bishops
+	pieces = board->pieces[WHITE_BISHOP];
+	mobilityScore = 0;
+	while(pieces)
+	{
+		mobilityScore += __builtin_popcountll(bishopMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[BLACK_BISHOP];
+	while(pieces)
+	{
+		mobilityScore -= __builtin_popcountll(bishopMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+    
+    coefficients->mobilityBonus[MIDDLEGAME][BISHOP / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][BISHOP / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][BISHOP / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][BISHOP / 2] * mobilityScore;
+
+	//Rook
+	pieces = board->pieces[WHITE_ROOK];
+	mobilityScore = 0;
+	while(pieces)
+	{
+		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[BLACK_ROOK];
+	while(pieces)
+	{
+		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+    
+    coefficients->mobilityBonus[MIDDLEGAME][ROOK / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][ROOK / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][ROOK / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][ROOK / 2] * mobilityScore;
+
+	//Queen
+	pieces = board->pieces[WHITE_QUEEN];
+	mobilityScore = 0;
+	while(pieces)
+	{
+		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[BLACK_QUEEN];
+	while(pieces)
+	{
+		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		pieces &= pieces - 1;
+	}
+    
+    coefficients->mobilityBonus[MIDDLEGAME][QUEEN / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][QUEEN / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][QUEEN / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][QUEEN / 2] * mobilityScore;
+
+	//Kings
+	pieces = board->pieces[WHITE_KING];
+	mobilityScore = 0;
+	while(pieces)
+	{
+		mobilityScore += __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~allyPieces));
+		pieces &= pieces - 1;
+	}
+	pieces = board->pieces[BLACK_KING];
+	while(pieces)
+	{
+		mobilityScore -= __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~enemyPieces));
+		pieces &= pieces - 1;
+	}
+    
+    coefficients->mobilityBonus[MIDDLEGAME][KING / 2] += mobilityScore;
+    coefficients->mobilityBonus[ENDGAME][KING / 2] += mobilityScore;
+
+	*mgScore += params.mobilityBonus[MIDDLEGAME][KING / 2] * mobilityScore;
+	*egScore += params.mobilityBonus[ENDGAME][KING / 2] * mobilityScore;
 
     //Rook open file bonuses
     uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];

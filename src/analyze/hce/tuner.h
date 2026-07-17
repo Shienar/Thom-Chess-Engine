@@ -30,6 +30,7 @@ typedef union {
     struct {
         double genericPieceValues[PHASE_COUNT][PIECE_COUNT / 2];
         double rawPieceTables[PHASE_COUNT][6][64];
+        double mobilityBonus[PHASE_COUNT][6];
         double openFileRookBonus[PHASE_COUNT][8];
         double passedPawnBonus[PHASE_COUNT][8];
         double doubledPawnBonus[PHASE_COUNT][8];
