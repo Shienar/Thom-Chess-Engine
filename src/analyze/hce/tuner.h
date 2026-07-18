@@ -26,17 +26,20 @@ typedef struct tuningEntry {
 } tuningEntry;
 
 typedef union {
-    double parameters[PARAMETER_COUNT];
     struct {
-        double genericPieceValues[PHASE_COUNT][PIECE_COUNT / 2];
+        double genericPieceValues[PHASE_COUNT][PIECE_TYPE_COUNT];
         double rawPieceTables[PHASE_COUNT][6][64];
+        double tempo[PHASE_COUNT];
         double virtualMobilityBonus[PHASE_COUNT];
+        double kingThreats[PHASE_COUNT][PIECE_TYPE_COUNT];
         double mobilityBonus[PHASE_COUNT][6];
+        double bishopPairBonus[PHASE_COUNT];
         double openFileRookBonus[PHASE_COUNT][8];
         double passedPawnBonus[PHASE_COUNT][8];
         double doubledPawnBonus[PHASE_COUNT][8];
         double isolatedPawnBonus[PHASE_COUNT][8];
     };
+    double parameters[0];
 } evalParameters_fp;
 
 #define sigmoidK(val, K) (1.0 / (1.0 + exp(-val * K / 400.0)))

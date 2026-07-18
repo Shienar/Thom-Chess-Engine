@@ -147,11 +147,17 @@ evalParameters hce_params = {
 			}
 		}
 	},
-	.virtualMobilityBonus = {    -1,    1},
+	.tempo = {   10,  10},
+	.virtualMobilityBonus = {    -2,    2},
+	.kingThreats = {
+		{    1,    2,    2,    2,    3,    0},
+		{    0,    1,    1,    1,    2,    0}
+	},
 	.mobilityBonus = {
 		{   -2,    0,    3,    0,   -3,    1},
 		{   -1,    1,    4,   -1,   -2,    2}
 	},
+	.bishopPairBonus = {   5,   20},
 	.openFileRookBonus = {
 		{    2,    0,   -2,    7,    1,    5,   10,   32},
 		{   -5,   -6,   -5,    9,    1,   -4,   -7,   -6}
@@ -171,8 +177,10 @@ evalParameters hce_params = {
 };
 
 evalParameters is_param_eg = {
-    .genericPieceValues = { [ENDGAME] = { [0 ... (PIECE_COUNT / 2 - 1)] = 1 } },
+    .genericPieceValues = { [ENDGAME] = { [0 ... (PIECE_TYPE_COUNT - 1)] = 1 } },
     .rawPieceTables = { [ENDGAME] = { [0 ... 5] = { [0 ... 63] = 1 } } },
+	.tempo = { [ENDGAME] = 1 },
+	.virtualMobilityBonus = { [ENDGAME] = 1 },
     .openFileRookBonus  = { [ENDGAME] = { [0 ... 7] = 1 } },
     .passedPawnBonus    = { [ENDGAME] = { [0 ... 7] = 1 } },
     .doubledPawnBonus   = { [ENDGAME] = { [0 ... 7] = 1 } },
@@ -188,12 +196,14 @@ int pieceBonusTable[PHASE_COUNT][PIECE_COUNT][64];
 
 //Other tables
 uint64_t bordering_files[8];
+uint8_t manhattanDistance[64][64];
 
-void init_HCE_tables(int hasNewValues)
+void init_HCE_tables()
 {
-    if(initHCE && !hasNewValues) return;
+    if(initHCE) return;
     initHCE = 1;
 
+	//PSQT
     for(int gamephase = MIDDLEGAME; gamephase <= ENDGAME; gamephase++)
     {
         for(int piece = 0; piece < PIECE_COUNT; piece+=2)
@@ -205,6 +215,21 @@ void init_HCE_tables(int hasNewValues)
             }
         }
     }
+
+	//Manhattan distance
+	for (int fromSq = 0; fromSq < 64; fromSq++) 
+	{
+		int fromColumn = getColumn(fromSq);
+		int fromRow = getRow(fromSq);
+
+		for (int destSq = 0; destSq < 64; destSq++) 
+		{
+			int destColumn = getColumn(destSq);
+			int destRow = getRow(destSq);
+
+			manhattanDistance[fromSq][destSq] = (uint8_t) (abs(fromColumn - destColumn) + abs(fromRow - destRow));
+		}
+	}
 
     bordering_files[0] = board_file[1];
     bordering_files[1] = board_file[0] | board_file[2];
@@ -220,7 +245,6 @@ void evaluatePieceSquareTables(bitboard* board, int* middlegameScore, int* endga
 {
     int eval[PHASE_COUNT][2] = {0};
 
-
     uint64_t mask = board->pieces_all;
     while(mask)
     {
@@ -233,27 +257,39 @@ void evaluatePieceSquareTables(bitboard* board, int* middlegameScore, int* endga
         mask &= (mask - 1);
     }
 
-    *middlegameScore += eval[MIDDLEGAME][board->turn] - eval[MIDDLEGAME][FLIP_COLOR(board->turn)];
-    *endgameScore += eval[ENDGAME][board->turn] - eval[ENDGAME][FLIP_COLOR(board->turn)];
+    *middlegameScore += eval[MIDDLEGAME][WHITE] - eval[MIDDLEGAME][BLACK];
+    *endgameScore += eval[ENDGAME][WHITE] - eval[ENDGAME][BLACK];
 }
 
-/**********************/
-/**  Open Rook File **/
-/**********************/
+/**********************************/
+/**  Open rook file, bishop pair **/
+/**********************************/
 
 void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endgameScore)
 {
     int eval[PHASE_COUNT] = {0};
-    
-        
+
+	//Bishop pair
+	if(__builtin_popcountll(board->pieces[WHITE_BISHOP]) >= 2)
+	{
+		eval[MIDDLEGAME] += hce_params.bishopPairBonus[MIDDLEGAME];
+		eval[ENDGAME] += hce_params.bishopPairBonus[ENDGAME];
+	}
+	if(__builtin_popcountll(board->pieces[BLACK_BISHOP]) >= 2)
+	{
+		eval[MIDDLEGAME] -= hce_params.bishopPairBonus[MIDDLEGAME];
+		eval[ENDGAME] -= hce_params.bishopPairBonus[ENDGAME];
+	}
+
+	//Open rook file.
     uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];
 
-    uint64_t allyRooks = board->pieces[ROOK | board->turn];
-    uint64_t enemyRooks = board->pieces[ROOK | FLIP_COLOR(board->turn)];
+    uint64_t whiteRooks = board->pieces[WHITE_ROOK];
+    uint64_t blackRooks = board->pieces[BLACK_ROOK];
 
-    while(allyRooks)
+    while(whiteRooks)
     {
-        int column = getColumn(__builtin_ctzll(allyRooks));
+        int column = getColumn(__builtin_ctzll(whiteRooks));
         uint64_t pawns_col = pawnMask & board_file[column];
 
         if(!pawns_col)
@@ -262,12 +298,12 @@ void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endg
             eval[ENDGAME] += hce_params.openFileRookBonus[ENDGAME][column];
         }
 
-        allyRooks &= (allyRooks - 1);
+        whiteRooks &= (whiteRooks - 1);
     }
 
-    while(enemyRooks)
+    while(blackRooks)
     {
-        int column = getColumn(__builtin_ctzll(enemyRooks));
+        int column = getColumn(__builtin_ctzll(blackRooks));
         uint64_t pawns_col = pawnMask & board_file[column];
     
         if(!pawns_col)
@@ -276,7 +312,7 @@ void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endg
             eval[ENDGAME] -= hce_params.openFileRookBonus[ENDGAME][column];
         }
 
-        enemyRooks &= (enemyRooks - 1);
+        blackRooks &= (blackRooks - 1);
     }
 
     *middlegameScore += eval[MIDDLEGAME];
@@ -291,30 +327,30 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
 {
     int eval[PHASE_COUNT] = {0};
 
-    uint64_t allyPawns = board->pieces[PAWN | board->turn];
-    uint64_t enemyPawns = board->pieces[PAWN | FLIP_COLOR(board->turn)];
+    uint64_t whitePawns = board->pieces[WHITE_PAWN];
+    uint64_t blackPawns = board->pieces[BLACK_PAWN];
 
-    uint64_t mask = allyPawns;
+    uint64_t mask = whitePawns;
     while(mask)
     {
         int column = getColumn(__builtin_ctzll(mask));
         
         //Passed Pawns
-        if((enemyPawns & board_file[column]) == 0)
+        if((blackPawns & board_file[column]) == 0)
         {
             eval[MIDDLEGAME] += hce_params.passedPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] += hce_params.passedPawnBonus[ENDGAME][column];
         }
 
         //Doubled pawns
-        if(__builtin_popcountll(allyPawns & board_file[column]) > 1)
+        if(__builtin_popcountll(whitePawns & board_file[column]) > 1)
         {
             eval[MIDDLEGAME] += hce_params.doubledPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] += hce_params.doubledPawnBonus[ENDGAME][column];
         }
 
         //Isolated Pawns
-        if((allyPawns & bordering_files[column]) == 0)
+        if((whitePawns & bordering_files[column]) == 0)
         {
             eval[MIDDLEGAME] += hce_params.isolatedPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] += hce_params.isolatedPawnBonus[ENDGAME][column];
@@ -323,21 +359,20 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
         mask &= mask - 1;
     }
     
-    mask = enemyPawns;
+    mask = blackPawns;
     while(mask)
     {
         int column = getColumn(__builtin_ctzll(mask));
-
         
         //Passed Pawns
-        if((allyPawns & board_file[column]) == 0)
+        if((whitePawns & board_file[column]) == 0)
         {
             eval[MIDDLEGAME] -= hce_params.passedPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] -= hce_params.passedPawnBonus[ENDGAME][column];
         }
         
         //Doubled pawns
-        if(__builtin_popcountll(enemyPawns & board_file[column]) > 1)
+        if(__builtin_popcountll(blackPawns & board_file[column]) > 1)
         {
             eval[MIDDLEGAME] -= hce_params.doubledPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] -= hce_params.doubledPawnBonus[ENDGAME][column];
@@ -345,7 +380,7 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
 
         
         //Isolated Pawns
-        if((allyPawns & bordering_files[column]) == 0)
+        if((whitePawns & bordering_files[column]) == 0)
         {
             eval[MIDDLEGAME] -= hce_params.isolatedPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] -= hce_params.isolatedPawnBonus[ENDGAME][column];
@@ -358,133 +393,129 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
     *endgameScore += eval[ENDGAME];
 }
 
-/**************/
-/** Mobility **/
-/**************/
+/************************/
+/** (Virtual) Mobility **/
+/************************/
 void evaluateMobility(bitboard* board, int* middlegameScore, int* endgameScore)
 {
 	int eval[2] = {0};
 
-	int allyColor = board->turn;
-	int enemyColor = FLIP_COLOR(board->turn);
-
-	uint64_t allyPieces = board->pieces_side[allyColor];
-	uint64_t enemyPieces = board->pieces_side[enemyColor];
+	uint64_t whitePieces = board->pieces_side[WHITE];
+	uint64_t blackPieces = board->pieces_side[BLACK];
 
 	//Pawns
-	uint64_t allyMask =  WHITE_PAWN_PUSH_MASK(board) | 
+	uint64_t whiteMask = WHITE_PAWN_PUSH_MASK(board) | 
 						 WHITE_PAWN_DOUBLEPUSH_MASK(board) | 
 						 WHITE_PAWN_LEFTATTACKS(board) | 
 						 WHITE_PAWN_RIGHTATTACKS(board) | 
 						 EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
 
-	uint64_t enemyMask = BLACK_PAWN_PUSH_MASK(board) | 
+	uint64_t blackMask = BLACK_PAWN_PUSH_MASK(board) | 
 						 BLACK_PAWN_DOUBLEPUSH_MASK(board) | 
 						 BLACK_PAWN_LEFTATTACKS(board) | 
 						 BLACK_PAWN_RIGHTATTACKS(board) | 
 						 EN_PASSANT_ATTACKERS_BLACK(singleBitMask(board->enPassantSquare), board);
 
-	if(ISBLACK(allyColor))
-	{
-		uint64_t temp = enemyMask;
-		enemyMask = allyMask;
-		allyMask = temp;
-	}
-
-	int mobilityScore = __builtin_popcountll(allyMask) - __builtin_popcountll(enemyMask);
+	int mobilityScore = __builtin_popcountll(whiteMask) - __builtin_popcountll(blackMask);
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][PAWN / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][PAWN / 2] * mobilityScore;
 
-	//Knights
-	uint64_t pieces = board->pieces[KNIGHT | allyColor];
+	//Knight Mobility
+	uint64_t pieces = board->pieces[WHITE_KNIGHT];
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(knightMoves(allyPieces, __builtin_ctzll(pieces)));
+		mobilityScore += __builtin_popcountll(knightMoves(whitePieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
-	pieces = board->pieces[KNIGHT | enemyColor];
+	pieces = board->pieces[BLACK_KNIGHT];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(knightMoves(enemyPieces, __builtin_ctzll(pieces)));
+		mobilityScore -= __builtin_popcountll(knightMoves(blackPieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
 
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][KNIGHT / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][KNIGHT / 2] * mobilityScore;
 
-	//Bishops
-	pieces = board->pieces[BISHOP | allyColor];
+	//Bishop Mobility
+	pieces = board->pieces[WHITE_BISHOP];
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(bishopMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		mobilityScore += __builtin_popcountll(bishopMoves(whitePieces, blackPieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
-	pieces = board->pieces[BISHOP | enemyColor];
+	pieces = board->pieces[BLACK_BISHOP];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(bishopMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		mobilityScore -= __builtin_popcountll(bishopMoves(blackPieces, whitePieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
 
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][BISHOP / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][BISHOP / 2] * mobilityScore;
 
-	//Rook
-	pieces = board->pieces[ROOK | allyColor];
+	//Rook Mobility
+	pieces = board->pieces[WHITE_ROOK];
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		mobilityScore += __builtin_popcountll(rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
-	pieces = board->pieces[ROOK | enemyColor];
+	pieces = board->pieces[BLACK_ROOK];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		mobilityScore -= __builtin_popcountll(rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
 
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][ROOK / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][ROOK / 2] * mobilityScore;
 
-	//Queen
-	pieces = board->pieces[QUEEN | allyColor];
+	//Queen Mobility
+	pieces = board->pieces[WHITE_QUEEN];
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		mobilityScore += __builtin_popcountll(rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
-	pieces = board->pieces[QUEEN | enemyColor];
+	pieces = board->pieces[BLACK_QUEEN];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		mobilityScore -= __builtin_popcountll(rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
 
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][QUEEN / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][QUEEN / 2] * mobilityScore;
 
-	//Kings
-	pieces = board->pieces[KING | allyColor];
+	//King Mobility & Virtual Mobility
+	pieces = board->pieces[WHITE_KING];
+	int virtualMobilityScore = 0;
 	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~allyPieces));
+		mobilityScore += __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~whitePieces));
+		virtualMobilityScore += __builtin_popcountll(queenMoves(whitePieces, blackPieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
-	pieces = board->pieces[KING | enemyColor];
+	pieces = board->pieces[BLACK_KING];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~enemyPieces));
+		mobilityScore -= __builtin_popcountll(kingAttacks[__builtin_ctzll(pieces)] & (~blackPieces));
+		virtualMobilityScore -= __builtin_popcountll(queenMoves(blackPieces, whitePieces, __builtin_ctzll(pieces)));
 		pieces &= pieces - 1;
 	}
 
 	eval[MIDDLEGAME] += hce_params.mobilityBonus[MIDDLEGAME][KING / 2] * mobilityScore;
 	eval[ENDGAME] += hce_params.mobilityBonus[ENDGAME][KING / 2] * mobilityScore;
 
+	eval[MIDDLEGAME] += hce_params.virtualMobilityBonus[MIDDLEGAME] * virtualMobilityScore;
+	eval[ENDGAME] += hce_params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
+	
 	*middlegameScore += eval[MIDDLEGAME];
 	*endgameScore += eval[ENDGAME];
 }
@@ -496,28 +527,43 @@ void evaluateKingSafety(bitboard* board, int* middlegameScore, int* endgameScore
 {
 	int eval[2] = {0};
 
-	int allyColor = board->turn;
-	int enemyColor = FLIP_COLOR(board->turn);
-
-	uint64_t allyPieces = board->pieces_side[allyColor];
-	uint64_t enemyPieces = board->pieces_side[enemyColor];
-
-	uint64_t pieces = board->pieces[KING | allyColor];
-	int virtualMobilityScore = 0;
-	while(pieces)
+	//King tropism.
+	for(int pc = 0; pc < PIECE_COUNT; pc += 2)
 	{
-		virtualMobilityScore += __builtin_popcountll(queenMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[KING | enemyColor];
-	while(pieces)
-	{
-		virtualMobilityScore -= __builtin_popcountll(queenMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
-		pieces &= pieces - 1;
-	}
+		//white pieces attacking black king
+		uint64_t mask = board->pieces[pc];
+		while(mask)
+		{
+			int sq = __builtin_ctzll(mask);
+			int distanceScore = manhattanDistance[board->kingSquare[BLACK]][sq];
 
-	eval[MIDDLEGAME] += hce_params.virtualMobilityBonus[MIDDLEGAME] * virtualMobilityScore;
-	eval[ENDGAME] += hce_params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
+			if(distanceScore < 12)
+			{
+				distanceScore = 12 - distanceScore;
+				eval[MIDDLEGAME] += distanceScore * hce_params.kingThreats[MIDDLEGAME][pc / 2];
+				eval[ENDGAME] += distanceScore * hce_params.kingThreats[ENDGAME][pc / 2];
+			}
+
+			mask &= mask - 1;
+		}
+
+		//black pieces attacking white king
+		mask = board->pieces[pc + 1];
+		while(mask)
+		{
+			int sq = __builtin_ctzll(mask);
+			int distanceScore = manhattanDistance[board->kingSquare[WHITE]][sq];
+
+			if(distanceScore < 12)
+			{
+				distanceScore = 12 - distanceScore;
+				eval[MIDDLEGAME] -= distanceScore * hce_params.kingThreats[MIDDLEGAME][pc / 2];
+				eval[ENDGAME] -= distanceScore * hce_params.kingThreats[ENDGAME][pc / 2];
+			}
+
+			mask &= mask - 1;
+		}
+	}
 	
 	*middlegameScore += eval[MIDDLEGAME];
 	*endgameScore += eval[ENDGAME];
@@ -551,6 +597,15 @@ int hce_eval(bitboard* board)
     evaluateSimplePieceDetails(board, &midgame_eval, &endgame_eval);
     evaluatePawnDetails(board, &midgame_eval, &endgame_eval);
 	evaluateMobility(board, &midgame_eval, &endgame_eval);
+	evaluateKingSafety(board, &midgame_eval, &endgame_eval);
 
-    return evaluatePhasedScore(board, midgame_eval, endgame_eval);
+	midgame_eval += hce_params.tempo[MIDDLEGAME];
+	endgame_eval += hce_params.tempo[ENDGAME];
+
+    int eval = evaluatePhasedScore(board, midgame_eval, endgame_eval);
+
+	if(ISBLACK(board->turn))
+		return -eval;
+	else
+		return eval;
 }

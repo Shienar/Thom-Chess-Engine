@@ -1,3 +1,0 @@
-isready
-setoption name Threads value 12
-tune 100000000 0.1 0.025 "C:\Users\grant\OneDrive\Desktop\MISC\Programming\ChessGeneral\lichess-big3-resolved.book" "C:\Users\grant\OneDrive\Desktop\MISC\Programming\ChessGeneral\Thom-Chess-Engine\import\tuner_output.txt"

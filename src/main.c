@@ -605,7 +605,7 @@ void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadConte
     loadRawWeights();
     #endif
     #else
-    init_HCE_tables(0);
+    init_HCE_tables();
     #endif
 
     if(!transpositionTable) 

@@ -132,8 +132,8 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
     
     int baseIndex_w = PIECE_COUNT*kingBuckets[board->kingSquare[WHITE]];
     int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + PIECE_COUNT*kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])];
-    int trackedPiecesPerColor = PIECE_COUNT / 2;
-    for(int i = 0; i < PIECE_COUNT / 2; i++)
+    int trackedPiecesPerColor = PIECE_TYPE_COUNT;
+    for(int i = 0; i < PIECE_TYPE_COUNT; i++)
     {
         //White's perspective
         inputs[baseIndex_w + i] = board->pieces[2 * i];
@@ -201,7 +201,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
         //Mirroring
         if(getColumn(ksq) > 3) { MIRROR_SQUARE(fromSq); MIRROR_SQUARE(toSq); }
 
-        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  (PIECE_COUNT / 2) + PIECE(pieceOffset) / 2;
+        pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(pieceOffset) / 2;
 
         int inputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (PIECE_COUNT * kingBuckets[ksq]) + pieceOffset;
         
@@ -209,7 +209,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
         if(lastMove.promoteTo) 
         {
             int relativeColor = (side == WHITE) ? COLOR(lastMove.piece) : FLIP_COLOR(lastMove.piece);
-            int promotePieceOffset = ISWHITE(relativeColor) ? PIECE(lastMove.promoteTo) / 2 :  (PIECE_COUNT / 2) + PIECE(lastMove.promoteTo) / 2;
+            int promotePieceOffset = ISWHITE(relativeColor) ? PIECE(lastMove.promoteTo) / 2 :  (PIECE_TYPE_COUNT) + PIECE(lastMove.promoteTo) / 2;
             int promoteInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (PIECE_COUNT * kingBuckets[ksq]) + promotePieceOffset;
             
             if(shouldUndoMove)
@@ -279,7 +279,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
             
             if(getColumn(ksq) > 3) MIRROR_SQUARE(capturedPieceSquare);
 
-            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  (PIECE_COUNT / 2) + PIECE(capturedPieceOffset) / 2;
+            capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(capturedPieceOffset) / 2;
             int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (PIECE_COUNT * kingBuckets[ksq]) + capturedPieceOffset;
 
             acc->inputNodes[capturedInputNodeIndex]^=singleBitMask(capturedPieceSquare);
@@ -342,11 +342,11 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     uint64_t accumBoard[PIECE_COUNT] = {0};
 
     int ksq; 
-    int trackedPiecesPerColor = PIECE_COUNT / 2;
+    int trackedPiecesPerColor = PIECE_TYPE_COUNT;
     if(ISWHITE(color))
     {
         ksq = accumulatorBoard->kingSquare[WHITE];
-        for(int i = 0; i < PIECE_COUNT / 2; i++)
+        for(int i = 0; i < PIECE_TYPE_COUNT; i++)
         {
             curBoard[i] = currentBoard->pieces[2 * i];
             curBoard[i + trackedPiecesPerColor] = currentBoard->pieces[2 * i + 1];
@@ -358,7 +358,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     else
     {
         ksq = FLIP_SQUARE(accumulatorBoard->kingSquare[BLACK]);
-        for(int i = 0; i < PIECE_COUNT / 2; i++)
+        for(int i = 0; i < PIECE_TYPE_COUNT; i++)
         {
             curBoard[i] = FLIP_MASK(currentBoard->pieces[2 * i + 1]);
             curBoard[trackedPiecesPerColor + i] = FLIP_MASK(currentBoard->pieces[2 * i]);

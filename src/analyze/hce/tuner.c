@@ -22,8 +22,8 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t{");
-        for(int piece = 0; piece < PIECE_COUNT / 2; piece++)
-            fprintf(output, "%5d%s", params.genericPieceValues[phase][piece], (piece == (PIECE_COUNT / 2) - 1) ? "" : ",");
+        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
+            fprintf(output, "%5d%s", params.genericPieceValues[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
@@ -61,17 +61,30 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     }
     fprintf(output, "\t},\n");
     
+    fprintf(output, "\t.tempo = {%5d,%5d},\n", params.tempo[MIDDLEGAME], params.tempo[ENDGAME]);
     fprintf(output, "\t.virtualMobilityBonus = {%5d,%5d},\n", params.virtualMobilityBonus[MIDDLEGAME], params.virtualMobilityBonus[ENDGAME]);
+
+    fprintf(output, "\t.kingThreats = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t{");
+        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
+            fprintf(output, "%5d%s", params.kingThreats[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
 
     fprintf(output, "\t.mobilityBonus = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t{");
-        for(int piece = 0; piece < PIECE_COUNT / 2; piece++)
-            fprintf(output, "%5d%s", params.mobilityBonus[phase][piece], (piece == (PIECE_COUNT / 2) - 1) ? "" : ",");
+        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
+            fprintf(output, "%5d%s", params.mobilityBonus[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
+
+    fprintf(output, "\t.bishopPairBonus = {%5d,%5d},\n", params.bishopPairBonus[MIDDLEGAME], params.bishopPairBonus[ENDGAME]);
 
     fprintf(output, "\t.openFileRookBonus = {\n");
     for(int phase = 0; phase < 2; phase++) 
@@ -121,12 +134,8 @@ evalParameters_fp currentParameters;
 tuningEntry* tuner_entries = NULL;
 int tuner_entry_count = 0;
 
-void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initPSQTCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
-    *mgScore = 0;
-    *egScore = 0;
-
-    //Piece values / square tables
     uint64_t mask = board->pieces_side[WHITE];
     while(mask)
     {
@@ -167,8 +176,32 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 
         mask &= (mask - 1);
     }
+}
 
-	uint64_t allyPieces = board->pieces_side[WHITE];
+void initTempoCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+    if(ISWHITE(board->turn))
+    {
+        coefficients->tempo[MIDDLEGAME]++;
+        coefficients->tempo[ENDGAME]++;
+
+        *mgScore += params.tempo[MIDDLEGAME];
+        *egScore += params.tempo[ENDGAME];
+    }
+    else
+    {
+        coefficients->tempo[MIDDLEGAME]--;
+        coefficients->tempo[ENDGAME]--;
+
+        *mgScore -= params.tempo[MIDDLEGAME];
+        *egScore -= params.tempo[ENDGAME];
+    }
+}
+
+//Includes virtual mobility
+void initMobilityCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+    uint64_t allyPieces = board->pieces_side[WHITE];
 	uint64_t enemyPieces = board->pieces_side[BLACK];
 
 	//Pawn Mobility
@@ -307,6 +340,27 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
     
 	*mgScore += params.virtualMobilityBonus[MIDDLEGAME]* virtualMobilityScore;
 	*egScore += params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
+}
+
+void initSimplePieceDetailCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+    //Bishop pair bonuses
+	if(__builtin_popcountll(board->pieces[WHITE_BISHOP]) >= 2)
+	{
+        coefficients->bishopPairBonus[MIDDLEGAME]++;
+        coefficients->bishopPairBonus[ENDGAME]++;
+
+        *mgScore += params.bishopPairBonus[MIDDLEGAME];
+        *egScore += params.bishopPairBonus[ENDGAME];
+	}
+	if(__builtin_popcountll(board->pieces[BLACK_BISHOP]) >= 2)
+	{
+        coefficients->bishopPairBonus[MIDDLEGAME]--;
+        coefficients->bishopPairBonus[ENDGAME]--;
+
+        *mgScore -= params.bishopPairBonus[MIDDLEGAME];
+        *egScore -= params.bishopPairBonus[ENDGAME];
+	}
 
     //Rook open file bonuses
     uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];
@@ -347,10 +401,14 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
         enemyRooks &= (enemyRooks - 1);
     }
 
+}
+
+void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
     uint64_t allyPawns = board->pieces[WHITE_PAWN];
     uint64_t enemyPawns = board->pieces[BLACK_PAWN];
 
-    mask = allyPawns;
+    uint64_t mask = allyPawns;
     while(mask)
     {
         int column = getColumn(__builtin_ctzll(mask));
@@ -427,6 +485,72 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
 
         mask &= mask - 1;
     }
+}
+
+void initKingSafetyCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{   
+	int eval[2] = {0};
+
+	//King tropism.
+	for(int pc = 0; pc < PIECE_COUNT; pc += 2)
+	{
+		uint64_t mask = board->pieces[pc];
+		while(mask)
+		{
+			int sq = __builtin_ctzll(mask);
+			int distanceScore = manhattanDistance[board->kingSquare[BLACK]][sq];
+
+			if(distanceScore < 7)
+			{
+				distanceScore = 7 - distanceScore;
+
+                coefficients->kingThreats[MIDDLEGAME][pc / 2] += distanceScore;
+                coefficients->kingThreats[ENDGAME][pc / 2] += distanceScore;
+
+				eval[MIDDLEGAME] += distanceScore * params.kingThreats[MIDDLEGAME][pc / 2];
+				eval[ENDGAME] += distanceScore * params.kingThreats[ENDGAME][pc / 2];
+			}
+
+			mask &= mask - 1;
+		}
+
+		//black pieces attacking white king
+		mask = board->pieces[pc + 1];
+		while(mask)
+		{
+			int sq = __builtin_ctzll(mask);
+			int distanceScore = manhattanDistance[board->kingSquare[WHITE]][sq];
+
+			if(distanceScore < 7)
+			{
+				distanceScore = 7 - distanceScore;
+                
+                coefficients->kingThreats[MIDDLEGAME][pc / 2] -= distanceScore;
+                coefficients->kingThreats[ENDGAME][pc / 2] -= distanceScore;
+
+				eval[MIDDLEGAME] -= distanceScore * params.kingThreats[MIDDLEGAME][pc / 2];
+				eval[ENDGAME] -= distanceScore * params.kingThreats[ENDGAME][pc / 2];
+			}
+
+			mask &= mask - 1;
+		}
+	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
+}
+
+void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+    *mgScore = 0;
+    *egScore = 0;
+
+    initPSQTCoefficients(board, coefficients, params, mgScore, egScore);
+    initTempoCoefficients(board, coefficients, params, mgScore, egScore);
+    initMobilityCoefficients(board, coefficients, params, mgScore, egScore);
+    initSimplePieceDetailCoefficients(board, coefficients, params, mgScore, egScore);
+    initPawnCoefficients(board, coefficients, params, mgScore, egScore);
+    initKingSafetyCoefficients(board, coefficients, params, mgScore, egScore);
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
@@ -533,19 +657,19 @@ double getError(tuningEntry* entries, double K)
     return sumSquaredError / tuner_entry_count;
 }
 
-
 double computeOptimalK(tuningEntry* entries)
 {
-    double start = -10.001;
-    double end = 10.001;
+    double start = -10.0;
+    double end = 10.0;
     double step = 1.0;
     
     double current = start;
+    printf("\33[2K\rCurrent K=%f", start);
 
     double currentError;
     double minError = getError(entries, start);
 
-    for(int i = 0; i < 4; i++)
+    for(int i = 0; i < 2; i++)
     {
         current = start - step;
         while(current < end)
@@ -556,6 +680,7 @@ double computeOptimalK(tuningEntry* entries)
             {
                 minError = currentError;
                 start = current;
+                printf("\33[2K\rCurrent K=%f", start);
             }
         }
 
@@ -566,6 +691,8 @@ double computeOptimalK(tuningEntry* entries)
 
     if(start == 0.0)
         start = 0.1;
+
+    printf("\33[2K\r");
     return start;
 }
 
@@ -612,7 +739,7 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient, evalPara
 
     #pragma omp parallel shared(gradient)
     {
-        evalParameters_fp local = { {0.0} };
+        evalParameters_fp local = {0};
 
         #pragma omp for
         for(int i = 0; i < tuner_entry_count; i++)
@@ -625,34 +752,10 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient, evalPara
 
 void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double max_lr, double min_lr)
 {
-    const int FORCE_NEW_WEIGHTS = 0;
-
     printf("Tuning for %lld epochs at LR=[%g ... %g]...\n", epochs, max_lr, min_lr);
 
-    if(FORCE_NEW_WEIGHTS)
-    {
-        memset(currentParameters.parameters, 0, sizeof(currentParameters.parameters));
-
-        currentParameters.genericPieceValues[MIDDLEGAME][0] = 100;
-        currentParameters.genericPieceValues[ENDGAME][0] = 100;
-
-        currentParameters.genericPieceValues[MIDDLEGAME][1] = 300;
-        currentParameters.genericPieceValues[ENDGAME][1] = 300;
-
-        currentParameters.genericPieceValues[MIDDLEGAME][2] = 300;
-        currentParameters.genericPieceValues[ENDGAME][2] = 300;
-
-        currentParameters.genericPieceValues[MIDDLEGAME][3] = 500;
-        currentParameters.genericPieceValues[ENDGAME][3] = 500;
-
-        currentParameters.genericPieceValues[MIDDLEGAME][4] = 900;
-        currentParameters.genericPieceValues[ENDGAME][4] = 900;
-    }
-    else
-    {
-        for(int i = 0; i < PARAMETER_COUNT; i++)
-            currentParameters.parameters[i] = (double) hce_params.parameters[i];
-    }
+    for(int i = 0; i < PARAMETER_COUNT; i++)
+        currentParameters.parameters[i] = (double) hce_params.parameters[i];
 
     printf("Initializing data entries...\n");
     initDataEntries(dataPath);
@@ -665,26 +768,31 @@ void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double 
     }
 
     double K;
-    if(FORCE_NEW_WEIGHTS)
+    if(1)
     {
         //Enforce specific scale.
+        //Do this after big eval changes where we don't 
+        //trust what they new scale might end up as.
         K = 3.612;
-        printf("Enforcing K=%f\n", K);
+        printf("Enforcing ");
     }
     else
     {
         //Retain same scale of preexisting terms
         printf("Calculating K...\n");
         K = computeOptimalK(tuner_entries);
-        printf("K=%f\n", K);
     }
-
-    evalParameters_fp deltaWeights = { {0.0 } };
-    evalParameters_fp firstMoments = { {0.0} };
-    evalParameters_fp secondMoments = { {0.0} };
+    printf("K=%f\n", K);
+    
+    evalParameters_fp deltaWeights = {0};
+    evalParameters_fp firstMoments = {0};
+    evalParameters_fp secondMoments = {0};
 
     double lr = max_lr;
-    int end_lr_epoch = _min(epochs, 1000);
+    int end_lr_epoch = _min(epochs, 2500);
+
+    printf("Initial Error = %e\n", getError(tuner_entries, K));
+    print_parameters(output, &currentParameters, &deltaWeights);
 
     for(int epoch = 0; epoch < epochs; epoch++)
     {
@@ -720,7 +828,7 @@ void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double 
 
         printf("Epoch %d (LR=%g): Error = %e\n", epoch, lr, error);
 
-        if(epoch % 25 == 0)
+        if(epoch && epoch % 25 == 0)
             print_parameters(output, &currentParameters, &deltaWeights);
     }
 

@@ -73,6 +73,7 @@ typedef struct hashtable_tt {
 //...
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
+#define PIECE_TYPE_COUNT 6
 #define MAX_PLY 40
 typedef struct bitboard {
     uint64_t pieces[PIECE_COUNT];

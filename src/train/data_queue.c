@@ -115,8 +115,8 @@ void processSingleMinibatch(binpackDetails* details, PreparedMinibatch* batch, u
         batch->expectedOutputs[entryNumber] = LAMBDA * (SIGMOID(score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
 
         uint64_t inputs[2 * PIECE_COUNT] = {0};
-        int trackedPiecesPerColor = PIECE_COUNT / 2;
-        for(int i = 0; i < PIECE_COUNT / 2; i++)
+        int trackedPiecesPerColor = PIECE_TYPE_COUNT;
+        for(int i = 0; i < PIECE_TYPE_COUNT; i++)
         {
             inputs[i] = board.pieces[2 * i];
             inputs[trackedPiecesPerColor + i] = board.pieces[2 * i + 1];
