@@ -28,16 +28,23 @@ typedef struct tuningEntry {
 typedef union {
     struct {
         double genericPieceValues[PHASE_COUNT][PIECE_TYPE_COUNT];
-        double rawPieceTables[PHASE_COUNT][6][64];
-        double tempo[PHASE_COUNT];
-        double virtualMobilityBonus[PHASE_COUNT];
-        double kingThreats[PHASE_COUNT][PIECE_TYPE_COUNT];
-        double mobilityBonus[PHASE_COUNT][6];
+        double rawPieceTables[PHASE_COUNT][PIECE_TYPE_COUNT][64];
+
+        double knightMobilityBonus[PHASE_COUNT][9];
+        double bishopMobilityBonus[PHASE_COUNT][14];
+        double rookMobilityBonus[PHASE_COUNT][15];
+        double queenMobilityBonus[PHASE_COUNT][28];
+        
+        double virtualMobilityBonus[PHASE_COUNT][28];
+
         double bishopPairBonus[PHASE_COUNT];
         double openFileRookBonus[PHASE_COUNT][8];
+
         double passedPawnBonus[PHASE_COUNT][8];
         double doubledPawnBonus[PHASE_COUNT][8];
         double isolatedPawnBonus[PHASE_COUNT][8];
+        
+        double tempo[PHASE_COUNT];
     };
     double parameters[0];
 } evalParameters_fp;
@@ -48,6 +55,6 @@ typedef union {
 //  - base algorithm, was horribly slow.
 //https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf
 //  - much faster algorithm, used here.
-void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double max_lr, double min_lr);
+void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t epochs, double max_lr, double min_lr);
 
 #endif

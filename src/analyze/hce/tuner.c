@@ -14,6 +14,9 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
         deltaParameters->parameters[i] = 0.0;
         params.parameters[i] = round(currentParameters->parameters[i]);
     }
+    
+    const char* phase_names[2] = {"MIDDLEGAME", "ENDGAME"};
+    const char* piece_names[6] = {"PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING"};
 
     rewind(output);
     fprintf(output, "evalParameters hce_params = {\n");
@@ -21,7 +24,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t.genericPieceValues = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
             fprintf(output, "%5d%s", params.genericPieceValues[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
@@ -32,19 +35,14 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t//a1 is bottomleft, h8 is topright.\n");
     fprintf(output, "\t.rawPieceTables = {\n");
 
-    const char* phase_names[2] = {"Middlegame", "Endgame"};
-    const char* piece_names[6] = {"Pawn", "Knight", "Bishop", "Rook", "Queen", "King"};
 
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t//%s\n", phase_names[phase]);
-        fprintf(output, "\t\t{\n");
+        fprintf(output, "\t\t[%s] = {\n", phase_names[phase]);
         
         for(int pc = 0; pc < 6; pc++)
         {
-            fprintf(output, "\t\t\t//%s\n", piece_names[pc]);
-            fprintf(output, "\t\t\t{\n");
-            
+            fprintf(output, "\t\t\t[%s / 2] = {\n", piece_names[pc]);
             for(int row = 0; row < 8; row++) 
             {
                 fprintf(output, "\t\t\t\t");
@@ -61,25 +59,52 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     }
     fprintf(output, "\t},\n");
     
-    fprintf(output, "\t.tempo = {%5d,%5d},\n", params.tempo[MIDDLEGAME], params.tempo[ENDGAME]);
-    fprintf(output, "\t.virtualMobilityBonus = {%5d,%5d},\n", params.virtualMobilityBonus[MIDDLEGAME], params.virtualMobilityBonus[ENDGAME]);
-
-    fprintf(output, "\t.kingThreats = {\n");
+    fprintf(output, "\t.knightMobilityBonus = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
-        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
-            fprintf(output, "%5d%s", params.kingThreats[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < 9; i++)
+            fprintf(output, "%5d%s", params.knightMobilityBonus[phase][i], (i == 8) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.bishopMobilityBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < 14; i++)
+            fprintf(output, "%5d%s", params.bishopMobilityBonus[phase][i], (i == 13) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.rookMobilityBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < 15; i++)
+            fprintf(output, "%5d%s", params.rookMobilityBonus[phase][i], (i == 14) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.queenMobilityBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < 28; i++)
+            fprintf(output, "%5d%s", params.queenMobilityBonus[phase][i], (i == 27) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
 
-    fprintf(output, "\t.mobilityBonus = {\n");
+    fprintf(output, "\t.virtualMobilityBonus = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
-        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
-            fprintf(output, "%5d%s", params.mobilityBonus[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < 28; i++)
+            fprintf(output, "%5d%s", params.virtualMobilityBonus[phase][i], (i == 27) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
@@ -87,9 +112,9 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t.bishopPairBonus = {%5d,%5d},\n", params.bishopPairBonus[MIDDLEGAME], params.bishopPairBonus[ENDGAME]);
 
     fprintf(output, "\t.openFileRookBonus = {\n");
-    for(int phase = 0; phase < 2; phase++) 
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int column = 0; column < 8; column++)
             fprintf(output, "%5d%s", params.openFileRookBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
@@ -97,9 +122,9 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t},\n");
 
     fprintf(output, "\t.passedPawnBonus = {\n");
-    for(int phase = 0; phase < 2; phase++) 
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int column = 0; column < 8; column++)
             fprintf(output, "%5d%s", params.passedPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
@@ -107,9 +132,9 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t},\n");
 
     fprintf(output, "\t.doubledPawnBonus = {\n");
-    for(int phase = 0; phase < 2; phase++) 
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int column = 0; column < 8; column++)
             fprintf(output, "%5d%s", params.doubledPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
@@ -117,14 +142,16 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fprintf(output, "\t},\n");
 
     fprintf(output, "\t.isolatedPawnBonus = {\n");
-    for(int phase = 0; phase < 2; phase++) 
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
-        fprintf(output, "\t\t{");
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int column = 0; column < 8; column++)
             fprintf(output, "%5d%s", params.isolatedPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
+
+    fprintf(output, "\t.tempo = {%5d,%5d}\n", params.tempo[MIDDLEGAME], params.tempo[ENDGAME]);
 
     fprintf(output, "};\n");
     fflush(output);
@@ -201,145 +228,158 @@ void initTempoCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 //Includes virtual mobility
 void initMobilityCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
-    uint64_t allyPieces = board->pieces_side[WHITE];
-	uint64_t enemyPieces = board->pieces_side[BLACK];
-
-	//Pawn Mobility
-	uint64_t allyMask =  WHITE_PAWN_PUSH_MASK(board) | 
-						 WHITE_PAWN_DOUBLEPUSH_MASK(board) | 
-						 WHITE_PAWN_LEFTATTACKS(board) | 
-						 WHITE_PAWN_RIGHTATTACKS(board) | 
-						 EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
-
-	uint64_t enemyMask = BLACK_PAWN_PUSH_MASK(board) | 
-						 BLACK_PAWN_DOUBLEPUSH_MASK(board) | 
-						 BLACK_PAWN_LEFTATTACKS(board) | 
-						 BLACK_PAWN_RIGHTATTACKS(board) | 
-						 EN_PASSANT_ATTACKERS_BLACK(singleBitMask(board->enPassantSquare), board);
-
-    int mobilityScore = __builtin_popcountll(allyMask) - __builtin_popcountll(enemyMask);
-
-    coefficients->mobilityBonus[MIDDLEGAME][PAWN / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][PAWN / 2] += mobilityScore;
-
-	*mgScore += params.mobilityBonus[MIDDLEGAME][PAWN / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][PAWN / 2] * mobilityScore;
+	uint64_t whitePieces = board->pieces_side[WHITE];
+	uint64_t blackPieces = board->pieces_side[BLACK];
 
 	//Knight Mobility
 	uint64_t pieces = board->pieces[WHITE_KNIGHT];
-	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(knightMoves(allyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = knightMoves(whitePieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+
+		*mgScore += params.knightMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += params.knightMobilityBonus[ENDGAME][moveCount];
+
+        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->knightMobilityBonus[ENDGAME][moveCount]++;
+
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_KNIGHT];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(knightMoves(enemyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = knightMoves(blackPieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+
+		*mgScore -= params.knightMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= params.knightMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->knightMobilityBonus[ENDGAME][moveCount]--;
+
 		pieces &= pieces - 1;
 	}
-    
-    coefficients->mobilityBonus[MIDDLEGAME][KNIGHT / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][KNIGHT / 2] += mobilityScore;
-
-	*mgScore += params.mobilityBonus[MIDDLEGAME][KNIGHT / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][KNIGHT / 2] * mobilityScore;
 
 	//Bishop Mobility
 	pieces = board->pieces[WHITE_BISHOP];
-	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(bishopMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = bishopMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+
+		*mgScore += params.bishopMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += params.bishopMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->bishopMobilityBonus[ENDGAME][moveCount]++;
+		
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_BISHOP];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(bishopMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = bishopMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+
+		*mgScore -= params.bishopMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= params.bishopMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->bishopMobilityBonus[ENDGAME][moveCount]--;
+
 		pieces &= pieces - 1;
 	}
-    
-    coefficients->mobilityBonus[MIDDLEGAME][BISHOP / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][BISHOP / 2] += mobilityScore;
-
-	*mgScore += params.mobilityBonus[MIDDLEGAME][BISHOP / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][BISHOP / 2] * mobilityScore;
 
 	//Rook Mobility
 	pieces = board->pieces[WHITE_ROOK];
-	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+		
+		*mgScore += params.rookMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += params.rookMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->rookMobilityBonus[ENDGAME][moveCount]++;
+
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_ROOK];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+		
+		*mgScore -= params.rookMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= params.rookMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->rookMobilityBonus[ENDGAME][moveCount]--;
+
 		pieces &= pieces - 1;
 	}
-    
-    coefficients->mobilityBonus[MIDDLEGAME][ROOK / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][ROOK / 2] += mobilityScore;
-
-	*mgScore += params.mobilityBonus[MIDDLEGAME][ROOK / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][ROOK / 2] * mobilityScore;
 
 	//Queen Mobility
 	pieces = board->pieces[WHITE_QUEEN];
-	mobilityScore = 0;
 	while(pieces)
 	{
-		mobilityScore += __builtin_popcountll(rookMoves(allyPieces, enemyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+		
+		*mgScore += params.queenMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += params.queenMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->queenMobilityBonus[ENDGAME][moveCount]++;
+		
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_QUEEN];
 	while(pieces)
 	{
-		mobilityScore -= __builtin_popcountll(rookMoves(enemyPieces, allyPieces, __builtin_ctzll(pieces)));
+		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+		int moveCount = __builtin_popcountll(moves);
+		
+		*mgScore -= params.queenMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= params.queenMobilityBonus[ENDGAME][moveCount];
+        
+        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->queenMobilityBonus[ENDGAME][moveCount]--;
+
 		pieces &= pieces - 1;
 	}
-    
-    coefficients->mobilityBonus[MIDDLEGAME][QUEEN / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][QUEEN / 2] += mobilityScore;
 
-	*mgScore += params.mobilityBonus[MIDDLEGAME][QUEEN / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][QUEEN / 2] * mobilityScore;
-
-	//King Mobility, Virtual Mobility
+	//Virtual Mobility
 	pieces = board->pieces[WHITE_KING];
-    int virtualMobilityScore = 0;
-	mobilityScore = 0;
 	while(pieces)
 	{
-        int sq = __builtin_ctzll(pieces);
-		mobilityScore += __builtin_popcountll(kingAttacks[sq] & (~allyPieces));
-        virtualMobilityScore += __builtin_popcountll(queenMoves(allyPieces, enemyPieces, sq));
+		uint64_t virtualMoves = queenMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+		
+		*mgScore += params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
+		*egScore += params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
+        
+        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]++;
+        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]++;
+
 		pieces &= pieces - 1;
 	}
 	pieces = board->pieces[BLACK_KING];
 	while(pieces)
 	{
-        int sq = __builtin_ctzll(pieces);
-		mobilityScore -= __builtin_popcountll(kingAttacks[sq] & (~enemyPieces));
-        virtualMobilityScore -= __builtin_popcountll(queenMoves(enemyPieces, allyPieces, sq));
+		uint64_t virtualMoves = queenMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+
+		*mgScore -= params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
+		*egScore -= params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
+        
+        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]--;
+        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]--;
+
 		pieces &= pieces - 1;
 	}
-    
-    coefficients->mobilityBonus[MIDDLEGAME][KING / 2] += mobilityScore;
-    coefficients->mobilityBonus[ENDGAME][KING / 2] += mobilityScore;
-
-    coefficients->virtualMobilityBonus[MIDDLEGAME] += virtualMobilityScore;
-    coefficients->virtualMobilityBonus[ENDGAME] += virtualMobilityScore;
-
-	*mgScore += params.mobilityBonus[MIDDLEGAME][KING / 2] * mobilityScore;
-	*egScore += params.mobilityBonus[ENDGAME][KING / 2] * mobilityScore;
-    
-	*mgScore += params.virtualMobilityBonus[MIDDLEGAME]* virtualMobilityScore;
-	*egScore += params.virtualMobilityBonus[ENDGAME] * virtualMobilityScore;
 }
 
 void initSimplePieceDetailCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
@@ -487,59 +527,6 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     }
 }
 
-void initKingSafetyCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
-{   
-	int eval[2] = {0};
-
-	//King tropism.
-	for(int pc = 0; pc < PIECE_COUNT; pc += 2)
-	{
-		uint64_t mask = board->pieces[pc];
-		while(mask)
-		{
-			int sq = __builtin_ctzll(mask);
-			int distanceScore = manhattanDistance[board->kingSquare[BLACK]][sq];
-
-			if(distanceScore < 7)
-			{
-				distanceScore = 7 - distanceScore;
-
-                coefficients->kingThreats[MIDDLEGAME][pc / 2] += distanceScore;
-                coefficients->kingThreats[ENDGAME][pc / 2] += distanceScore;
-
-				eval[MIDDLEGAME] += distanceScore * params.kingThreats[MIDDLEGAME][pc / 2];
-				eval[ENDGAME] += distanceScore * params.kingThreats[ENDGAME][pc / 2];
-			}
-
-			mask &= mask - 1;
-		}
-
-		//black pieces attacking white king
-		mask = board->pieces[pc + 1];
-		while(mask)
-		{
-			int sq = __builtin_ctzll(mask);
-			int distanceScore = manhattanDistance[board->kingSquare[WHITE]][sq];
-
-			if(distanceScore < 7)
-			{
-				distanceScore = 7 - distanceScore;
-                
-                coefficients->kingThreats[MIDDLEGAME][pc / 2] -= distanceScore;
-                coefficients->kingThreats[ENDGAME][pc / 2] -= distanceScore;
-
-				eval[MIDDLEGAME] -= distanceScore * params.kingThreats[MIDDLEGAME][pc / 2];
-				eval[ENDGAME] -= distanceScore * params.kingThreats[ENDGAME][pc / 2];
-			}
-
-			mask &= mask - 1;
-		}
-	}
-	
-	*mgScore += eval[MIDDLEGAME];
-	*egScore += eval[ENDGAME];
-}
-
 void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
     *mgScore = 0;
@@ -550,7 +537,6 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
     initMobilityCoefficients(board, coefficients, params, mgScore, egScore);
     initSimplePieceDetailCoefficients(board, coefficients, params, mgScore, egScore);
     initPawnCoefficients(board, coefficients, params, mgScore, egScore);
-    initKingSafetyCoefficients(board, coefficients, params, mgScore, egScore);
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
@@ -750,7 +736,7 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient, evalPara
     }
 }
 
-void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double max_lr, double min_lr)
+void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t epochs, double max_lr, double min_lr)
 {
     printf("Tuning for %lld epochs at LR=[%g ... %g]...\n", epochs, max_lr, min_lr);
 
@@ -768,12 +754,10 @@ void Tune(const char* dataPath, const char* outputPath, uint64_t epochs, double 
     }
 
     double K;
-    if(1)
+    if(forcedK != 0)
     {
         //Enforce specific scale.
-        //Do this after big eval changes where we don't 
-        //trust what they new scale might end up as.
-        K = 3.612;
+        K = forcedK;
         printf("Enforcing ");
     }
     else

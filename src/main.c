@@ -516,15 +516,21 @@ int main(int argc, char** argv)
             #else
             else if(strcmp(str, "tune") == 0)
             {
-                //Format: 'tune <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"
+                //Format: 'tune <double forcedK (0 for auto) > <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"
 
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 
                 char inputPath[256] = {'\0'};
                 char outputPath[256] = {'\0'};
+                double forcedK;
                 uint64_t epochs;
                 double max_lr;
                 double min_lr;
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                
+                sscanf(str, "%lf", &forcedK);
 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -550,7 +556,7 @@ int main(int argc, char** argv)
                     break;
                 
                 sscanf(str, "\"%[^\"]", outputPath);
-                Tune(inputPath, outputPath, epochs, max_lr, min_lr);
+                Tune(inputPath, outputPath, forcedK, epochs, max_lr, min_lr);
                 
 
                 break;
