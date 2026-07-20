@@ -43,6 +43,8 @@ typedef union {
         double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        double connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        double backwardPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         
         double tempo[PHASE_COUNT];
     };

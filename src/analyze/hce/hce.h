@@ -26,6 +26,8 @@ typedef union {
         int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        int connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        int backwardPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         
         int tempo[PHASE_COUNT];
     };

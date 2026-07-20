@@ -148,6 +148,26 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.connectedPawnBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int column = 0; column < COLUMN_COUNT; column++)
+            fprintf(output, "%5d%s", params.connectedPawnBonus[phase][column], (column == 7) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.backwardPawnBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int column = 0; column < COLUMN_COUNT; column++)
+            fprintf(output, "%5d%s", params.backwardPawnBonus[phase][column], (column == 7) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
 
     fprintf(output, "\t.tempo = {%5d,%5d}\n", params.tempo[MIDDLEGAME], params.tempo[ENDGAME]);
 
@@ -473,8 +493,9 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *egScore += params.doubledPawnBonus[ENDGAME][column];
         }
 
+        uint64_t borderingMask = allyPawns & bordering_files[column];
         //Isolated Pawns
-        if((allyPawns & bordering_files[column]) == 0)
+        if(!borderingMask)
         {
             coefficients->isolatedPawnBonus[MIDDLEGAME][column]++;
             coefficients->isolatedPawnBonus[ENDGAME][column]++;
@@ -482,6 +503,24 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *mgScore += params.isolatedPawnBonus[MIDDLEGAME][column];
             *egScore += params.isolatedPawnBonus[ENDGAME][column];
         }
+		//Backward pawns
+		else if((borderingMask & (sq - 1)) == 0)
+		{
+            coefficients->backwardPawnBonus[MIDDLEGAME][column]++;
+            coefficients->backwardPawnBonus[ENDGAME][column]++;
+            
+            *mgScore += params.backwardPawnBonus[MIDDLEGAME][column];
+            *egScore += params.backwardPawnBonus[ENDGAME][column];
+		}
+		//connected pawns
+		else if(borderingMask & board_rank[row - 1])
+		{
+            coefficients->connectedPawnBonus[MIDDLEGAME][column]++;
+            coefficients->connectedPawnBonus[ENDGAME][column]++;
+            
+            *mgScore += params.connectedPawnBonus[MIDDLEGAME][column];
+            *egScore += params.connectedPawnBonus[ENDGAME][column];
+		}
 
         mask &= mask - 1;
     }
@@ -517,9 +556,9 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *egScore -= params.doubledPawnBonus[ENDGAME][mirroredColumn];
         }
 
-        
+        uint64_t borderingMask = enemyPawns & bordering_files[column];
         //Isolated Pawns
-        if((enemyPawns & bordering_files[column]) == 0)
+        if(!borderingMask)
         {
             coefficients->isolatedPawnBonus[MIDDLEGAME][mirroredColumn]--;
             coefficients->isolatedPawnBonus[ENDGAME][mirroredColumn]--;
@@ -527,6 +566,24 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *mgScore -= params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
             *egScore -= params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
+		//Backward pawns
+		else if((borderingMask & ~(sq - 1)) == 0)
+		{
+            coefficients->backwardPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->backwardPawnBonus[ENDGAME][mirroredColumn]--;
+            
+            *mgScore -= params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= params.backwardPawnBonus[ENDGAME][mirroredColumn];
+		}
+		//connected pawns
+		else if(borderingMask & board_rank[row + 1])
+		{
+            coefficients->connectedPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->connectedPawnBonus[ENDGAME][mirroredColumn]--;
+            
+            *mgScore -= params.connectedPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= params.connectedPawnBonus[ENDGAME][mirroredColumn];
+		}
 
         mask &= mask - 1;
     }
@@ -560,6 +617,8 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
     //memset(coefficients->passedPawnBonus, 0, sizeof(coefficients->passedPawnBonus));
     //memset(coefficients->doubledPawnBonus, 0, sizeof(coefficients->doubledPawnBonus));
     //memset(coefficients->isolatedPawnBonus, 0, sizeof(coefficients->isolatedPawnBonus));
+    //memset(coefficients->backwardPawnBonus, 0, sizeof(coefficients->backwardPawnBonus));
+    //memset(coefficients->connectedPawnBonus, 0, sizeof(coefficients->connectedPawnBonus));
     
     //memset(coefficients->tempo, 0, sizeof(coefficients->tempo));
 }
