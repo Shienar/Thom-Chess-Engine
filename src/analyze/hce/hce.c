@@ -1,191 +1,200 @@
 #include "analyze/hce/hce.h"
 
+//For simplicity, this represents white's view of the board when
+//viewed in a text editor.
+//
+//White Piece square tables receive a rank-wise FLIP_SQUARE. (xor 56)
+//Black piece square tables receive a column-wise MIRROR_SQUARE (xor 7)
+//Black column-based parameters receive the column-wise MIRROR_SQUARE.
+//Black row-based parameters also received MIRROR_SQUARE, since the math works out there as well given row=[0, 7].
 evalParameters hce_params = {
 	.genericPieceValues = {
-		[MIDDLEGAME] = {   64,  335,  345,  439,  975,    0},
-		[ENDGAME] = {   91,  309,  315,  542, 1023,    0}
+		[MIDDLEGAME] = {   63,  334,  347,  433,  972,    0},
+		[ENDGAME] = {   92,  313,  321,  553, 1048,    0}
 	},
-	//For simplicity, these arrays represent white's view of the board when viewed on a text editor.
-	//a1 is bottomleft, h8 is topright.
 	.rawPieceTables = {
 		[MIDDLEGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				   85,  117,   69,   96,   74,  105,   22,  -18,
-				  -12,   -4,   17,   18,   56,   65,   30,  -14,
-				  -19,    9,   -5,   14,   23,   15,   22,  -16,
-				  -27,   -4,   -6,   -3,   16,    9,   12,  -16,
-				  -29,    6,   -7,  -13,    6,   14,   33,  -17,
-				  -37,   -7,  -21,  -20,  -17,   15,   39,  -24,
+				   79,  111,   73,  100,   79,  100,   24,  -11,
+				   -9,    0,   20,   19,   50,   59,   28,  -12,
+				  -16,    8,   -3,   13,   22,   14,   19,  -14,
+				  -25,   -5,   -4,   -2,   15,    8,   10,  -15,
+				  -25,    6,   -6,   -8,    7,   14,   27,  -15,
+				  -33,   -6,  -18,  -17,  -13,   11,   33,  -25,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				 -170, -107,  -45,  -47,   41,  -85,  -47, -113,
-				  -58,  -36,   48,   46,   25,   61,   -7,  -12,
-				  -35,   46,   41,   53,   76,  114,   63,   27,
-				  -12,   14,   13,   43,   29,   56,   10,   20,
-				   -8,    7,    5,   18,   14,   26,   19,  -11,
-				   -6,    2,    9,   18,   25,   12,   26,    1,
-				   -9,  -34,    4,    2,   13,   20,   -4,  -17,
-				  -88,  -17,  -34,  -16,  -15,  -18,   -8,  -31
+				 -167, -113,  -49,  -45,   34,  -81,  -54, -119,
+				  -53,  -34,   45,   41,   23,   56,   -9,  -13,
+				  -29,   43,   41,   52,   71,  104,   58,   22,
+				  -10,   11,   13,   40,   28,   51,    8,   19,
+				   -6,    7,    6,   16,   16,   24,   18,  -10,
+				   -7,    2,    8,   19,   25,   10,   21,   -1,
+				   -9,  -30,    3,    3,   13,   16,   -4,  -17,
+				  -81,  -18,  -30,  -13,  -11,  -16,   -8,  -32
 			},
 			[BISHOP / 2] = {
-				  -39,  -25,  -73,  -61,  -44,  -50,   -4,  -32,
-				  -15,    3,  -21,  -22,   24,   37,    6,  -38,
-				  -21,   30,   29,   30,   21,   40,   32,   -5,
-				  -12,   -6,    7,   27,   22,   20,   -2,  -11,
-				   -8,   -1,   -4,   26,   14,    2,   -8,    8,
-				   -9,    6,    5,    8,    5,   19,   14,    4,
-				    1,   13,   16,   -9,    6,   19,   21,   -5,
-				  -22,   -2,  -15,  -11,   -5,    0,  -16,   -8
+				  -40,  -28,  -70,  -64,  -49,  -50,   -9,  -34,
+				  -16,    0,  -19,  -20,   18,   28,    4,  -35,
+				  -18,   28,   26,   26,   18,   35,   30,   -3,
+				  -11,   -7,    5,   22,   19,   16,   -4,  -12,
+				   -5,   -3,   -8,   23,   10,   -1,   -9,    7,
+				   -7,    5,    6,    5,    3,   15,   11,    3,
+				    1,   16,   16,   -4,    4,   18,   20,   -4,
+				  -14,    3,  -11,   -6,   -3,    2,  -10,   -5
 			},
 			[ROOK / 2] = {
-				   20,   28,   17,   35,   46,   14,   30,   21,
-				   11,    8,   32,   53,   44,   44,   17,   27,
-				  -25,    3,    4,   19,    7,   33,   60,   10,
-				  -35,  -17,  -11,    6,    8,   26,   -2,  -18,
-				  -42,  -34,  -23,   -5,  -12,  -12,    9,  -25,
-				  -42,  -23,  -20,  -12,    3,    6,    4,  -23,
-				  -21,  -11,  -20,    1,    4,   14,   -2,  -48,
-				  -18,   -5,   -5,    9,    7,   -6,  -20,  -12
+				   21,   26,   19,   35,   43,   18,   29,   21,
+				   10,    8,   33,   50,   41,   42,   14,   24,
+				  -24,    6,    6,   18,    8,   28,   54,    7,
+				  -34,  -16,  -10,    4,    5,   19,   -3,  -18,
+				  -40,  -32,  -21,   -5,  -12,  -14,    5,  -27,
+				  -39,  -21,  -17,   -9,    2,    5,    5,  -21,
+				  -21,  -11,  -16,    3,    5,   13,   -2,  -43,
+				  -18,   -5,   -4,    9,    6,   -6,  -17,  -11
 			},
 			[QUEEN / 2] = {
-				  -43,   -6,   20,   16,   53,   45,   53,   26,
-				  -18,  -42,  -22,   -7,  -25,   40,   17,   38,
-				  -13,  -21,   -8,    0,   10,   47,   46,   54,
-				  -25,  -28,  -23,  -28,   -8,    0,   -4,   -4,
-				  -13,  -28,  -19,   -8,  -17,   -2,   -3,   -3,
-				  -13,   -6,  -16,    4,    3,   -4,   17,   11,
-				  -22,   -1,   13,    1,   15,   23,   10,   14,
-				    6,   -5,    9,    8,    0,   -8,   -2,  -27
+				  -39,   -3,   15,   15,   46,   36,   44,   17,
+				  -16,  -42,  -22,  -15,  -29,   29,    7,   30,
+				  -10,  -17,  -10,   -4,    4,   37,   44,   49,
+				  -22,  -27,  -24,  -30,  -14,   -5,   -7,   -3,
+				  -14,  -26,  -20,  -12,  -19,   -5,   -5,   -5,
+				  -12,   -6,  -14,    3,    4,   -5,   14,    8,
+				  -17,    0,   13,    3,   15,   22,    9,   13,
+				    4,   -1,   11,    9,    2,   -4,    0,  -25
 			},
 			[KING / 2] = {
-				  -42,   14,   22,  -49,  -58,  -25,   15,   40,
-				  -13,  -14,  -47,    6,  -18,   -6,  -27,  -28,
-				  -45,   15,  -29,  -40,  -28,   15,   20,  -31,
-				  -40,  -49,  -51,  -74,  -71,  -57,  -47,  -75,
-				  -67,  -35,  -64,  -82,  -87,  -66,  -63,  -93,
-				  -20,  -21,  -41,  -61,  -58,  -44,  -17,  -34,
-				   13,   16,    1,  -56,  -47,  -15,   10,    5,
-				    8,   44,   15,  -37,   21,  -12,   17,   33
+				  -22,   28,   25,  -48,  -56,  -17,   10,   40,
+				  -14,  -11,  -44,   10,  -12,  -11,  -27,  -41,
+				  -45,   14,  -19,  -36,  -29,   10,   18,  -41,
+				  -50,  -52,  -54,  -77,  -78,  -60,  -52,  -82,
+				  -76,  -41,  -67,  -85,  -90,  -68,  -67,  -99,
+				  -26,  -21,  -45,  -62,  -58,  -45,  -19,  -37,
+				   12,   15,   -2,  -52,  -44,  -15,   11,    6,
+				    9,   41,   13,  -31,   18,  -10,   18,   30
 			}
 		},
 		[ENDGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				  169,  168,  164,  125,  137,  132,  171,  181,
-				   88,  101,   81,   56,   61,   53,   84,   80,
-				   28,   24,    8,    7,    1,    0,   22,   14,
-				    6,    6,   -5,  -18,    0,   -4,    5,    0,
-				   -3,   17,    2,   -4,   -3,    8,   -3,  -11,
-				   11,    7,    8,    8,    7,    0,    6,  -10,
+				  164,  164,  157,  119,  130,  131,  168,  176,
+				   78,   93,   69,   43,   47,   43,   78,   72,
+				   25,   25,    5,    4,   -2,    0,   22,   13,
+				    5,    8,   -5,  -18,   -2,   -4,    7,    0,
+				   -3,   19,    2,   -3,   -3,    8,    0,  -10,
+				    9,    9,    7,    9,    7,    2,    8,   -8,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				  -61,  -26,   -1,  -20,  -14,  -27,  -40, -100,
-				  -27,  -10,   -6,    9,   -2,  -31,  -17,  -50,
-				  -19,   -2,   12,   15,   -8,    2,   -5,  -33,
-				   -9,    9,   19,   19,   26,   20,    9,  -13,
-				   -3,    8,   18,   40,   17,   30,   16,  -14,
-				    3,   14,   13,   30,   25,    8,    1,    4,
-				  -11,   -9,   12,   11,   17,    4,   -5,  -20,
-				  -21,  -33,   -2,    4,    0,   -6,  -20,  -40
+				  -61,  -21,    0,  -16,  -11,  -23,  -35,  -95,
+				  -24,   -7,   -5,   10,   -1,  -28,  -12,  -44,
+				  -16,   -1,   14,   15,   -5,    4,   -2,  -28,
+				   -6,   12,   20,   22,   28,   22,   12,   -9,
+				    2,   11,   21,   40,   21,   31,   16,   -8,
+				    5,   16,   14,   31,   25,   10,    5,    7,
+				   -5,   -4,   13,   11,   17,    7,   -2,  -14,
+				  -16,  -27,    0,    7,    3,   -3,  -16,  -32
 			},
 			[BISHOP / 2] = {
-				  -10,   -7,   -4,    6,    8,    1,   -5,  -12,
-				   -3,    0,    6,   -5,    7,   -5,    4,  -19,
-				    1,    5,    7,   -1,   -3,    2,    4,    0,
-				    7,    7,    9,    7,   14,   19,    6,    9,
-				    7,    9,    9,   27,    6,   15,   -2,    3,
-				  -12,    6,   12,   18,   26,   16,    2,  -14,
-				   -1,  -11,    3,    2,   11,    7,   -7,  -22,
-				  -19,    1,  -19,   10,    6,    6,   -1,  -15
+				   -4,    0,    1,   11,   12,    6,    2,   -6,
+				    0,    3,    8,   -2,   10,   -2,    7,  -14,
+				    5,    8,    9,    2,   -1,    4,    5,    2,
+				   10,   10,   11,    9,   16,   19,    8,   12,
+				    9,   12,   12,   27,    8,   16,    2,    5,
+				   -7,    9,   14,   19,   26,   16,    5,   -7,
+				    3,   -6,    3,    4,   12,   10,   -3,  -14,
+				  -12,    0,  -13,   14,   10,    9,    7,   -8
 			},
 			[ROOK / 2] = {
-				   14,   16,   15,   18,    9,    9,    9,    3,
-				   17,   14,   14,   14,   -3,   -3,    3,   -1,
-				    1,    2,    1,    5,  -12,  -16,  -13,  -16,
-				   -1,    0,    6,   -1,   -1,    3,   -7,  -10,
-				   -1,    3,    4,    8,  -12,    1,   -2,  -16,
-				   -4,    3,   -4,    4,   -1,    1,  -18,  -23,
-				    6,    8,   -2,   13,    0,    2,  -13,   -5,
-				   -5,   11,    4,    0,   -7,  -11,    1,   -7
+				   14,   18,   16,   17,   10,   11,   12,    5,
+				   16,   16,   15,   15,   -1,    0,    7,    2,
+				    2,    3,    2,    5,  -12,  -13,  -10,  -12,
+				    1,    3,    5,    0,   -1,    4,   -4,   -7,
+				    0,    5,    5,    7,  -10,    2,    1,  -11,
+				   -3,    3,   -3,    4,   -1,    2,  -16,  -19,
+				    7,    8,   -1,   11,   -1,    3,  -11,   -3,
+				   -3,   11,    4,   -2,   -9,  -10,    2,   -4
 			},
 			[QUEEN / 2] = {
-				   -2,   35,   42,   33,   37,   30,    6,   20,
-				  -16,   20,   44,   65,   74,   40,   38,    0,
-				  -13,    9,   28,   54,   51,   37,   10,    3,
-				    6,   19,   24,   44,   68,   44,   51,   27,
-				  -15,   24,   21,   56,   31,   45,   31,   18,
-				  -13,  -16,   17,   25,   28,   16,   11,    5,
-				  -16,  -12,  -16,   -7,    3,  -11,  -40,  -46,
-				  -13,   -5,    0,  -25,    6,   -4,  -18,  -33
+				   -1,   32,   45,   36,   38,   35,    8,   21,
+				  -12,   26,   48,   73,   78,   46,   42,    4,
+				  -11,   12,   35,   57,   56,   43,    7,    3,
+				    9,   24,   28,   49,   69,   47,   53,   27,
+				   -7,   28,   27,   58,   35,   46,   35,   24,
+				   -8,  -11,   21,   27,   30,   20,   15,    7,
+				  -18,  -11,  -17,   -5,    5,  -13,  -34,  -41,
+				  -14,  -11,   -5,  -27,    1,   -6,  -19,  -28
 			},
 			[KING / 2] = {
-				  -84,  -37,  -21,   -8,  -11,   12,    2,  -54,
-				   -8,   25,   20,   22,   23,   50,   28,   18,
-				   13,   20,   26,   30,   34,   46,   54,   18,
-				    1,   24,   28,   36,   37,   38,   35,   11,
-				  -19,    1,   23,   33,   34,   32,   17,   -3,
-				  -10,   -6,   23,   33,   34,   29,   18,    5,
-				  -36,   -1,   11,    9,   11,   14,  -12,  -28,
-				  -63,  -42,  -31,    3,  -22,   -3,  -41,  -46
+				  -90,  -39,  -19,   -6,   -8,    7,   -1,  -62,
+				   -8,   27,   26,   25,   26,   50,   29,   16,
+				   12,   24,   32,   36,   41,   48,   53,   18,
+				    2,   26,   34,   44,   44,   42,   37,   11,
+				  -16,    5,   27,   39,   40,   35,   20,   -2,
+				   -9,   -4,   25,   35,   36,   30,   17,    2,
+				  -36,   -2,   13,   12,   13,   14,  -13,  -30,
+				  -65,  -43,  -30,   -1,  -22,   -6,  -43,  -52
 			}
 		}
 	},
 	.knightMobilityBonus = {
-		[MIDDLEGAME] = {  -73,  -17,   -8,   11,   14,   18,   22,   27,   31},
-		[ENDGAME] = {  -89,  -34,  -25,   -6,   -2,    2,    7,   11,   15}
+		[MIDDLEGAME] = {  -65,  -12,   -4,   13,   13,   15,   19,   22,   25},
+		[ENDGAME] = {  -79,  -27,  -18,   -2,    0,    4,    8,   12,   15}
 	},
 	.bishopMobilityBonus = {
-		[MIDDLEGAME] = { -128,  -83,  -68,  -50,  -23,    1,    5,   10,   14,   19,   24,   34,   40,   47},
-		[ENDGAME] = { -148, -110,  -95,  -77,  -49,  -25,  -20,  -16,  -11,   -5,   -1,    9,   16,   18}
+		[MIDDLEGAME] = { -121,  -79,  -65,  -49,  -25,   -5,    0,    4,    7,   12,   17,   27,   33,   42},
+		[ENDGAME] = { -140, -104,  -89,  -73,  -46,  -25,  -20,  -16,  -11,   -6,   -2,    8,   15,   15}
 	},
 	.rookMobilityBonus = {
-		[MIDDLEGAME] = {  -47,  -29,  -20,  -13,  -10,   -6,    0,    3,    7,   11,   17,   26,   31,   37,   41},
-		[ENDGAME] = {  -57,  -38,  -28,  -18,  -18,  -14,   -9,   -5,    0,    5,    9,   20,   25,   31,   35}
+		[MIDDLEGAME] = {  -40,  -27,  -18,  -12,  -12,   -8,   -2,    0,    3,    7,   12,   21,   26,   33,   37},
+		[ENDGAME] = {  -52,  -35,  -25,  -16,  -16,  -12,   -7,   -4,    0,    5,    8,   19,   24,   30,   33}
 	},
 	.queenMobilityBonus = {
-		[MIDDLEGAME] = { -146, -128, -110,  -74,  -37,  -19,  -10,   -5,    0,    4,    8,   13,   18,   22,   27,   40,   45,   50,   55,   60,   65,   70,   70,   70,   70,   70,   70,   70},
-		[ENDGAME] = { -165, -144, -126, -108,  -52,  -33,  -24,   -1,   22,   27,   31,   37,   42,   47,   51,   60,   65,   70,   75,   80,   85,   90,   90,   90,   90,   90,   90,   90}
+		[MIDDLEGAME] = { -136, -121, -105,  -72,  -40,  -24,  -15,  -10,   -6,   -2,    1,    6,   11,   14,   19,   40,   45,   50,   55,   60,   65,   70,   70,   70,   70,   70,   70,   70},
+		[ENDGAME] = { -158, -136, -119, -101,  -50,  -33,  -25,   -4,   18,   23,   27,   33,   38,   42,   46,   60,   65,   70,   75,   80,   85,   90,   90,   90,   90,   90,   90,   90}
 	},
 	.virtualMobilityBonus = {
-		[MIDDLEGAME] = {   95,   84,   77,   73,   69,   52,   31,   13,    3,   -7,  -12,  -18,  -23,  -29,  -35,  -41,  -47,  -53,  -58,  -62,  -67,  -72,  -73,  -71,  -72,  -69,  -70,  -68},
-		[ENDGAME] = {   70,   58,   54,   50,   46,   28,   23,   13,    9,    5,    1,   -8,  -12,  -17,  -21,  -25,  -30,  -35,  -39,  -44,  -49,  -54,  -54,  -55,  -56,  -56,  -57,  -57}
+		[MIDDLEGAME] = {   97,   83,   75,   71,   69,   54,   33,   16,    6,   -4,   -9,  -16,  -22,  -29,  -36,  -43,  -50,  -56,  -62,  -65,  -70,  -76,  -78,  -73,  -76,  -70,  -72,  -67},
+		[ENDGAME] = {   65,   51,   48,   44,   42,   26,   21,   11,    8,    6,    2,   -6,   -9,  -13,  -17,  -20,  -24,  -29,  -33,  -38,  -43,  -48,  -48,  -50,  -52,  -52,  -54,  -54}
 	},
-	.bishopPairBonus = {   23,   53},
+	.bishopPairBonus = {   21,   53},
 	.openFileRookBonus = {
-		[MIDDLEGAME] = {    2,    0,   -2,    8,    1,    6,   11,   36},
-		[ENDGAME] = {   -6,   -7,   -6,    9,    0,   -5,   -8,   -8}
+		[MIDDLEGAME] = {    5,    3,   -2,    9,    2,    7,   13,   34},
+		[ENDGAME] = {   -5,   -7,   -5,    9,    0,   -4,   -7,   -6}
 	},
 	.passedPawnBonus = {
-		[MIDDLEGAME] = {    7,   3,   2,   0,    8,   -3,    1,    4},
-		[ENDGAME] = {    0,    3,     4,    4,    8,    2,    7,    4}
+		[MIDDLEGAME] = {    0,    9,   13,   16,   32,   67,   97,    0},
+		[ENDGAME] = {    0,   13,   18,   24,   62,   97,  133,    0}
 	},
 	.doubledPawnBonus = {
-		[MIDDLEGAME] = {    4,    4,    3,   -1,    0,    4,    1,    0},
-		[ENDGAME] = {   -4,   -2,   -3,   -4,    1,   -1,   -1,   -9}
+		[MIDDLEGAME] = {    2,    2,    1,   -3,   -2,    4,   -1,   -2},
+		[ENDGAME] = {   -8,   -5,   -5,   -5,    0,   -3,   -4,  -12}
 	},
 	.isolatedPawnBonus = {
-		[MIDDLEGAME] = {   -4,   -6,   -3,   -7,   -7,    2,   -3,   -4},
-		[ENDGAME] = {    0,    1,    4,   -5,    2,    6,    7,   -2}
+		[MIDDLEGAME] = {   -4,   -8,   -4,   -9,   -8,    1,   -4,   -3},
+		[ENDGAME] = {    2,   -1,    3,   -6,    0,    5,    5,   -1}
 	},
-	.tempo = {   10,   10}
+	.tempo = {    10,   10}
 };
-
 
 evalParameters is_param_eg = {
     .genericPieceValues[ENDGAME] = { [0 ... PIECE_TYPE_COUNT - 1] = 1 },
     .rawPieceTables[ENDGAME] = { [0 ... 5] = { [0 ... 63] = 1 } },
-    .virtualMobilityBonus[ENDGAME] = { [0 ... 27] = 1 },
+
     .knightMobilityBonus[ENDGAME] = { [0 ... 8] = 1 },
     .bishopMobilityBonus[ENDGAME] = { [0 ... 13] = 1 },
     .rookMobilityBonus[ENDGAME] = { [0 ... 14] = 1 },
     .queenMobilityBonus[ENDGAME] = { [0 ... 27] = 1 },
+    .virtualMobilityBonus[ENDGAME] = { [0 ... 27] = 1 },
+
+	.bishopPairBonus[ENDGAME] = 1,
     .openFileRookBonus[ENDGAME] = { [0 ... 7] = 1 },
+
     .passedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
     .doubledPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
     .isolatedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
+	
     .tempo[ENDGAME] = 1
 };
 
@@ -197,7 +206,7 @@ int initHCE = 0;
 int pieceBonusTable[PHASE_COUNT][PIECE_COUNT][64];
 
 //Other tables
-uint64_t bordering_files[8];
+uint64_t bordering_files[COLUMN_COUNT];
 
 void init_HCE_tables()
 {
@@ -212,7 +221,7 @@ void init_HCE_tables()
             for(int square = 0; square < 64; square++)
             {
                 pieceBonusTable[gamephase][piece][square] = hce_params.rawPieceTables[gamephase][piece / 2][FLIP_SQUARE(square)] + hce_params.genericPieceValues[gamephase][piece / 2];
-                pieceBonusTable[gamephase][piece + 1][square] = hce_params.rawPieceTables[gamephase][piece / 2][square] + hce_params.genericPieceValues[gamephase][piece / 2];
+                pieceBonusTable[gamephase][piece + 1][square] = hce_params.rawPieceTables[gamephase][piece / 2][MIRROR_SQUARE(square)] + hce_params.genericPieceValues[gamephase][piece / 2];
             }
         }
     }
@@ -268,15 +277,13 @@ void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endg
 	}
 
 	//Open rook file.
-    uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];
-
     uint64_t whiteRooks = board->pieces[WHITE_ROOK];
     uint64_t blackRooks = board->pieces[BLACK_ROOK];
 
     while(whiteRooks)
     {
         int column = getColumn(__builtin_ctzll(whiteRooks));
-        uint64_t pawns_col = pawnMask & board_file[column];
+        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
 
         if(!pawns_col)
         {
@@ -290,12 +297,14 @@ void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endg
     while(blackRooks)
     {
         int column = getColumn(__builtin_ctzll(blackRooks));
-        uint64_t pawns_col = pawnMask & board_file[column];
+        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
+
+		int mirroredColumn = MIRROR_SQUARE(column);
     
         if(!pawns_col)
         {
-            eval[MIDDLEGAME] -= hce_params.openFileRookBonus[MIDDLEGAME][column];
-            eval[ENDGAME] -= hce_params.openFileRookBonus[ENDGAME][column];
+            eval[MIDDLEGAME] -= hce_params.openFileRookBonus[MIDDLEGAME][mirroredColumn];
+            eval[ENDGAME] -= hce_params.openFileRookBonus[ENDGAME][mirroredColumn];
         }
 
         blackRooks &= (blackRooks - 1);
@@ -319,13 +328,15 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
     uint64_t mask = whitePawns;
     while(mask)
     {
-        int column = getColumn(__builtin_ctzll(mask));
+		int sq = __builtin_ctzll(mask);
+        int column = getColumn(sq);
+		int row = getRow(sq);
         
         //Passed Pawns
         if((blackPawns & board_file[column]) == 0)
         {
-            eval[MIDDLEGAME] += hce_params.passedPawnBonus[MIDDLEGAME][column];
-            eval[ENDGAME] += hce_params.passedPawnBonus[ENDGAME][column];
+            eval[MIDDLEGAME] += hce_params.passedPawnBonus[MIDDLEGAME][row];
+            eval[ENDGAME] += hce_params.passedPawnBonus[ENDGAME][row];
         }
 
         //Doubled pawns
@@ -348,28 +359,33 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
     mask = blackPawns;
     while(mask)
     {
-        int column = getColumn(__builtin_ctzll(mask));
+		int sq = __builtin_ctzll(mask);
+        int column = getColumn(sq);
+		int row = getRow(sq);
+
+		int mirroredColumn = MIRROR_SQUARE(column);
+		int mirroredRow = MIRROR_SQUARE(row);
         
         //Passed Pawns
         if((whitePawns & board_file[column]) == 0)
         {
-            eval[MIDDLEGAME] -= hce_params.passedPawnBonus[MIDDLEGAME][column];
-            eval[ENDGAME] -= hce_params.passedPawnBonus[ENDGAME][column];
+            eval[MIDDLEGAME] -= hce_params.passedPawnBonus[MIDDLEGAME][mirroredRow];
+            eval[ENDGAME] -= hce_params.passedPawnBonus[ENDGAME][mirroredRow];
         }
         
         //Doubled pawns
         if(__builtin_popcountll(blackPawns & board_file[column]) > 1)
         {
-            eval[MIDDLEGAME] -= hce_params.doubledPawnBonus[MIDDLEGAME][column];
-            eval[ENDGAME] -= hce_params.doubledPawnBonus[ENDGAME][column];
+            eval[MIDDLEGAME] -= hce_params.doubledPawnBonus[MIDDLEGAME][mirroredColumn];
+            eval[ENDGAME] -= hce_params.doubledPawnBonus[ENDGAME][mirroredColumn];
         }
 
         
         //Isolated Pawns
-        if((whitePawns & bordering_files[column]) == 0)
+        if((blackPawns & bordering_files[column]) == 0)
         {
-            eval[MIDDLEGAME] -= hce_params.isolatedPawnBonus[MIDDLEGAME][column];
-            eval[ENDGAME] -= hce_params.isolatedPawnBonus[ENDGAME][column];
+            eval[MIDDLEGAME] -= hce_params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
+            eval[ENDGAME] -= hce_params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
 
         mask &= mask - 1;

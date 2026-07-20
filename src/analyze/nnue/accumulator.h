@@ -16,8 +16,6 @@ static inline uint64_t mirrorBoard(uint64_t x)
    return x;
 }
 
-#define MIRROR_SQUARE(x) x^=7
-
 //Main thread accumulators
 extern accumulator* playerAccumulator;
 extern accumulatorRefreshTable* playingRefreshTable;

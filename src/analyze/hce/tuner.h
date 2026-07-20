@@ -38,11 +38,11 @@ typedef union {
         double virtualMobilityBonus[PHASE_COUNT][28];
 
         double bishopPairBonus[PHASE_COUNT];
-        double openFileRookBonus[PHASE_COUNT][8];
+        double openFileRookBonus[PHASE_COUNT][COLUMN_COUNT];
 
-        double passedPawnBonus[PHASE_COUNT][8];
-        double doubledPawnBonus[PHASE_COUNT][8];
-        double isolatedPawnBonus[PHASE_COUNT][8];
+        double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
+        double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         
         double tempo[PHASE_COUNT];
     };

@@ -13,6 +13,7 @@
 #define COLOR(x) (x&1)
 #define FLIP_COLOR(x) (x^1)
 #define FLIP_SQUARE(x) (x^56)
+#define MIRROR_SQUARE(x) (x^7)
 
 #define ISWHITE(piece) ((piece&1) == WHITE)
 #define ISBLACK(piece) ((piece&1) == BLACK)
@@ -96,6 +97,9 @@
 
 #define DARK_SQUARES 0xAA55AA55AA55AA55
 #define LIGHT_SQUARES 0x55AA55AA55AA55AA
+
+#define ROW_COUNT 8
+#define COLUMN_COUNT 8
 
 extern uint64_t board_file[8];
 extern uint64_t board_rank[8];

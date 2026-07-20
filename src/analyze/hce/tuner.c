@@ -31,8 +31,6 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     }
     fprintf(output, "\t},\n");
 
-    fprintf(output, "\t//For simplicity, these arrays represent white's view of the board when viewed on a text editor.\n");
-    fprintf(output, "\t//a1 is bottomleft, h8 is topright.\n");
     fprintf(output, "\t.rawPieceTables = {\n");
 
 
@@ -43,12 +41,12 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
         for(int pc = 0; pc < 6; pc++)
         {
             fprintf(output, "\t\t\t[%s / 2] = {\n", piece_names[pc]);
-            for(int row = 0; row < 8; row++) 
+            for(int row = 0; row < ROW_COUNT; row++) 
             {
                 fprintf(output, "\t\t\t\t");
-                for(int col = 0; col < 8; col++) 
+                for(int col = 0; col < COLUMN_COUNT; col++) 
                 {
-                    int idx = row * 8 + col;
+                    int idx = row * COLUMN_COUNT + col;
                     fprintf(output, "%5d%s", params.rawPieceTables[phase][pc][idx], (idx == 63) ? "" : ",");
                 }
                 fprintf(output, "\n");
@@ -115,7 +113,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < 8; column++)
+        for(int column = 0; column < COLUMN_COUNT; column++)
             fprintf(output, "%5d%s", params.openFileRookBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
@@ -125,7 +123,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < 8; column++)
+        for(int column = 0; column < COLUMN_COUNT; column++)
             fprintf(output, "%5d%s", params.passedPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
@@ -135,7 +133,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < 8; column++)
+        for(int column = 0; column < COLUMN_COUNT; column++)
             fprintf(output, "%5d%s", params.doubledPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
@@ -145,7 +143,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
         fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < 8; column++)
+        for(int column = 0; column < COLUMN_COUNT; column++)
             fprintf(output, "%5d%s", params.isolatedPawnBonus[phase][column], (column == 7) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
@@ -190,16 +188,16 @@ void initPSQTCoefficients(bitboard* board, evalParameters* coefficients, evalPar
         int pieceIndex = findPieceOnSquare(board, sq) / 2;
 
         coefficients->genericPieceValues[MIDDLEGAME][pieceIndex]--;
-        coefficients->rawPieceTables[MIDDLEGAME][pieceIndex][sq]--;
+        coefficients->rawPieceTables[MIDDLEGAME][pieceIndex][MIRROR_SQUARE(sq)]--;
 
         coefficients->genericPieceValues[ENDGAME][pieceIndex]--;
-        coefficients->rawPieceTables[ENDGAME][pieceIndex][sq]--;
+        coefficients->rawPieceTables[ENDGAME][pieceIndex][MIRROR_SQUARE(sq)]--;
 
         *mgScore -= params.genericPieceValues[MIDDLEGAME][pieceIndex];
-        *mgScore -= params.rawPieceTables[MIDDLEGAME][pieceIndex][sq];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][pieceIndex][MIRROR_SQUARE(sq)];
         
         *egScore -= params.genericPieceValues[ENDGAME][pieceIndex];
-        *egScore -= params.rawPieceTables[ENDGAME][pieceIndex][sq];
+        *egScore -= params.rawPieceTables[ENDGAME][pieceIndex][MIRROR_SQUARE(sq)];
 
         mask &= (mask - 1);
     }
@@ -403,14 +401,13 @@ void initSimplePieceDetailCoefficients(bitboard* board, evalParameters* coeffici
 	}
 
     //Rook open file bonuses
-    uint64_t pawnMask = board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN];
     uint64_t allyRooks = board->pieces[WHITE_ROOK];
     uint64_t enemyRooks = board->pieces[BLACK_ROOK];
 
     while(allyRooks)
     {
         int column = getColumn(__builtin_ctzll(allyRooks));
-        uint64_t pawns_col = pawnMask & board_file[column];
+        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
 
         if(!pawns_col)
         {
@@ -427,15 +424,16 @@ void initSimplePieceDetailCoefficients(bitboard* board, evalParameters* coeffici
     while(enemyRooks)
     {
         int column = getColumn(__builtin_ctzll(enemyRooks));
-        uint64_t pawns_col = pawnMask & board_file[column];
+		int mirroredColumn = MIRROR_SQUARE(column);
+        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
     
         if(!pawns_col)
         {
-            coefficients->openFileRookBonus[MIDDLEGAME][column]--;
-            coefficients->openFileRookBonus[ENDGAME][column]--;
+            coefficients->openFileRookBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->openFileRookBonus[ENDGAME][mirroredColumn]--;
 
-            *mgScore -= params.openFileRookBonus[MIDDLEGAME][column];
-            *egScore -= params.openFileRookBonus[ENDGAME][column];
+            *mgScore -= params.openFileRookBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= params.openFileRookBonus[ENDGAME][mirroredColumn];
         }
 
         enemyRooks &= (enemyRooks - 1);
@@ -451,16 +449,18 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     uint64_t mask = allyPawns;
     while(mask)
     {
-        int column = getColumn(__builtin_ctzll(mask));
+		int sq = __builtin_ctzll(mask);
+        int column = getColumn(sq);
+		int row = getRow(sq);
         
         //Passed Pawns
         if((enemyPawns & board_file[column]) == 0)
         {
-            coefficients->passedPawnBonus[MIDDLEGAME][column]++;
-            coefficients->passedPawnBonus[ENDGAME][column]++;
+            coefficients->passedPawnBonus[MIDDLEGAME][row]++;
+            coefficients->passedPawnBonus[ENDGAME][row]++;
             
-            *mgScore += params.passedPawnBonus[MIDDLEGAME][column];
-            *egScore += params.passedPawnBonus[ENDGAME][column];
+            *mgScore += params.passedPawnBonus[MIDDLEGAME][row];
+            *egScore += params.passedPawnBonus[ENDGAME][row];
         }
 
         //Doubled pawns
@@ -489,38 +489,43 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     mask = enemyPawns;
     while(mask)
     {
-        int column = getColumn(__builtin_ctzll(mask));
+		int sq = __builtin_ctzll(mask);
+        int column = getColumn(sq);
+		int row = getRow(sq);
+
+		int mirroredColumn = MIRROR_SQUARE(column);
+		int mirroredRow = MIRROR_SQUARE(row);
 
         
         //Passed Pawns
         if((allyPawns & board_file[column]) == 0)
         {
-            coefficients->passedPawnBonus[MIDDLEGAME][column]--;
-            coefficients->passedPawnBonus[ENDGAME][column]--;
+            coefficients->passedPawnBonus[MIDDLEGAME][mirroredRow]--;
+            coefficients->passedPawnBonus[ENDGAME][mirroredRow]--;
             
-            *mgScore -= params.passedPawnBonus[MIDDLEGAME][column];
-            *egScore -= params.passedPawnBonus[ENDGAME][column];
+            *mgScore -= params.passedPawnBonus[MIDDLEGAME][mirroredRow];
+            *egScore -= params.passedPawnBonus[ENDGAME][mirroredRow];
         }
         
         //Doubled pawns
         if(__builtin_popcountll(enemyPawns & board_file[column]) > 1)
         {
-            coefficients->doubledPawnBonus[MIDDLEGAME][column]--;
-            coefficients->doubledPawnBonus[ENDGAME][column]--;
+            coefficients->doubledPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->doubledPawnBonus[ENDGAME][mirroredColumn]--;
             
-            *mgScore -= params.doubledPawnBonus[MIDDLEGAME][column];
-            *egScore -= params.doubledPawnBonus[ENDGAME][column];
+            *mgScore -= params.doubledPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= params.doubledPawnBonus[ENDGAME][mirroredColumn];
         }
 
         
         //Isolated Pawns
-        if((allyPawns & bordering_files[column]) == 0)
+        if((enemyPawns & bordering_files[column]) == 0)
         {
-            coefficients->isolatedPawnBonus[MIDDLEGAME][column]--;
-            coefficients->isolatedPawnBonus[ENDGAME][column]--;
+            coefficients->isolatedPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->isolatedPawnBonus[ENDGAME][mirroredColumn]--;
             
-            *mgScore -= params.isolatedPawnBonus[MIDDLEGAME][column];
-            *egScore -= params.isolatedPawnBonus[ENDGAME][column];
+            *mgScore -= params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
 
         mask &= mask - 1;
@@ -537,6 +542,26 @@ void initCoefficients(bitboard* board, evalParameters* coefficients, evalParamet
     initMobilityCoefficients(board, coefficients, params, mgScore, egScore);
     initSimplePieceDetailCoefficients(board, coefficients, params, mgScore, egScore);
     initPawnCoefficients(board, coefficients, params, mgScore, egScore);
+
+    //Filter out things not being tuned.
+
+    //memset(coefficients->genericPieceValues, 0, sizeof(coefficients->genericPieceValues));
+    //memset(coefficients->rawPieceTables, 0, sizeof(coefficients->rawPieceTables));
+    
+    //memset(coefficients->knightMobilityBonus, 0, sizeof(coefficients->knightMobilityBonus));
+    //memset(coefficients->bishopMobilityBonus, 0, sizeof(coefficients->bishopMobilityBonus));
+    //memset(coefficients->rookMobilityBonus, 0, sizeof(coefficients->rookMobilityBonus));
+    //memset(coefficients->queenMobilityBonus, 0, sizeof(coefficients->queenMobilityBonus));
+    //memset(coefficients->virtualMobilityBonus, 0, sizeof(coefficients->virtualMobilityBonus));
+    
+    //memset(coefficients->bishopPairBonus, 0, sizeof(coefficients->bishopPairBonus));
+    //memset(coefficients->openFileRookBonus, 0, sizeof(coefficients->openFileRookBonus));
+    
+    //memset(coefficients->passedPawnBonus, 0, sizeof(coefficients->passedPawnBonus));
+    //memset(coefficients->doubledPawnBonus, 0, sizeof(coefficients->doubledPawnBonus));
+    //memset(coefficients->isolatedPawnBonus, 0, sizeof(coefficients->isolatedPawnBonus));
+    
+    //memset(coefficients->tempo, 0, sizeof(coefficients->tempo));
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
@@ -778,7 +803,7 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
     printf("Initial Error = %e\n", getError(tuner_entries, K));
     print_parameters(output, &currentParameters, &deltaWeights);
 
-    for(int epoch = 0; epoch < epochs; epoch++)
+    for(int epoch = 1; epoch < epochs; epoch++)
     {
         if(epoch < end_lr_epoch)
         {
@@ -810,10 +835,13 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
 
         double error = getError(tuner_entries, K);
 
-        printf("Epoch %d (LR=%g): Error = %e\n", epoch, lr, error);
+        printf("\rEpoch %d (LR=%g): Error = %e", epoch, lr, error);
 
-        if(epoch && epoch % 25 == 0)
+        if(epoch % 25 == 0)
+        {
+            printf("\n");
             print_parameters(output, &currentParameters, &deltaWeights);
+        }
     }
 
     printf("\nTuning complete!\n");

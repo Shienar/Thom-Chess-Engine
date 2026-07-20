@@ -5,7 +5,7 @@
 #include <string.h>
 #include <math.h>
 
-uint64_t board_file[8] = {
+uint64_t board_file[COLUMN_COUNT] = {
     (0x0101010101010101 << 0),
     (0x0101010101010101 << 1),
     (0x0101010101010101 << 2),
@@ -16,7 +16,7 @@ uint64_t board_file[8] = {
     (0x0101010101010101 << 7)
 };
 
-uint64_t board_rank[8] = {
+uint64_t board_rank[ROW_COUNT] = {
     (0xFFULL << 0),
     (0xFFULL << 8),
     (0xFFULL << 16),
@@ -103,9 +103,9 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
 
     char rows[8][9] = {'\0'};
 
-    for(int row = 0; row < 8; row++)
+    for(int row = 0; row < ROW_COUNT; row++)
     {
-        for(int column = 0; column < 8; column++)
+        for(int column = 0; column < COLUMN_COUNT; column++)
         {
             int columnIndex = 0;
             for(columnIndex = 0; columnIndex < column; columnIndex++)
@@ -189,7 +189,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     for(int pc = 0; pc < PIECE_COUNT; pc++) board->pieces[pc] = 0;
     for(int side = 0; side < 2; side++) board->pieces_side[side] = 0;
 
-    for(int row = 0; row < 8; row++)
+    for(int row = 0; row < ROW_COUNT; row++)
     {
         if(boardStrings[row][0] != '8')
         {

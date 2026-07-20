@@ -22,11 +22,12 @@ The training kernels require HIP SDK to run. They were created specifically for 
 
 ### ACKNOWLEDGEMENTS:
 
-- The engine uses the gm2600.bin polyglot opening book from Scid vs PC.
-- Ronald de Man's sygyzy tablebase is used for endgame analysis. A tablebase generator is available at https://github.com/syzygy1/tb
-- Andy Grant's sygyzy probing tool Pyrrhic is used to probe the sygyzy files. It is available at https://github.com/AndyGrant/Pyrrhic
-- The chess programming wiki (https://www.chessprogramming.org/) contains a lot of valuable information that was very helpful to me when I started this project.
+- The engine is currenlty using the gm2600.bin polyglot opening book from Scid vs PC.
+- Ronald de Man's sygyzy tablebase is used for endgame analysis.
+- Andy Grant's sygyzy probing tool [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) is used to probe the sygyzy files.
 - Dominik Klein's book "Neural Networks for Chess" helped me get started on understanding chess NNUEs. You can find it at https://github.com/asdfjkl/neural_network_chess
-- Training data from https://robotmoon.com/nnue-training-data/ was used during the development of the training pipeline. Networks that were trained in the debugging phase were discarded. In the interests of originality, the engine will train its uninitialized weights on data generated from its own HCE.
-- Andrew Grant's modernized texel tuning method was used for tuning the HCE weights. (https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf)
-- The lichess-big3-resolved.book dataset was used for tuning.
+- [Stockfish training data](https://robotmoon.com/nnue-training-data/) was used during the development of the training pipeline. Networks that were trained in the debugging phase were discarded. In the interests of originality, the engine will train its uninitialized weights on data generated from its own HCE.
+- [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
+- The lichess-big3-resolved.book dataset was used for tuning the HCE.
+
+### 

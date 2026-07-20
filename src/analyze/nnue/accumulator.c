@@ -199,7 +199,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
         int ksq = (side == WHITE) ? board->kingSquare[WHITE] : FLIP_SQUARE(board->kingSquare[BLACK]);
 
         //Mirroring
-        if(getColumn(ksq) > 3) { MIRROR_SQUARE(fromSq); MIRROR_SQUARE(toSq); }
+        if(getColumn(ksq) > 3) { fromSq = MIRROR_SQUARE(fromSq); toSq = MIRROR_SQUARE(toSq); }
 
         pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(pieceOffset) / 2;
 
@@ -277,7 +277,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
                 capturedPieceSquare = FLIP_SQUARE(capturedPieceSquare);
             }
             
-            if(getColumn(ksq) > 3) MIRROR_SQUARE(capturedPieceSquare);
+            if(getColumn(ksq) > 3) capturedPieceSquare = MIRROR_SQUARE(capturedPieceSquare);
 
             capturedPieceOffset = ISWHITE(capturedPieceOffset) ? PIECE(capturedPieceOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(capturedPieceOffset) / 2;
             int capturedInputNodeIndex = (BITBOARDS_PER_INPUT_SIDE * side) + (PIECE_COUNT * kingBuckets[ksq]) + capturedPieceOffset;

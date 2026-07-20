@@ -18,15 +18,14 @@ typedef union {
         int bishopMobilityBonus[PHASE_COUNT][14];
         int rookMobilityBonus[PHASE_COUNT][15];
         int queenMobilityBonus[PHASE_COUNT][28];
-        
         int virtualMobilityBonus[PHASE_COUNT][28];
 
         int bishopPairBonus[PHASE_COUNT];
-        int openFileRookBonus[PHASE_COUNT][8];
+        int openFileRookBonus[PHASE_COUNT][COLUMN_COUNT];
 
-        int passedPawnBonus[PHASE_COUNT][8];
-        int doubledPawnBonus[PHASE_COUNT][8];
-        int isolatedPawnBonus[PHASE_COUNT][8];
+        int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
+        int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         
         int tempo[PHASE_COUNT];
     };
@@ -38,7 +37,7 @@ typedef union {
 extern evalParameters hce_params; 
 extern evalParameters is_param_eg;
 extern int gamephasePieceValues[PIECE_COUNT];
-extern uint64_t bordering_files[8];
+extern uint64_t bordering_files[COLUMN_COUNT];
 
 void init_HCE_tables();
 int evaluatePhasedScore(bitboard* board, int middlegameScore, int endgameScore);
