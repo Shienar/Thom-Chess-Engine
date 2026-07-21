@@ -3,17 +3,18 @@
 #include <math.h>
 #include <float.h>
 
+
+evalParameters_fp currentParameters;
+tuningEntry* tuner_entries = NULL;
+int tuner_entry_count = 0;
+
 //Print out all of the parameters in C array format.
 //Just look at the declaration at the top of hce.c if this doesn't make sense.
-void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalParameters_fp* deltaParameters)
+void print_parameters(FILE* output, evalParameters_fp* currentParameters)
 {
     evalParameters params = {0};
     for(int i = 0; i < PARAMETER_COUNT; i++)
-    {
-        currentParameters->parameters[i] += deltaParameters->parameters[i];
-        deltaParameters->parameters[i] = 0.0;
         params.parameters[i] = round(currentParameters->parameters[i]);
-    }
     
     const char* phase_names[2] = {"MIDDLEGAME", "ENDGAME"};
     const char* piece_names[6] = {"PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING"};
@@ -175,56 +176,551 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters, evalPa
     fflush(output);
 }
 
-evalParameters_fp currentParameters;
-tuningEntry* tuner_entries = NULL;
-int tuner_entry_count = 0;
-
-void initPSQTCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
-    uint64_t mask = board->pieces_side[WHITE];
-    while(mask)
-    {
+	uint64_t mask = board->pieces[WHITE_PAWN];
+	while(mask)
+	{
         int sq = __builtin_ctzll(mask);
-        int pieceIndex = findPieceOnSquare(board, sq) / 2;
+        int column = getColumn(sq);
+		int row = getRow(sq);
 
-        coefficients->genericPieceValues[MIDDLEGAME][pieceIndex]++;
-        coefficients->rawPieceTables[MIDDLEGAME][pieceIndex][FLIP_SQUARE(sq)]++;
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][PAWN / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][PAWN / 2][FLIP_SQUARE(sq)]++;
 
-        coefficients->genericPieceValues[ENDGAME][pieceIndex]++;
-        coefficients->rawPieceTables[ENDGAME][pieceIndex][FLIP_SQUARE(sq)]++;
+        coefficients->genericPieceValues[ENDGAME][PAWN / 2]++;
+        coefficients->rawPieceTables[ENDGAME][PAWN / 2][FLIP_SQUARE(sq)]++;
 
-        *mgScore += params.genericPieceValues[MIDDLEGAME][pieceIndex];
-        *mgScore += params.rawPieceTables[MIDDLEGAME][pieceIndex][FLIP_SQUARE(sq)];
+        *mgScore += params.genericPieceValues[MIDDLEGAME][PAWN / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][PAWN / 2][FLIP_SQUARE(sq)];
         
-        *egScore += params.genericPieceValues[ENDGAME][pieceIndex];
-        *egScore += params.rawPieceTables[ENDGAME][pieceIndex][FLIP_SQUARE(sq)];
+        *egScore += params.genericPieceValues[ENDGAME][PAWN / 2];
+        *egScore += params.rawPieceTables[ENDGAME][PAWN / 2][FLIP_SQUARE(sq)];
 
-        mask &= (mask - 1);
-    }
-    mask = board->pieces_side[BLACK];
-    while(mask)
-    {
+		//Passed Pawns
+        if((board->pieces[BLACK_PAWN] & board_file[column]) == 0)
+        {
+            coefficients->passedPawnBonus[MIDDLEGAME][row]++;
+            coefficients->passedPawnBonus[ENDGAME][row]++;
+
+            *mgScore += hce_params.passedPawnBonus[MIDDLEGAME][row];
+            *egScore += hce_params.passedPawnBonus[ENDGAME][row];
+        }
+
+        //Doubled pawns
+        if(__builtin_popcountll(board->pieces[WHITE_PAWN] & board_file[column]) > 1)
+        {
+            coefficients->doubledPawnBonus[MIDDLEGAME][column]++;
+            coefficients->doubledPawnBonus[ENDGAME][column]++;
+
+            *mgScore += hce_params.doubledPawnBonus[MIDDLEGAME][column];
+            *egScore += hce_params.doubledPawnBonus[ENDGAME][column];
+        }
+
+		uint64_t borderingMask = board->pieces[WHITE_PAWN] & bordering_files[column];
+        //Isolated Pawns
+        if(!borderingMask)
+        {
+            coefficients->isolatedPawnBonus[MIDDLEGAME][column]++;
+            coefficients->isolatedPawnBonus[ENDGAME][column]++;
+
+            *mgScore += hce_params.isolatedPawnBonus[MIDDLEGAME][column];
+            *egScore += hce_params.isolatedPawnBonus[ENDGAME][column];
+        }
+		//Backward pawns
+		else if(row > 1 && (borderingMask & (sq - 1)) == 0 && borderingMask & board_rank[row + 1])
+		{
+            coefficients->backwardPawnBonus[MIDDLEGAME][column]++;
+            coefficients->backwardPawnBonus[ENDGAME][column]++;
+
+			*mgScore += hce_params.backwardPawnBonus[MIDDLEGAME][column];
+			*egScore += hce_params.backwardPawnBonus[ENDGAME][column];
+		}
+		//connected pawns
+		else if(borderingMask & board_rank[row - 1])
+		{
+            coefficients->connectedPawnBonus[MIDDLEGAME][column]++;
+            coefficients->connectedPawnBonus[ENDGAME][column]++;
+
+			*mgScore += hce_params.connectedPawnBonus[MIDDLEGAME][column];
+			*egScore += hce_params.connectedPawnBonus[ENDGAME][column];
+		}
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_PAWN];
+	while(mask)
+	{
         int sq = __builtin_ctzll(mask);
-        int pieceIndex = findPieceOnSquare(board, sq) / 2;
+        int column = getColumn(sq);
+		int row = getRow(sq);
+		
+		int mirroredColumn = MIRROR_SQUARE(column);
+		int mirroredRow = MIRROR_SQUARE(row);
 
-        coefficients->genericPieceValues[MIDDLEGAME][pieceIndex]--;
-        coefficients->rawPieceTables[MIDDLEGAME][pieceIndex][MIRROR_SQUARE(sq)]--;
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][PAWN / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][PAWN / 2][MIRROR_SQUARE(sq)]--;
 
-        coefficients->genericPieceValues[ENDGAME][pieceIndex]--;
-        coefficients->rawPieceTables[ENDGAME][pieceIndex][MIRROR_SQUARE(sq)]--;
+        coefficients->genericPieceValues[ENDGAME][PAWN / 2]--;
+        coefficients->rawPieceTables[ENDGAME][PAWN / 2][MIRROR_SQUARE(sq)]--;
 
-        *mgScore -= params.genericPieceValues[MIDDLEGAME][pieceIndex];
-        *mgScore -= params.rawPieceTables[MIDDLEGAME][pieceIndex][MIRROR_SQUARE(sq)];
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][PAWN / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][PAWN / 2][MIRROR_SQUARE(sq)];
         
-        *egScore -= params.genericPieceValues[ENDGAME][pieceIndex];
-        *egScore -= params.rawPieceTables[ENDGAME][pieceIndex][MIRROR_SQUARE(sq)];
+        *egScore -= params.genericPieceValues[ENDGAME][PAWN / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][PAWN / 2][MIRROR_SQUARE(sq)];
 
-        mask &= (mask - 1);
-    }
+		//Passed Pawns
+        if((board->pieces[WHITE_PAWN] & board_file[column]) == 0)
+        {
+            coefficients->passedPawnBonus[MIDDLEGAME][mirroredRow]--;
+            coefficients->passedPawnBonus[ENDGAME][mirroredRow]--;
+
+            *mgScore -= hce_params.passedPawnBonus[MIDDLEGAME][mirroredRow];
+            *egScore -= hce_params.passedPawnBonus[ENDGAME][mirroredRow];
+        }
+        
+        //Doubled pawns
+        if(__builtin_popcountll(board->pieces[BLACK_PAWN] & board_file[column]) > 1)
+        {
+            coefficients->doubledPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->doubledPawnBonus[ENDGAME][mirroredColumn]--;
+
+            *mgScore -= hce_params.doubledPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= hce_params.doubledPawnBonus[ENDGAME][mirroredColumn];
+        }
+
+		uint64_t borderingMask = board->pieces[BLACK_PAWN] & bordering_files[column];
+        //Isolated Pawns
+        if(!borderingMask)
+        {
+            coefficients->isolatedPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->isolatedPawnBonus[ENDGAME][mirroredColumn]--;
+
+            *mgScore -= hce_params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
+            *egScore -= hce_params.isolatedPawnBonus[ENDGAME][mirroredColumn];
+        }
+		//Backward pawns
+		else if(row < 6 && (borderingMask & ~(sq - 1)) == 0 && borderingMask & board_rank[row - 1])
+		{
+            coefficients->backwardPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->backwardPawnBonus[ENDGAME][mirroredColumn]--;
+
+			*mgScore -= hce_params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
+			*egScore -= hce_params.backwardPawnBonus[ENDGAME][mirroredColumn];
+		}
+		//connected pawns
+		else if(borderingMask & board_rank[row + 1])
+		{
+            coefficients->connectedPawnBonus[MIDDLEGAME][mirroredColumn]--;
+            coefficients->connectedPawnBonus[ENDGAME][mirroredColumn]--;
+
+			*mgScore -= hce_params.connectedPawnBonus[MIDDLEGAME][mirroredColumn];
+			*egScore -= hce_params.connectedPawnBonus[ENDGAME][mirroredColumn];
+		}
+
+		mask &= mask - 1;
+	}
+	
+	*mgScore += *mgScore;
+	*egScore += *egScore;
 }
 
-void initTempoCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
+	uint64_t mask = board->pieces[WHITE_KNIGHT];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][KNIGHT / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][KNIGHT / 2][FLIP_SQUARE(sq)]++;
+
+        coefficients->genericPieceValues[ENDGAME][KNIGHT / 2]++;
+        coefficients->rawPieceTables[ENDGAME][KNIGHT / 2][FLIP_SQUARE(sq)]++;
+
+        *mgScore += params.genericPieceValues[MIDDLEGAME][KNIGHT / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][KNIGHT / 2][FLIP_SQUARE(sq)];
+        
+        *egScore += params.genericPieceValues[ENDGAME][KNIGHT / 2];
+        *egScore += params.rawPieceTables[ENDGAME][KNIGHT / 2][FLIP_SQUARE(sq)];
+
+		//mobility
+		uint64_t moves = knightMoves(board->pieces_side[WHITE], sq);
+		int moveCount = __builtin_popcountll(moves);
+
+        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->knightMobilityBonus[ENDGAME][moveCount]++;
+
+		*mgScore += hce_params.knightMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += hce_params.knightMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_KNIGHT];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][KNIGHT / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][KNIGHT / 2][MIRROR_SQUARE(sq)]--;
+
+        coefficients->genericPieceValues[ENDGAME][KNIGHT / 2]--;
+        coefficients->rawPieceTables[ENDGAME][KNIGHT / 2][MIRROR_SQUARE(sq)]--;
+
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][KNIGHT / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][KNIGHT / 2][MIRROR_SQUARE(sq)];
+        
+        *egScore -= params.genericPieceValues[ENDGAME][KNIGHT / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][KNIGHT / 2][MIRROR_SQUARE(sq)];
+
+		//mobility
+		uint64_t moves = knightMoves(board->pieces_side[BLACK], sq);
+		int moveCount = __builtin_popcountll(moves);
+
+        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->knightMobilityBonus[ENDGAME][moveCount]--;
+
+		*mgScore -= hce_params.knightMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= hce_params.knightMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	*mgScore += *mgScore;
+	*egScore += *egScore;
+}
+
+void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+	uint64_t mask = board->pieces[WHITE_BISHOP];
+
+	//bishop pair
+	if(__builtin_popcountll(mask) >= 2)
+	{
+        coefficients->bishopPairBonus[MIDDLEGAME]++;
+        coefficients->bishopPairBonus[ENDGAME]++;
+
+		*mgScore += hce_params.bishopPairBonus[MIDDLEGAME];
+		*egScore += hce_params.bishopPairBonus[ENDGAME];
+	}
+
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][BISHOP / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][BISHOP / 2][FLIP_SQUARE(sq)]++;
+
+        coefficients->genericPieceValues[ENDGAME][BISHOP / 2]++;
+        coefficients->rawPieceTables[ENDGAME][BISHOP / 2][FLIP_SQUARE(sq)]++;
+
+        *mgScore += params.genericPieceValues[MIDDLEGAME][BISHOP / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][BISHOP / 2][FLIP_SQUARE(sq)];
+        
+        *egScore += params.genericPieceValues[ENDGAME][BISHOP / 2];
+        *egScore += params.rawPieceTables[ENDGAME][BISHOP / 2][FLIP_SQUARE(sq)];
+
+		//mobility
+		uint64_t moves = bishopMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int moveCount = __builtin_popcountll(moves);
+
+        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->bishopMobilityBonus[ENDGAME][moveCount]++;
+
+		*mgScore += hce_params.bishopMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += hce_params.bishopMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_BISHOP];
+
+	//bishop pair
+	if(__builtin_popcountll(mask) >= 2)
+	{
+        coefficients->bishopPairBonus[MIDDLEGAME]--;
+        coefficients->bishopPairBonus[ENDGAME]--;
+
+		*mgScore -= hce_params.bishopPairBonus[MIDDLEGAME];
+		*egScore -= hce_params.bishopPairBonus[ENDGAME];
+	}
+
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/sq value
+        coefficients->genericPieceValues[MIDDLEGAME][BISHOP / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][BISHOP / 2][MIRROR_SQUARE(sq)]--;
+
+        coefficients->genericPieceValues[ENDGAME][BISHOP / 2]--;
+        coefficients->rawPieceTables[ENDGAME][BISHOP / 2][MIRROR_SQUARE(sq)]--;
+
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][BISHOP / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][BISHOP / 2][MIRROR_SQUARE(sq)];
+        
+        *egScore -= params.genericPieceValues[ENDGAME][BISHOP / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][BISHOP / 2][MIRROR_SQUARE(sq)];
+		
+		//mobility
+		uint64_t moves = bishopMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		int moveCount = __builtin_popcountll(moves);
+
+        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->bishopMobilityBonus[ENDGAME][moveCount]--;
+
+		*mgScore -= hce_params.bishopMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= hce_params.bishopMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	*mgScore += *mgScore;
+	*egScore += *egScore;
+}
+
+void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+	uint64_t mask = board->pieces[WHITE_ROOK];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
+
+		//piece/sq value
+        coefficients->genericPieceValues[MIDDLEGAME][ROOK / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][ROOK / 2][FLIP_SQUARE(sq)]++;
+
+        coefficients->genericPieceValues[ENDGAME][ROOK / 2]++;
+        coefficients->rawPieceTables[ENDGAME][ROOK / 2][FLIP_SQUARE(sq)]++;
+
+        *mgScore += params.genericPieceValues[MIDDLEGAME][ROOK / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][ROOK / 2][FLIP_SQUARE(sq)];
+        
+        *egScore += params.genericPieceValues[ENDGAME][ROOK / 2];
+        *egScore += params.rawPieceTables[ENDGAME][ROOK / 2][FLIP_SQUARE(sq)];
+		
+		//open rook file
+        if(!pawns_col)
+        {
+            coefficients->openFileRookBonus[MIDDLEGAME][column]++;
+            coefficients->openFileRookBonus[ENDGAME][column]++;
+
+            *mgScore += hce_params.openFileRookBonus[MIDDLEGAME][column];
+            *egScore += hce_params.openFileRookBonus[ENDGAME][column];
+        }
+
+		//mobility
+		uint64_t moves = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int moveCount = __builtin_popcountll(moves);
+		
+        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->rookMobilityBonus[ENDGAME][moveCount]++;
+
+		*mgScore += hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += hce_params.rookMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_ROOK];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
+		
+		//piece/sq value
+        coefficients->genericPieceValues[MIDDLEGAME][ROOK / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][ROOK / 2][MIRROR_SQUARE(sq)]--;
+
+        coefficients->genericPieceValues[ENDGAME][ROOK / 2]--;
+        coefficients->rawPieceTables[ENDGAME][ROOK / 2][MIRROR_SQUARE(sq)]--;
+
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][ROOK / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][ROOK / 2][MIRROR_SQUARE(sq)];
+        
+        *egScore -= params.genericPieceValues[ENDGAME][ROOK / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][ROOK / 2][MIRROR_SQUARE(sq)];
+		
+		//open rook file
+        if(!pawns_col)
+        {
+            coefficients->openFileRookBonus[MIDDLEGAME][column]--;
+            coefficients->openFileRookBonus[ENDGAME][column]--;
+
+            *mgScore -= hce_params.openFileRookBonus[MIDDLEGAME][column];
+            *egScore -= hce_params.openFileRookBonus[ENDGAME][column];
+        }
+		
+		//mobility
+		uint64_t moves = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		int moveCount = __builtin_popcountll(moves);
+		
+        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->rookMobilityBonus[ENDGAME][moveCount]--;
+
+		*mgScore -= hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= hce_params.rookMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	*mgScore += *mgScore;
+	*egScore += *egScore;
+}
+
+void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+	uint64_t mask = board->pieces[WHITE_QUEEN];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][QUEEN / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][QUEEN / 2][FLIP_SQUARE(sq)]++;
+
+        coefficients->genericPieceValues[ENDGAME][QUEEN / 2]++;
+        coefficients->rawPieceTables[ENDGAME][QUEEN / 2][FLIP_SQUARE(sq)]++;
+
+        *mgScore += params.genericPieceValues[MIDDLEGAME][QUEEN / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][QUEEN / 2][FLIP_SQUARE(sq)];
+        
+        *egScore += params.genericPieceValues[ENDGAME][QUEEN / 2];
+        *egScore += params.rawPieceTables[ENDGAME][QUEEN / 2][FLIP_SQUARE(sq)];
+
+		//mobility
+		uint64_t moves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int moveCount = __builtin_popcountll(moves);
+
+        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]++;
+        coefficients->queenMobilityBonus[ENDGAME][moveCount]++;
+		
+		*mgScore += hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore += hce_params.queenMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_QUEEN];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][QUEEN / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][QUEEN / 2][MIRROR_SQUARE(sq)]--;
+
+        coefficients->genericPieceValues[ENDGAME][QUEEN / 2]--;
+        coefficients->rawPieceTables[ENDGAME][QUEEN / 2][MIRROR_SQUARE(sq)]--;
+
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][QUEEN / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][QUEEN / 2][MIRROR_SQUARE(sq)];
+        
+        *egScore -= params.genericPieceValues[ENDGAME][QUEEN / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][QUEEN / 2][MIRROR_SQUARE(sq)];
+
+		//mobility
+		uint64_t moves = queenMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		int moveCount = __builtin_popcountll(moves);
+		
+        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]--;
+        coefficients->queenMobilityBonus[ENDGAME][moveCount]--;
+
+		*mgScore -= hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
+		*egScore -= hce_params.queenMobilityBonus[ENDGAME][moveCount];
+
+		mask &= mask - 1;
+	}
+	
+	*mgScore += *mgScore;
+	*egScore += *egScore;
+}
+
+void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+
+	uint64_t mask = board->pieces[WHITE_KING];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][KING / 2]++;
+        coefficients->rawPieceTables[MIDDLEGAME][KING / 2][FLIP_SQUARE(sq)]++;
+
+        coefficients->genericPieceValues[ENDGAME][KING / 2]++;
+        coefficients->rawPieceTables[ENDGAME][KING / 2][FLIP_SQUARE(sq)]++;
+
+        *mgScore += params.genericPieceValues[MIDDLEGAME][KING / 2];
+        *mgScore += params.rawPieceTables[MIDDLEGAME][KING / 2][FLIP_SQUARE(sq)];
+        
+        *egScore += params.genericPieceValues[ENDGAME][KING / 2];
+        *egScore += params.rawPieceTables[ENDGAME][KING / 2][FLIP_SQUARE(sq)];
+
+		//virtual mobility
+		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+		
+        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]++;
+        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]++;
+
+		*mgScore += hce_params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
+		*egScore += hce_params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
+
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_KING];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        coefficients->genericPieceValues[MIDDLEGAME][KING / 2]--;
+        coefficients->rawPieceTables[MIDDLEGAME][KING / 2][MIRROR_SQUARE(sq)]--;
+
+        coefficients->genericPieceValues[ENDGAME][KING / 2]--;
+        coefficients->rawPieceTables[ENDGAME][KING / 2][MIRROR_SQUARE(sq)]--;
+
+        *mgScore -= params.genericPieceValues[MIDDLEGAME][KING / 2];
+        *mgScore -= params.rawPieceTables[MIDDLEGAME][KING / 2][MIRROR_SQUARE(sq)];
+        
+        *egScore -= params.genericPieceValues[ENDGAME][KING / 2];
+        *egScore -= params.rawPieceTables[ENDGAME][KING / 2][MIRROR_SQUARE(sq)];
+
+		//virtual mobility
+		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+		
+        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]--;
+        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]--;
+
+		*mgScore -= hce_params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
+		*egScore -= hce_params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
+
+		mask &= mask - 1;
+	}
+
+	*mgScore += *mgScore;
+	*egScore += *egScore;
+}
+
+void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+{
+    *mgScore = 0;
+    *egScore = 0;
+
     if(ISWHITE(board->turn))
     {
         coefficients->tempo[MIDDLEGAME]++;
@@ -241,386 +737,13 @@ void initTempoCoefficients(bitboard* board, evalParameters* coefficients, evalPa
         *mgScore -= params.tempo[MIDDLEGAME];
         *egScore -= params.tempo[ENDGAME];
     }
-}
 
-//Includes virtual mobility
-void initMobilityCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
-{
-	uint64_t whitePieces = board->pieces_side[WHITE];
-	uint64_t blackPieces = board->pieces_side[BLACK];
-
-	//Knight Mobility
-	uint64_t pieces = board->pieces[WHITE_KNIGHT];
-	while(pieces)
-	{
-		uint64_t moves = knightMoves(whitePieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-
-		*mgScore += params.knightMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore += params.knightMobilityBonus[ENDGAME][moveCount];
-
-        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]++;
-        coefficients->knightMobilityBonus[ENDGAME][moveCount]++;
-
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[BLACK_KNIGHT];
-	while(pieces)
-	{
-		uint64_t moves = knightMoves(blackPieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-
-		*mgScore -= params.knightMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore -= params.knightMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->knightMobilityBonus[MIDDLEGAME][moveCount]--;
-        coefficients->knightMobilityBonus[ENDGAME][moveCount]--;
-
-		pieces &= pieces - 1;
-	}
-
-	//Bishop Mobility
-	pieces = board->pieces[WHITE_BISHOP];
-	while(pieces)
-	{
-		uint64_t moves = bishopMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-
-		*mgScore += params.bishopMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore += params.bishopMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]++;
-        coefficients->bishopMobilityBonus[ENDGAME][moveCount]++;
-		
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[BLACK_BISHOP];
-	while(pieces)
-	{
-		uint64_t moves = bishopMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-
-		*mgScore -= params.bishopMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore -= params.bishopMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->bishopMobilityBonus[MIDDLEGAME][moveCount]--;
-        coefficients->bishopMobilityBonus[ENDGAME][moveCount]--;
-
-		pieces &= pieces - 1;
-	}
-
-	//Rook Mobility
-	pieces = board->pieces[WHITE_ROOK];
-	while(pieces)
-	{
-		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-		
-		*mgScore += params.rookMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore += params.rookMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]++;
-        coefficients->rookMobilityBonus[ENDGAME][moveCount]++;
-
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[BLACK_ROOK];
-	while(pieces)
-	{
-		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-		
-		*mgScore -= params.rookMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore -= params.rookMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->rookMobilityBonus[MIDDLEGAME][moveCount]--;
-        coefficients->rookMobilityBonus[ENDGAME][moveCount]--;
-
-		pieces &= pieces - 1;
-	}
-
-	//Queen Mobility
-	pieces = board->pieces[WHITE_QUEEN];
-	while(pieces)
-	{
-		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-		
-		*mgScore += params.queenMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore += params.queenMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]++;
-        coefficients->queenMobilityBonus[ENDGAME][moveCount]++;
-		
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[BLACK_QUEEN];
-	while(pieces)
-	{
-		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
-		int moveCount = __builtin_popcountll(moves);
-		
-		*mgScore -= params.queenMobilityBonus[MIDDLEGAME][moveCount];
-		*egScore -= params.queenMobilityBonus[ENDGAME][moveCount];
-        
-        coefficients->queenMobilityBonus[MIDDLEGAME][moveCount]--;
-        coefficients->queenMobilityBonus[ENDGAME][moveCount]--;
-
-		pieces &= pieces - 1;
-	}
-
-	//Virtual Mobility
-	pieces = board->pieces[WHITE_KING];
-	while(pieces)
-	{
-		uint64_t virtualMoves = queenMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
-		int virtualMoveCount = __builtin_popcountll(virtualMoves);
-		
-		*mgScore += params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
-		*egScore += params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
-        
-        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]++;
-        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]++;
-
-		pieces &= pieces - 1;
-	}
-	pieces = board->pieces[BLACK_KING];
-	while(pieces)
-	{
-		uint64_t virtualMoves = queenMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
-		int virtualMoveCount = __builtin_popcountll(virtualMoves);
-
-		*mgScore -= params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
-		*egScore -= params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
-        
-        coefficients->virtualMobilityBonus[MIDDLEGAME][virtualMoveCount]--;
-        coefficients->virtualMobilityBonus[ENDGAME][virtualMoveCount]--;
-
-		pieces &= pieces - 1;
-	}
-}
-
-void initSimplePieceDetailCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
-{
-    //Bishop pair bonuses
-	if(__builtin_popcountll(board->pieces[WHITE_BISHOP]) >= 2)
-	{
-        coefficients->bishopPairBonus[MIDDLEGAME]++;
-        coefficients->bishopPairBonus[ENDGAME]++;
-
-        *mgScore += params.bishopPairBonus[MIDDLEGAME];
-        *egScore += params.bishopPairBonus[ENDGAME];
-	}
-	if(__builtin_popcountll(board->pieces[BLACK_BISHOP]) >= 2)
-	{
-        coefficients->bishopPairBonus[MIDDLEGAME]--;
-        coefficients->bishopPairBonus[ENDGAME]--;
-
-        *mgScore -= params.bishopPairBonus[MIDDLEGAME];
-        *egScore -= params.bishopPairBonus[ENDGAME];
-	}
-
-    //Rook open file bonuses
-    uint64_t allyRooks = board->pieces[WHITE_ROOK];
-    uint64_t enemyRooks = board->pieces[BLACK_ROOK];
-
-    while(allyRooks)
-    {
-        int column = getColumn(__builtin_ctzll(allyRooks));
-        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
-
-        if(!pawns_col)
-        {
-            coefficients->openFileRookBonus[MIDDLEGAME][column]++;
-            coefficients->openFileRookBonus[ENDGAME][column]++;
-
-            *mgScore += params.openFileRookBonus[MIDDLEGAME][column];
-            *egScore += params.openFileRookBonus[ENDGAME][column];
-        }
-
-        allyRooks &= (allyRooks - 1);
-    }
-
-    while(enemyRooks)
-    {
-        int column = getColumn(__builtin_ctzll(enemyRooks));
-		int mirroredColumn = MIRROR_SQUARE(column);
-        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
-    
-        if(!pawns_col)
-        {
-            coefficients->openFileRookBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->openFileRookBonus[ENDGAME][mirroredColumn]--;
-
-            *mgScore -= params.openFileRookBonus[MIDDLEGAME][mirroredColumn];
-            *egScore -= params.openFileRookBonus[ENDGAME][mirroredColumn];
-        }
-
-        enemyRooks &= (enemyRooks - 1);
-    }
-
-}
-
-void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
-{
-    uint64_t allyPawns = board->pieces[WHITE_PAWN];
-    uint64_t enemyPawns = board->pieces[BLACK_PAWN];
-
-    uint64_t mask = allyPawns;
-    while(mask)
-    {
-		int sq = __builtin_ctzll(mask);
-        int column = getColumn(sq);
-		int row = getRow(sq);
-        
-        //Passed Pawns
-        if((enemyPawns & board_file[column]) == 0)
-        {
-            coefficients->passedPawnBonus[MIDDLEGAME][row]++;
-            coefficients->passedPawnBonus[ENDGAME][row]++;
-            
-            *mgScore += params.passedPawnBonus[MIDDLEGAME][row];
-            *egScore += params.passedPawnBonus[ENDGAME][row];
-        }
-
-        //Doubled pawns
-        if(__builtin_popcountll(allyPawns & board_file[column]) > 1)
-        {
-            coefficients->doubledPawnBonus[MIDDLEGAME][column]++;
-            coefficients->doubledPawnBonus[ENDGAME][column]++;
-            
-            *mgScore += params.doubledPawnBonus[MIDDLEGAME][column];
-            *egScore += params.doubledPawnBonus[ENDGAME][column];
-        }
-
-        uint64_t borderingMask = allyPawns & bordering_files[column];
-        //Isolated Pawns
-        if(!borderingMask)
-        {
-            coefficients->isolatedPawnBonus[MIDDLEGAME][column]++;
-            coefficients->isolatedPawnBonus[ENDGAME][column]++;
-            
-            *mgScore += params.isolatedPawnBonus[MIDDLEGAME][column];
-            *egScore += params.isolatedPawnBonus[ENDGAME][column];
-        }
-		//Backward pawns
-		else if((borderingMask & (sq - 1)) == 0)
-		{
-            coefficients->backwardPawnBonus[MIDDLEGAME][column]++;
-            coefficients->backwardPawnBonus[ENDGAME][column]++;
-            
-            *mgScore += params.backwardPawnBonus[MIDDLEGAME][column];
-            *egScore += params.backwardPawnBonus[ENDGAME][column];
-		}
-		//connected pawns
-		else if(borderingMask & board_rank[row - 1])
-		{
-            coefficients->connectedPawnBonus[MIDDLEGAME][column]++;
-            coefficients->connectedPawnBonus[ENDGAME][column]++;
-            
-            *mgScore += params.connectedPawnBonus[MIDDLEGAME][column];
-            *egScore += params.connectedPawnBonus[ENDGAME][column];
-		}
-
-        mask &= mask - 1;
-    }
-    
-    mask = enemyPawns;
-    while(mask)
-    {
-		int sq = __builtin_ctzll(mask);
-        int column = getColumn(sq);
-		int row = getRow(sq);
-
-		int mirroredColumn = MIRROR_SQUARE(column);
-		int mirroredRow = MIRROR_SQUARE(row);
-
-        
-        //Passed Pawns
-        if((allyPawns & board_file[column]) == 0)
-        {
-            coefficients->passedPawnBonus[MIDDLEGAME][mirroredRow]--;
-            coefficients->passedPawnBonus[ENDGAME][mirroredRow]--;
-            
-            *mgScore -= params.passedPawnBonus[MIDDLEGAME][mirroredRow];
-            *egScore -= params.passedPawnBonus[ENDGAME][mirroredRow];
-        }
-        
-        //Doubled pawns
-        if(__builtin_popcountll(enemyPawns & board_file[column]) > 1)
-        {
-            coefficients->doubledPawnBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->doubledPawnBonus[ENDGAME][mirroredColumn]--;
-            
-            *mgScore -= params.doubledPawnBonus[MIDDLEGAME][mirroredColumn];
-            *egScore -= params.doubledPawnBonus[ENDGAME][mirroredColumn];
-        }
-
-        uint64_t borderingMask = enemyPawns & bordering_files[column];
-        //Isolated Pawns
-        if(!borderingMask)
-        {
-            coefficients->isolatedPawnBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->isolatedPawnBonus[ENDGAME][mirroredColumn]--;
-            
-            *mgScore -= params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
-            *egScore -= params.isolatedPawnBonus[ENDGAME][mirroredColumn];
-        }
-		//Backward pawns
-		else if((borderingMask & ~(sq - 1)) == 0)
-		{
-            coefficients->backwardPawnBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->backwardPawnBonus[ENDGAME][mirroredColumn]--;
-            
-            *mgScore -= params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
-            *egScore -= params.backwardPawnBonus[ENDGAME][mirroredColumn];
-		}
-		//connected pawns
-		else if(borderingMask & board_rank[row + 1])
-		{
-            coefficients->connectedPawnBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->connectedPawnBonus[ENDGAME][mirroredColumn]--;
-            
-            *mgScore -= params.connectedPawnBonus[MIDDLEGAME][mirroredColumn];
-            *egScore -= params.connectedPawnBonus[ENDGAME][mirroredColumn];
-		}
-
-        mask &= mask - 1;
-    }
-}
-
-void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
-{
-    *mgScore = 0;
-    *egScore = 0;
-
-    initPSQTCoefficients(board, coefficients, params, mgScore, egScore);
-    initTempoCoefficients(board, coefficients, params, mgScore, egScore);
-    initMobilityCoefficients(board, coefficients, params, mgScore, egScore);
-    initSimplePieceDetailCoefficients(board, coefficients, params, mgScore, egScore);
     initPawnCoefficients(board, coefficients, params, mgScore, egScore);
-
-    //Filter out things not being tuned.
-
-    //memset(coefficients->genericPieceValues, 0, sizeof(coefficients->genericPieceValues));
-    //memset(coefficients->rawPieceTables, 0, sizeof(coefficients->rawPieceTables));
-    
-    //memset(coefficients->knightMobilityBonus, 0, sizeof(coefficients->knightMobilityBonus));
-    //memset(coefficients->bishopMobilityBonus, 0, sizeof(coefficients->bishopMobilityBonus));
-    //memset(coefficients->rookMobilityBonus, 0, sizeof(coefficients->rookMobilityBonus));
-    //memset(coefficients->queenMobilityBonus, 0, sizeof(coefficients->queenMobilityBonus));
-    //memset(coefficients->virtualMobilityBonus, 0, sizeof(coefficients->virtualMobilityBonus));
-    
-    //memset(coefficients->bishopPairBonus, 0, sizeof(coefficients->bishopPairBonus));
-    //memset(coefficients->openFileRookBonus, 0, sizeof(coefficients->openFileRookBonus));
-    
-    //memset(coefficients->passedPawnBonus, 0, sizeof(coefficients->passedPawnBonus));
-    //memset(coefficients->doubledPawnBonus, 0, sizeof(coefficients->doubledPawnBonus));
-    //memset(coefficients->isolatedPawnBonus, 0, sizeof(coefficients->isolatedPawnBonus));
-    //memset(coefficients->backwardPawnBonus, 0, sizeof(coefficients->backwardPawnBonus));
-    //memset(coefficients->connectedPawnBonus, 0, sizeof(coefficients->connectedPawnBonus));
-    
-    //memset(coefficients->tempo, 0, sizeof(coefficients->tempo));
+    initKnightCoefficients(board, coefficients, params, mgScore, egScore);
+    initBishopCoefficients(board, coefficients, params, mgScore, egScore);
+    initRookCoefficients(board, coefficients, params, mgScore, egScore);
+    initQueenCoefficients(board, coefficients, params, mgScore, egScore);
+    initKingCoefficients(board, coefficients, params, mgScore, egScore);
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
@@ -766,26 +889,9 @@ double computeOptimalK(tuningEntry* entries)
     return start;
 }
 
-double updateEvaluation(tuningEntry* oldEntry, evalParameters_fp deltaWeights)
+void updateSingleGradient(tuningEntry* entry, evalParameters_fp* gradient, double K)
 {
-    for(int i = 0; i < oldEntry->activeTupleCount; i++)
-    {
-        int index = oldEntry->activeTuples[i].index;
-        int coeff = oldEntry->activeTuples[i].coefficient;
-        
-        if(is_param_eg.parameters[index])
-            oldEntry->eg_score += coeff * deltaWeights.parameters[index];
-        else
-            oldEntry->mg_score += coeff * deltaWeights.parameters[index];
-    }
-
-	oldEntry->heuristic_eval = (oldEntry->phase[MIDDLEGAME] * oldEntry->mg_score + oldEntry->phase[ENDGAME] * oldEntry->eg_score) / 256;
-    return oldEntry->heuristic_eval;
-}
-
-void updateSingleGradient(tuningEntry* entry, evalParameters_fp* gradient, evalParameters_fp deltaWeights, double K)
-{
-    int eval = updateEvaluation(entry, deltaWeights);
+    int eval = entry->heuristic_eval;
     double s = sigmoidK(eval, K);
     double err = (entry->result - s) * s * (1 - s);
     double mgBase = err * entry->phaseFactors[MIDDLEGAME];
@@ -803,7 +909,7 @@ void updateSingleGradient(tuningEntry* entry, evalParameters_fp* gradient, evalP
     }
 }
 
-void computeGradient(tuningEntry* entries, evalParameters_fp* gradient, evalParameters_fp deltaWeights,  double K)
+void computeGradient(tuningEntry* entries, evalParameters_fp* gradient,  double K)
 {
     memset(gradient, 0, sizeof(evalParameters_fp));
 
@@ -813,10 +919,92 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient, evalPara
 
         #pragma omp for
         for(int i = 0; i < tuner_entry_count; i++)
-            updateSingleGradient(&entries[i], &local, deltaWeights, K);
+            updateSingleGradient(&entries[i], &local, K);
 
         for(int i = 0; i < PARAMETER_COUNT; i++)
             gradient->parameters[i] += local.parameters[i];
+    }
+}
+
+void zeroCenter(double* table, int size)
+{
+    double sum = 0.0;
+    for (int i = 0; i < size; i++)
+        sum += table[i];
+
+    double average = sum / size;
+    for (int i = 0; i < size; i++)
+        table[i] -= average;
+}
+
+void enforceMonotonicIncreasing(double* table,  int size)
+{
+    for (int i = 1; i < size; i++)
+        table[i] = _max(table[i - 1] + 1, table[i]);
+}
+
+void enforceMonotonicDecreasing(double* table,  int size)
+{
+    for (int i = 1; i < size; i++)
+        table[i] = _min(table[i - 1] - 1, table[i]);
+}
+
+void refreshEvaluations(evalParameters_fp* currentParameters, evalParameters_fp* deltaParameters)
+{
+    for(int i = 0; i < PARAMETER_COUNT; i++)
+        currentParameters->parameters[i] += deltaParameters->parameters[i];
+
+    //When initial weights are all zero (excepting 100/300/300/500/900 piece values), they tend to bleed together.
+    //
+    //I don't want a piece's mobility weights or square tables being in the range of [150, 250] with a raw piece value that is 
+    //200 lower than what it should be.
+    //
+    //This is an attempt to enforce some kind of intuitive understanding of what
+    //the weights are supposed to be doing.
+    for(int phase = 0; phase < PHASE_COUNT; phase++)\
+    {
+        zeroCenter(&currentParameters->rawPieceTables[phase][PAWN / 2][8], 48);
+
+        for(int pc = 1; pc < 6; pc++)
+            zeroCenter(currentParameters->rawPieceTables[phase][pc], 64);
+
+        zeroCenter(currentParameters->knightMobilityBonus[phase], 9);
+        enforceMonotonicIncreasing(currentParameters->knightMobilityBonus[phase], 9);
+
+        zeroCenter(currentParameters->bishopMobilityBonus[phase], 14);
+        enforceMonotonicIncreasing(currentParameters->bishopMobilityBonus[phase], 14);
+
+        zeroCenter(currentParameters->rookMobilityBonus[phase], 15);
+        enforceMonotonicIncreasing(currentParameters->rookMobilityBonus[phase], 15);
+        
+        zeroCenter(currentParameters->queenMobilityBonus[phase], 28);
+        enforceMonotonicIncreasing(currentParameters->queenMobilityBonus[phase], 28);
+
+        zeroCenter(currentParameters->virtualMobilityBonus[phase], 28);
+        enforceMonotonicDecreasing(currentParameters->virtualMobilityBonus[phase], 28);
+
+        enforceMonotonicIncreasing(&currentParameters->passedPawnBonus[phase][1], 6);
+    }
+
+
+    #pragma omp parallel for
+    for(int entryNum = 0; entryNum < tuner_entry_count; entryNum++)
+    {
+        tuningEntry* entry = &tuner_entries[entryNum];
+        entry->eg_score = 0;
+        entry->mg_score = 0;
+        for(int i = 0; i < entry->activeTupleCount; i++)
+        {
+            int index = entry->activeTuples[i].index;
+            int coeff = entry->activeTuples[i].coefficient;
+            
+            if(is_param_eg.parameters[index])
+                entry->eg_score += coeff * currentParameters->parameters[index];
+            else
+                entry->mg_score += coeff * currentParameters->parameters[index];
+        }
+
+        entry->heuristic_eval = (entry->phase[MIDDLEGAME] * entry->mg_score + entry->phase[ENDGAME] * entry->eg_score) / 256;
     }
 }
 
@@ -852,7 +1040,6 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
     }
     printf("K=%f\n", K);
     
-    evalParameters_fp deltaWeights = {0};
     evalParameters_fp firstMoments = {0};
     evalParameters_fp secondMoments = {0};
 
@@ -860,7 +1047,7 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
     int end_lr_epoch = _min(epochs, 2500);
 
     printf("Initial Error = %e\n", getError(tuner_entries, K));
-    print_parameters(output, &currentParameters, &deltaWeights);
+    print_parameters(output, &currentParameters);
 
     for(int epoch = 1; epoch < epochs; epoch++)
     {
@@ -871,7 +1058,7 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
         }
 
         evalParameters_fp gradient = {0};
-        computeGradient(tuner_entries, &gradient, deltaWeights, K);
+        computeGradient(tuner_entries, &gradient, K);
 
         double biasCorrection1 = 1.0 - pow(ADAM_BETA1, epoch + 1);
         double biasCorrection2 = 1.0 - pow(ADAM_BETA2, epoch + 1);
@@ -889,9 +1076,10 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
             double correctedFirstMoment = firstMoments.parameters[i] / biasCorrection1;
             double correctedSecondMoment = secondMoments.parameters[i] / biasCorrection2;
 
-            deltaWeights.parameters[i] -= (lr * correctedFirstMoment) / (sqrt(correctedSecondMoment) + 1e-8);
+            gradient.parameters[i] = -(lr * correctedFirstMoment) / (sqrt(correctedSecondMoment) + 1e-8);
         }
 
+        refreshEvaluations(&currentParameters, &gradient);
         double error = getError(tuner_entries, K);
 
         printf("\rEpoch %d (LR=%g): Error = %e", epoch, lr, error);
@@ -899,7 +1087,7 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
         if(epoch % 25 == 0)
         {
             printf("\n");
-            print_parameters(output, &currentParameters, &deltaWeights);
+            print_parameters(output, &currentParameters);
         }
     }
 

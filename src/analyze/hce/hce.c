@@ -9,183 +9,182 @@
 //Black row-based parameters also received MIRROR_SQUARE, since the math works out there as well given row=[0, 7].
 evalParameters hce_params = {
 	.genericPieceValues = {
-		[MIDDLEGAME] = {   79,  334,  349,  434,  980,    0},
-		[ENDGAME] = {   92,  314,  323,  558, 1059,    0}
+		[MIDDLEGAME] = {   81,  276,  301,  386,  888,    0},
+		[ENDGAME] = {  140,  344,  359,  633, 1144,    0}
 	},
 	.rawPieceTables = {
 		[MIDDLEGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				   74,  108,   74,  101,   80,   96,   24,  -10,
-				   -7,    3,   23,   21,   48,   59,   28,  -11,
-				  -15,    9,   -1,   13,   22,   14,   19,  -13,
-				  -24,   -4,   -3,   -1,   13,    8,   10,  -15,
-				  -24,    6,   -6,   -8,    6,   13,   26,  -15,
-				  -32,   -6,  -17,  -16,  -13,   10,   32,  -25,
+				   13,   39,   55,   76,   62,   31,  -11,   -6,
+				   15,    8,   40,   24,   34,   45,   -2,   11,
+				   -3,  -11,    2,    0,    6,   -6,  -18,   -6,
+				  -16,  -24,  -10,   -5,   -5,  -13,  -29,  -17,
+				  -14,  -21,  -15,  -17,  -14,  -18,  -30,  -16,
+				  -16,  -14,  -12,  -20,  -20,  -13,  -20,  -21,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				 -166, -115,  -51,  -44,   32,  -79,  -56, -122,
-				  -50,  -31,   46,   41,   24,   56,   -9,  -12,
-				  -26,   43,   43,   54,   72,  102,   57,   21,
-				   -8,   11,   15,   41,   30,   51,    9,   19,
-				   -6,    7,    7,   17,   17,   24,   19,  -10,
-				   -8,    2,    8,   19,   25,   10,   20,   -3,
-				  -11,  -30,    3,    2,   12,   14,   -5,  -17,
-				  -79,  -19,  -30,  -13,  -11,  -16,  -10,  -33
+				 -122, -118,  -59,  -26,    9,  -37,  -68, -110,
+				   -7,    1,   47,   30,   28,   59,   -3,    5,
+				   15,   40,   54,   67,   77,   63,   43,   15,
+				   15,   14,   43,   38,   34,   41,   13,   18,
+				   -5,    6,   17,   17,   22,   13,   18,   -9,
+				  -23,   -1,    3,   14,   18,    2,   -4,  -24,
+				  -18,  -21,   -9,    0,    0,  -13,  -23,  -14,
+				  -49,  -19,  -16,  -11,  -11,   -9,  -19,  -48
 			},
 			[BISHOP / 2] = {
-				  -39,  -29,  -68,  -65,  -50,  -49,  -10,  -34,
-				  -15,    1,  -16,  -17,   18,   26,    5,  -32,
-				  -15,   29,   27,   27,   19,   35,   30,    0,
-				  -10,   -6,    7,   21,   20,   16,   -3,  -11,
-				   -4,   -3,   -8,   24,   11,   -1,   -9,    7,
-				   -5,    6,    7,    5,    4,   14,   11,    3,
-				    1,   17,   17,   -3,    4,   18,   20,   -3,
-				  -11,    5,  -10,   -5,   -3,    1,   -8,   -5
+				  -38,  -41,  -50,  -73,  -67,  -44,  -30,  -34,
+				  -15,    5,   11,   10,    1,    0,    7,   -9,
+				   18,   23,   29,   26,   27,   36,   36,   20,
+				    2,   -2,   20,   28,   29,   16,    3,  -10,
+				   -5,   -1,   -8,   23,   17,   -1,  -10,    0,
+				    5,    3,    9,   -2,    6,    2,    6,   -6,
+				   -3,   15,   15,    6,   -6,    9,    8,    2,
+				    8,   18,   -5,  -12,   -9,  -14,    7,  -14
 			},
 			[ROOK / 2] = {
-				   22,   26,   20,   35,   42,   20,   29,   21,
-				   11,   10,   35,   50,   41,   42,   14,   23,
-				  -22,    8,    8,   19,   10,   27,   53,    6,
-				  -32,  -15,   -8,    4,    5,   17,   -3,  -18,
-				  -39,  -30,  -21,   -5,  -12,  -15,    3,  -28,
-				  -37,  -19,  -16,   -8,    2,    4,    5,  -20,
-				  -21,  -11,  -15,    3,    5,   12,   -3,  -42,
-				  -18,   -5,   -4,    8,    6,   -6,  -17,  -11
+				   23,   15,   18,   26,   25,   34,   11,   12,
+				   11,   19,   40,   39,   36,   38,    8,   10,
+				   -7,   22,   25,   22,   31,   18,   28,    0,
+				  -18,   -5,    4,    2,   -1,   -4,   -8,  -15,
+				  -25,  -19,  -17,   -6,  -13,  -22,  -24,  -33,
+				  -24,  -10,  -12,   -8,  -13,  -12,   -5,  -19,
+				  -31,  -22,   -8,   -6,   -7,  -10,  -16,  -31,
+				  -19,  -10,   -7,    1,    1,   -7,  -12,  -16
 			},
 			[QUEEN / 2] = {
-				  -37,   -1,   15,   17,   45,   34,   41,   14,
-				  -13,  -39,  -19,  -15,  -28,   27,    5,   29,
-				   -7,  -13,   -8,   -2,    5,   36,   46,   49,
-				  -19,  -25,  -22,  -28,  -13,   -5,   -6,   -1,
-				  -13,  -23,  -18,  -11,  -17,   -5,   -4,   -4,
-				  -11,   -5,  -13,    3,    4,   -4,   13,    8,
-				  -15,    1,   13,    3,   15,   22,    9,   12,
-				    4,   -1,   11,    8,    2,   -4,    0,  -24
+				  -16,   13,   -1,   24,   21,    0,   -7,  -24,
+				   11,  -19,    4,  -29,  -23,  -11,  -25,    0,
+				   32,   27,    5,    4,    6,   12,   50,   38,
+				   10,   -7,   -1,  -10,  -10,   -3,   -1,   12,
+				   -7,   -1,  -13,  -12,   -4,  -10,   -5,   -9,
+				   -4,   -1,   -4,  -10,   -7,   -5,   -2,   -1,
+				    5,    2,    6,    4,    1,    8,    5,    2,
+				   -1,    0,   -1,    2,   -1,   -7,   -1,  -11
 			},
 			[KING / 2] = {
-				  -18,   32,   26,  -48,  -55,  -14,    8,   40,
-				  -14,  -10,  -42,   12,  -10,  -13,  -27,  -45,
-				  -45,   14,  -15,  -34,  -30,    8,   17,  -46,
-				  -54,  -54,  -55,  -79,  -82,  -62,  -53,  -85,
-				  -80,  -44,  -69,  -87,  -92,  -68,  -69, -101,
-				  -29,  -22,  -47,  -63,  -58,  -46,  -20,  -39,
-				   12,   15,   -4,  -51,  -43,  -15,   11,    6,
-				   10,   40,   12,  -29,   16,   -8,   19,   29
+				   82,  117,   62,   -4,  -11,   47,    4,   41,
+				   13,   35,   14,   58,   45,  -15,    0,  -72,
+				  -24,   34,   67,   23,    1,   17,   30,  -72,
+				  -73,  -39,  -34,  -48,  -72,  -43,  -47,  -91,
+				  -87,  -43,  -51,  -66,  -78,  -48,  -64,  -95,
+				  -21,    8,  -29,  -39,  -31,  -29,   -2,  -25,
+				   62,   54,   17,   -4,   -5,   13,   46,   57,
+				   66,   75,   37,   39,   25,   40,   70,   64
 			}
 		},
 		[ENDGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				  162,  162,  154,  115,  126,  129,  165,  174,
-				   75,   90,   65,   38,   41,   39,   75,   69,
-				   25,   25,    4,    2,   -3,   -1,   21,   13,
-				    5,    9,   -5,  -18,   -3,   -4,    7,    0,
-				   -3,   19,    2,   -3,   -3,    7,    1,   -9,
-				    8,    9,    8,    9,    8,    2,    9,   -7,
+				   68,   85,   64,   24,   26,   57,   95,   81,
+				    9,   44,   -6,  -35,  -39,  -22,   38,   11,
+				  -12,   11,  -24,  -37,  -40,  -26,    8,  -14,
+				  -26,    6,  -26,  -32,  -35,  -25,    4,  -23,
+				  -29,    4,  -21,  -19,  -22,  -21,    3,  -28,
+				  -28,    8,  -12,   -5,   -5,  -14,    6,  -25,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				  -62,  -20,    0,  -15,  -11,  -22,  -34,  -94,
-				  -23,   -6,   -5,   10,   -1,  -27,  -10,  -42,
-				  -15,   -1,   15,   15,   -4,    5,   -2,  -27,
-				   -5,   13,   21,   23,   29,   23,   13,   -8,
-				    3,   12,   22,   40,   23,   31,   16,   -6,
-				    5,   16,   14,   31,   25,   11,    6,    7,
-				   -4,   -3,   14,   12,   16,    8,   -1,  -13,
-				  -15,  -26,    0,    7,    4,   -2,  -17,  -30
+				  -66,   -6,   -3,   -4,   -6,  -11,  -17,  -80,
+				  -14,    0,   -5,   -2,   -8,  -18,    9,  -20,
+				   -3,   -2,   16,   11,   11,    7,    0,  -11,
+				    8,   18,   27,   32,   32,   26,   20,    2,
+				    8,   12,   26,   31,   31,   24,    7,    5,
+				   -5,    1,    5,   23,   16,    6,   -1,   -5,
+				   -4,   -5,   -1,    1,   -2,    1,   -3,   -7,
+				  -15,  -19,  -12,   -4,   -4,  -14,  -23,  -16
 			},
 			[BISHOP / 2] = {
-				   -1,    3,    3,   13,   13,    8,    4,   -4,
-				    1,    5,    9,   -1,   11,   -1,    8,  -12,
-				    6,    9,   10,    4,    0,    5,    5,    3,
-				   11,   11,   12,   10,   17,   19,    9,   12,
-				    9,   13,   13,   28,    9,   17,    4,    6,
-				   -5,   10,   15,   20,   27,   17,    7,   -6,
-				    4,   -4,    3,    5,   13,   11,   -2,  -11,
-				  -10,    0,  -10,   15,   11,    9,   10,   -7
+				    7,    7,    1,   15,    7,    5,    9,    2,
+				   -4,    0,   -3,   -9,   -3,   -5,   -2,   -9,
+				    4,    3,    3,   -2,  -10,    0,   -6,    1,
+				    1,    7,    5,    7,   13,    4,    3,    2,
+				   -6,    7,   10,    9,    7,    7,    3,   -7,
+				   -4,    1,    5,   10,    6,    5,    4,   -5,
+				   -8,   -5,  -21,   -5,   -3,   -8,   -6,    0,
+				  -15,  -26,   -5,   -4,   -2,   -2,   19,  -12
 			},
 			[ROOK / 2] = {
-				   14,   19,   17,   17,   10,   11,   13,    6,
-				   16,   17,   16,   15,    0,    1,    8,    2,
-				    3,    4,    3,    5,  -11,  -12,   -9,  -11,
-				    2,    4,    5,    1,   -1,    5,   -3,   -6,
-				    1,    6,    6,    7,   -9,    2,    2,  -10,
-				   -3,    3,   -3,    4,   -1,    1,  -16,  -18,
-				    7,    8,    0,   10,   -1,    3,  -10,   -3,
-				   -3,   10,    4,   -2,   -9,   -9,    2,   -3
+				    6,   13,   16,    5,    8,   10,   21,    6,
+				    7,   18,   15,    7,    9,   11,   19,    7,
+				    4,    9,    3,   -2,   -3,    2,    7,    2,
+				    6,    9,    2,    0,    0,    9,   10,    4,
+				   -2,    7,    3,   -4,   -1,    3,    5,    1,
+				  -12,   -7,  -10,  -12,   -8,   -9,  -16,  -12,
+				   -9,   -7,   -9,  -12,  -11,  -10,   -8,  -15,
+				   -9,  -10,   -7,  -17,  -16,  -11,   -7,   -8
 			},
 			[QUEEN / 2] = {
-				    0,   31,   46,   36,   38,   36,    8,   22,
-				  -10,   28,   50,   76,   79,   48,   42,    5,
-				  -11,   13,   38,   58,   57,   45,    5,    2,
-				    9,   26,   30,   51,   69,   47,   52,   27,
-				   -5,   29,   29,   59,   37,   45,   36,   25,
-				   -7,   -9,   22,   28,   31,   22,   15,    7,
-				  -19,  -11,  -17,   -4,    6,  -13,  -33,  -39,
-				  -14,  -12,   -6,  -27,    0,   -6,  -19,  -26
+				   -4,   -8,   26,   13,   15,   26,   -1,   13,
+				   -5,   21,   38,   70,   64,   41,   24,    7,
+				  -20,    2,   36,   36,   44,   36,  -31,  -17,
+				   -6,   16,   21,   40,   39,   28,   23,    3,
+				   -1,    9,   22,   30,   19,    7,    8,    8,
+				  -19,  -11,    3,   -1,   -1,    3,   -6,  -19,
+				  -52,  -47,  -42,  -23,  -21,  -42,  -46,  -36,
+				  -44,  -54,  -53,  -44,  -29,  -38,  -41,  -30
 			},
 			[KING / 2] = {
-				  -91,  -39,  -18,   -5,   -7,    4,   -3,  -65,
-				   -8,   28,   28,   26,   27,   50,   30,   15,
-				   12,   26,   35,   39,   44,   49,   52,   18,
-				    3,   27,   37,   47,   48,   44,   38,   12,
-				  -14,    6,   29,   42,   43,   37,   21,   -1,
-				   -9,   -3,   25,   36,   37,   30,   17,    2,
-				  -35,   -3,   13,   13,   14,   14,  -13,  -30,
-				  -65,  -43,  -30,   -4,  -22,   -7,  -43,  -53
+				 -117,  -54,  -22,  -10,   -5,  -36,  -33, -102,
+				  -17,   27,   40,   25,   23,   34,   25,   -6,
+				    0,   35,   46,   53,   59,   48,   33,    4,
+				   -2,   32,   54,   66,   66,   52,   34,    3,
+				   -9,   14,   40,   56,   61,   40,   21,   -7,
+				  -23,   -4,   24,   35,   34,   21,   -3,  -26,
+				  -53,  -26,   -2,    9,    7,   -4,  -24,  -57,
+				  -92,  -61,  -40,  -44,  -39,  -38,  -67, -100
 			}
 		}
 	},
 	.knightMobilityBonus = {
-		[MIDDLEGAME] = {  -60,   -9,   -1,   14,   13,   15,   18,   20,   22},
-		[ENDGAME] = {  -71,  -23,  -14,    0,    1,    5,    9,   12,   15}
+		[MIDDLEGAME] = {  -37,  -15,   -6,    2,    9,   10,   11,   12,   13},
+		[ENDGAME] = {  -38,  -12,   -3,   -2,    1,   12,   13,   14,   15}
 	},
 	.bishopMobilityBonus = {
-		[MIDDLEGAME] = { -115,  -76,  -62,  -48,  -26,   -7,   -2,    2,    4,   10,   15,   25,   29,   40},
-		[ENDGAME] = { -134, -100,  -85,  -70,  -44,  -24,  -20,  -15,  -10,   -6,   -3,    7,   14,   14}
+		[MIDDLEGAME] = {  -30,  -21,  -14,  -11,   -6,    0,    5,    8,    9,   10,   11,   12,   13,   14},
+		[ENDGAME] = {  -60,  -42,  -32,  -21,   -7,    5,    8,   14,   20,   21,   22,   23,   24,   25}
 	},
 	.rookMobilityBonus = {
-		[MIDDLEGAME] = {  -37,  -26,  -17,  -11,  -13,   -8,   -3,   -1,    2,    6,   11,   19,   24,   31,   35},
-		[ENDGAME] = {  -49,  -33,  -24,  -14,  -15,  -11,   -6,   -3,    1,    5,    8,   18,   23,   29,   32}
+		[MIDDLEGAME] = {  -22,  -11,   -8,   -5,   -4,   -3,   -2,    0,    1,    3,    6,   10,   11,   13,   14},
+		[ENDGAME] = {  -40,  -23,  -20,  -14,  -13,   -5,   -2,    2,    9,   12,   14,   16,   19,   22,   23}
 	},
 	.queenMobilityBonus = {
-		[MIDDLEGAME] = { -129, -115, -101,  -71,  -42,  -27,  -18,  -14,  -10,   -6,   -4,    0,    5,    8,   13,   40,   45,   50,   55,   60,   65,   70,   72,   74,   76,   78,   80,   82},
-		[ENDGAME] = { -152, -130, -113,  -96,  -48,  -33,  -25,   -6,   15,   20,   24,   30,   35,   38,   42,   60,   65,   70,   75,   80,   85,   90,   90,   90,   90,   90,   90,   90}
+		[MIDDLEGAME] = {  -55,  -17,  -16,  -15,  -14,  -10,   -5,   -4,   -3,   -2,   -1,    0,    1,    2,    3,    4,    5,    6,    7,    8,    9,   10,   11,   12,   13,   14,   15,   16},
+		[ENDGAME] = { -101, -100,  -99,  -70,  -50,  -46,  -42,  -33,  -22,  -15,   -6,   -2,    5,   10,   15,   19,   25,   30,   37,   39,   45,   46,   47,   48,   49,   55,   56,   57}
 	},
 	.virtualMobilityBonus = {
-		[MIDDLEGAME] = {   96,   82,   73,   70,   69,   55,   35,   18,    8,   -2,   -7,  -15,  -21,  -30,  -37,  -45,  -53,  -60,  -66,  -68,  -73,  -80,  -82,  -75,  -79,  -71,  -73,  -65},
-		[ENDGAME] = {   60,   45,   43,   40,   39,   24,   19,   10,    8,    7,    3,   -4,   -6,   -9,  -13,  -15,  -19,  -24,  -28,  -33,  -38,  -43,  -43,  -46,  -49,  -49,  -52,  -52}
+		[MIDDLEGAME] = {   56,   55,   54,   53,   52,   51,   45,   40,   38,   31,   30,   25,   20,   14,    7,   -1,  -14,  -22,  -31,  -41,  -49,  -50,  -57,  -58,  -59,  -60,  -61,  -62},
+		[ENDGAME] = {   79,   29,   24,   12,   11,   10,    8,    6,    5,    4,    3,    2,    1,    0,   -1,   -2,   -3,   -4,   -5,   -6,   -9,  -12,  -16,  -20,  -22,  -30,  -31,  -32}
 	},
-	.bishopPairBonus = {   21,   53},
+	.bishopPairBonus = {   19,   63},
 	.openFileRookBonus = {
-		[MIDDLEGAME] = {    7,    5,   -1,   10,    3,    7,   14,   34},
-		[ENDGAME] = {   -3,   -6,   -4,    9,    1,   -3,   -6,   -5}
+		[MIDDLEGAME] = {   20,   17,   15,   16,   15,    9,   36,   57},
+		[ENDGAME] = {   16,    5,   12,   11,    8,    4,   -6,   -1}
 	},
 	.passedPawnBonus = {
-		[MIDDLEGAME] = {    0,    8,   12,   15,   30,   64,   91,    0},
-		[ENDGAME] = {    0,   11,   16,   22,   60,   97,  128,    0}
+		[MIDDLEGAME] = {    0,    1,    3,    7,   19,   27,   28,    0},
+		[ENDGAME] = {    0,  -19,  -17,   -1,   28,   87,   88,    0}
 	},
 	.doubledPawnBonus = {
-		[MIDDLEGAME] = {    1,    1,    1,   -4,   -2,    3,   -2,   -4},
-		[ENDGAME] = {   -9,   -6,   -5,   -5,    0,   -3,   -5,  -13}
+		[MIDDLEGAME] = {  -13,    2,   -3,    1,   -3,   -2,    5,  -10},
+		[ENDGAME] = {  -26,  -25,  -16,   -9,   -3,  -17,  -26,  -28}
 	},
 	.isolatedPawnBonus = {
-		[MIDDLEGAME] = {   -4,   -9,   -5,  -10,   -9,    0,   -5,   -2},
-		[ENDGAME] = {    3,   -1,    3,   -6,   -1,    5,    4,   -1}
+		[MIDDLEGAME] = {  -13,   -5,  -14,  -15,  -18,  -18,   -5,  -13},
+		[ENDGAME] = {   17,  -14,   -4,  -11,   -9,   -2,  -11,   15}
 	},
 	.connectedPawnBonus = {
-		[MIDDLEGAME] = {    4,    4,    5,    7,    6,    5,    4,    2},
-		[ENDGAME] = {    4,    5,    6,    7,    7,    7,    5,    4}
+		[MIDDLEGAME] = {    8,    8,    6,   11,    6,    7,   11,    7},
+		[ENDGAME] = {    2,    5,    5,    9,   12,    9,    7,    4}
 	},
 	.backwardPawnBonus = {
-		[MIDDLEGAME] = {   -1,   -2,   -3,   -4,   -3,   -2,   -2,   -1},
-		[ENDGAME] = {   -2,   -2,   -4,   -4,   -4,   -4,   -3,   -2}
+		[MIDDLEGAME] = {    3,    4,    5,    8,    0,    5,    7,  -10},
+		[ENDGAME] = {   -1,    2,   -6,    0,    6,    2,   -5,   -3}
 	},
-	.tempo = {   10,   10}
+	.tempo = {   20,   22}
 };
-
 
 evalParameters is_param_eg = {
     .genericPieceValues[ENDGAME] = { [0 ... PIECE_TYPE_COUNT - 1] = 1 },
@@ -209,9 +208,6 @@ evalParameters is_param_eg = {
     .tempo[ENDGAME] = 1
 };
 
-/*************************/
-/** Piece Square Tables **/
-/*************************/
 int initHCE = 0;
 
 int pieceBonusTable[PHASE_COUNT][PIECE_COUNT][64];
@@ -247,117 +243,36 @@ void init_HCE_tables()
     bordering_files[7] = board_file[6];
 }
 
-void evaluatePieceSquareTables(bitboard* board, int* middlegameScore, int* endgameScore)
+void evaluatePawns(bitboard* board, int* mgScore, int* egScore)
 {
-    int eval[PHASE_COUNT][2] = {0};
+	int eval[PHASE_COUNT] = {0};
 
-    uint64_t mask = board->pieces_all;
-    while(mask)
-    {
+	uint64_t mask = board->pieces[WHITE_PAWN];
+	while(mask)
+	{
         int sq = __builtin_ctzll(mask);
-        int piece = findPieceOnSquare(board, sq);
-
-        eval[MIDDLEGAME][COLOR(piece)] += pieceBonusTable[MIDDLEGAME][piece][sq];
-        eval[ENDGAME][COLOR(piece)] += pieceBonusTable[ENDGAME][piece][sq];
-
-        mask &= (mask - 1);
-    }
-
-    *middlegameScore += eval[MIDDLEGAME][WHITE] - eval[MIDDLEGAME][BLACK];
-    *endgameScore += eval[ENDGAME][WHITE] - eval[ENDGAME][BLACK];
-}
-
-/**********************************/
-/**  Open rook file, bishop pair **/
-/**********************************/
-
-void evaluateSimplePieceDetails(bitboard* board, int* middlegameScore, int* endgameScore)
-{
-    int eval[PHASE_COUNT] = {0};
-
-	//Bishop pair
-	if(__builtin_popcountll(board->pieces[WHITE_BISHOP]) >= 2)
-	{
-		eval[MIDDLEGAME] += hce_params.bishopPairBonus[MIDDLEGAME];
-		eval[ENDGAME] += hce_params.bishopPairBonus[ENDGAME];
-	}
-	if(__builtin_popcountll(board->pieces[BLACK_BISHOP]) >= 2)
-	{
-		eval[MIDDLEGAME] -= hce_params.bishopPairBonus[MIDDLEGAME];
-		eval[ENDGAME] -= hce_params.bishopPairBonus[ENDGAME];
-	}
-
-	//Open rook file.
-    uint64_t whiteRooks = board->pieces[WHITE_ROOK];
-    uint64_t blackRooks = board->pieces[BLACK_ROOK];
-
-    while(whiteRooks)
-    {
-        int column = getColumn(__builtin_ctzll(whiteRooks));
-        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
-
-        if(!pawns_col)
-        {
-            eval[MIDDLEGAME] += hce_params.openFileRookBonus[MIDDLEGAME][column];
-            eval[ENDGAME] += hce_params.openFileRookBonus[ENDGAME][column];
-        }
-
-        whiteRooks &= (whiteRooks - 1);
-    }
-
-    while(blackRooks)
-    {
-        int column = getColumn(__builtin_ctzll(blackRooks));
-        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
-
-		int mirroredColumn = MIRROR_SQUARE(column);
-    
-        if(!pawns_col)
-        {
-            eval[MIDDLEGAME] -= hce_params.openFileRookBonus[MIDDLEGAME][mirroredColumn];
-            eval[ENDGAME] -= hce_params.openFileRookBonus[ENDGAME][mirroredColumn];
-        }
-
-        blackRooks &= (blackRooks - 1);
-    }
-
-    *middlegameScore += eval[MIDDLEGAME];
-    *endgameScore += eval[ENDGAME];
-}
-
-/***********************************************************************************/
-/** Passed Pawns, Doubled Pawns, Isolated Pawns, Backward Pawns, Pawn Connections **/
-/***********************************************************************************/
-
-void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScore)
-{
-    int eval[PHASE_COUNT] = {0};
-
-    uint64_t whitePawns = board->pieces[WHITE_PAWN];
-    uint64_t blackPawns = board->pieces[BLACK_PAWN];
-
-    uint64_t mask = whitePawns;
-    while(mask)
-    {
-		int sq = __builtin_ctzll(mask);
         int column = getColumn(sq);
 		int row = getRow(sq);
-        
-        //Passed Pawns
-        if((blackPawns & board_file[column]) == 0)
+
+		//piece/square value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_PAWN][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_PAWN][sq];
+
+		 //Passed Pawns
+        if((board->pieces[BLACK_PAWN] & board_file[column]) == 0)
         {
             eval[MIDDLEGAME] += hce_params.passedPawnBonus[MIDDLEGAME][row];
             eval[ENDGAME] += hce_params.passedPawnBonus[ENDGAME][row];
         }
 
         //Doubled pawns
-        if(__builtin_popcountll(whitePawns & board_file[column]) > 1)
+        if(__builtin_popcountll(board->pieces[WHITE_PAWN] & board_file[column]) > 1)
         {
             eval[MIDDLEGAME] += hce_params.doubledPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] += hce_params.doubledPawnBonus[ENDGAME][column];
         }
 
-		uint64_t borderingMask = whitePawns & bordering_files[column];
+		uint64_t borderingMask = board->pieces[WHITE_PAWN] & bordering_files[column];
         //Isolated Pawns
         if(!borderingMask)
         {
@@ -365,7 +280,7 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
             eval[ENDGAME] += hce_params.isolatedPawnBonus[ENDGAME][column];
         }
 		//Backward pawns
-		else if((borderingMask & (sq - 1)) == 0)
+		else if(row > 1 && (borderingMask & (sq - 1)) == 0 && borderingMask & board_rank[row + 1])
 		{
 			eval[MIDDLEGAME] += hce_params.backwardPawnBonus[MIDDLEGAME][column];
 			eval[ENDGAME] += hce_params.backwardPawnBonus[ENDGAME][column];
@@ -377,34 +292,38 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
 			eval[ENDGAME] += hce_params.connectedPawnBonus[ENDGAME][column];
 		}
 
-        mask &= mask - 1;
-    }
-    
-    mask = blackPawns;
-    while(mask)
-    {
-		int sq = __builtin_ctzll(mask);
+		mask &= mask - 1;
+	}
+	
+	mask = board->pieces[BLACK_PAWN];
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
         int column = getColumn(sq);
 		int row = getRow(sq);
-
+		
 		int mirroredColumn = MIRROR_SQUARE(column);
 		int mirroredRow = MIRROR_SQUARE(row);
-        
-        //Passed Pawns
-        if((whitePawns & board_file[column]) == 0)
+
+		//piece/square value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_PAWN][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][BLACK_PAWN][sq];
+
+		//Passed Pawns
+        if((board->pieces[WHITE_PAWN] & board_file[column]) == 0)
         {
             eval[MIDDLEGAME] -= hce_params.passedPawnBonus[MIDDLEGAME][mirroredRow];
             eval[ENDGAME] -= hce_params.passedPawnBonus[ENDGAME][mirroredRow];
         }
         
         //Doubled pawns
-        if(__builtin_popcountll(blackPawns & board_file[column]) > 1)
+        if(__builtin_popcountll(board->pieces[BLACK_PAWN] & board_file[column]) > 1)
         {
             eval[MIDDLEGAME] -= hce_params.doubledPawnBonus[MIDDLEGAME][mirroredColumn];
             eval[ENDGAME] -= hce_params.doubledPawnBonus[ENDGAME][mirroredColumn];
         }
 
-		uint64_t borderingMask = blackPawns & bordering_files[column];
+		uint64_t borderingMask = board->pieces[BLACK_PAWN] & bordering_files[column];
         //Isolated Pawns
         if(!borderingMask)
         {
@@ -412,7 +331,7 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
             eval[ENDGAME] -= hce_params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
 		//Backward pawns
-		else if((borderingMask & ~(sq - 1)) == 0)
+		else if(row < 6 && (borderingMask & ~(sq - 1)) == 0 && borderingMask & board_rank[row - 1])
 		{
 			eval[MIDDLEGAME] -= hce_params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
 			eval[ENDGAME] -= hce_params.backwardPawnBonus[ENDGAME][mirroredColumn];
@@ -424,150 +343,277 @@ void evaluatePawnDetails(bitboard* board, int* middlegameScore, int* endgameScor
 			eval[ENDGAME] -= hce_params.connectedPawnBonus[ENDGAME][mirroredColumn];
 		}
 
-        mask &= mask - 1;
-    }
-
-    *middlegameScore += eval[MIDDLEGAME];
-    *endgameScore += eval[ENDGAME];
+		mask &= mask - 1;
+	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
 }
 
-/************************/
-/** (Virtual) Mobility **/
-/************************/
-void evaluateMobility(bitboard* board, int* middlegameScore, int* endgameScore)
+void evaluateKnights(bitboard* board, int* mgScore, int* egScore)
 {
-	int eval[2] = {0};
+	int eval[PHASE_COUNT] = {0};
 
-	uint64_t whitePieces = board->pieces_side[WHITE];
-	uint64_t blackPieces = board->pieces_side[BLACK];
-
-	//Knight Mobility
-	uint64_t pieces = board->pieces[WHITE_KNIGHT];
-	while(pieces)
+	uint64_t mask = board->pieces[WHITE_KNIGHT];
+	while(mask)
 	{
-		uint64_t moves = knightMoves(whitePieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_KNIGHT][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_KNIGHT][sq];
+
+		//mobility
+		uint64_t moves = knightMoves(board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 
 		eval[MIDDLEGAME] += hce_params.knightMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.knightMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
-	pieces = board->pieces[BLACK_KNIGHT];
-	while(pieces)
+	
+	mask = board->pieces[BLACK_KNIGHT];
+	while(mask)
 	{
-		uint64_t moves = knightMoves(blackPieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_KNIGHT][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][BLACK_KNIGHT][sq];
+
+		//mobility
+		uint64_t moves = knightMoves(board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 
 		eval[MIDDLEGAME] -= hce_params.knightMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.knightMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
+	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
+}
+
+void evaluateBishops(bitboard* board, int* mgScore, int* egScore)
+{
+	int eval[PHASE_COUNT] = {0};
+
+	uint64_t mask = board->pieces[WHITE_BISHOP];
+
+	//bishop pair
+	if(__builtin_popcountll(mask) >= 2)
+	{
+		eval[MIDDLEGAME] += hce_params.bishopPairBonus[MIDDLEGAME];
+		eval[ENDGAME] += hce_params.bishopPairBonus[ENDGAME];
 	}
 
-	//Bishop Mobility
-	pieces = board->pieces[WHITE_BISHOP];
-	while(pieces)
+	while(mask)
 	{
-		uint64_t moves = bishopMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_BISHOP][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_BISHOP][sq];
+
+		//mobility
+		uint64_t moves = bishopMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 
 		eval[MIDDLEGAME] += hce_params.bishopMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.bishopMobilityBonus[ENDGAME][moveCount];
-		
-		pieces &= pieces - 1;
+
+		mask &= mask - 1;
 	}
-	pieces = board->pieces[BLACK_BISHOP];
-	while(pieces)
+	
+	mask = board->pieces[BLACK_BISHOP];
+
+	//bishop pair
+	if(__builtin_popcountll(mask) >= 2)
 	{
-		uint64_t moves = bishopMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+		eval[MIDDLEGAME] -= hce_params.bishopPairBonus[MIDDLEGAME];
+		eval[ENDGAME] -= hce_params.bishopPairBonus[ENDGAME];
+	}
+
+	while(mask)
+	{
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/sq value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_BISHOP][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][BLACK_BISHOP][sq];
+		
+		//mobility
+		uint64_t moves = bishopMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 
 		eval[MIDDLEGAME] -= hce_params.bishopMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.bishopMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
+}
 
-	//Rook Mobility
-	pieces = board->pieces[WHITE_ROOK];
-	while(pieces)
+void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
+{
+	int eval[PHASE_COUNT] = {0};
+
+	uint64_t mask = board->pieces[WHITE_ROOK];
+	while(mask)
 	{
-		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+        uint64_t pawns_col = board->pieces[WHITE_PAWN] & board_file[column];
+
+		//piece/sq value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_ROOK][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_ROOK][sq];
+		
+		//open rook file
+        if(!pawns_col)
+        {
+            eval[MIDDLEGAME] += hce_params.openFileRookBonus[MIDDLEGAME][column];
+            eval[ENDGAME] += hce_params.openFileRookBonus[ENDGAME][column];
+        }
+
+		//mobility
+		uint64_t moves = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
 		eval[MIDDLEGAME] += hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.rookMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
-	pieces = board->pieces[BLACK_ROOK];
-	while(pieces)
+	
+	mask = board->pieces[BLACK_ROOK];
+	while(mask)
 	{
-		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+        uint64_t pawns_col = board->pieces[BLACK_PAWN] & board_file[column];
+		
+		//piece/sq value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_ROOK][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][BLACK_ROOK][sq];
+		
+		//open rook file
+        if(!pawns_col)
+        {
+            eval[MIDDLEGAME] -= hce_params.openFileRookBonus[MIDDLEGAME][column];
+            eval[ENDGAME] -= hce_params.openFileRookBonus[ENDGAME][column];
+        }
+		
+		//mobility
+		uint64_t moves = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
 		eval[MIDDLEGAME] -= hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.rookMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
+}
 
-	//Queen Mobility
-	pieces = board->pieces[WHITE_QUEEN];
-	while(pieces)
+void evaluateQueens(bitboard* board, int* mgScore, int* egScore)
+{
+	int eval[PHASE_COUNT] = {0};
+
+	uint64_t mask = board->pieces[WHITE_QUEEN];
+	while(mask)
 	{
-		uint64_t moves = rookMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_QUEEN][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_QUEEN][sq];
+
+		//mobility
+		uint64_t moves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
 		eval[MIDDLEGAME] += hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.queenMobilityBonus[ENDGAME][moveCount];
-		
-		pieces &= pieces - 1;
+
+		mask &= mask - 1;
 	}
-	pieces = board->pieces[BLACK_QUEEN];
-	while(pieces)
+	
+	mask = board->pieces[BLACK_QUEEN];
+	while(mask)
 	{
-		uint64_t moves = rookMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_QUEEN][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][BLACK_QUEEN][sq];
+
+		//mobility
+		uint64_t moves = queenMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
 		eval[MIDDLEGAME] -= hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.queenMobilityBonus[ENDGAME][moveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
+	
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
+}
 
-	//Virtual Mobility
-	pieces = board->pieces[WHITE_KING];
-	while(pieces)
+void evaluateKings(bitboard* board, int* mgScore, int* egScore)
+{
+	int eval[PHASE_COUNT] = {0};
+
+	uint64_t mask = board->pieces[WHITE_KING];
+	while(mask)
 	{
-		uint64_t virtualMoves = queenMoves(whitePieces, blackPieces, __builtin_ctzll(pieces));
+        int sq = __builtin_ctzll(mask);
+
+		//piece/square value
+        eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_KING][sq];
+        eval[ENDGAME] += pieceBonusTable[ENDGAME][WHITE_KING][sq];
+
+		//virtual mobility
+		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int virtualMoveCount = __builtin_popcountll(virtualMoves);
 		
 		eval[MIDDLEGAME] += hce_params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
 		eval[ENDGAME] += hce_params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
-	pieces = board->pieces[BLACK_KING];
-	while(pieces)
+	
+	mask = board->pieces[BLACK_KING];
+	while(mask)
 	{
-		uint64_t virtualMoves = queenMoves(blackPieces, whitePieces, __builtin_ctzll(pieces));
-		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+        int sq = __builtin_ctzll(mask);
+		
+		//piece/square value
+        eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][WHITE_KING][sq];
+        eval[ENDGAME] -= pieceBonusTable[ENDGAME][WHITE_KING][sq];
 
+		//virtual mobility
+		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		int virtualMoveCount = __builtin_popcountll(virtualMoves);
+		
 		eval[MIDDLEGAME] -= hce_params.virtualMobilityBonus[MIDDLEGAME][virtualMoveCount];
 		eval[ENDGAME] -= hce_params.virtualMobilityBonus[ENDGAME][virtualMoveCount];
 
-		pieces &= pieces - 1;
+		mask &= mask - 1;
 	}
 
-	*middlegameScore += eval[MIDDLEGAME];
-	*endgameScore += eval[ENDGAME];
+	*mgScore += eval[MIDDLEGAME];
+	*egScore += eval[ENDGAME];
 }
 
-/******************/
-/** Tapered Eval **/
-/******************/
 int gamephasePieceValues[PIECE_COUNT] = {0,0,1,1,1,1,2,2,4,4,0,0};
 int evaluatePhasedScore(bitboard* board, int middlegameScore, int endgameScore)
 {
@@ -585,21 +631,17 @@ int evaluatePhasedScore(bitboard* board, int middlegameScore, int endgameScore)
 
 int hce_eval(bitboard* board)
 {
-    int midgame_eval = 0;
-    int endgame_eval = 0;
+    int midgame_eval = hce_params.tempo[MIDDLEGAME];
+    int endgame_eval = hce_params.tempo[ENDGAME];
 
-    evaluatePieceSquareTables(board, &midgame_eval, &endgame_eval);
-    evaluateSimplePieceDetails(board, &midgame_eval, &endgame_eval);
-    evaluatePawnDetails(board, &midgame_eval, &endgame_eval);
-	evaluateMobility(board, &midgame_eval, &endgame_eval);
-
-	midgame_eval += hce_params.tempo[MIDDLEGAME];
-	endgame_eval += hce_params.tempo[ENDGAME];
+    evaluatePawns(board, &midgame_eval, &endgame_eval);
+    evaluateKnights(board, &midgame_eval, &endgame_eval);
+    evaluateBishops(board, &midgame_eval, &endgame_eval);
+    evaluateRooks(board, &midgame_eval, &endgame_eval);
+    evaluateQueens(board, &midgame_eval, &endgame_eval);
+    evaluateKings(board, &midgame_eval, &endgame_eval);
 
     int eval = evaluatePhasedScore(board, midgame_eval, endgame_eval);
 
-	if(ISBLACK(board->turn))
-		return -eval;
-	else
-		return eval;
+	return (ISWHITE(board->turn)) ? eval : -eval;
 }
