@@ -8,6 +8,9 @@
 #define MIDDLEGAME 0
 #define ENDGAME 1
 
+#define HALF_OPEN_FILE 0
+#define OPEN_FILE 1
+
 //Externally visible for tuning.
 typedef union {
     struct {
@@ -19,15 +22,20 @@ typedef union {
         int rookMobilityBonus[PHASE_COUNT][15];
         int queenMobilityBonus[PHASE_COUNT][28];
         int virtualMobilityBonus[PHASE_COUNT][28];
-
-        int bishopPairBonus[PHASE_COUNT];
-        int openFileRookBonus[PHASE_COUNT][COLUMN_COUNT];
-
+        
+        int minorPawnCover[PHASE_COUNT];
         int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         int connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        int backwardPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        int backwardPawnBonus[PHASE_COUNT][ROW_COUNT];
+
+        int knightOutputBonus[PHASE_COUNT];
+
+        int bishopPairBonus[PHASE_COUNT];
+        int badBishopBonus[PHASE_COUNT];
+        
+        int openRookFileBonus[PHASE_COUNT][2];
         
         int tempo[PHASE_COUNT];
     };

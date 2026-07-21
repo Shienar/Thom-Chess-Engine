@@ -34,17 +34,21 @@ typedef union {
         double bishopMobilityBonus[PHASE_COUNT][14];
         double rookMobilityBonus[PHASE_COUNT][15];
         double queenMobilityBonus[PHASE_COUNT][28];
-        
         double virtualMobilityBonus[PHASE_COUNT][28];
-
-        double bishopPairBonus[PHASE_COUNT];
-        double openFileRookBonus[PHASE_COUNT][COLUMN_COUNT];
-
+        
+        double minorPawnCover[PHASE_COUNT];
         double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double backwardPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+
+        double knightOutputBonus[PHASE_COUNT];
+
+        double bishopPairBonus[PHASE_COUNT];
+        double badBishopBonus[PHASE_COUNT];
+        
+        double openRookFileBonus[PHASE_COUNT][2];
         
         double tempo[PHASE_COUNT];
     };
