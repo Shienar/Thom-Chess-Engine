@@ -38,10 +38,9 @@ typedef union {
         
         double minorPawnCover[PHASE_COUNT];
         double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
+        double connectedPawnBonus[PHASE_COUNT][ROW_COUNT];
         double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        double connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        double backwardPawnBonus[PHASE_COUNT][COLUMN_COUNT];
 
         double knightOutputBonus[PHASE_COUNT];
 
@@ -49,6 +48,9 @@ typedef union {
         double badBishopBonus[PHASE_COUNT];
         
         double openRookFileBonus[PHASE_COUNT][2];
+        double connectedRookBonus[PHASE_COUNT][MAX_ROOK_CONNECTIONS];
+
+        double connectedQueenBonus[PHASE_COUNT][MAX_QUEEN_CONNECTIONS];
         
         double tempo[PHASE_COUNT];
     };

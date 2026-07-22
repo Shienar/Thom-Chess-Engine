@@ -72,7 +72,6 @@ int main(int argc, char** argv)
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
                 printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
                 printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
-                printf("option name delta_pruning_offset type spin default %d min 200 max 600\n", delta_pruning_offset);
 
                 printf("option name probcut_offset type spin default %d min 200 max 600\n", probcut_offset);
                 printf("option name probcut_offset_improving type spin default %d min 200 max 500\n", probcut_offset_improving);

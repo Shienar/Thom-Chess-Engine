@@ -11,195 +11,199 @@
  * 
  * The tuner is intended to bootstrap an eval from the following start:
  * K = 3.612
-	evalParameters hce_params = {
-		.genericPieceValues = {
-			[MIDDLEGAME] = {   100,  300,  300,  500,  900,    0},
-			[ENDGAME] = {  100,  300,  300,  500, 900,    0}
-		},
-		.tempo = {   20,   20}
-	};
+evalParameters hce_params = {
+	.genericPieceValues = {
+		[MIDDLEGAME] = {   100,  300,  300,  500,  900,    0},
+		[ENDGAME] = {  100,  300,  300,  500, 900,    0}
+	},
+	.tempo = {   20,   20}
+};
  * 
  */
 evalParameters hce_params = {
 	.genericPieceValues = {
-		[MIDDLEGAME] = {   75,  259,  293,  371,  826,    0},
-		[ENDGAME] = {  140,  347,  365,  646, 1200,    0}
+		[MIDDLEGAME] = {   74,  257,  290,  363,  784,    0},
+		[ENDGAME] = {  141,  332,  369,  652, 1235,    0}
 	},
 	.rawPieceTables = {
 		[MIDDLEGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				    6,   39,   54,   76,   60,   30,   -9,  -13,
-				    9,    8,   40,   27,   35,   45,    0,    4,
-				   -8,   -7,    5,    6,   10,   -2,  -12,  -12,
-				  -20,  -18,   -6,    2,    0,   -9,  -20,  -22,
-				  -22,  -23,  -14,  -15,  -14,  -16,  -29,  -23,
-				  -21,  -13,  -10,  -20,  -18,  -12,  -21,  -26,
+				    3,   37,   51,   73,   56,   29,   -8,  -15,
+				    8,    9,   40,   27,   35,   45,    1,    4,
+				   -8,   -6,    7,    6,   11,   -2,  -13,  -12,
+				  -20,  -15,   -4,    2,    1,   -8,  -19,  -24,
+				  -21,  -23,  -12,  -13,  -13,  -14,  -28,  -24,
+				  -22,  -12,  -11,  -22,  -21,  -12,  -18,  -28,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				 -110, -112,  -47,  -15,   20,  -26,  -59,  -99,
-				  -29,  -21,   22,    5,    3,   34,  -25,  -18,
-				   -2,   19,   32,   44,   53,   41,   23,   -2,
-				    7,   18,   42,   37,   36,   41,   18,   10,
-				    6,   18,   28,   28,   33,   24,   29,    1,
-				  -13,   10,   13,   23,   26,   13,    6,  -14,
-				  -13,  -15,   -2,    9,    9,   -5,  -17,  -11,
-				  -44,  -13,  -10,   -1,   -2,   -3,  -12,  -43
+				 -106, -113,  -46,  -17,   19,  -27,  -59,  -95,
+				  -30,  -21,   22,    5,    3,   34,  -25,  -18,
+				   -2,   18,   30,   44,   53,   40,   23,   -1,
+				    6,   18,   41,   37,   36,   40,   18,   10,
+				    5,   18,   28,   28,   33,   25,   29,    1,
+				  -13,   10,   14,   23,   27,   13,    7,  -14,
+				  -12,  -15,   -1,   10,   10,   -4,  -16,  -11,
+				  -41,  -15,   -9,   -2,   -3,   -3,  -14,  -42
 			},
 			[BISHOP / 2] = {
-				  -38,  -41,  -48,  -73,  -66,  -44,  -30,  -35,
-				   -9,    7,   11,   10,    2,   -1,   10,   -3,
-				   21,   24,   31,   25,   27,   37,   37,   25,
-				    4,   -1,   21,   28,   29,   17,    5,   -9,
-				   -4,    0,   -6,   24,   18,    0,  -10,    1,
-				    4,    4,    9,   -4,    3,    1,    6,   -8,
-				   -9,   11,   12,    5,   -8,    6,    4,   -5,
-				    5,   16,   -7,  -11,   -7,  -16,    5,  -16
+				  -38,  -41,  -49,  -73,  -66,  -45,  -31,  -35,
+				   -8,    6,    9,   11,    2,   -1,    9,   -2,
+				   22,   23,   29,   25,   27,   36,   38,   25,
+				    3,   -1,   21,   28,   29,   17,    5,   -8,
+				   -3,    0,   -6,   24,   18,    1,   -9,    2,
+				    4,    4,   10,   -3,    4,    2,    7,   -7,
+				   -9,   11,   12,    5,   -7,    6,    5,   -5,
+				    5,   16,   -8,  -11,   -7,  -17,    3,  -15
 			},
 			[ROOK / 2] = {
-				   28,   13,   11,   18,   16,   25,    8,   16,
-				   13,   15,   28,   28,   25,   25,    3,   14,
-				    2,   23,   18,   13,   22,   11,   30,    9,
-				   -6,    1,    0,   -4,   -7,   -8,   -2,   -4,
-				  -13,  -13,  -20,   -9,  -16,  -25,  -16,  -22,
-				  -16,   -3,  -13,  -10,  -16,  -13,    2,  -12,
-				  -24,  -15,  -10,   -8,   -9,  -13,  -10,  -24,
-				  -15,   -4,   -7,    0,    0,   -7,   -7,  -12
+				   28,   12,    9,   15,   14,   23,    6,   17,
+				   13,   15,   26,   26,   23,   23,    3,   13,
+				    2,   22,   17,   11,   21,   10,   29,    8,
+				   -6,    1,   -2,   -5,   -8,  -10,   -2,   -3,
+				  -13,  -12,  -21,  -10,  -17,  -25,  -16,  -21,
+				  -15,   -3,  -14,  -12,  -16,  -13,    2,  -11,
+				  -22,  -15,  -11,  -10,  -11,  -14,  -10,  -22,
+				  -12,   -1,   -2,    4,    4,   -3,   -3,   -9
 			},
 			[QUEEN / 2] = {
-				  -11,   16,    0,   23,   23,   -2,   -4,  -19,
-				   19,  -16,    1,  -31,  -24,  -14,  -23,    8,
-				   36,   28,    5,    2,    3,   12,   50,   41,
-				   10,   -6,   -1,  -12,  -12,   -4,   -1,   12,
-				   -7,   -1,  -14,  -12,   -6,  -10,   -5,   -9,
-				   -4,   -2,   -5,  -11,   -8,   -6,   -3,   -2,
-				    4,    2,    4,    4,    0,    7,    4,    3,
-				   -3,    0,   -2,    0,   -3,   -8,   -1,  -13
+				   -8,   18,    1,   23,   24,   -3,   -2,  -15,
+				   20,  -16,    1,  -30,  -23,  -14,  -22,    9,
+				   36,   27,    5,    1,    3,   12,   52,   42,
+				   12,   -6,   -2,  -13,  -13,   -5,   -1,   13,
+				   -7,    0,  -14,  -14,   -8,  -11,   -4,   -9,
+				   -5,   -3,   -7,  -12,   -9,   -7,   -5,   -1,
+				    1,    1,    2,    2,   -1,    6,    3,    1,
+				   -6,    0,   -2,    3,    0,   -7,    0,  -13
 			},
 			[KING / 2] = {
-				  119,  137,   65,  -16,  -20,   52,    4,   63,
-				   20,   30,    4,   53,   41,  -20,   -3,  -76,
-				  -20,   32,   61,   15,   -9,   11,   28,  -69,
-				  -72,  -41,  -38,  -55,  -79,  -47,  -47,  -90,
-				  -87,  -44,  -54,  -70,  -82,  -51,  -64,  -94,
-				  -20,    9,  -29,  -38,  -31,  -29,   -2,  -24,
-				   64,   57,   18,   -1,   -3,   14,   48,   57,
-				   67,   76,   41,   39,   24,   44,   70,   62
+				  188,  155,   70,  -21,  -23,   55,    9,   81,
+				   25,   28,    0,   44,   36,  -24,   -4,  -76,
+				  -16,   30,   50,    2,  -24,    1,   25,  -67,
+				  -71,  -44,  -48,  -69,  -95,  -57,  -51,  -89,
+				  -85,  -46,  -61,  -82,  -93,  -57,  -65,  -91,
+				  -18,    8,  -33,  -43,  -35,  -30,    1,  -18,
+				   67,   57,   19,    0,   -2,   17,   53,   64,
+				   70,   79,   45,   41,   28,   47,   75,   67
 			}
 		},
 		[ENDGAME] = {
 			[PAWN / 2] = {
 				    0,    0,    0,    0,    0,    0,    0,    0,
-				   66,   82,   61,   22,   25,   56,   92,   80,
-				    6,   39,  -11,  -40,  -42,  -26,   33,   10,
-				  -12,   10,  -26,  -38,  -39,  -27,    6,  -13,
-				  -24,    8,  -24,  -28,  -30,  -22,    5,  -20,
-				  -28,    5,  -19,  -16,  -18,  -18,    5,  -25,
-				  -25,    8,  -12,   -5,   -4,  -12,    6,  -22,
+				   67,   83,   61,   22,   26,   56,   93,   79,
+				    7,   40,  -11,  -40,  -42,  -26,   34,    9,
+				  -11,    9,  -26,  -38,  -39,  -27,    6,  -14,
+				  -23,    8,  -24,  -28,  -28,  -21,    6,  -21,
+				  -28,    5,  -20,  -16,  -17,  -17,    4,  -26,
+				  -27,    8,  -13,   -6,   -4,  -14,    6,  -24,
 				    0,    0,    0,    0,    0,    0,    0,    0
 			},
 			[KNIGHT / 2] = {
-				  -66,   -3,    1,    0,   -2,   -8,  -14,  -81,
-				  -20,   -6,   -9,   -6,  -12,  -22,    3,  -27,
-				  -10,   -6,   12,    7,    7,    3,   -4,  -18,
-				    0,   12,   20,   25,   24,   19,   13,   -5,
-				   12,   17,   31,   35,   36,   29,   12,    8,
-				   -2,    5,   10,   28,   21,   11,    3,   -2,
-				   -2,   -3,    4,    6,    3,    5,    0,   -5,
-				  -13,  -18,   -9,    0,   -1,  -10,  -22,  -12
+				  -70,   -5,    0,    0,   -3,   -8,  -16,  -85,
+				  -23,   -7,   -9,   -5,  -11,  -21,    2,  -29,
+				  -12,   -5,   13,    7,    8,    4,   -3,  -19,
+				   -1,   13,   21,   26,   25,   20,   14,   -7,
+				   10,   18,   32,   36,   37,   30,   13,    6,
+				   -4,    6,   11,   29,   23,   12,    4,   -4,
+				   -4,   -4,    4,    6,    3,    5,   -1,   -6,
+				  -13,  -14,   -9,    1,    0,  -10,  -19,  -12
 			},
 			[BISHOP / 2] = {
-				    8,    8,    0,   16,    7,    5,    8,    1,
-				   -4,    0,   -1,   -8,   -2,   -4,   -3,  -11,
-				    4,    5,    3,    0,   -9,    1,   -6,    1,
-				    2,    8,    6,    7,   13,    4,    4,    1,
-				   -6,    8,   11,   10,    6,    8,    3,   -6,
+				    7,    8,    0,   16,    7,    5,    8,    1,
+				   -4,    0,   -1,   -9,   -3,   -5,   -3,  -11,
+				    4,    5,    3,   -1,  -10,    0,   -7,    1,
+				    2,    7,    5,    6,   13,    3,    3,    1,
+				   -6,    7,   10,    9,    6,    8,    2,   -6,
 				   -4,    1,    5,   10,    8,    4,    4,   -7,
-				  -10,   -8,  -20,   -6,   -4,   -9,   -9,   -1,
-				  -14,  -26,   -6,   -4,   -2,   -4,   18,  -14
+				  -10,   -9,  -19,   -6,   -4,   -9,   -9,   -1,
+				  -14,  -25,   -1,   -3,   -1,    1,   18,  -14
 			},
 			[ROOK / 2] = {
-				    8,    9,   18,    8,   12,   12,   19,   10,
-				   10,   17,   19,   12,   13,   14,   18,   10,
-				    6,    5,    5,    2,    2,    4,    3,    4,
-				    6,    3,    2,    2,    3,   10,    4,    5,
-				   -1,    1,    3,   -3,    1,    2,   -2,    1,
-				  -10,  -13,  -11,  -11,   -7,  -10,  -21,  -10,
-				   -7,  -14,  -10,  -11,  -10,  -10,  -14,  -13,
-				   -9,  -15,   -8,  -16,  -17,  -13,  -11,   -8
+				    8,    9,   19,    9,   13,   13,   19,   10,
+				    9,   16,   19,   11,   13,   14,   18,   10,
+				    6,    6,    5,    2,    2,    5,    4,    4,
+				    7,    3,    3,    3,    3,   10,    5,    5,
+				   -1,    1,    4,   -2,    1,    3,   -1,    2,
+				   -9,  -12,   -9,   -9,   -6,   -8,  -21,   -9,
+				   -6,  -12,   -8,   -9,   -9,   -9,  -13,  -12,
+				  -12,  -18,  -13,  -21,  -21,  -18,  -15,  -10
 			},
 			[QUEEN / 2] = {
-				   -8,  -11,   25,   13,   12,   27,   -4,    8,
-				  -10,   19,   40,   72,   65,   43,   23,    3,
-				  -21,    2,   37,   39,   47,   37,  -29,  -17,
-				   -4,   16,   21,   41,   41,   30,   24,    5,
-				   -1,   10,   22,   30,   20,    7,    8,    8,
-				  -19,  -10,    4,   -1,   -1,    3,   -5,  -19,
-				  -54,  -48,  -41,  -23,  -21,  -41,  -45,  -39,
-				  -44,  -54,  -52,  -42,  -28,  -37,  -42,  -29
+				  -10,  -12,   25,   13,   11,   27,   -6,    7,
+				   -8,   21,   40,   71,   63,   42,   23,    4,
+				  -18,    4,   37,   38,   47,   37,  -29,  -14,
+				   -1,   17,   21,   40,   40,   30,   26,    9,
+				    3,   11,   22,   30,   20,    8,   11,   13,
+				  -15,   -6,    5,    1,    1,    5,    0,  -15,
+				  -48,  -45,  -35,  -18,  -17,  -38,  -43,  -35,
+				  -45,  -60,  -61,  -59,  -51,  -48,  -54,  -34
 			},
 			[KING / 2] = {
-				 -126,  -60,  -23,   -8,   -4,  -37,  -33, -108,
-				  -18,   28,   42,   26,   24,   35,   26,   -5,
-				    0,   36,   48,   56,   62,   50,   34,    3,
-				   -2,   33,   55,   69,   69,   53,   34,    2,
-				   -9,   14,   42,   59,   63,   41,   22,   -7,
-				  -24,   -4,   24,   36,   34,   22,   -3,  -27,
-				  -54,  -27,   -3,    9,    7,   -4,  -25,  -58,
-				  -94,  -63,  -42,  -45,  -38,  -40,  -67, -101
+				 -139,  -63,  -23,   -7,   -2,  -37,  -34, -112,
+				  -19,   29,   43,   27,   25,   36,   26,   -6,
+				   -1,   36,   50,   58,   64,   52,   34,    3,
+				   -2,   33,   57,   71,   71,   55,   35,    2,
+				   -9,   15,   43,   60,   65,   42,   22,   -8,
+				  -23,   -4,   25,   36,   35,   21,   -4,  -27,
+				  -55,  -27,   -3,    8,    7,   -5,  -26,  -59,
+				  -94,  -63,  -42,  -43,  -38,  -39,  -68, -102
 			}
 		}
 	},
 	.knightMobilityBonus = {
-		[MIDDLEGAME] = {  -32,  -13,   -4,    2,    8,    9,   10,   11,   12},
-		[ENDGAME] = {  -33,  -11,   -3,   -2,    1,   11,   12,   13,   14}
+		[MIDDLEGAME] = {  -32,  -13,   -5,    2,    8,    9,   10,   11,   12},
+		[ENDGAME] = { -185,    3,   19,   20,   21,   29,   30,   31,   32}
 	},
 	.bishopMobilityBonus = {
-		[MIDDLEGAME] = {  -29,  -20,  -14,  -11,   -6,    0,    5,    8,    9,   10,   11,   12,   13,   14},
-		[ENDGAME] = {  -61,  -42,  -31,  -20,   -7,    6,    9,   14,   20,   21,   22,   23,   24,   25}
+		[MIDDLEGAME] = {  -29,  -19,  -13,  -11,   -6,   -1,    5,    8,    9,   10,   11,   12,   13,   14},
+		[ENDGAME] = {  -65,  -43,  -31,  -20,   -8,    6,    9,   14,   21,   22,   23,   24,   25,   26}
 	},
 	.rookMobilityBonus = {
-		[MIDDLEGAME] = {  -22,   -8,   -6,   -3,   -2,   -1,    0,    2,    3,    4,    5,    6,    7,    8,    9},
-		[ENDGAME] = {  -40,  -25,  -20,  -15,  -13,   -5,   -2,    1,    8,   12,   14,   17,   20,   23,   24}
+		[MIDDLEGAME] = {  -21,  -10,   -8,   -5,   -4,   -3,   -1,    2,    3,    4,    6,    8,    9,   10,   11},
+		[ENDGAME] = {  -45,  -26,  -21,  -17,  -15,   -5,   -2,    1,    9,   13,   15,   18,   22,   25,   26}
 	},
 	.queenMobilityBonus = {
-		[MIDDLEGAME] = {  -50,  -17,  -16,  -15,  -13,   -9,   -4,   -3,   -2,   -1,    0,    1,    2,    3,    4,    5,    6,    7,    8,    9,   10,   11,   12,   13,   14,   15,   16,   17},
-		[ENDGAME] = { -100,  -99,  -98,  -66,  -50,  -45,  -40,  -31,  -20,  -14,   -5,   -1,    5,   10,   15,   19,   25,   30,   36,   38,   43,   44,   45,   47,   48,   53,   54,   57}
+		[MIDDLEGAME] = { -104,  -22,  -21,  -16,  -11,   -7,   -2,   -1,    0,    1,    2,    3,    4,    5,    6,    7,    8,    9,   10,   11,   12,   13,   14,   15,   16,   17,   18,   19},
+		[ENDGAME] = {  -58,  -57,  -56,  -55,  -54,  -53,  -52,  -42,  -30,  -23,  -13,   -8,   -1,    4,   10,   14,   20,   26,   33,   35,   40,   41,   42,   43,   44,   50,   51,   52}
 	},
 	.virtualMobilityBonus = {
-		[MIDDLEGAME] = {   56,   55,   54,   53,   51,   50,   45,   39,   37,   30,   29,   25,   19,   13,    6,   -3,  -15,  -25,  -33,  -44,  -49,  -50,  -55,  -56,  -57,  -58,  -59,  -60},
-		[ENDGAME] = {   80,   39,   29,   14,   12,   11,    8,    5,    4,    3,    2,    1,    0,   -1,   -2,   -3,   -4,   -5,   -6,   -7,  -10,  -13,  -18,  -23,  -26,  -35,  -36,  -37}
+		[MIDDLEGAME] = {   44,   43,   42,   41,   40,   39,   34,   29,   27,   20,   19,   15,   11,    5,   -1,   -9,  -19,  -26,  -31,  -32,  -33,  -34,  -35,  -36,  -37,  -38,  -39,  -40},
+		[ENDGAME] = {  172,   41,   28,   13,   11,   10,    6,    3,    2,    1,    0,   -1,   -2,   -3,   -4,   -5,   -6,   -7,   -8,  -12,  -16,  -19,  -25,  -29,  -31,  -39,  -40,  -41}
 	},
 	.minorPawnCover = {    8,    5},
 	.passedPawnBonus = {
-		[MIDDLEGAME] = {    0,    1,    3,    6,   19,   26,   27,    0},
-		[ENDGAME] = {    0,  -18,  -16,    0,   30,   93,   94,    0}
+		[MIDDLEGAME] = {    0,    1,    3,    6,   18,   24,   25,    0},
+		[ENDGAME] = {    0,  -18,  -15,    0,   31,   94,   95,    0}
+	},
+	.connectedPawnBonus = {
+		[MIDDLEGAME] = {    0,   10,    2,    3,    3,   17,  112,    0},
+		[ENDGAME] = {    0,    8,    1,    1,    7,   16,    5,    0}
 	},
 	.doubledPawnBonus = {
-		[MIDDLEGAME] = {   -7,    5,   -2,    1,   -3,   -1,    7,   -5},
+		[MIDDLEGAME] = {   -7,    5,   -2,    1,   -2,   -1,    7,   -4},
 		[ENDGAME] = {  -26,  -26,  -16,   -9,   -3,  -17,  -26,  -29}
 	},
 	.isolatedPawnBonus = {
-		[MIDDLEGAME] = {  -12,   -5,  -15,  -17,  -18,  -18,   -7,  -12},
-		[ENDGAME] = {   17,  -13,   -4,  -13,  -12,   -3,  -10,   14}
+		[MIDDLEGAME] = {  -11,   -7,  -15,  -17,  -18,  -17,   -7,  -10},
+		[ENDGAME] = {   17,  -13,   -3,  -13,  -13,   -3,  -11,   15}
 	},
-	.connectedPawnBonus = {
-		[MIDDLEGAME] = {    0,    0,   11,    4,    3,   17,  124,    0},
-		[ENDGAME] = {    0,    0,    7,    2,    8,   22,   19,    0}
-	},
-	.backwardPawnBonus = {
-		[MIDDLEGAME] = {    6,    6,    7,    7,    3,    6,    7,   -9},
-		[ENDGAME] = {    2,    2,   -4,   -1,    5,    5,   -3,    0}
-	},
-	.knightOutputBonus = {   35,    9},
-	.bishopPairBonus = {   19,   63},
+	.knightOutputBonus = {   35,   10},
+	.bishopPairBonus = {   18,   63},
 	.badBishopBonus = {    0,   -1},
 	.openRookFileBonus = {
-		[MIDDLEGAME] = {   10,   32},
-		[ENDGAME] = {   11,    5}
+		[MIDDLEGAME] = {    8,   29},
+		[ENDGAME] = {   11,    4}
 	},
-	.tempo = {   20,   22}
+	.connectedRookBonus = {
+		[MIDDLEGAME] = {   -4,   11},
+		[ENDGAME] = {   10,    2}
+	},
+	.connectedQueenBonus = {
+		[MIDDLEGAME] = {   -6,    4,    2},
+		[ENDGAME] = {   42,   30,    5}
+	},
+	.tempo = {   20,   20}
 };
 
 evalParameters is_param_eg = {
@@ -217,7 +221,6 @@ evalParameters is_param_eg = {
     .doubledPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
     .isolatedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
     .connectedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
-    .backwardPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
 
 	.knightOutputBonus[ENDGAME] = 1,
 
@@ -225,6 +228,9 @@ evalParameters is_param_eg = {
 	.badBishopBonus[ENDGAME] = 1,
 
     .openRookFileBonus[ENDGAME] = { [0 ... 1] = 1 },
+	.connectedRookBonus[ENDGAME] = { [0 ... 1] = 1},
+
+	.connectedQueenBonus[ENDGAME] = { [0 ... 2] = 1},
 
     .tempo[ENDGAME] = 1
 };
@@ -303,14 +309,8 @@ void evaluatePawns(bitboard* board, int* mgScore, int* egScore)
             eval[MIDDLEGAME] += hce_params.isolatedPawnBonus[MIDDLEGAME][column];
             eval[ENDGAME] += hce_params.isolatedPawnBonus[ENDGAME][column];
         }
-		//Backward pawns
-		else if(row > 1 && (borderingMask & (sq - 1)) == 0 && borderingMask & board_rank[row + 1])
-		{
-			eval[MIDDLEGAME] += hce_params.backwardPawnBonus[MIDDLEGAME][column];
-			eval[ENDGAME] += hce_params.backwardPawnBonus[ENDGAME][column];
-		}
 		//connected pawns
-		else if(borderingMask & board_rank[row - 1])
+		else if(borderingMask & (board_rank[row - 1] | board_rank[row + 1]))
 		{
 			eval[MIDDLEGAME] += hce_params.connectedPawnBonus[MIDDLEGAME][row];
 			eval[ENDGAME] += hce_params.connectedPawnBonus[ENDGAME][row];
@@ -357,14 +357,8 @@ void evaluatePawns(bitboard* board, int* mgScore, int* egScore)
             eval[MIDDLEGAME] -= hce_params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
             eval[ENDGAME] -= hce_params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
-		//Backward pawns
-		else if(row < 6 && (borderingMask & ~(sq - 1)) == 0 && borderingMask & board_rank[row - 1])
-		{
-			eval[MIDDLEGAME] -= hce_params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
-			eval[ENDGAME] -= hce_params.backwardPawnBonus[ENDGAME][mirroredColumn];
-		}
 		//connected pawns
-		else if(borderingMask & board_rank[row + 1])
+		else if(borderingMask & (board_rank[row - 1] | board_rank[row + 1]))
 		{
 			eval[MIDDLEGAME] -= hce_params.connectedPawnBonus[MIDDLEGAME][mirroredRow];
 			eval[ENDGAME] -= hce_params.connectedPawnBonus[ENDGAME][mirroredRow];
@@ -529,12 +523,15 @@ void evaluateBishops(bitboard* board, int* mgScore, int* egScore)
 void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
 {
 	int eval[PHASE_COUNT] = {0};
+	int connectedRooksByRow = 0;
+	int connectedRooksByColumn = 0;
 
 	uint64_t mask = board->pieces[WHITE_ROOK];
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
 		int column = getColumn(sq);
+		int row = getRow(sq);
 
 		//piece/sq value
         eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_ROOK][sq];
@@ -562,6 +559,12 @@ void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
 		eval[MIDDLEGAME] += hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.rookMobilityBonus[ENDGAME][moveCount];
 
+        //rook rams
+		uint64_t connections = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		uint64_t connectedRooks = connections & board->pieces[WHITE_ROOK];
+		connectedRooksByRow += __builtin_popcountll(connectedRooks & board_rank[row]);
+		connectedRooksByColumn += __builtin_popcountll(connectedRooks & board_file[column]);
+
 		mask &= mask - 1;
 	}
 	
@@ -570,6 +573,7 @@ void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
 	{
         int sq = __builtin_ctzll(mask);
 		int column = getColumn(sq);
+		int row = getRow(sq);
 		
 		//piece/sq value
         eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_ROOK][sq];
@@ -596,9 +600,21 @@ void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
 		
 		eval[MIDDLEGAME] -= hce_params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.rookMobilityBonus[ENDGAME][moveCount];
+		
+        //rook rams
+		uint64_t connections = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		uint64_t connectedRooks = connections & board->pieces[BLACK_ROOK];
+		connectedRooksByRow -= __builtin_popcountll(connectedRooks & board_rank[row]);
+		connectedRooksByColumn -= __builtin_popcountll(connectedRooks & board_file[column]);
 
 		mask &= mask - 1;
 	}
+
+	eval[MIDDLEGAME] += connectedRooksByRow * hce_params.connectedRookBonus[MIDDLEGAME][CONNECTED_ROW];
+	eval[ENDGAME] += connectedRooksByRow * hce_params.connectedRookBonus[ENDGAME][CONNECTED_ROW];
+	
+	eval[MIDDLEGAME] += connectedRooksByColumn * hce_params.connectedRookBonus[MIDDLEGAME][CONNECTED_COLUMN];
+	eval[ENDGAME] += connectedRooksByColumn * hce_params.connectedRookBonus[ENDGAME][CONNECTED_COLUMN];
 	
 	*mgScore += eval[MIDDLEGAME];
 	*egScore += eval[ENDGAME];
@@ -607,11 +623,16 @@ void evaluateRooks(bitboard* board, int* mgScore, int* egScore)
 void evaluateQueens(bitboard* board, int* mgScore, int* egScore)
 {
 	int eval[PHASE_COUNT] = {0};
+	int connectedSlidersByRow = 0;
+	int connectedSlidersByColumn = 0;
+	int connectedSlidersByDiagonal = 0;
 
 	uint64_t mask = board->pieces[WHITE_QUEEN];
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+		int row = getRow(sq);
 
 		//piece/square value
         eval[MIDDLEGAME] += pieceBonusTable[MIDDLEGAME][WHITE_QUEEN][sq];
@@ -623,6 +644,16 @@ void evaluateQueens(bitboard* board, int* mgScore, int* egScore)
 		
 		eval[MIDDLEGAME] += hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] += hce_params.queenMobilityBonus[ENDGAME][moveCount];
+		
+        //queen & slider rams
+		uint64_t rookConnections = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		rookConnections &= (board->pieces[WHITE_QUEEN] | board->pieces[WHITE_ROOK]);
+		connectedSlidersByRow += __builtin_popcountll(rookConnections & board_rank[row]);
+		connectedSlidersByColumn += __builtin_popcountll(rookConnections & board_file[column]);
+
+		uint64_t bishopConnections = bishopMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		bishopConnections &= (board->pieces[WHITE_QUEEN] | board->pieces[WHITE_BISHOP]);
+		connectedSlidersByDiagonal += __builtin_popcountll(bishopConnections);
 
 		mask &= mask - 1;
 	}
@@ -631,6 +662,8 @@ void evaluateQueens(bitboard* board, int* mgScore, int* egScore)
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+		int row = getRow(sq);
 		
 		//piece/square value
         eval[MIDDLEGAME] -= pieceBonusTable[MIDDLEGAME][BLACK_QUEEN][sq];
@@ -642,10 +675,29 @@ void evaluateQueens(bitboard* board, int* mgScore, int* egScore)
 		
 		eval[MIDDLEGAME] -= hce_params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		eval[ENDGAME] -= hce_params.queenMobilityBonus[ENDGAME][moveCount];
+		
+        //queen & slider rams
+		uint64_t rookConnections = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		rookConnections &= (board->pieces[BLACK_QUEEN] | board->pieces[BLACK_ROOK]);
+		connectedSlidersByRow -= __builtin_popcountll(rookConnections & board_rank[row]);
+		connectedSlidersByColumn -= __builtin_popcountll(rookConnections & board_file[column]);
+
+		uint64_t bishopConnections = bishopMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		bishopConnections &= (board->pieces[BLACK] | board->pieces[BLACK_BISHOP]);
+		connectedSlidersByDiagonal -= __builtin_popcountll(bishopConnections);
 
 		mask &= mask - 1;
 	}
 	
+	eval[MIDDLEGAME] += connectedSlidersByRow * hce_params.connectedQueenBonus[MIDDLEGAME][CONNECTED_ROW];
+	eval[ENDGAME] += connectedSlidersByRow * hce_params.connectedQueenBonus[ENDGAME][CONNECTED_ROW];
+	
+	eval[MIDDLEGAME] += connectedSlidersByColumn * hce_params.connectedQueenBonus[MIDDLEGAME][CONNECTED_COLUMN];
+	eval[ENDGAME] += connectedSlidersByColumn * hce_params.connectedQueenBonus[ENDGAME][CONNECTED_COLUMN];
+	
+	eval[MIDDLEGAME] += connectedSlidersByDiagonal * hce_params.connectedQueenBonus[MIDDLEGAME][CONNECTED_DIAGONAL];
+	eval[ENDGAME] += connectedSlidersByDiagonal * hce_params.connectedQueenBonus[ENDGAME][CONNECTED_DIAGONAL];
+
 	*mgScore += eval[MIDDLEGAME];
 	*egScore += eval[ENDGAME];
 }
@@ -724,6 +776,6 @@ int hce_eval(bitboard* board)
     evaluateKings(board, &midgame_eval, &endgame_eval);
 
     int eval = evaluatePhasedScore(board, midgame_eval, endgame_eval);
-
+	eval = clamp(eval, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 	return (ISWHITE(board->turn)) ? eval : -eval;
 }

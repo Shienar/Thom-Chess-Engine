@@ -118,6 +118,16 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     }
     fprintf(output, "\t},\n");
 
+    fprintf(output, "\t.connectedPawnBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int row = 0; row < ROW_COUNT; row++)
+            fprintf(output, "%5d%s", params.connectedPawnBonus[phase][row], (row == 7) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+
     fprintf(output, "\t.doubledPawnBonus = {\n");
     for(int phase = 0; phase < PHASE_COUNT; phase++) 
     {
@@ -138,27 +148,6 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     }
     fprintf(output, "\t},\n");
     
-    fprintf(output, "\t.connectedPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int row = 0; row < ROW_COUNT; row++)
-            fprintf(output, "%5d%s", params.connectedPawnBonus[phase][row], (row == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
-    
-    fprintf(output, "\t.backwardPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < COLUMN_COUNT; column++)
-            fprintf(output, "%5d%s", params.backwardPawnBonus[phase][column], (column == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
-
-    
     fprintf(output, "\t.knightOutputBonus = {%5d,%5d},\n", params.knightOutputBonus[MIDDLEGAME], params.knightOutputBonus[ENDGAME]);
 
     fprintf(output, "\t.bishopPairBonus = {%5d,%5d},\n", params.bishopPairBonus[MIDDLEGAME], params.bishopPairBonus[ENDGAME]);
@@ -170,6 +159,26 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
         fprintf(output, "\t\t[%s] = {", phase_names[phase]);
         for(int i = 0; i < 2; i++)
             fprintf(output, "%5d%s", params.openRookFileBonus[phase][i], (i == 1) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.connectedRookBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < MAX_ROOK_CONNECTIONS; i++)
+            fprintf(output, "%5d%s", params.connectedRookBonus[phase][i], (i == 1) ? "" : ",");
+        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+    }
+    fprintf(output, "\t},\n");
+    
+    fprintf(output, "\t.connectedQueenBonus = {\n");
+    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    {
+        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        for(int i = 0; i < MAX_QUEEN_CONNECTIONS; i++)
+            fprintf(output, "%5d%s", params.connectedQueenBonus[phase][i], (i == 2) ? "" : ",");
         fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
     }
     fprintf(output, "\t},\n");
@@ -235,17 +244,8 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *mgScore += params.isolatedPawnBonus[MIDDLEGAME][column];
             *egScore += params.isolatedPawnBonus[ENDGAME][column];
         }
-		//Backward pawns
-		else if(row > 1 && (borderingMask & (sq - 1)) == 0 && borderingMask & board_rank[row + 1])
-		{
-            coefficients->backwardPawnBonus[MIDDLEGAME][column]++;
-            coefficients->backwardPawnBonus[ENDGAME][column]++;
-
-			*mgScore += params.backwardPawnBonus[MIDDLEGAME][column];
-			*egScore += params.backwardPawnBonus[ENDGAME][column];
-		}
 		//connected pawns
-		else if(borderingMask & board_rank[row - 1])
+		else if(borderingMask & (board_rank[row - 1] | board_rank[row + 1]))
 		{
             coefficients->connectedPawnBonus[MIDDLEGAME][row]++;
             coefficients->connectedPawnBonus[ENDGAME][row]++;
@@ -313,17 +313,8 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             *mgScore -= params.isolatedPawnBonus[MIDDLEGAME][mirroredColumn];
             *egScore -= params.isolatedPawnBonus[ENDGAME][mirroredColumn];
         }
-		//Backward pawns
-		else if(row < 6 && (borderingMask & ~(sq - 1)) == 0 && borderingMask & board_rank[row - 1])
-		{
-            coefficients->backwardPawnBonus[MIDDLEGAME][mirroredColumn]--;
-            coefficients->backwardPawnBonus[ENDGAME][mirroredColumn]--;
-
-			*mgScore -= params.backwardPawnBonus[MIDDLEGAME][mirroredColumn];
-			*egScore -= params.backwardPawnBonus[ENDGAME][mirroredColumn];
-		}
 		//connected pawns
-		else if(borderingMask & board_rank[row + 1])
+		else if(borderingMask & (board_rank[row - 1] | board_rank[row + 1]))
 		{
             coefficients->connectedPawnBonus[MIDDLEGAME][mirroredRow]--;
             coefficients->connectedPawnBonus[ENDGAME][mirroredRow]--;
@@ -543,11 +534,15 @@ void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalP
 
 void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
+	int connectedRooksByRow = 0;
+	int connectedRooksByColumn = 0;
+
 	uint64_t mask = board->pieces[WHITE_ROOK];
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
 		int column = getColumn(sq);
+		int row = getRow(sq);
 
 		//piece/sq value
         coefficients->genericPieceValues[MIDDLEGAME][ROOK / 2]++;
@@ -592,6 +587,12 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 
 		*mgScore += params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		*egScore += params.rookMobilityBonus[ENDGAME][moveCount];
+        
+        //rook rams
+		uint64_t connections = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		uint64_t connectedRooks = connections & board->pieces[WHITE_ROOK];
+		connectedRooksByRow += __builtin_popcountll(connectedRooks & board_rank[row]);
+		connectedRooksByColumn += __builtin_popcountll(connectedRooks & board_file[column]);
 
 		mask &= mask - 1;
 	}
@@ -601,6 +602,7 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	{
         int sq = __builtin_ctzll(mask);
 		int column = getColumn(sq);
+		int row = getRow(sq);
 		
 		//piece/sq value
         coefficients->genericPieceValues[MIDDLEGAME][ROOK / 2]--;
@@ -645,17 +647,41 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 
 		*mgScore -= params.rookMobilityBonus[MIDDLEGAME][moveCount];
 		*egScore -= params.rookMobilityBonus[ENDGAME][moveCount];
+        
+        //rook rams
+		uint64_t connections = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		uint64_t connectedRooks = connections & board->pieces[BLACK_ROOK];
+		connectedRooksByRow -= __builtin_popcountll(connectedRooks & board_rank[row]);
+		connectedRooksByColumn -= __builtin_popcountll(connectedRooks & board_file[column]);
 
 		mask &= mask - 1;
 	}
+
+    coefficients->connectedRookBonus[MIDDLEGAME][CONNECTED_COLUMN] += connectedRooksByColumn;
+    coefficients->connectedRookBonus[ENDGAME][CONNECTED_COLUMN] += connectedRooksByColumn;
+
+	*mgScore += connectedRooksByColumn * params.connectedRookBonus[MIDDLEGAME][CONNECTED_COLUMN];
+	*egScore += connectedRooksByColumn * params.connectedRookBonus[ENDGAME][CONNECTED_COLUMN];
+    
+    coefficients->connectedRookBonus[MIDDLEGAME][CONNECTED_ROW] += connectedRooksByRow;
+    coefficients->connectedRookBonus[ENDGAME][CONNECTED_ROW] += connectedRooksByRow;
+
+	*mgScore += connectedRooksByRow * params.connectedRookBonus[MIDDLEGAME][CONNECTED_ROW];
+	*egScore += connectedRooksByRow * params.connectedRookBonus[ENDGAME][CONNECTED_ROW];
 }
 
 void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
 {
+	int connectedSlidersByRow = 0;
+	int connectedSlidersByColumn = 0;
+	int connectedSlidersByDiagonal = 0;
+
 	uint64_t mask = board->pieces[WHITE_QUEEN];
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+		int row = getRow(sq);
 
 		//piece/square value
         coefficients->genericPieceValues[MIDDLEGAME][QUEEN / 2]++;
@@ -679,7 +705,16 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 		
 		*mgScore += params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		*egScore += params.queenMobilityBonus[ENDGAME][moveCount];
+        
+        //queen & slider rams
+		uint64_t rookConnections = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		rookConnections &= (board->pieces[WHITE_QUEEN] | board->pieces[WHITE_ROOK]);
+		connectedSlidersByRow += __builtin_popcountll(rookConnections & board_rank[row]);
+		connectedSlidersByColumn += __builtin_popcountll(rookConnections & board_file[column]);
 
+		uint64_t bishopConnections = bishopMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
+		bishopConnections &= (board->pieces[WHITE_QUEEN] | board->pieces[WHITE_BISHOP]);
+		connectedSlidersByDiagonal += __builtin_popcountll(bishopConnections);
 		mask &= mask - 1;
 	}
 	
@@ -687,6 +722,8 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
+		int row = getRow(sq);
 		
 		//piece/square value
         coefficients->genericPieceValues[MIDDLEGAME][QUEEN / 2]--;
@@ -710,9 +747,37 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 
 		*mgScore -= params.queenMobilityBonus[MIDDLEGAME][moveCount];
 		*egScore -= params.queenMobilityBonus[ENDGAME][moveCount];
+        
+        //queen & slider rams
+		uint64_t rookConnections = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		rookConnections &= (board->pieces[BLACK_QUEEN] | board->pieces[BLACK_ROOK]);
+		connectedSlidersByRow -= __builtin_popcountll(rookConnections & board_rank[row]);
+		connectedSlidersByColumn -= __builtin_popcountll(rookConnections & board_file[column]);
+
+		uint64_t bishopConnections = bishopMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
+		bishopConnections &= (board->pieces[BLACK] | board->pieces[BLACK_BISHOP]);
+		connectedSlidersByDiagonal -= __builtin_popcountll(bishopConnections);
 
 		mask &= mask - 1;
 	}
+    
+    coefficients->connectedQueenBonus[MIDDLEGAME][CONNECTED_ROW] += connectedSlidersByRow;
+    coefficients->connectedQueenBonus[ENDGAME][CONNECTED_ROW] += connectedSlidersByRow;
+
+	*mgScore += connectedSlidersByRow * params.connectedQueenBonus[MIDDLEGAME][CONNECTED_ROW];
+	*egScore += connectedSlidersByRow * params.connectedQueenBonus[ENDGAME][CONNECTED_ROW];
+    
+    coefficients->connectedQueenBonus[MIDDLEGAME][CONNECTED_COLUMN] += connectedSlidersByColumn;
+    coefficients->connectedQueenBonus[ENDGAME][CONNECTED_COLUMN] += connectedSlidersByColumn;
+
+	*mgScore += connectedSlidersByColumn * params.connectedQueenBonus[MIDDLEGAME][CONNECTED_COLUMN];
+	*egScore += connectedSlidersByColumn * params.connectedQueenBonus[ENDGAME][CONNECTED_COLUMN];
+    
+    coefficients->connectedQueenBonus[MIDDLEGAME][CONNECTED_DIAGONAL] += connectedSlidersByDiagonal;
+    coefficients->connectedQueenBonus[ENDGAME][CONNECTED_DIAGONAL] += connectedSlidersByDiagonal;
+
+	*mgScore += connectedSlidersByDiagonal * params.connectedQueenBonus[MIDDLEGAME][CONNECTED_DIAGONAL];
+	*egScore += connectedSlidersByDiagonal * params.connectedQueenBonus[ENDGAME][CONNECTED_DIAGONAL];
 }
 
 void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)

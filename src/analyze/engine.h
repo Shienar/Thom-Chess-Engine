@@ -36,7 +36,6 @@ extern float aspiration_margin_mult_factor;
 extern int reverse_futility_margin;
 extern int reverse_futility_margin_improving;
 extern int futility_margin;
-extern int delta_pruning_offset;
 
 extern int probcut_offset;
 extern int probcut_offset_improving;

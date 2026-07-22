@@ -30,7 +30,6 @@ float aspiration_margin_mult_factor = 2.0f;
 int reverse_futility_margin = 205;
 int reverse_futility_margin_improving = 120;
 int futility_margin = 370;
-int delta_pruning_offset = 480;
 
 int probcut_offset = 400;
 int probcut_offset_improving = 250;
@@ -48,7 +47,7 @@ void initSearchTables()
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
         {
             if(depth >= lm_depth && moveCount >= count)
-                reductionTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.14f);
+                reductionTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.35f);
             else reductionTable[depth][moveCount] = 0;
         }
     }
@@ -138,7 +137,21 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     alpha = _max(alpha, best);
 
     //Delta pruning
-    if(delta_pruning_offset + best < alpha) return best;
+    int largestDelta = 0;
+    int opposingColor = FLIP_COLOR(board->turn);
+
+    if(board->pieces[QUEEN | opposingColor])
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][QUEEN / 2], hce_params.genericPieceValues[ENDGAME][QUEEN / 2]);
+    else if(board->pieces[ROOK | opposingColor])
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][ROOK / 2], hce_params.genericPieceValues[ENDGAME][ROOK / 2]);
+    else if(board->pieces[BISHOP | opposingColor])
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][BISHOP / 2], hce_params.genericPieceValues[ENDGAME][BISHOP / 2]);
+    else if(board->pieces[KNIGHT | opposingColor])
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][KNIGHT / 2], hce_params.genericPieceValues[ENDGAME][KNIGHT / 2]);
+    else if(board->pieces[PAWN | opposingColor])
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][PAWN / 2], hce_params.genericPieceValues[ENDGAME][PAWN / 2]);
+
+    if(largestDelta && largestDelta + best < alpha) return best;
 
     moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_CHECKS, NULL, tt_move, NULL, NULL, NULL);
     int validMovesVisited = 0;

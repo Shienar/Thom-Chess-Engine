@@ -11,7 +11,14 @@
 #define HALF_OPEN_FILE 0
 #define OPEN_FILE 1
 
+#define CONNECTED_ROW 0
+#define CONNECTED_COLUMN 1
+#define CONNECTED_DIAGONAL 2
+#define MAX_ROOK_CONNECTIONS 2
+#define MAX_QUEEN_CONNECTIONS 3
+
 //Externally visible for tuning.
+//Everything is a bonus and everything gets added. Some bonuses happen to be negative.
 typedef union {
     struct {
         int genericPieceValues[PHASE_COUNT][PIECE_TYPE_COUNT];
@@ -25,10 +32,9 @@ typedef union {
         
         int minorPawnCover[PHASE_COUNT];
         int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
+        int connectedPawnBonus[PHASE_COUNT][ROW_COUNT];
         int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        int connectedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        int backwardPawnBonus[PHASE_COUNT][ROW_COUNT];
 
         int knightOutputBonus[PHASE_COUNT];
 
@@ -36,6 +42,9 @@ typedef union {
         int badBishopBonus[PHASE_COUNT];
         
         int openRookFileBonus[PHASE_COUNT][2];
+        int connectedRookBonus[PHASE_COUNT][MAX_ROOK_CONNECTIONS];
+
+        int connectedQueenBonus[PHASE_COUNT][MAX_QUEEN_CONNECTIONS];
         
         int tempo[PHASE_COUNT];
     };
