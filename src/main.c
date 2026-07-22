@@ -75,6 +75,11 @@ int main(int argc, char** argv)
 
                 printf("option name probcut_offset type spin default %d min 200 max 600\n", probcut_offset);
                 printf("option name probcut_offset_improving type spin default %d min 200 max 500\n", probcut_offset_improving);
+                
+                printf("option name historyBonusScale type spin default %d min 50 max 600\n", historyBonusScale);
+                printf("option name historyBonusOffset type spin default %d min 50 max 600\n", historyBonusOffset);
+                printf("option name historyPenaltyScale type spin default %d min 50 max 600\n", historyPenaltyScale);
+                printf("option name historyPenaltyOffset type spin default %d min 50 max 600\n", historyPenaltyOffset);
                 #endif
                 printf("uciok\n");
                 fflush(stdout);
@@ -231,6 +236,30 @@ int main(int argc, char** argv)
                         {
                             if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                                 sscanf(str, "%d", &probcut_offset_improving);
+                            break;
+                        }
+                        else if(strcmp(str, "historyBonusScale") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &historyBonusScale);
+                            break;
+                        }
+                        else if(strcmp(str, "historyBonusOffset") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &historyBonusOffset);
+                            break;
+                        }
+                        else if(strcmp(str, "historyPenaltyScale") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &historyPenaltyScale);
+                            break;
+                        }
+                        else if(strcmp(str, "historyPenaltyOffset") == 0)
+                        {
+                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                                sscanf(str, "%d", &historyPenaltyOffset);
                             break;
                         }
                         #endif

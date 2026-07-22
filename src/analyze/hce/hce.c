@@ -188,7 +188,7 @@ evalParameters hce_params = {
 		[MIDDLEGAME] = {  -11,   -7,  -15,  -17,  -18,  -17,   -7,  -10},
 		[ENDGAME] = {   17,  -13,   -3,  -13,  -13,   -3,  -11,   15}
 	},
-	.knightOutputBonus = {   35,   10},
+	.knightOutpostBonus = {   35,   10},
 	.bishopPairBonus = {   18,   63},
 	.badBishopBonus = {    0,   -1},
 	.openRookFileBonus = {
@@ -222,7 +222,7 @@ evalParameters is_param_eg = {
     .isolatedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
     .connectedPawnBonus[ENDGAME] = { [0 ... 7] = 1 },
 
-	.knightOutputBonus[ENDGAME] = 1,
+	.knightOutpostBonus[ENDGAME] = 1,
 
 	.bishopPairBonus[ENDGAME] = 1,
 	.badBishopBonus[ENDGAME] = 1,
@@ -401,8 +401,8 @@ void evaluateKnights(bitboard* board, int* mgScore, int* egScore)
 		   board->pieces[WHITE_PAWN] && board_rank[row - 1] &&
 		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~(singleBitMask(sq + 7) - 1))) == 0)
 			{	
-				eval[MIDDLEGAME] += hce_params.knightOutputBonus[MIDDLEGAME];
-				eval[ENDGAME] += hce_params.knightOutputBonus[ENDGAME];
+				eval[MIDDLEGAME] += hce_params.knightOutpostBonus[MIDDLEGAME];
+				eval[ENDGAME] += hce_params.knightOutpostBonus[ENDGAME];
 			}
 
 		mask &= mask - 1;
@@ -431,8 +431,8 @@ void evaluateKnights(bitboard* board, int* mgScore, int* egScore)
 		   board->pieces[BLACK_PAWN] && board_rank[row + 1] &&
 		   (bordering_files[column] & board->pieces[WHITE_PAWN] & ((singleBitMask(sq - 6) - 1))) == 0)
 			{	
-				eval[MIDDLEGAME] -= hce_params.knightOutputBonus[MIDDLEGAME];
-				eval[ENDGAME] -= hce_params.knightOutputBonus[ENDGAME];
+				eval[MIDDLEGAME] -= hce_params.knightOutpostBonus[MIDDLEGAME];
+				eval[ENDGAME] -= hce_params.knightOutpostBonus[ENDGAME];
 			}
 
 		mask &= mask - 1;

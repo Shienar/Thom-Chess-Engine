@@ -42,7 +42,7 @@ typedef union {
         double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
 
-        double knightOutputBonus[PHASE_COUNT];
+        double knightOutpostBonus[PHASE_COUNT];
 
         double bishopPairBonus[PHASE_COUNT];
         double badBishopBonus[PHASE_COUNT];

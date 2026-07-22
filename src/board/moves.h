@@ -34,12 +34,12 @@
 
 int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 
-#define PV_MOVE_SCORE 30000
-#define TT_MOVE_SCORE 20000
-#define KILLER_1_SCORE 10000
-#define KILLER_2_SCORE 9500
-#define MAX_HISTORY_SCORE 5000 //+- max bound
-#define CAPTURE_SCORE 5000 //+- min bound, used as an exact score for quiet promotions.
+#define TT_MOVE_SCORE 32000
+#define PV_MOVE_SCORE 31000
+#define KILLER_1_SCORE 30000
+#define KILLER_2_SCORE 29000
+#define MAX_HISTORY_SCORE 25000 //+- max bound
+#define CAPTURE_SCORE 25000 //+- min bound, used as an exact score for quiet promotions.
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64]);
 move_c* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);

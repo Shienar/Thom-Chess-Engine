@@ -36,7 +36,7 @@ typedef union {
         int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
         int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
 
-        int knightOutputBonus[PHASE_COUNT];
+        int knightOutpostBonus[PHASE_COUNT];
 
         int bishopPairBonus[PHASE_COUNT];
         int badBishopBonus[PHASE_COUNT];

@@ -40,6 +40,12 @@ extern int futility_margin;
 extern int probcut_offset;
 extern int probcut_offset_improving;
 
+extern int historyBonusScale;
+extern int historyBonusOffset;
+extern int historyPenaltyScale;
+extern int historyPenaltyOffset;
+
+
 void initSearchTables();
 int perft(bitboard* board, int depth, int verbose);
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply);

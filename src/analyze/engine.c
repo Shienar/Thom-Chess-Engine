@@ -34,6 +34,11 @@ int futility_margin = 370;
 int probcut_offset = 400;
 int probcut_offset_improving = 250;
 
+int historyBonusScale = 290;
+int historyBonusOffset = 137;
+int historyPenaltyScale = 392;
+int historyPenaltyOffset = 131;
+
 
 int reductionTable[MAX_PLY][MAX_MOVES] = {0};
 
@@ -179,7 +184,8 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             {
                 best = score;
 
-                if(score > alpha) alpha = score;
+                if(score > alpha) 
+                    alpha = score;
 
                 if(alpha >= beta)
                     break;
@@ -345,7 +351,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         move_d detailedMove = board->history[board->historyIndex - 1];
                         updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
                         #endif
-                        probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV);
+
+                        probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
+                        if(probCutScore >= pBeta)
+                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV);
 
                         unmove(board);
 
@@ -367,7 +376,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                                 transposition_table_set(context->tt, pcutEntry, ply);
                             }
                             destroy_move_iterator(iter);
-                            return beta;
+                            return probCutScore;
                         }
                     }   
                     destroy_move_iterator(iter);
@@ -403,7 +412,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
             if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
             
-            if(!pvNode && isQuietMove && !context->improving[ply]) next_depth -= reductionTable[depth][validMovesVisited];
+            //lmr
+            if(!pvNode && isQuietMove && !context->improving[ply]) 
+                next_depth -= reductionTable[depth][validMovesVisited];
 
             if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
             else
@@ -441,12 +452,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     context->killerMoves[ply][0] = *currentMove;
                 
                     //History heuristic
-                    int bonus = depth * depth;
+                    int bonus = historyBonusScale * depth + historyBonusOffset;
+                    int penalty = historyPenaltyScale * depth + historyPenaltyOffset;
                     int16_t* dest = &context->historyTable[board->turn][PIECE(currentPiece) / 2][currentMove->endSquare];
                     *dest = _min(*dest + bonus, MAX_HISTORY_SCORE);
+
                     int16_t* straightArr = (int16_t*) context->historyTable;
                     for(int i = 0; i < searchedQuietCount; i++)
-                        straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - bonus, -MAX_HISTORY_SCORE);
+                    straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
                 }
 
                 return score;
@@ -725,6 +738,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
     searchThreadContext* context = (searchThreadContext*)param;
     memset(context->historyTable, 0, sizeof(context->historyTable));
+    memset(context->killerMoves, 0, sizeof(context->killerMoves));
     
     int maxDepth = context->maxDepth;
     volatile clock_t *endTime = context->endTime;

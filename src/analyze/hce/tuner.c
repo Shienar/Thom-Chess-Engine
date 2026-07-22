@@ -148,7 +148,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     }
     fprintf(output, "\t},\n");
     
-    fprintf(output, "\t.knightOutputBonus = {%5d,%5d},\n", params.knightOutputBonus[MIDDLEGAME], params.knightOutputBonus[ENDGAME]);
+    fprintf(output, "\t.knightOutpostBonus = {%5d,%5d},\n", params.knightOutpostBonus[MIDDLEGAME], params.knightOutpostBonus[ENDGAME]);
 
     fprintf(output, "\t.bishopPairBonus = {%5d,%5d},\n", params.bishopPairBonus[MIDDLEGAME], params.bishopPairBonus[ENDGAME]);
     fprintf(output, "\t.badBishopBonus = {%5d,%5d},\n", params.badBishopBonus[MIDDLEGAME], params.badBishopBonus[ENDGAME]);
@@ -370,11 +370,11 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		   board->pieces[WHITE_PAWN] && board_rank[row - 1] &&
 		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~(singleBitMask(sq + 7) - 1))) == 0)
 			{	
-                coefficients->knightOutputBonus[MIDDLEGAME]++;
-                coefficients->knightOutputBonus[ENDGAME]++;
+                coefficients->knightOutpostBonus[MIDDLEGAME]++;
+                coefficients->knightOutpostBonus[ENDGAME]++;
 
-				*mgScore += params.knightOutputBonus[MIDDLEGAME];
-				*egScore += params.knightOutputBonus[ENDGAME];
+				*mgScore += params.knightOutpostBonus[MIDDLEGAME];
+				*egScore += params.knightOutpostBonus[ENDGAME];
 			}
 
 		mask &= mask - 1;
@@ -415,11 +415,11 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		   board->pieces[BLACK_PAWN] && board_rank[row + 1] &&
 		   (bordering_files[column] & board->pieces[WHITE_PAWN] & ((singleBitMask(sq - 6) - 1))) == 0)
 			{	
-                coefficients->knightOutputBonus[MIDDLEGAME]--;
-                coefficients->knightOutputBonus[ENDGAME]--;
+                coefficients->knightOutpostBonus[MIDDLEGAME]--;
+                coefficients->knightOutpostBonus[ENDGAME]--;
 
-				*mgScore -= params.knightOutputBonus[MIDDLEGAME];
-				*egScore -= params.knightOutputBonus[ENDGAME];
+				*mgScore -= params.knightOutpostBonus[MIDDLEGAME];
+				*egScore -= params.knightOutpostBonus[ENDGAME];
 			}
 
 		mask &= mask - 1;

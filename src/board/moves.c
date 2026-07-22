@@ -395,7 +395,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
     return gain[0];
 }
 
-//Only used when move ordering matters.
+//Only used when move ordering matters (not perft)
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64])
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
@@ -424,11 +424,11 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
     {
         move_d m;
         createDetailedMove(&m, iter->moveList[i], board);
-
-        if(pvMove && m.arr[0] == pvMove->raw)
-            iter->moveScores[i] = PV_MOVE_SCORE;
-        else if(ttMove && m.arr[0] == ttMove->raw)
+        
+        if(ttMove && m.arr[0] == ttMove->raw)
             iter->moveScores[i] = TT_MOVE_SCORE;
+        else if(pvMove && m.arr[0] == pvMove->raw)
+            iter->moveScores[i] = PV_MOVE_SCORE;
         else if(killerMoves && m.arr[0] == killerMoves[0].raw)
             iter->moveScores[i] = KILLER_1_SCORE;
         else if(killerMoves && m.arr[0] == killerMoves[1].raw)
@@ -438,7 +438,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             int seeValue = staticExchangeEvaluation(board, m);
 
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
-            else if(capturesOnly == GET_WINNING_CAPTURES)
+            else if(capturesOnly == GET_WINNING_CAPTURES && seeValue < -50)
             {
                 //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
                 if(i > iter->visitedCount)
