@@ -8,7 +8,7 @@
 #define MIDDLEGAME 0
 #define ENDGAME 1
 
-#define HALF_OPEN_FILE 0
+#define SEMI_OPEN_FILE 0
 #define OPEN_FILE 1
 
 #define CONNECTED_ROW 0
@@ -16,6 +16,12 @@
 #define CONNECTED_DIAGONAL 2
 #define MAX_ROOK_CONNECTIONS 2
 #define MAX_QUEEN_CONNECTIONS 3
+
+#define ATTACKING_KNIGHT 0
+#define ATTACKING_BISHOP 1 
+#define ATTACKING_ROOK 2
+#define ATTACKING_QUEEN 3
+#define PAWN_ATTACK_TYPES 4
 
 //Externally visible for tuning.
 //Everything is a bonus and everything gets added. Some bonuses happen to be negative.
@@ -30,6 +36,7 @@ typedef union {
         int queenMobilityBonus[PHASE_COUNT][28];
         int virtualMobilityBonus[PHASE_COUNT][28];
         
+        int pawnAttacks[PHASE_COUNT][PAWN_ATTACK_TYPES];
         int minorPawnCover[PHASE_COUNT];
         int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         int connectedPawnBonus[PHASE_COUNT][ROW_COUNT];
@@ -56,7 +63,6 @@ typedef union {
 extern evalParameters hce_params; 
 extern evalParameters is_param_eg;
 extern int gamephasePieceValues[PIECE_COUNT];
-extern uint64_t bordering_files[COLUMN_COUNT];
 
 void init_HCE_tables();
 int evaluatePhasedScore(bitboard* board, int middlegameScore, int endgameScore);

@@ -101,8 +101,10 @@
 #define ROW_COUNT 8
 #define COLUMN_COUNT 8
 
-extern uint64_t board_file[8];
-extern uint64_t board_rank[8];
+extern uint64_t board_file[COLUMN_COUNT];
+extern uint64_t board_rank[ROW_COUNT];
+
+extern uint64_t bordering_files[COLUMN_COUNT];
 
 
 //Background = 48; Foreground = 38

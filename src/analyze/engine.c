@@ -115,10 +115,23 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     table_entry_tt entry = transposition_table_get(board, context->tt, &tt_hit, ply);
     if(tt_hit)
     {
-        if(entry.nodeType == NODE_TYPE_PV ||
-          (entry.nodeType == NODE_TYPE_ALL && entry.evaluation <= alpha) ||
-          (entry.nodeType == NODE_TYPE_CUT && entry.evaluation >= beta)) 
+        if(entry.nodeType == NODE_BOUND_EXACT)
             return entry.evaluation;
+        else if(entry.nodeType == NODE_BOUND_UPPER)
+        {
+            if(entry.evaluation <= alpha)
+                return entry.evaluation;
+            beta = _min(beta, entry.evaluation);
+        }
+        else if(entry.nodeType == NODE_BOUND_LOWER)
+        {
+            if(entry.evaluation >= beta)
+                return entry.evaluation;
+            alpha = _max(alpha, entry.evaluation);
+        }
+            
+        if(alpha >= beta)
+            return alpha;
 
         temp.raw = entry.bestMove;
         tt_move = &temp;
@@ -131,7 +144,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         table_entry_tt shallowEntry = {
             .depth = 0,
             .hashCode = board->hashCode,
-            .nodeType = NODE_TYPE_UNKNOWN,
+            .nodeType = NODE_BOUND_UNKNOWN,
             .evaluation = best,
             .age = board->halfMoveCount
         };
@@ -197,7 +210,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     table_entry_tt shallowEntry = {
         .depth = 0,
         .hashCode = board->hashCode,
-        .nodeType = (best >= beta) ? NODE_TYPE_CUT : ( (best > lowestBound) ? NODE_TYPE_PV : NODE_TYPE_ALL),
+        .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ( (best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
         .evaluation = best,
         .age = board->halfMoveCount
     };
@@ -224,17 +237,19 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     int searchedQuietIndices[MAX_MOVES] = {0};
     int searchedQuietCount = 0;
+    int skipQuiets = 0;
 
-    context->seldepth = _max(context->seldepth, ply);
+    if(pvNode)
+        context->seldepth = _max(context->seldepth, ply);
     
     if(isDraw(board)) return (ply & 3) - 1;
 
     //Mate distance pruning for non-root nodes.
     if(ply != 0)
     {
-        int a = _max(alpha, -SCORE_WIN + ply);
-        int b = _min(beta, SCORE_WIN - ply - 1);
-        if(a >= b) return a;
+        alpha = _max(alpha, -SCORE_WIN + ply);
+        beta = _min(beta, SCORE_WIN - ply - 1);
+        if(alpha >= beta) return alpha;
     }
 
     int score = 0;
@@ -251,10 +266,23 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     {
         if(old_tt_entry.depth >= depth && (!pvNode || depth == 0)) 
         {
-            if(old_tt_entry.nodeType == NODE_TYPE_PV ||
-               (old_tt_entry.nodeType == NODE_TYPE_ALL && old_tt_entry.evaluation <= alpha) ||
-               (old_tt_entry.nodeType == NODE_TYPE_CUT && old_tt_entry.evaluation >= beta)) 
+            if(old_tt_entry.nodeType == NODE_BOUND_EXACT)
+                return old_tt_entry.evaluation;
+            else if(old_tt_entry.nodeType == NODE_BOUND_UPPER)
+            {
+                if(old_tt_entry.evaluation <= alpha)
                     return old_tt_entry.evaluation;
+                beta = _min(beta, old_tt_entry.evaluation);
+            }
+            else if(old_tt_entry.nodeType == NODE_BOUND_LOWER)
+            {
+                if(old_tt_entry.evaluation >= beta)
+                    return old_tt_entry.evaluation;
+                alpha = _max(alpha, old_tt_entry.evaluation);
+            }
+                
+            if(alpha >= beta)
+                return alpha;
         }
         
         temp.raw = old_tt_entry.bestMove; 
@@ -273,7 +301,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         int result = getSygyzyResult(context->board);
         if(result != -1) 
         {
-            new_tt_entry.nodeType = NODE_TYPE_PV;
+            new_tt_entry.nodeType = NODE_BOUND_EXACT;
             new_tt_entry.evaluation = result;
             transposition_table_set(context->tt, new_tt_entry, ply);
             return result;
@@ -289,7 +317,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             table_entry_tt shallowEntry = {
                 .depth = 0,
                 .hashCode = board->hashCode,
-                .nodeType = NODE_TYPE_UNKNOWN,
+                .nodeType = NODE_BOUND_UNKNOWN,
                 .evaluation = score,
                 .age = board->halfMoveCount
             };
@@ -298,6 +326,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     //Improving
+    context->evalHistory[ply] = score;
     if(inCheck) context->improving[ply] = 0;
     else context->improving[ply] = (ply >= 2) ? (score > context->evalHistory[ply - 2]) : 1;
 
@@ -305,6 +334,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
+        //Futility pruning
+        if(depth <= futility_pruning_depth && (score + futility_margin) <= alpha)
+            return alpha;
+
         //Reverse Futility Pruning
         if(depth <= reverse_futility_pruning_depth)
         {
@@ -314,10 +347,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             if(reducedVal >= beta) return beta;
         }
-
-        //Futility pruning
-        if(depth <= futility_pruning_depth && (score + futility_margin) <= alpha)
-            return alpha;
 
         //Null move pruning
         if(score >= beta && depth >= nullmove_pruning_depth &&
@@ -369,7 +398,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                                 table_entry_tt pcutEntry = {
                                     .depth = nextDepth,
                                     .hashCode = board->hashCode,
-                                    .nodeType = NODE_TYPE_CUT,
+                                    .nodeType = NODE_BOUND_LOWER,
                                     .evaluation = beta,
                                     .age = board->halfMoveCount
                                 };
@@ -399,6 +428,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
             int currentPiece = findPieceOnSquare(board, currentMove->startSquare);
+            
+            int next_depth = depth - 1;
+            int isCapture = findPieceOnSquare(board, currentMove->endSquare) != EMPTY_PIECE || 
+                            (ISPAWN(currentPiece) && board->enPassantSquare == currentMove->endSquare);
 
             if(moveFromStruct(board, *currentMove)) continue;
 
@@ -406,15 +439,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             move_d detailedMove = board->history[board->historyIndex - 1];
             updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
             #endif
-
-            int next_depth = depth - 1;
-            int isCapture = findPieceOnSquare(board, currentMove->endSquare) != EMPTY_PIECE || (ISPAWN(currentPiece) && board->enPassantSquare == currentMove->endSquare);
+            
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
             if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
             
             //lmr
             if(!pvNode && isQuietMove && !context->improving[ply]) 
                 next_depth -= reductionTable[depth][validMovesVisited];
+
 
             if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
             else
@@ -440,7 +472,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             
             if(score >= beta)
             {
-                new_tt_entry.nodeType = NODE_TYPE_CUT;
+                new_tt_entry.nodeType = NODE_BOUND_LOWER;
                 new_tt_entry.evaluation = score;
                 transposition_table_set(context->tt, new_tt_entry, ply);
                 destroy_move_iterator(iter);
@@ -470,7 +502,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                 if(score > alpha)
                 {
-                    new_tt_entry.nodeType = NODE_TYPE_PV;
+                    new_tt_entry.nodeType = NODE_BOUND_EXACT;
                     new_tt_entry.evaluation = score;
                     new_tt_entry.bestMove = currentMove->raw;
                     transposition_table_set(context->tt, new_tt_entry, ply);
@@ -490,7 +522,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         if(bestScore < alpha)
         {
             //Don't save a bestmove since we couldn't find one that fits in window.
-            new_tt_entry.nodeType = NODE_TYPE_ALL;
+            new_tt_entry.nodeType = NODE_BOUND_UPPER;
             new_tt_entry.evaluation = bestScore;
             new_tt_entry.bestMove = 0;
             transposition_table_set(context->tt, new_tt_entry, ply);

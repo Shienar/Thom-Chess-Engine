@@ -6,19 +6,16 @@
 extern uint64_t tt_size_entries;
 
 //0-depth evaluation.
-#define NODE_TYPE_UNKNOWN 0
+#define NODE_BOUND_UNKNOWN 0
 
 //The searched node's evaluation falls in the range of (alpha, beta)
-//The saved score is exact for the given depth.
-#define NODE_TYPE_PV 1 
+#define NODE_BOUND_EXACT 1 
 
 //The score failed-low. Score <= alpha.
-//The saved score is an upper bound for the real score.
-#define NODE_TYPE_ALL 2
+#define NODE_BOUND_UPPER 2
 
 //The score failed-high. Score >= beta.
-//The saved score is a lower bound for the real score.
-#define NODE_TYPE_CUT 3
+#define NODE_BOUND_LOWER 3
 
 extern hashtable_tt* transpositionTable;
 

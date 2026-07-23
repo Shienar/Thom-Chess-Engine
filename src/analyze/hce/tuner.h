@@ -9,6 +9,12 @@
 
 #define PI 3.141592653589793
 
+#define UPDATE_COEFFICIENTS(var, val, op, index) \
+    coefficients->var[MIDDLEGAME]index op val; \
+    coefficients->var[ENDGAME]index op val; \
+    *mgScore op val * params.var[MIDDLEGAME]index; \
+    *egScore op val * params.var[ENDGAME]index
+
 typedef struct tuningTuple {
     int index;
     int coefficient; //White - black
@@ -35,7 +41,8 @@ typedef union {
         double rookMobilityBonus[PHASE_COUNT][15];
         double queenMobilityBonus[PHASE_COUNT][28];
         double virtualMobilityBonus[PHASE_COUNT][28];
-        
+
+        double pawnAttacks[PHASE_COUNT][PAWN_ATTACK_TYPES];
         double minorPawnCover[PHASE_COUNT];
         double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
         double connectedPawnBonus[PHASE_COUNT][ROW_COUNT];

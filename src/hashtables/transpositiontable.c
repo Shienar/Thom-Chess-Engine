@@ -81,7 +81,7 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
     if(existingEntry.hashCode)
     {
         //Don't overwrite existing with unknown nodes
-        if(entry.nodeType == NODE_TYPE_UNKNOWN)
+        if(entry.nodeType == NODE_BOUND_UNKNOWN)
             return;
         
         //Replacement rules for same position.
