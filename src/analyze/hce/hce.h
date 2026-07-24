@@ -4,10 +4,6 @@
 #include "board/moves.h"
 #include "board/bitboard.h"
 
-#define PHASE_COUNT 2
-#define MIDDLEGAME 0
-#define ENDGAME 1
-
 #define SEMI_OPEN_FILE 0
 #define OPEN_FILE 1
 
@@ -23,49 +19,74 @@
 #define ATTACKING_QUEEN 3
 #define PAWN_ATTACK_TYPES 4
 
+typedef struct {
+    int32_t mg;
+    int32_t eg;
+} eval_t;
+
+#define P(mg, eg) {mg, eg}
+
+#define EVAL_ADD(dest, val) \
+    do { \
+        (dest).mg += (val).mg; \
+        (dest).eg += (val).eg; \
+    } while(0)
+    
+#define EVAL_MADD(dest, val, mul) \
+    do { \
+        (dest).mg += mul * (val).mg; \
+        (dest).eg += mul * (val).eg; \
+    } while(0)
+
+#define EVAL_SUB(dest, val) \
+    do { \
+        (dest).mg -= (val).mg; \
+        (dest).eg -= (val).eg; \
+    } while(0)
+
 //Externally visible for tuning.
 //Everything is a bonus and everything gets added. Some bonuses happen to be negative.
 typedef union {
     struct {
-        int genericPieceValues[PHASE_COUNT][PIECE_TYPE_COUNT];
-        int rawPieceTables[PHASE_COUNT][PIECE_TYPE_COUNT][64];
+        eval_t genericPieceValues[PIECE_TYPE_COUNT];
+        eval_t rawPieceTables[PIECE_TYPE_COUNT][64];
 
-        int knightMobilityBonus[PHASE_COUNT][9];
-        int bishopMobilityBonus[PHASE_COUNT][14];
-        int rookMobilityBonus[PHASE_COUNT][15];
-        int queenMobilityBonus[PHASE_COUNT][28];
-        int virtualMobilityBonus[PHASE_COUNT][28];
+        eval_t knightMobilityBonus[9];
+        eval_t bishopMobilityBonus[14];
+        eval_t rookMobilityBonus[15];
+        eval_t queenMobilityBonus[28];
+        eval_t virtualMobilityBonus[28];
         
-        int pawnAttacks[PHASE_COUNT][PAWN_ATTACK_TYPES];
-        int minorPawnCover[PHASE_COUNT];
-        int passedPawnBonus[PHASE_COUNT][ROW_COUNT];
-        int connectedPawnBonus[PHASE_COUNT][ROW_COUNT];
-        int doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        int isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
+        eval_t pawnAttacks[PAWN_ATTACK_TYPES];
+        eval_t minorPawnCover;
+        eval_t passedPawnBonus[ROW_COUNT];
+        eval_t connectedPawnBonus[ROW_COUNT];
+        eval_t doubledPawnBonus[COLUMN_COUNT];
+        eval_t isolatedPawnBonus[COLUMN_COUNT];
 
-        int knightOutpostBonus[PHASE_COUNT];
+        eval_t knightOutpostBonus;
 
-        int bishopPairBonus[PHASE_COUNT];
-        int badBishopBonus[PHASE_COUNT];
+        eval_t bishopPairBonus;
+        eval_t badBishopBonus;
         
-        int openRookFileBonus[PHASE_COUNT][2];
-        int connectedRookBonus[PHASE_COUNT][MAX_ROOK_CONNECTIONS];
+        eval_t openRookFileBonus[2];
+        eval_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
 
-        int connectedQueenBonus[PHASE_COUNT][MAX_QUEEN_CONNECTIONS];
+        eval_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
         
-        int tempo[PHASE_COUNT];
+        eval_t tempo;
     };
-    int parameters[0];
+    eval_t parameters[0];
 } evalParameters;
 
-#define PARAMETER_COUNT (sizeof(evalParameters) / sizeof(int))
+#define PARAMETER_COUNT (sizeof(evalParameters) / sizeof(eval_t))
 
 extern evalParameters hce_params; 
 extern evalParameters is_param_eg;
 extern int gamephasePieceValues[PIECE_COUNT];
 
 void init_HCE_tables();
-int evaluatePhasedScore(bitboard* board, int middlegameScore, int endgameScore);
+int evaluatePhasedScore(bitboard* board, eval_t eval);
 int hce_eval(bitboard* board);
 
 #endif

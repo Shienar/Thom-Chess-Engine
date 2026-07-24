@@ -9,11 +9,18 @@
 
 #define PI 3.141592653589793
 
+typedef struct {
+    double mg;
+    double eg;
+} evalfp_t;
+
 #define UPDATE_COEFFICIENTS(var, val, op, index) \
-    coefficients->var[MIDDLEGAME]index op val; \
-    coefficients->var[ENDGAME]index op val; \
-    *mgScore op val * params.var[MIDDLEGAME]index; \
-    *egScore op val * params.var[ENDGAME]index
+    do { \
+        (coefficients->var)index.mg op val; \
+        (coefficients->var)index.eg op val; \
+        score->mg op val * (params.var)index.mg; \
+        score->eg op val * (params.var)index.eg; \
+    } while(0)
 
 typedef struct tuningTuple {
     int index;
@@ -22,46 +29,45 @@ typedef struct tuningTuple {
 
 typedef struct tuningEntry {
     double heuristic_eval;
-    double eg_score;
-    double mg_score;
-    int phase[PHASE_COUNT];
+    evalfp_t score;
+    eval_t phase;
     double result;
-    double phaseFactors[PHASE_COUNT];
+    evalfp_t phaseFactors;
     tuningTuple* activeTuples;
     int activeTupleCount;
 } tuningEntry;
 
 typedef union {
     struct {
-        double genericPieceValues[PHASE_COUNT][PIECE_TYPE_COUNT];
-        double rawPieceTables[PHASE_COUNT][PIECE_TYPE_COUNT][64];
+        evalfp_t genericPieceValues[PIECE_TYPE_COUNT];
+        evalfp_t rawPieceTables[PIECE_TYPE_COUNT][64];
 
-        double knightMobilityBonus[PHASE_COUNT][9];
-        double bishopMobilityBonus[PHASE_COUNT][14];
-        double rookMobilityBonus[PHASE_COUNT][15];
-        double queenMobilityBonus[PHASE_COUNT][28];
-        double virtualMobilityBonus[PHASE_COUNT][28];
-
-        double pawnAttacks[PHASE_COUNT][PAWN_ATTACK_TYPES];
-        double minorPawnCover[PHASE_COUNT];
-        double passedPawnBonus[PHASE_COUNT][ROW_COUNT];
-        double connectedPawnBonus[PHASE_COUNT][ROW_COUNT];
-        double doubledPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-        double isolatedPawnBonus[PHASE_COUNT][COLUMN_COUNT];
-
-        double knightOutpostBonus[PHASE_COUNT];
-
-        double bishopPairBonus[PHASE_COUNT];
-        double badBishopBonus[PHASE_COUNT];
+        evalfp_t knightMobilityBonus[9];
+        evalfp_t bishopMobilityBonus[14];
+        evalfp_t rookMobilityBonus[15];
+        evalfp_t queenMobilityBonus[28];
+        evalfp_t virtualMobilityBonus[28];
         
-        double openRookFileBonus[PHASE_COUNT][2];
-        double connectedRookBonus[PHASE_COUNT][MAX_ROOK_CONNECTIONS];
+        evalfp_t pawnAttacks[PAWN_ATTACK_TYPES];
+        evalfp_t minorPawnCover;
+        evalfp_t passedPawnBonus[ROW_COUNT];
+        evalfp_t connectedPawnBonus[ROW_COUNT];
+        evalfp_t doubledPawnBonus[COLUMN_COUNT];
+        evalfp_t isolatedPawnBonus[COLUMN_COUNT];
 
-        double connectedQueenBonus[PHASE_COUNT][MAX_QUEEN_CONNECTIONS];
+        evalfp_t knightOutpostBonus;
+
+        evalfp_t bishopPairBonus;
+        evalfp_t badBishopBonus;
         
-        double tempo[PHASE_COUNT];
+        evalfp_t openRookFileBonus[2];
+        evalfp_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
+
+        evalfp_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
+        
+        evalfp_t tempo;
     };
-    double parameters[0];
+    evalfp_t parameters[0];
 } evalParameters_fp;
 
 #define sigmoidK(val, K) (1.0 / (1.0 + exp(-val * K / 400.0)))

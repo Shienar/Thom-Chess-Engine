@@ -14,192 +14,130 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
 {
     evalParameters params = {0};
     for(int i = 0; i < PARAMETER_COUNT; i++)
-        params.parameters[i] = round(currentParameters->parameters[i]);
+        params.parameters[i] = (eval_t)P(round(currentParameters->parameters[i].mg), round(currentParameters->parameters[i].eg));
     
-    const char* phase_names[2] = {"MIDDLEGAME", "ENDGAME"};
     const char* piece_names[6] = {"PAWN", "KNIGHT", "BISHOP", "ROOK", "QUEEN", "KING"};
 
     rewind(output);
     fprintf(output, "evalParameters hce_params = {\n");
     
-    fprintf(output, "\t.genericPieceValues = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
-            fprintf(output, "%5d%s", params.genericPieceValues[phase][piece], (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.genericPieceValues = {\n\t\t");
+    for(int piece = 0; piece < PIECE_TYPE_COUNT; piece++)
+        fprintf(output, "P(%5d,%5d)%s ", params.genericPieceValues[piece].mg, params.genericPieceValues[piece].eg, (piece == (PIECE_TYPE_COUNT) - 1) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
-    fprintf(output, "\t.rawPieceTables = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.rawPieceTables = {\n");       
+    for(int pc = 0; pc < 6; pc++)
     {
-        fprintf(output, "\t\t[%s] = {\n", phase_names[phase]);
-        
-        for(int pc = 0; pc < 6; pc++)
+        fprintf(output, "\t\t\t[%s / 2] = {\n", piece_names[pc]);
+        for(int row = 0; row < ROW_COUNT; row++) 
         {
-            fprintf(output, "\t\t\t[%s / 2] = {\n", piece_names[pc]);
-            for(int row = 0; row < ROW_COUNT; row++) 
+            fprintf(output, "\t\t\t\t");
+            for(int col = 0; col < COLUMN_COUNT; col++) 
             {
-                fprintf(output, "\t\t\t\t");
-                for(int col = 0; col < COLUMN_COUNT; col++) 
-                {
-                    int idx = row * COLUMN_COUNT + col;
-                    fprintf(output, "%5d%s", params.rawPieceTables[phase][pc][idx], (idx == 63) ? "" : ",");
-                }
-                fprintf(output, "\n");
+                int idx = row * COLUMN_COUNT + col;
+                fprintf(output, "P(%5d,%5d)%s ", params.rawPieceTables[pc][idx].mg, params.rawPieceTables[pc][idx].eg, (idx == 63) ? "" : ",");
             }
-            fprintf(output, "\t\t\t}%s\n", (pc == 5) ? "" : ",");
+            fprintf(output, "\n");
         }
-        fprintf(output, "\t\t}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
+        fprintf(output, "\t\t\t}%s\n", (pc == 5) ? "" : ",");
+        }
     fprintf(output, "\t},\n");
     
-    fprintf(output, "\t.knightMobilityBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.knightMobilityBonus = {");
+    for(int i = 0; i < 9; i++)
     {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 9; i++)
-            fprintf(output, "%5d%s", params.knightMobilityBonus[phase][i], (i == 8) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+        if(!(i % 5))
+            fprintf(output, "\n\t\t");
+        fprintf(output, "P(%5d,%5d)%s ", params.knightMobilityBonus[i].mg, params.knightMobilityBonus[i].eg, (i == 8) ? "" : ",");
     }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\n\t},\n");
     
-    fprintf(output, "\t.bishopMobilityBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.bishopMobilityBonus = {");
+    for(int i = 0; i < 14; i++)
     {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 14; i++)
-            fprintf(output, "%5d%s", params.bishopMobilityBonus[phase][i], (i == 13) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+        if(!(i % 5))
+            fprintf(output, "\n\t\t");
+        fprintf(output, "P(%5d,%5d)%s ", params.bishopMobilityBonus[i].mg, params.bishopMobilityBonus[i].eg, (i == 13) ? "" : ",");
     }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\n\t},\n");
     
-    fprintf(output, "\t.rookMobilityBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.rookMobilityBonus = {");
+    for(int i = 0; i < 15; i++)
     {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 15; i++)
-            fprintf(output, "%5d%s", params.rookMobilityBonus[phase][i], (i == 14) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+        if(!(i % 5))
+            fprintf(output, "\n\t\t");
+        fprintf(output, "P(%5d,%5d)%s ", params.rookMobilityBonus[i].mg, params.rookMobilityBonus[i].eg, (i == 14) ? "" : ",");
     }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\n\t},\n");
     
-    fprintf(output, "\t.queenMobilityBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.queenMobilityBonus = {");
+    for(int i = 0; i < 28; i++)
     {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 28; i++)
-            fprintf(output, "%5d%s", params.queenMobilityBonus[phase][i], (i == 27) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
+        if(!(i % 5))
+            fprintf(output, "\n\t\t");
+        fprintf(output, "P(%5d,%5d)%s ", params.queenMobilityBonus[i].mg, params.queenMobilityBonus[i].eg, (i == 27) ? "" : ",");
     }
-    fprintf(output, "\t},\n");
-
-    fprintf(output, "\t.virtualMobilityBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 28; i++)
-            fprintf(output, "%5d%s", params.virtualMobilityBonus[phase][i], (i == 27) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\n\t},\n");
     
-    fprintf(output, "\t.pawnAttacks = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
+    fprintf(output, "\t.virtualMobilityBonus = {");
+    for(int i = 0; i < 28; i++)
     {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
+        if(!(i % 5))
+            fprintf(output, "\n\t\t");
+        fprintf(output, "P(%5d,%5d)%s ", params.virtualMobilityBonus[i].mg, params.virtualMobilityBonus[i].eg, (i == 27) ? "" : ",");
+    }
+    fprintf(output, "\n\t},\n");
+    
+    fprintf(output, "\t.pawnAttacks = {\n\t\t");
         for(int i = 0; i < PAWN_ATTACK_TYPES; i++)
-            fprintf(output, "%5d%s", params.pawnAttacks[phase][i], (i == PAWN_ATTACK_TYPES - 1) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+            fprintf(output, "P(%5d,%5d)%s ", params.pawnAttacks[i].mg, params.pawnAttacks[i].eg, (i == PAWN_ATTACK_TYPES - 1) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
-    fprintf(output, "\t.minorPawnCover = {%5d,%5d},\n", params.minorPawnCover[MIDDLEGAME], params.minorPawnCover[ENDGAME]);
+    fprintf(output, "\t.minorPawnCover = P(%5d,%5d),\n", params.minorPawnCover.mg, params.minorPawnCover.eg);
 
-    fprintf(output, "\t.passedPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < COLUMN_COUNT; column++)
-            fprintf(output, "%5d%s", params.passedPawnBonus[phase][column], (column == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.passedPawnBonus = {\n\t\t");
+    for(int column = 0; column < COLUMN_COUNT; column++)
+        fprintf(output, "P(%5d,%5d)%s ", params.passedPawnBonus[column].mg, params.passedPawnBonus[column].eg, (column == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
-    fprintf(output, "\t.connectedPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int row = 0; row < ROW_COUNT; row++)
-            fprintf(output, "%5d%s", params.connectedPawnBonus[phase][row], (row == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.connectedPawnBonus = {\n\t\t");
+    for(int row = 0; row < ROW_COUNT; row++)
+        fprintf(output, "P(%5d,%5d)%s ", params.connectedPawnBonus[row].mg, params.connectedPawnBonus[row].eg, (row == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
-    fprintf(output, "\t.doubledPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < COLUMN_COUNT; column++)
-            fprintf(output, "%5d%s", params.doubledPawnBonus[phase][column], (column == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.doubledPawnBonus = {\n\t\t");
+    for(int column = 0; column < COLUMN_COUNT; column++)
+        fprintf(output, "P(%5d,%5d)%s ", params.doubledPawnBonus[column].mg, params.doubledPawnBonus[column].eg, (column == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
-    fprintf(output, "\t.isolatedPawnBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int column = 0; column < COLUMN_COUNT; column++)
-            fprintf(output, "%5d%s", params.isolatedPawnBonus[phase][column], (column == 7) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.isolatedPawnBonus = {\n\t\t");
+    for(int column = 0; column < COLUMN_COUNT; column++)
+        fprintf(output, "P(%5d,%5d)%s ", params.isolatedPawnBonus[column].mg, params.isolatedPawnBonus[column].eg, (column == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
     
-    fprintf(output, "\t.knightOutpostBonus = {%5d,%5d},\n", params.knightOutpostBonus[MIDDLEGAME], params.knightOutpostBonus[ENDGAME]);
+    fprintf(output, "\t.knightOutpostBonus = P(%5d,%5d),\n", params.knightOutpostBonus.mg, params.knightOutpostBonus.eg);
 
-    fprintf(output, "\t.bishopPairBonus = {%5d,%5d},\n", params.bishopPairBonus[MIDDLEGAME], params.bishopPairBonus[ENDGAME]);
-    fprintf(output, "\t.badBishopBonus = {%5d,%5d},\n", params.badBishopBonus[MIDDLEGAME], params.badBishopBonus[ENDGAME]);
+    fprintf(output, "\t.bishopPairBonus = P(%5d,%5d),\n", params.bishopPairBonus.mg, params.bishopPairBonus.eg);
+    fprintf(output, "\t.badBishopBonus = P(%5d,%5d),\n", params.badBishopBonus.mg, params.badBishopBonus.eg);
 
-    fprintf(output, "\t.openRookFileBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < 2; i++)
-            fprintf(output, "%5d%s", params.openRookFileBonus[phase][i], (i == 1) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.openRookFileBonus = { P(%5d,%5d), P(%5d,%5d) },\n", params.openRookFileBonus[0].mg, params.openRookFileBonus[0].eg, 
+                                                                            params.openRookFileBonus[1].mg, params.openRookFileBonus[1].eg);
     
-    fprintf(output, "\t.connectedRookBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < MAX_ROOK_CONNECTIONS; i++)
-            fprintf(output, "%5d%s", params.connectedRookBonus[phase][i], (i == 1) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
-    
-    fprintf(output, "\t.connectedQueenBonus = {\n");
-    for(int phase = 0; phase < PHASE_COUNT; phase++) 
-    {
-        fprintf(output, "\t\t[%s] = {", phase_names[phase]);
-        for(int i = 0; i < MAX_QUEEN_CONNECTIONS; i++)
-            fprintf(output, "%5d%s", params.connectedQueenBonus[phase][i], (i == 2) ? "" : ",");
-        fprintf(output, "}%s\n", (phase == PHASE_COUNT - 1) ? "" : ",");
-    }
-    fprintf(output, "\t},\n");
+    fprintf(output, "\t.connectedRookBonus = { P(%5d,%5d), P(%5d,%5d) },\n", params.connectedRookBonus[0].mg, params.connectedRookBonus[0].eg, 
+                                                                             params.connectedRookBonus[1].mg, params.connectedRookBonus[1].eg);
+                                                                            
+    fprintf(output, "\t.connectedQueenBonus = { P(%5d,%5d), P(%5d,%5d), P(%5d,%5d) },\n", params.connectedQueenBonus[0].mg, params.connectedQueenBonus[0].eg,
+                                                                                          params.connectedQueenBonus[1].mg, params.connectedQueenBonus[1].eg,
+                                                                                          params.connectedQueenBonus[2].mg, params.connectedQueenBonus[2].eg);
 
-    fprintf(output, "\t.tempo = {%5d,%5d}\n", params.tempo[MIDDLEGAME], params.tempo[ENDGAME]);
+    fprintf(output, "\t.tempo = P(%5d,%5d),\n", params.tempo.mg, params.tempo.eg);
 
     fprintf(output, "};\n");
     fflush(output);
 }
 
-void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 	uint64_t mask = board->pieces[WHITE_PAWN];
     
@@ -339,7 +277,7 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     UPDATE_COEFFICIENTS(minorPawnCover, protectedCount, +=,);
 }
 
-void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 	uint64_t mask = board->pieces[WHITE_KNIGHT];
 	while(mask)
@@ -398,7 +336,7 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 	}
 }
 
-void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 	uint64_t mask = board->pieces[WHITE_BISHOP];
 
@@ -466,7 +404,7 @@ void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalP
     UPDATE_COEFFICIENTS(badBishopBonus, badPawns, +=,);
 }
 
-void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 	int connectedRooksByRow = 0;
 	int connectedRooksByColumn = 0;
@@ -553,7 +491,7 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     UPDATE_COEFFICIENTS(connectedRookBonus, connectedRooksByRow, +=, [CONNECTED_ROW]);
 }
 
-void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 	int connectedSlidersByRow = 0;
 	int connectedSlidersByColumn = 0;
@@ -623,7 +561,7 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
     UPDATE_COEFFICIENTS(connectedQueenBonus, connectedSlidersByDiagonal, +=, [CONNECTED_DIAGONAL]);
 }
 
-void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
 
 	uint64_t mask = board->pieces[WHITE_KING];
@@ -663,33 +601,30 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	}
 }
 
-void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, double* mgScore, double* egScore)
+void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
-    *mgScore = 0;
-    *egScore = 0;
+    score->mg = 0.0;
+    score->eg = 0.0;
 
     if(ISWHITE(board->turn))
-    {
         UPDATE_COEFFICIENTS(tempo, 1, +=,);
-    }
     else
-    {
         UPDATE_COEFFICIENTS(tempo, 1, -=,);
-    }
 
-    initPawnCoefficients(board, coefficients, params, mgScore, egScore);
-    initKnightCoefficients(board, coefficients, params, mgScore, egScore);
-    initBishopCoefficients(board, coefficients, params, mgScore, egScore);
-    initRookCoefficients(board, coefficients, params, mgScore, egScore);
-    initQueenCoefficients(board, coefficients, params, mgScore, egScore);
-    initKingCoefficients(board, coefficients, params, mgScore, egScore);
+    initPawnCoefficients(board, coefficients, params, score);
+    initKnightCoefficients(board, coefficients, params, score);
+    initBishopCoefficients(board, coefficients, params, score);
+    initRookCoefficients(board, coefficients, params, score);
+    initQueenCoefficients(board, coefficients, params, score);
+    initKingCoefficients(board, coefficients, params, score);
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
 {
+    //This currently works since midgame & endgame coefficients are always equal. 
     int length = 0;
     for(int i = 0; i < PARAMETER_COUNT; i++)
-        if(coefficients->parameters[i] != 0)
+        if(coefficients->parameters[i].mg != 0)
             length++;
 
     entry->activeTupleCount = length;
@@ -697,8 +632,8 @@ void initTuples(tuningEntry* entry, evalParameters* coefficients)
 
     int insertIndex = 0;
     for(int i = 0; i < PARAMETER_COUNT; i++)
-        if(coefficients->parameters[i] != 0)
-            entry->activeTuples[insertIndex++] = (tuningTuple) { i, coefficients->parameters[i] };
+        if(coefficients->parameters[i].mg != 0)
+            entry->activeTuples[insertIndex++] = (tuningTuple) { i, coefficients->parameters[i].mg };
 }
 
 void initSingleEntry(tuningEntry* entry, bitboard* board)
@@ -710,17 +645,17 @@ void initSingleEntry(tuningEntry* entry, bitboard* board)
     }
 	phase = clamp(phase, 0, 24);
 
-    entry->phaseFactors[MIDDLEGAME] = 1.0 - phase / 24.0;
-    entry->phaseFactors[ENDGAME] = phase / 24.0;
+    entry->phaseFactors.mg = 1.0 - phase / 24.0;
+    entry->phaseFactors.eg = phase / 24.0;
 
-	entry->phase[ENDGAME] = (phase * 256 + 12) / 24;
-	entry->phase[MIDDLEGAME] = 256 - entry->phase[ENDGAME];
+	entry->phase.eg = (phase * 256 + 12) / 24;
+	entry->phase.mg = 256 - entry->phase.eg;
 
     //White relative
     evalParameters coefficients = {0};
-    initCoefficients(board, &coefficients, currentParameters, &entry->mg_score, &entry->eg_score);
+    initCoefficients(board, &coefficients, currentParameters, &entry->score);
 
-	entry->heuristic_eval =  (entry->phase[MIDDLEGAME] * entry->mg_score + entry->phase[ENDGAME] * entry->eg_score) / 256;
+	entry->heuristic_eval = (entry->phase.mg * entry->score.mg + entry->phase.eg * entry->score.eg) / 256;
 
     initTuples(entry, &coefficients);
 }
@@ -828,23 +763,22 @@ double computeOptimalK(tuningEntry* entries)
     return start;
 }
 
+//Technically updating 2. Endgame + midgame.
 void updateSingleGradient(tuningEntry* entry, evalParameters_fp* gradient, double K)
 {
     int eval = entry->heuristic_eval;
     double s = sigmoidK(eval, K);
     double err = (entry->result - s) * s * (1 - s);
-    double mgBase = err * entry->phaseFactors[MIDDLEGAME];
-    double egBase = err * entry->phaseFactors[ENDGAME];
+    double mgBase = err * entry->phaseFactors.mg;
+    double egBase = err * entry->phaseFactors.eg;
 
     for(int i = 0; i < entry->activeTupleCount; i++)
     {
         int index = entry->activeTuples[i].index;
         int coeff = entry->activeTuples[i].coefficient;
 
-        if(is_param_eg.parameters[index])
-            gradient->parameters[index] += egBase * coeff;
-        else
-            gradient->parameters[index] += mgBase * coeff;
+        gradient->parameters[index].mg += mgBase * coeff;
+        gradient->parameters[index].eg += egBase * coeff;
     }
 }
 
@@ -861,37 +795,57 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient,  double 
             updateSingleGradient(&entries[i], &local, K);
 
         for(int i = 0; i < PARAMETER_COUNT; i++)
-            gradient->parameters[i] += local.parameters[i];
+        {
+            gradient->parameters[i].mg += local.parameters[i].mg;
+            gradient->parameters[i].eg += local.parameters[i].eg;
+        }
     }
 }
 
-void enforceZeroCenter(double* table, int size)
+void enforceZeroCenter(evalfp_t* table, int size)
 {
     double sum = 0.0;
     for (int i = 0; i < size; i++)
-        sum += table[i];
+        sum += table[i].mg;
 
     double average = sum / size;
     for (int i = 0; i < size; i++)
-        table[i] -= average;
+        table[i].mg -= average;
+        
+    sum = 0.0;
+    for (int i = 0; i < size; i++)
+        sum += table[i].eg;
+
+    average = sum / size;
+    for (int i = 0; i < size; i++)
+        table[i].eg -= average;
 }
 
-void enforceMonotonicIncreasing(double* table,  int size)
+void enforceMonotonicIncreasing(evalfp_t* table,  int size)
 {
     for (int i = 1; i < size; i++)
-        table[i] = _max(table[i - 1] + 1, table[i]);
+    {
+        table[i].mg = _max(table[i - 1].mg + 1, table[i].mg);
+        table[i].eg = _max(table[i - 1].eg + 1, table[i].eg);
+    }
 }
 
-void enforceMonotonicDecreasing(double* table,  int size)
+void enforceMonotonicDecreasing(evalfp_t* table,  int size)
 {
     for (int i = 1; i < size; i++)
-        table[i] = _min(table[i - 1] - 1, table[i]);
+    {
+        table[i].mg = _min(table[i - 1].mg - 1, table[i].mg);
+        table[i].eg = _min(table[i - 1].eg - 1, table[i].eg);
+    }
 }
 
 void refreshEvaluations(evalParameters_fp* currentParameters, evalParameters_fp* deltaParameters)
 {
     for(int i = 0; i < PARAMETER_COUNT; i++)
-        currentParameters->parameters[i] += deltaParameters->parameters[i];
+    {
+        currentParameters->parameters[i].mg += deltaParameters->parameters[i].mg;
+        currentParameters->parameters[i].eg += deltaParameters->parameters[i].eg;
+    }
 
     //When initial weights are all zero (excepting 100/300/300/500/900 piece values), they tend to bleed together.
     //
@@ -900,50 +854,45 @@ void refreshEvaluations(evalParameters_fp* currentParameters, evalParameters_fp*
     //
     //This is an attempt to enforce some kind of intuitive understanding of what
     //the weights are supposed to be doing.
-    for(int phase = 0; phase < PHASE_COUNT; phase++)\
-    {
-        enforceZeroCenter(&currentParameters->rawPieceTables[phase][PAWN / 2][8], 48);
+   
+    enforceZeroCenter(&currentParameters->rawPieceTables[PAWN / 2][8], 48);
 
-        for(int pc = 1; pc < 6; pc++)
-            enforceZeroCenter(currentParameters->rawPieceTables[phase][pc], 64);
+    for(int pc = 1; pc < 6; pc++)
+        enforceZeroCenter(currentParameters->rawPieceTables[pc], 64);
 
-        enforceZeroCenter(currentParameters->knightMobilityBonus[phase], 9);
-        enforceMonotonicIncreasing(currentParameters->knightMobilityBonus[phase], 9);
+    enforceZeroCenter(currentParameters->knightMobilityBonus, 9);
+    enforceMonotonicIncreasing(currentParameters->knightMobilityBonus, 9);
 
-        enforceZeroCenter(currentParameters->bishopMobilityBonus[phase], 14);
-        enforceMonotonicIncreasing(currentParameters->bishopMobilityBonus[phase], 14);
+    enforceZeroCenter(currentParameters->bishopMobilityBonus, 14);
+    enforceMonotonicIncreasing(currentParameters->bishopMobilityBonus, 14);
 
-        enforceZeroCenter(currentParameters->rookMobilityBonus[phase], 15);
-        enforceMonotonicIncreasing(currentParameters->rookMobilityBonus[phase], 15);
-        
-        enforceZeroCenter(currentParameters->queenMobilityBonus[phase], 28);
-        enforceMonotonicIncreasing(currentParameters->queenMobilityBonus[phase], 28);
+    enforceZeroCenter(currentParameters->rookMobilityBonus, 15);
+    enforceMonotonicIncreasing(currentParameters->rookMobilityBonus, 15);
+    
+    enforceZeroCenter(currentParameters->queenMobilityBonus, 28);
+    enforceMonotonicIncreasing(currentParameters->queenMobilityBonus, 28);
 
-        enforceZeroCenter(currentParameters->virtualMobilityBonus[phase], 28);
-        enforceMonotonicDecreasing(currentParameters->virtualMobilityBonus[phase], 28);
+    enforceZeroCenter(currentParameters->virtualMobilityBonus, 28);
+    enforceMonotonicDecreasing(currentParameters->virtualMobilityBonus, 28);
 
-        enforceMonotonicIncreasing(&currentParameters->passedPawnBonus[phase][1], 6);
-    }
-
+    enforceMonotonicIncreasing(&currentParameters->passedPawnBonus[1], 6);
 
     #pragma omp parallel for
     for(int entryNum = 0; entryNum < tuner_entry_count; entryNum++)
     {
         tuningEntry* entry = &tuner_entries[entryNum];
-        entry->eg_score = 0;
-        entry->mg_score = 0;
+        entry->score.mg = 0;
+        entry->score.eg = 0;
         for(int i = 0; i < entry->activeTupleCount; i++)
         {
             int index = entry->activeTuples[i].index;
             int coeff = entry->activeTuples[i].coefficient;
             
-            if(is_param_eg.parameters[index])
-                entry->eg_score += coeff * currentParameters->parameters[index];
-            else
-                entry->mg_score += coeff * currentParameters->parameters[index];
+            entry->score.mg += coeff * currentParameters->parameters[index].mg;
+            entry->score.eg += coeff * currentParameters->parameters[index].eg;
         }
 
-        entry->heuristic_eval = (entry->phase[MIDDLEGAME] * entry->mg_score + entry->phase[ENDGAME] * entry->eg_score) / 256;
+        entry->heuristic_eval = (entry->phase.mg * entry->score.mg + entry->phase.eg * entry->score.eg) / 256;
     }
 }
 
@@ -952,7 +901,10 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
     printf("Tuning for %lld epochs at LR=[%g ... %g]...\n", epochs, max_lr, min_lr);
 
     for(int i = 0; i < PARAMETER_COUNT; i++)
-        currentParameters.parameters[i] = (double) hce_params.parameters[i];
+    {
+        currentParameters.parameters[i].mg = (double) hce_params.parameters[i].mg;
+        currentParameters.parameters[i].eg = (double) hce_params.parameters[i].eg;
+    }
 
     printf("Initializing data entries...\n");
     initDataEntries(dataPath);
@@ -1007,15 +959,20 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
             //Average: /= tuner_entry_count
             //MSE derivative: *= 2
             //Chain rule: *= -K / 400.0
-            gradient.parameters[i] *= (-K / (200.0 * tuner_entry_count));
+            gradient.parameters[i].mg *= (-K / (200.0 * tuner_entry_count));
+            gradient.parameters[i].eg *= (-K / (200.0 * tuner_entry_count));
 
-            firstMoments.parameters[i] = ADAM_BETA1 * firstMoments.parameters[i] + (1.0 - ADAM_BETA1) * gradient.parameters[i];
-            secondMoments.parameters[i] = ADAM_BETA2 * secondMoments.parameters[i] + (1.0 - ADAM_BETA2) * gradient.parameters[i] * gradient.parameters[i];;
+            firstMoments.parameters[i].mg = ADAM_BETA1 * firstMoments.parameters[i].mg + (1.0 - ADAM_BETA1) * gradient.parameters[i].mg;
+            secondMoments.parameters[i].mg = ADAM_BETA2 * secondMoments.parameters[i].mg + (1.0 - ADAM_BETA2) * gradient.parameters[i].mg * gradient.parameters[i].mg;
 
-            double correctedFirstMoment = firstMoments.parameters[i] / biasCorrection1;
-            double correctedSecondMoment = secondMoments.parameters[i] / biasCorrection2;
+            firstMoments.parameters[i].eg = ADAM_BETA1 * firstMoments.parameters[i].eg + (1.0 - ADAM_BETA1) * gradient.parameters[i].eg;
+            secondMoments.parameters[i].eg = ADAM_BETA2 * secondMoments.parameters[i].eg + (1.0 - ADAM_BETA2) * gradient.parameters[i].eg * gradient.parameters[i].eg;
 
-            gradient.parameters[i] = -(lr * correctedFirstMoment) / (sqrt(correctedSecondMoment) + 1e-8);
+            evalfp_t correctedFirstMoment = P(firstMoments.parameters[i].mg / biasCorrection1, firstMoments.parameters[i].eg / biasCorrection1);
+            evalfp_t correctedSecondMoment = P(secondMoments.parameters[i].mg / biasCorrection2, secondMoments.parameters[i].eg / biasCorrection2);
+
+            gradient.parameters[i].mg = -(lr * correctedFirstMoment.mg) / (sqrt(correctedSecondMoment.mg) + 1e-8);
+            gradient.parameters[i].eg = -(lr * correctedFirstMoment.eg) / (sqrt(correctedSecondMoment.eg) + 1e-8);
         }
 
         refreshEvaluations(&currentParameters, &gradient);

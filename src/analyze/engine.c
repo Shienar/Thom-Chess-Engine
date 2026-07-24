@@ -159,15 +159,15 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     int opposingColor = FLIP_COLOR(board->turn);
 
     if(board->pieces[QUEEN | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][QUEEN / 2], hce_params.genericPieceValues[ENDGAME][QUEEN / 2]);
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[QUEEN / 2]);
     else if(board->pieces[ROOK | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][ROOK / 2], hce_params.genericPieceValues[ENDGAME][ROOK / 2]);
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[ROOK / 2]);
     else if(board->pieces[BISHOP | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][BISHOP / 2], hce_params.genericPieceValues[ENDGAME][BISHOP / 2]);
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[BISHOP / 2]);
     else if(board->pieces[KNIGHT | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][KNIGHT / 2], hce_params.genericPieceValues[ENDGAME][KNIGHT / 2]);
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[KNIGHT / 2]);
     else if(board->pieces[PAWN | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[MIDDLEGAME][PAWN / 2], hce_params.genericPieceValues[ENDGAME][PAWN / 2]);
+        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[PAWN / 2]);
 
     if(largestDelta && largestDelta + best < alpha) return best;
 
@@ -441,6 +441,15 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             #endif
             
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
+            if(isQuietMove && skipQuiets)
+            {
+                unmove(board);
+                #ifdef NNUE
+                updateMoveAccumulator(board, detailedMove, 1, context->accumulator, context->refreshTable);
+                #endif
+                continue;
+            }
+            
             if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
             
             //lmr

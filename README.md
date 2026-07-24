@@ -30,8 +30,9 @@ The training kernels require HIP SDK to run. Their compatibility was not really 
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
 - The lichess-big3-resolved.book dataset was used for tuning the HCE.
 - The open-sourced nature of the chess programming community was very helpful for me to get past various barriers. I'd like to mention the following in particular that were the most impactful:
-    - [Ethereal](https://github.com/AndyGrant/Ethereal)
-    - [Alexandria](https://github.com/PGG106/Alexandria)
-    - [Surge](https://github.com/nkarve/surge)
+    - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & sygyzy implementation)
+    - [Alexandria](https://github.com/PGG106/Alexandria) (For search implementation)
+    - [Stash](https://gitlab.com/mhouppin/stash-bot) (For search implementation)
+    - [Surge](https://github.com/nkarve/surge) (For movegen)
 
 ### 
