@@ -21,15 +21,19 @@ const int probcut_depth = 8;
 const int probcut_depth_reduction = 4;
 const int tt_reduction_depth = 7;
 const int tt_reduction_min_depth_offset = 3;
-const int lm_depth = 4;
+const int lmr_depth = 4;
 
 int initial_aspiration_margin = 38;
 int maximum_aspiration_margin = 150;
 float aspiration_margin_mult_factor = 2.0f;
 
-int reverse_futility_margin = 205;
-int reverse_futility_margin_improving = 120;
-int futility_margin = 370;
+int delta_pruning_offset = 52;
+
+int futility_margin = 403;
+int futility_margin_improving = 368;
+
+int reverse_futility_margin = 190;
+int reverse_futility_margin_improving = 122;
 
 int probcut_offset = 400;
 int probcut_offset_improving = 250;
@@ -39,21 +43,19 @@ int historyBonusOffset = 137;
 int historyPenaltyScale = 392;
 int historyPenaltyOffset = 131;
 
-
-int reductionTable[MAX_PLY][MAX_MOVES] = {0};
+int lmrTable[MAX_PLY][MAX_MOVES] = {0};
 
 void initSearchTables()
 {
-    if(reductionTable[lm_depth][10]) return;
+    if(lmrTable[lmr_depth][10]) return;
 
-    for(int depth = 0; depth < MAX_PLY; depth++)
+    for(int depth = lmr_depth; depth < MAX_PLY; depth++)
     {
         int count = 2.0f + 0.5f * depth * depth;
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
         {
-            if(depth >= lm_depth && moveCount >= count)
-                reductionTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.35f);
-            else reductionTable[depth][moveCount] = 0;
+            if(moveCount >= count)
+                lmrTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.35f);
         }
     }
 }
@@ -155,19 +157,19 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     alpha = _max(alpha, best);
 
     //Delta pruning
-    int largestDelta = 0;
+    int largestDelta = delta_pruning_offset;
     int opposingColor = FLIP_COLOR(board->turn);
 
     if(board->pieces[QUEEN | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[QUEEN / 2]);
+        largestDelta += evaluatePhasedScore(board, hce_params.genericPieceValues[QUEEN / 2]);
     else if(board->pieces[ROOK | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[ROOK / 2]);
+        largestDelta += evaluatePhasedScore(board, hce_params.genericPieceValues[ROOK / 2]);
     else if(board->pieces[BISHOP | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[BISHOP / 2]);
+        largestDelta += evaluatePhasedScore(board, hce_params.genericPieceValues[BISHOP / 2]);
     else if(board->pieces[KNIGHT | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[KNIGHT / 2]);
+        largestDelta += evaluatePhasedScore(board, hce_params.genericPieceValues[KNIGHT / 2]);
     else if(board->pieces[PAWN | opposingColor])
-        largestDelta = evaluatePhasedScore(board, hce_params.genericPieceValues[PAWN / 2]);
+        largestDelta += evaluatePhasedScore(board, hce_params.genericPieceValues[PAWN / 2]);
 
     if(largestDelta && largestDelta + best < alpha) return best;
 
@@ -237,7 +239,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     int searchedQuietIndices[MAX_MOVES] = {0};
     int searchedQuietCount = 0;
-    int skipQuiets = 0;
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
@@ -299,7 +300,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(!pvNode && depth >= sygyzyProbeDepth)
     {
         int result = getSygyzyResult(context->board);
-        if(result != -1) 
+        if(result != -1)
         {
             new_tt_entry.nodeType = NODE_BOUND_EXACT;
             new_tt_entry.evaluation = result;
@@ -335,8 +336,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
         //Futility pruning
-        if(depth <= futility_pruning_depth && (score + futility_margin) <= alpha)
-            return alpha;
+        if(depth <= futility_pruning_depth)
+        {
+            int boostedVal;
+            if(context->improving[ply]) boostedVal = score + futility_margin_improving;
+            else boostedVal = score + futility_margin;
+
+            if(boostedVal <= alpha) return alpha;
+        }
 
         //Reverse Futility Pruning
         if(depth <= reverse_futility_pruning_depth)
@@ -441,20 +448,13 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             #endif
             
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
-            if(isQuietMove && skipQuiets)
-            {
-                unmove(board);
-                #ifdef NNUE
-                updateMoveAccumulator(board, detailedMove, 1, context->accumulator, context->refreshTable);
-                #endif
-                continue;
-            }
-            
+
+            //Check extensions
             if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
             
             //lmr
             if(!pvNode && isQuietMove && !context->improving[ply]) 
-                next_depth -= reductionTable[depth][validMovesVisited];
+                next_depth -= lmrTable[depth][validMovesVisited];
 
 
             if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);

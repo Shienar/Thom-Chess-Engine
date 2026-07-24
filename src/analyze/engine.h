@@ -27,15 +27,19 @@ extern const int nullmove_pruning_depth;
 extern const int tt_reduction_depth;
 extern const int probcut_depth;
 extern const int probcut_depth_reduction;
-extern const int lm_depth;
+extern const int lmr_depth;
 
 extern int initial_aspiration_margin;
 extern int maximum_aspiration_margin;
 extern float aspiration_margin_mult_factor;
 
+extern int delta_pruning_offset;
+
+extern int futility_margin;
+extern int futility_margin_improving;
+
 extern int reverse_futility_margin;
 extern int reverse_futility_margin_improving;
-extern int futility_margin;
 
 extern int probcut_offset;
 extern int probcut_offset_improving;

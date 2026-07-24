@@ -69,9 +69,15 @@ int main(int argc, char** argv)
                 printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
                 printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
 
+                
+                printf("option name delta_pruning_offset type spin default %d min 10 max 200\n", delta_pruning_offset);
+
+                printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
+                printf("option name futility_margin_improving type spin default %d min 150 max 450\n", futility_margin_improving);
+
+
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
                 printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
-                printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
 
                 printf("option name probcut_offset type spin default %d min 200 max 600\n", probcut_offset);
                 printf("option name probcut_offset_improving type spin default %d min 200 max 500\n", probcut_offset_improving);
@@ -519,13 +525,6 @@ int main(int argc, char** argv)
                 break;
             }
             #ifdef TRAIN
-            else if(strcmp(str, "binpackinfo") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
-                binpackPrintInfo(VALIDATION_DATA_PATH);
-                binpackPrintInfo(TRAINING_DATA_PATH);
-                break;
-            }
             else if(strcmp(str, "train") == 0)
             {
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
@@ -594,6 +593,13 @@ int main(int argc, char** argv)
             {
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 generate();
+                break;
+            }
+            else if(strcmp(str, "binpackinfo") == 0)
+            {
+                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                binpackPrintInfo(VALIDATION_DATA_PATH);
+                binpackPrintInfo(TRAINING_DATA_PATH);
                 break;
             }
             else if(strcmp(str, "quit") == 0) 

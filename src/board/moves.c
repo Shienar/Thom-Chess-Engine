@@ -403,6 +403,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
     iter->moveScores = malloc(MAX_MOVES * sizeof(int16_t));
     iter->count = 0;
     iter->visitedCount = 0;
+    iter->skippedQuiets = 0;
 
     if(requiredMoves && IS_VALID_MOVE(requiredMoves[0]))
     {
@@ -456,7 +457,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
         else if(m.promoteTo)
-            iter->moveScores[i] = CAPTURE_SCORE - 1;
+            iter->moveScores[i] = CAPTURE_SCORE + 1;
         else if(history)
             iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
@@ -500,6 +501,33 @@ move_c* iterate_next_move(moveIterator* iter)
         iter->moveScores[bestIndex] = INT16_MIN;
     
     return &iter->moveList[iter->visitedCount++];
+}
+
+void skip_remaining_quiets(moveIterator* iter)
+{
+    assert(iter);
+
+    if(iter->skippedQuiets)
+        return;
+        
+    iter->skippedQuiets = 1;
+
+    for(int i = iter->visitedCount; i < iter->count; i++) 
+    {
+        if(abs(iter->moveScores[i]) < CAPTURE_SCORE) 
+        {
+            if(i < iter->visitedCount)
+            {
+                iter->moveScores[i] = iter->moveScores[iter->visitedCount];
+                iter->moveScores[iter->visitedCount] = INT16_MIN; //Not really necessary. There'd be random unused junk here from old move otherwise.
+
+                move_c temp = iter->moveList[iter->visitedCount];
+                iter->moveList[iter->visitedCount] = iter->moveList[i];
+                iter->moveList[i] = temp;
+            }
+            iter->visitedCount++;
+        }
+    }
 }
 
 void destroy_move_iterator(moveIterator* iter)
