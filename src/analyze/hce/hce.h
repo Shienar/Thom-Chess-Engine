@@ -73,6 +73,9 @@ typedef union {
         eval_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
 
         eval_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
+
+        eval_t kingPawnShieldBonus[COLUMN_COUNT];
+        eval_t kingPawnStormBonus[ROW_COUNT];
         
         eval_t tempo;
     };
@@ -84,6 +87,8 @@ typedef union {
 extern evalParameters hce_params; 
 extern evalParameters is_param_eg;
 extern int gamephasePieceValues[PIECE_COUNT];
+extern uint64_t kingPawnShieldMask[2][COLUMN_COUNT];
+extern uint64_t kingPawnStormMask[COLUMN_COUNT];
 
 void init_HCE_tables();
 int evaluatePhasedScore(bitboard* board, eval_t eval);

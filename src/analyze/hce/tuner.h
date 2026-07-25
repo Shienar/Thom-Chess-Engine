@@ -64,6 +64,9 @@ typedef union {
         evalfp_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
 
         evalfp_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
+
+        evalfp_t kingPawnShieldBonus[COLUMN_COUNT];
+        evalfp_t kingPawnStormBonus[ROW_COUNT];
         
         evalfp_t tempo;
     };

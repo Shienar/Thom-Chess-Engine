@@ -47,7 +47,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.knightMobilityBonus = {");
     for(int i = 0; i < 9; i++)
     {
-        if(!(i % 5))
+        if(!(i % 8))
             fprintf(output, "\n\t\t");
         fprintf(output, "P(%5d,%5d)%s ", params.knightMobilityBonus[i].mg, params.knightMobilityBonus[i].eg, (i == 8) ? "" : ",");
     }
@@ -56,7 +56,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.bishopMobilityBonus = {");
     for(int i = 0; i < 14; i++)
     {
-        if(!(i % 5))
+        if(!(i % 8))
             fprintf(output, "\n\t\t");
         fprintf(output, "P(%5d,%5d)%s ", params.bishopMobilityBonus[i].mg, params.bishopMobilityBonus[i].eg, (i == 13) ? "" : ",");
     }
@@ -65,7 +65,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.rookMobilityBonus = {");
     for(int i = 0; i < 15; i++)
     {
-        if(!(i % 5))
+        if(!(i % 8))
             fprintf(output, "\n\t\t");
         fprintf(output, "P(%5d,%5d)%s ", params.rookMobilityBonus[i].mg, params.rookMobilityBonus[i].eg, (i == 14) ? "" : ",");
     }
@@ -74,7 +74,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.queenMobilityBonus = {");
     for(int i = 0; i < 28; i++)
     {
-        if(!(i % 5))
+        if(!(i % 8))
             fprintf(output, "\n\t\t");
         fprintf(output, "P(%5d,%5d)%s ", params.queenMobilityBonus[i].mg, params.queenMobilityBonus[i].eg, (i == 27) ? "" : ",");
     }
@@ -83,7 +83,7 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.virtualMobilityBonus = {");
     for(int i = 0; i < 28; i++)
     {
-        if(!(i % 5))
+        if(!(i % 8))
             fprintf(output, "\n\t\t");
         fprintf(output, "P(%5d,%5d)%s ", params.virtualMobilityBonus[i].mg, params.virtualMobilityBonus[i].eg, (i == 27) ? "" : ",");
     }
@@ -130,6 +130,17 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
     fprintf(output, "\t.connectedQueenBonus = { P(%5d,%5d), P(%5d,%5d), P(%5d,%5d) },\n", params.connectedQueenBonus[0].mg, params.connectedQueenBonus[0].eg,
                                                                                           params.connectedQueenBonus[1].mg, params.connectedQueenBonus[1].eg,
                                                                                           params.connectedQueenBonus[2].mg, params.connectedQueenBonus[2].eg);
+
+                                                                                          
+    fprintf(output, "\t.kingPawnShieldBonus = {\n\t\t");
+    for(int column = 0; column < COLUMN_COUNT; column++)
+        fprintf(output, "P(%5d,%5d)%s ", params.kingPawnShieldBonus[column].mg, params.kingPawnShieldBonus[column].eg, (column == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
+    
+    fprintf(output, "\t.kingPawnStormBonus = {\n\t\t");
+    for(int column = 0; column < COLUMN_COUNT; column++)
+        fprintf(output, "P(%5d,%5d)%s ", params.kingPawnStormBonus[column].mg, params.kingPawnStormBonus[column].eg, (column == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
 
     fprintf(output, "\t.tempo = P(%5d,%5d),\n", params.tempo.mg, params.tempo.eg);
 
@@ -568,6 +579,7 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
 
 		//piece/square value
         UPDATE_COEFFICIENTS(genericPieceValues, 1, +=, [KING / 2]);
@@ -578,6 +590,15 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		int virtualMoveCount = __builtin_popcountll(virtualMoves);
 		
         UPDATE_COEFFICIENTS(virtualMobilityBonus, 1, +=, [virtualMoveCount]);
+        
+        int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[WHITE][column] & board->pieces[WHITE_PAWN]);
+        UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, +=, [column]);
+
+		for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+        {
+            int row = getRow(__builtin_ctzll(stormMask));
+            UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, +=, [row]);
+        }
 
 		mask &= mask - 1;
 	}
@@ -586,6 +607,7 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+		int column = getColumn(sq);
 		
 		//piece/square value
         UPDATE_COEFFICIENTS(genericPieceValues, 1, -=, [KING / 2]);
@@ -596,6 +618,16 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		int virtualMoveCount = __builtin_popcountll(virtualMoves);
 
         UPDATE_COEFFICIENTS(virtualMobilityBonus, 1, -=, [virtualMoveCount]);
+
+        int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[BLACK][column] & board->pieces[BLACK_PAWN]);
+        UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, -=, [column]);
+
+		for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+        {
+            int row = getRow(__builtin_ctzll(stormMask));
+            row = MIRROR_SQUARE(row);
+            UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, -=, [row]);
+        }
 
 		mask &= mask - 1;
 	}
