@@ -88,11 +88,6 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
         fprintf(output, "P(%5d,%5d)%s ", params.virtualMobilityBonus[i].mg, params.virtualMobilityBonus[i].eg, (i == 27) ? "" : ",");
     }
     fprintf(output, "\n\t},\n");
-    
-    fprintf(output, "\t.pawnAttacks = {\n\t\t");
-        for(int i = 0; i < PAWN_ATTACK_TYPES; i++)
-            fprintf(output, "P(%5d,%5d)%s ", params.pawnAttacks[i].mg, params.pawnAttacks[i].eg, (i == PAWN_ATTACK_TYPES - 1) ? "" : ",");
-    fprintf(output, "\n\t},\n");
 
     fprintf(output, "\t.minorPawnCover = P(%5d,%5d),\n", params.minorPawnCover.mg, params.minorPawnCover.eg);
 
@@ -142,42 +137,33 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
         fprintf(output, "P(%5d,%5d)%s ", params.kingPawnStormBonus[column].mg, params.kingPawnStormBonus[column].eg, (column == 7) ? "" : ",");
     fprintf(output, "\n\t},\n");
 
+    fprintf(output, "\t.openKingFile = { P(%5d,%5d), P(%5d,%5d) },\n", params.openKingFile[0].mg, params.openKingFile[0].eg, 
+                                                                       params.openKingFile[1].mg, params.openKingFile[1].eg);
+
+    fprintf(output, "\t.kingSafety = {\n");
+    for(int i = 0; i < 10; i++)
+    {
+        fprintf(output, "\t\t");
+        for(int j = 0; j < 10; j++)
+        {
+            int index = 10 * i + j;
+            fprintf(output, "P(%5d,%5d)%s ", params.kingSafety[index].mg, params.kingSafety[index].eg, (index == 99) ? "" : ",");
+        }
+        fprintf(output, "\n");
+    }
+    fprintf(output, "\t},\n");
+
     fprintf(output, "\t.tempo = P(%5d,%5d),\n", params.tempo.mg, params.tempo.eg);
 
     fprintf(output, "};\n");
     fflush(output);
 }
 
-void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
 	uint64_t mask = board->pieces[WHITE_PAWN];
     
 	int protectedCount = __builtin_popcountll((mask >> 8) & (board->pieces[WHITE_BISHOP] | board->pieces[WHITE_KNIGHT]));
-
-    int pawnThreats = (~(board->pieces[BLACK_PAWN] | board->pieces[BLACK_KING])) & (WHITE_PAWN_LEFTATTACKS(board) | WHITE_PAWN_RIGHTATTACKS(board));
-	while(pawnThreats)
-	{
-		int pc = findPieceOnSquare(board, __builtin_ctzll(pawnThreats));
-
-		if(ISKNIGHT(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, +=, [ATTACKING_KNIGHT]);
-		}
-		else if(ISBISHOP(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, +=, [ATTACKING_BISHOP]);
-		}
-		else if(ISROOK(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, +=, [ATTACKING_ROOK]);
-		}
-		else if(ISQUEEN(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, +=, [ATTACKING_QUEEN]);
-		}
-
-		pawnThreats &= pawnThreats - 1;
-	}
 
 	while(mask)
 	{
@@ -219,31 +205,6 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	mask = board->pieces[BLACK_PAWN];
     
 	protectedCount -= __builtin_popcountll((mask << 8) & (board->pieces[BLACK_BISHOP] | board->pieces[BLACK_KNIGHT]));
-
-    pawnThreats = (~(board->pieces[WHITE_PAWN] | board->pieces[WHITE_KING])) & (BLACK_PAWN_LEFTATTACKS(board) | BLACK_PAWN_RIGHTATTACKS(board));
-	while(pawnThreats)
-	{
-		int pc = findPieceOnSquare(board, __builtin_ctzll(pawnThreats));
-
-		if(ISKNIGHT(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, -=, [ATTACKING_KNIGHT]);
-		}
-		else if(ISBISHOP(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, -=, [ATTACKING_BISHOP]);
-		}
-		else if(ISROOK(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, -=, [ATTACKING_ROOK]);
-		}
-		else if(ISQUEEN(pc))
-		{
-            UPDATE_COEFFICIENTS(pawnAttacks, 1, -=, [ATTACKING_QUEEN]);
-		}
-		
-		pawnThreats &= pawnThreats - 1;
-	}
 
 	while(mask)
 	{
@@ -288,7 +249,7 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     UPDATE_COEFFICIENTS(minorPawnCover, protectedCount, +=,);
 }
 
-void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
 	uint64_t mask = board->pieces[WHITE_KNIGHT];
 	while(mask)
@@ -304,6 +265,9 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		//mobility
 		uint64_t moves = knightMoves(board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
+
+		//king safety
+		context->attackWeight[WHITE] += KNIGHT_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[BLACK]);
         
         UPDATE_COEFFICIENTS(knightMobilityBonus, 1, +=, [moveCount]);
 
@@ -332,6 +296,9 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		//mobility
 		uint64_t moves = knightMoves(board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
+		
+		//king safety
+		context->attackWeight[BLACK] += KNIGHT_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[WHITE]);
 
         UPDATE_COEFFICIENTS(knightMobilityBonus, 1, -=, [moveCount]);
 
@@ -347,7 +314,7 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
 	}
 }
 
-void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
 	uint64_t mask = board->pieces[WHITE_BISHOP];
 
@@ -375,6 +342,9 @@ void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		//mobility
 		uint64_t moves = bishopMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
+
+		//king safety
+		context->attackWeight[WHITE] += BISHOP_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[BLACK]);
 
         UPDATE_COEFFICIENTS(bishopMobilityBonus, 1, +=, [moveCount]);
 
@@ -407,6 +377,9 @@ void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalP
 		uint64_t moves = bishopMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 
+		//king safety
+		context->attackWeight[BLACK] += BISHOP_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[WHITE]);
+
         UPDATE_COEFFICIENTS(bishopMobilityBonus, 1, -=, [moveCount]);
 
 		mask &= mask - 1;
@@ -415,7 +388,7 @@ void initBishopCoefficients(bitboard* board, evalParameters* coefficients, evalP
     UPDATE_COEFFICIENTS(badBishopBonus, badPawns, +=,);
 }
 
-void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
 	int connectedRooksByRow = 0;
 	int connectedRooksByColumn = 0;
@@ -448,6 +421,9 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		uint64_t moves = rookMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
+		//king safety
+		context->attackWeight[WHITE] += ROOK_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[BLACK]);
+
         UPDATE_COEFFICIENTS(rookMobilityBonus, 1, +=, [moveCount]);
         
         //rook rams
@@ -487,6 +463,9 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		uint64_t moves = rookMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
+		//king safety
+		context->attackWeight[BLACK] += ROOK_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[WHITE]);
+
         UPDATE_COEFFICIENTS(rookMobilityBonus, 1, -=, [moveCount]);
         
         //rook rams
@@ -502,7 +481,7 @@ void initRookCoefficients(bitboard* board, evalParameters* coefficients, evalPar
     UPDATE_COEFFICIENTS(connectedRookBonus, connectedRooksByRow, +=, [CONNECTED_ROW]);
 }
 
-void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
 	int connectedSlidersByRow = 0;
 	int connectedSlidersByColumn = 0;
@@ -523,6 +502,9 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 		uint64_t moves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int moveCount = __builtin_popcountll(moves);
 
+		//king safety
+		context->attackWeight[WHITE] += QUEEN_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[BLACK]);
+		
         UPDATE_COEFFICIENTS(queenMobilityBonus, 1, +=, [moveCount]);
         
         //queen & slider rams
@@ -552,6 +534,9 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
 		uint64_t moves = queenMoves(board->pieces_side[BLACK], board->pieces_side[WHITE], sq);
 		int moveCount = __builtin_popcountll(moves);
 		
+		//king safety
+		context->attackWeight[BLACK] += QUEEN_ATTACK_WEIGHT * __builtin_popcountll(moves & context->kingZone[WHITE]);
+		
         UPDATE_COEFFICIENTS(queenMobilityBonus, 1, -=, [moveCount]);
         
         //queen & slider rams
@@ -572,13 +557,17 @@ void initQueenCoefficients(bitboard* board, evalParameters* coefficients, evalPa
     UPDATE_COEFFICIENTS(connectedQueenBonus, connectedSlidersByDiagonal, +=, [CONNECTED_DIAGONAL]);
 }
 
-void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
+void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score, evalContext* context)
 {
-
 	uint64_t mask = board->pieces[WHITE_KING];
+	
+    int semiOpenFileCount = 0;
+	int openFileCount = 0;
+
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+        int row = getRow(sq);
 		int column = getColumn(sq);
 
 		//piece/square value
@@ -588,18 +577,40 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		//virtual mobility
 		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int virtualMoveCount = __builtin_popcountll(virtualMoves);
-		
         UPDATE_COEFFICIENTS(virtualMobilityBonus, 1, +=, [virtualMoveCount]);
         
-        int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[WHITE][column] & board->pieces[WHITE_PAWN]);
-        UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, +=, [column]);
-
-		for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+        if(row <= 1)
         {
-            int row = getRow(__builtin_ctzll(stormMask));
-            UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, +=, [row]);
-        }
+            //pawn shield
+            int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[WHITE][column] & board->pieces[WHITE_PAWN]);
+            UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, +=, [column]);
 
+            //pawn storm
+            for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+            {
+                int pawnRow = getRow(__builtin_ctzll(stormMask));
+                UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, +=, [pawnRow]);
+            }
+            
+            //(semi) open file
+			for(int column = 0; column < 8; column++) 
+			{
+				for(int column_offset = -1; column_offset <= 1; column_offset++) 
+				{
+					int target_column = column + column_offset;
+					if(target_column >= 0 && target_column <= 7) 
+					{
+						if((board->pieces[WHITE_PAWN] & board_file[target_column]) == 0)
+						{
+							if((board->pieces[BLACK_PAWN] & board_file[target_column]) == 0)
+								openFileCount++;
+							else
+								semiOpenFileCount++;
+						}
+					}
+				}
+			}
+        }
 		mask &= mask - 1;
 	}
 	
@@ -607,7 +618,10 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 	while(mask)
 	{
         int sq = __builtin_ctzll(mask);
+        int row = getRow(sq);
 		int column = getColumn(sq);
+
+        int mirroredRow = MIRROR_SQUARE(row);
 		
 		//piece/square value
         UPDATE_COEFFICIENTS(genericPieceValues, 1, -=, [KING / 2]);
@@ -616,39 +630,77 @@ void initKingCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		//virtual mobility
 		uint64_t virtualMoves = queenMoves(board->pieces_side[WHITE], board->pieces_side[BLACK], sq);
 		int virtualMoveCount = __builtin_popcountll(virtualMoves);
-
         UPDATE_COEFFICIENTS(virtualMobilityBonus, 1, -=, [virtualMoveCount]);
 
-        int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[BLACK][column] & board->pieces[BLACK_PAWN]);
-        UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, -=, [column]);
-
-		for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+        if(mirroredRow <= 1)
         {
-            int row = getRow(__builtin_ctzll(stormMask));
-            row = MIRROR_SQUARE(row);
-            UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, -=, [row]);
-        }
+            //pawn shield
+            int pawnShieldCount = __builtin_popcountll(kingPawnShieldMask[BLACK][column] & board->pieces[BLACK_PAWN]);
+            UPDATE_COEFFICIENTS(kingPawnShieldBonus, pawnShieldCount, -=, [column]);
 
+            //pawn storm
+            for(uint64_t stormMask = kingPawnStormMask[column] & board->pieces[BLACK_PAWN]; stormMask > 0; stormMask &= stormMask - 1)
+            {
+                int pawnRow = getRow(__builtin_ctzll(stormMask));
+                pawnRow = MIRROR_SQUARE(pawnRow);
+                UPDATE_COEFFICIENTS(kingPawnStormBonus, 1, -=, [pawnRow]);
+            }
+            
+            //(semi) open file
+			for(int column = 0; column < 8; column++) 
+			{
+				for(int column_offset = -1; column_offset <= 1; column_offset++) 
+				{
+					int target_column = column + column_offset;
+					if(target_column >= 0 && target_column <= 7)
+					{
+						if((board->pieces[BLACK_PAWN] & board_file[target_column]) == 0)
+						{
+							if((board->pieces[WHITE_PAWN] & board_file[target_column]) == 0)
+								openFileCount--;
+							else
+								semiOpenFileCount--;
+						}
+					}
+				}
+			}
+        }
 		mask &= mask - 1;
 	}
+
+	//king safety
+	context->attackWeight[WHITE] = _min(context->attackWeight[WHITE], 99);
+	context->attackWeight[BLACK] = _min(context->attackWeight[BLACK], 99);
+    UPDATE_COEFFICIENTS(kingSafety, 1, +=, [context->attackWeight[WHITE]]);
+    UPDATE_COEFFICIENTS(kingSafety, 1, -=, [context->attackWeight[BLACK]]);
+
+    UPDATE_COEFFICIENTS(openKingFile, openFileCount, +=, [OPEN_FILE]);
+    UPDATE_COEFFICIENTS(openKingFile, semiOpenFileCount, +=, [SEMI_OPEN_FILE]);
 }
 
 void initCoefficients(bitboard* board, evalParameters* coefficients, evalParameters_fp params, evalfp_t* score)
 {
     score->mg = 0.0;
     score->eg = 0.0;
+    
+	evalContext context = {
+		.kingZone = {
+			[WHITE] = kingZone[WHITE][board->kingSquare[WHITE]],
+			[BLACK] = kingZone[BLACK][board->kingSquare[BLACK]]
+		}
+	};
 
     if(ISWHITE(board->turn))
         UPDATE_COEFFICIENTS(tempo, 1, +=,);
     else
         UPDATE_COEFFICIENTS(tempo, 1, -=,);
 
-    initPawnCoefficients(board, coefficients, params, score);
-    initKnightCoefficients(board, coefficients, params, score);
-    initBishopCoefficients(board, coefficients, params, score);
-    initRookCoefficients(board, coefficients, params, score);
-    initQueenCoefficients(board, coefficients, params, score);
-    initKingCoefficients(board, coefficients, params, score);
+    initPawnCoefficients(board, coefficients, params, score, &context);
+    initKnightCoefficients(board, coefficients, params, score, &context);
+    initBishopCoefficients(board, coefficients, params, score, &context);
+    initRookCoefficients(board, coefficients, params, score, &context);
+    initQueenCoefficients(board, coefficients, params, score, &context);
+    initKingCoefficients(board, coefficients, params, score, &context);
 }
 
 void initTuples(tuningEntry* entry, evalParameters* coefficients)
@@ -857,8 +909,8 @@ void enforceMonotonicIncreasing(evalfp_t* table,  int size)
 {
     for (int i = 1; i < size; i++)
     {
-        table[i].mg = _max(table[i - 1].mg + 1, table[i].mg);
-        table[i].eg = _max(table[i - 1].eg + 1, table[i].eg);
+        table[i].mg = _max(table[i - 1].mg, table[i].mg);
+        table[i].eg = _max(table[i - 1].eg, table[i].eg);
     }
 }
 
@@ -866,8 +918,25 @@ void enforceMonotonicDecreasing(evalfp_t* table,  int size)
 {
     for (int i = 1; i < size; i++)
     {
-        table[i].mg = _min(table[i - 1].mg - 1, table[i].mg);
-        table[i].eg = _min(table[i - 1].eg - 1, table[i].eg);
+        table[i].mg = _min(table[i - 1].mg, table[i].mg);
+        table[i].eg = _min(table[i - 1].eg, table[i].eg);
+    }
+}
+
+void enforceZeroMin(evalfp_t* table, int size)
+{
+    double minValue_mg = DBL_MAX;
+    double minValue_eg = DBL_MAX;
+    for(int i = 0; i < size; i++)
+    {
+        minValue_mg = _min(minValue_mg, table[i].mg);
+        minValue_eg = _min(minValue_eg, table[i].eg);
+    }
+
+    for(int i = 0; i < size; i++)
+    {
+        table[i].mg -= minValue_mg;
+        table[i].eg -= minValue_eg;
     }
 }
 
@@ -908,6 +977,9 @@ void refreshEvaluations(evalParameters_fp* currentParameters, evalParameters_fp*
     enforceMonotonicDecreasing(currentParameters->virtualMobilityBonus, 28);
 
     enforceMonotonicIncreasing(&currentParameters->passedPawnBonus[1], 6);
+
+    enforceZeroMin(currentParameters->kingSafety, 100);
+    enforceMonotonicIncreasing(currentParameters->kingSafety, 100);
 
     #pragma omp parallel for
     for(int entryNum = 0; entryNum < tuner_entry_count; entryNum++)

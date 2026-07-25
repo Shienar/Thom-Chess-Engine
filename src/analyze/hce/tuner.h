@@ -48,7 +48,6 @@ typedef union {
         evalfp_t queenMobilityBonus[28];
         evalfp_t virtualMobilityBonus[28];
         
-        evalfp_t pawnAttacks[PAWN_ATTACK_TYPES];
         evalfp_t minorPawnCover;
         evalfp_t passedPawnBonus[ROW_COUNT];
         evalfp_t connectedPawnBonus[ROW_COUNT];
@@ -67,6 +66,8 @@ typedef union {
 
         evalfp_t kingPawnShieldBonus[COLUMN_COUNT];
         evalfp_t kingPawnStormBonus[ROW_COUNT];
+        evalfp_t openKingFile[2];
+        evalfp_t kingSafety[100];
         
         evalfp_t tempo;
     };

@@ -457,7 +457,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
         else if(m.promoteTo)
-            iter->moveScores[i] = CAPTURE_SCORE + 1;
+            iter->moveScores[i] = CAPTURE_SCORE + m.promoteTo;
         else if(history)
             iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;

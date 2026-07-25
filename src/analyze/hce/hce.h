@@ -13,11 +13,10 @@
 #define MAX_ROOK_CONNECTIONS 2
 #define MAX_QUEEN_CONNECTIONS 3
 
-#define ATTACKING_KNIGHT 0
-#define ATTACKING_BISHOP 1 
-#define ATTACKING_ROOK 2
-#define ATTACKING_QUEEN 3
-#define PAWN_ATTACK_TYPES 4
+#define KNIGHT_ATTACK_WEIGHT 2
+#define BISHOP_ATTACK_WEIGHT 2
+#define ROOK_ATTACK_WEIGHT 3
+#define QUEEN_ATTACK_WEIGHT 5
 
 typedef struct {
     int32_t mg;
@@ -44,6 +43,11 @@ typedef struct {
         (dest).eg -= (val).eg; \
     } while(0)
 
+typedef struct {
+    uint64_t kingZone[2];
+    int32_t attackWeight[2];
+} evalContext;
+
 //Externally visible for tuning.
 //Everything is a bonus and everything gets added. Some bonuses happen to be negative.
 typedef union {
@@ -57,7 +61,6 @@ typedef union {
         eval_t queenMobilityBonus[28];
         eval_t virtualMobilityBonus[28];
         
-        eval_t pawnAttacks[PAWN_ATTACK_TYPES];
         eval_t minorPawnCover;
         eval_t passedPawnBonus[ROW_COUNT];
         eval_t connectedPawnBonus[ROW_COUNT];
@@ -76,7 +79,9 @@ typedef union {
 
         eval_t kingPawnShieldBonus[COLUMN_COUNT];
         eval_t kingPawnStormBonus[ROW_COUNT];
-        
+        eval_t openKingFile[2];
+        eval_t kingSafety[100];
+
         eval_t tempo;
     };
     eval_t parameters[0];
@@ -85,10 +90,11 @@ typedef union {
 #define PARAMETER_COUNT (sizeof(evalParameters) / sizeof(eval_t))
 
 extern evalParameters hce_params; 
-extern evalParameters is_param_eg;
 extern int gamephasePieceValues[PIECE_COUNT];
 extern uint64_t kingPawnShieldMask[2][COLUMN_COUNT];
 extern uint64_t kingPawnStormMask[COLUMN_COUNT];
+extern uint64_t kingZone[2][64];
+extern int attackWeight[8];
 
 void init_HCE_tables();
 int evaluatePhasedScore(bitboard* board, eval_t eval);
