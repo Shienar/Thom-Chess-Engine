@@ -396,7 +396,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
 }
 
 //Only used when move ordering matters (not perft)
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64])
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64], move_c* excludedMove)
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move_c));
@@ -426,7 +426,21 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
         move_d m;
         createDetailedMove(&m, iter->moveList[i], board);
         
-        if(ttMove && m.arr[0] == ttMove->raw)
+        if(excludedMove && m.arr[0] == excludedMove->raw)
+        {
+            //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
+            if(i > iter->visitedCount)
+            {
+                iter->moveScores[i] = iter->moveScores[iter->visitedCount];
+                iter->moveScores[iter->visitedCount] = INT16_MIN;
+
+                move_c temp = iter->moveList[iter->visitedCount];
+                iter->moveList[iter->visitedCount] = iter->moveList[i];
+                iter->moveList[i] = temp;
+            }
+            iter->visitedCount++;
+        }
+        else if(ttMove && m.arr[0] == ttMove->raw)
             iter->moveScores[i] = TT_MOVE_SCORE;
         else if(pvMove && m.arr[0] == pvMove->raw)
             iter->moveScores[i] = PV_MOVE_SCORE;
@@ -441,7 +455,6 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
             else if(capturesOnly == GET_WINNING_CAPTURES && seeValue < -50)
             {
-                //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
                 if(i > iter->visitedCount)
                 {
                     iter->moveScores[i] = iter->moveScores[iter->visitedCount];
@@ -451,7 +464,6 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
                     iter->moveList[iter->visitedCount] = iter->moveList[i];
                     iter->moveList[i] = temp;
                 }
-
                 iter->visitedCount++;
             } 
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;

@@ -28,6 +28,7 @@ extern const int tt_reduction_depth;
 extern const int probcut_depth;
 extern const int probcut_depth_reduction;
 extern const int lmr_depth;
+extern const int singular_extension_depth;
 
 extern int initial_aspiration_margin;
 extern int maximum_aspiration_margin;

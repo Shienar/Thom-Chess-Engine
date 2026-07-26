@@ -178,6 +178,7 @@ typedef struct searchThreadContext {
     clock_t startTime;
     volatile clock_t* endTime;
     move_c searchedMoves[MAX_REQUIRED_MOVES];
+    move_c excludedMove;
 
     //Necessary search information
     int16_t score;

@@ -40,7 +40,7 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 #define KILLER_2_SCORE 29000
 #define MAX_HISTORY_SCORE 25000 //+- max bound
 #define CAPTURE_SCORE 25000 //+- min bound, used as an exact score for quiet promotions.
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64]);
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64], move_c* excludedMove);
 move_c* iterate_next_move(moveIterator* iter);
 void skip_remaining_quiets(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
