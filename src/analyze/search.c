@@ -13,6 +13,9 @@ int enablePonder = 0;
 int isCalculating = 0;
 int suppressUCIMessages = 0;
 
+volatile uint8_t abortFlag = 0;
+volatile uint8_t isPonder = 0;
+
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
 const int futility_pruning_depth = 2;
@@ -125,9 +128,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     
     bitboard* board = context->board;
 
+    if(abortFlag || ((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime))
+    {
+        abortFlag = 1;
+        return 0;
+    }
     if(isDraw(board))
         return (ply & 3) - 1;
-    if(ply >= MAX_PLY - 1 || (context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes)) 
+    if(ply >= MAX_PLY - 1)
         return evaluate(context);
 
     int lowestBound = alpha;
@@ -319,9 +327,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         score = old_tt_entry.evaluation;
     }
 
-    if(ply >= MAX_PLY - 1) 
+    if(abortFlag || (ply >= 1 && isPonder == 0 && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    {
+        abortFlag = 1;
+        return 0;
+    }
+    if(ply >= MAX_PLY - 1)
         return evaluate(context);
-    if(depth <= 0 || (ply >= 1 && ((context->isPonder == 0 && context->endTime && clock() > *context->endTime) || (context->countedNodes >= context->maxNodes))))
+    if(depth <= 0)
         return quiescentSearch(context, alpha, beta, ply);
     
     //Sygyzy
@@ -692,8 +705,6 @@ void printResultingMoves(move_c bestMove, move_c ponderMove, int isBookMove)
 
 void aspiration_window(searchThreadContext* context, int currentDepth)
 {
-    volatile clock_t* endTime = context->endTime;
-
     if(currentDepth < min_aspiration_depth)
     {
         #ifdef NNUE
@@ -712,8 +723,6 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         int beta = context->score + aspiration_margin;
         while(1)
         {
-            if(context->isPonder == 0 && clock() > *endTime) break;
-
             #ifdef NNUE
             loadInputAccumulator(context->board, context->accumulator, WHITE);
             loadInputAccumulator(context->board, context->accumulator, BLACK);
@@ -759,10 +768,13 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
-        if(context->isPonder == 0 && clock() > *context->endTime) break;
+        if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes > context->maxNodes / threadCount)) 
+            break;
 
         aspiration_window(context, currentDepth);
-        if(clock() <= *context->endTime) memcpy(&tempPV, &context->pv, sizeof(PVar));
+
+        if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && !abortFlag) 
+            memcpy(&tempPV, &context->pv, sizeof(PVar));
         
         if(abs(context->score) > MIN_MATE_SCORE) break;
     }
@@ -842,14 +854,13 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
 THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 {
     srand(time(NULL));
+    abortFlag = 0;
 
     searchThreadContext* context = (searchThreadContext*)param;
     memset(context->historyTable, 0, sizeof(context->historyTable));
     memset(context->killerMoves, 0, sizeof(context->killerMoves));
     
     int maxDepth = context->maxDepth;
-    volatile clock_t *endTime = context->endTime;
-    context->startTime = clock();
     
     move_c bestMove, ponderMove = (move_c){0};
     int helperThreadCount = threadCount - 1;
@@ -861,7 +872,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     context->completedDepth = 0;
 
     //Book moves
-    if(!context->isPonder)
+    if(!isPonder)
     {
         context->pv.line[0] = getBookMove(board);
         if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move_c){0}, 1); isCalculating = 0; return 0; }
@@ -877,7 +888,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     accumulator* threadAccumulators = NULL;
     accumulatorRefreshTable** threadRefreshTables = NULL;
     #endif
-    clock_t terminateFlag = LONG_MAX;
 
     if(helperThreadCount > 0)
     {
@@ -893,7 +903,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         {
             helperThreadContext[i].board = &threadBoards[i];
             memcpy(helperThreadContext[i].board, board, sizeof(bitboard));
-            helperThreadContext[i].endTime = &terminateFlag;
+            helperThreadContext[i].startTime = context->startTime;
+            helperThreadContext[i].hardEndTime = context->hardEndTime;
+            helperThreadContext[i].softEndTime = context->softEndTime;
             helperThreadContext[i].maxDepth = context->maxDepth;
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
 
@@ -914,7 +926,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
 
-        if(currentDepth > 1 && (clock() > *endTime || context->countedNodes > context->maxNodes)) break;
+        if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->maxNodes / threadCount))) break;
         
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
@@ -923,7 +935,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         if(!suppressUCIMessages)
         {
             int totalNodes = context->countedNodes;
-            for(int i = 0; i < helperThreadCount; i++) totalNodes += helperThreadContext[i].countedNodes; //very volatile, basically a best-guess until the cleanup.
+            totalNodes *= threadCount; //Unreliable, basically a best-guess until end of search.
             int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
@@ -960,7 +972,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     }
     if(helperThreadCount > 0)
     {   
-        terminateFlag = 0;
+        abortFlag = 1;
         for(int i = 0; i < helperThreadCount; i++) 
         {
             THREAD_WAIT(helperThreads[i]);

@@ -171,11 +171,9 @@ typedef struct PVar {
 #define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
     //UCI Thread settings or info
-    int isPonder;
     int maxDepth, seldepth, completedDepth, deepeningSkip;
     int maxNodes, countedNodes;
-    clock_t startTime;
-    volatile clock_t* endTime;
+    clock_t startTime, softEndTime, hardEndTime;
     move_c searchedMoves[MAX_REQUIRED_MOVES];
     move_c excludedMove;
 

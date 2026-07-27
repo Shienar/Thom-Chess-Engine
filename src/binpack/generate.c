@@ -20,11 +20,12 @@ void generate()
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
     details = binpack_open(TRAINING_DATA_PATH, 0);
 
-    clock_t endTime = LONG_MAX;
     for(int i = 0; i < concurrency; i++)
     {
         contextList[i].board = create_board(NULL);
-        contextList[i].endTime = &endTime;
+        contextList[i].startTime = 0,
+        contextList[i].hardEndTime = LONG_MAX,
+        contextList[i].softEndTime = LONG_MAX,
         contextList[i].maxDepth = 9;
         contextList[i].maxNodes = 5000;
 
@@ -58,7 +59,7 @@ void generate()
     cleanup:
 
     printf("Stopping all threads...\n");
-    endTime = 0;
+    abortFlag = 0;
     for(int i = 0; i < concurrency; i++) 
     {
         THREAD_WAIT(threadList[i]);
@@ -92,7 +93,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
     uint8_t hit;
     
-    while(*context->endTime)
+    while(!abortFlag)
     {
         context->searchedMoves[0].raw = 0;
         context->pv.line[0].raw = 0;

@@ -13,6 +13,9 @@
 #include "analyze/hce/hce.h"
 #endif
 
+extern volatile uint8_t abortFlag;
+extern volatile uint8_t isPonder;
+
 extern int threadCount;
 extern int enablePonder;
 extern int isCalculating;

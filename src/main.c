@@ -60,13 +60,11 @@ int main(int argc, char** argv)
     char sygyzyPath[1024] = {'\0'};
     int isPathDirty = 1; //Has sygyzy been initialized with the current path?
 
-    clock_t endTime; //Doubles as a terminate flag
 
     searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
     threadContext->board = board;
     threadContext->maxDepth = MAX_PLY;
     threadContext->maxNodes = INT_MAX;
-    threadContext->endTime = &endTime;
 
     THREADTYPE calculateThread = THREAD_INIT;
 
@@ -128,7 +126,7 @@ int main(int argc, char** argv)
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 if(isCalculating)
                 {
-                    endTime = 0;
+                    abortFlag = 1;
                     THREAD_WAIT(calculateThread);
                 }
                 clear_tt(transpositionTable);
@@ -268,7 +266,7 @@ int main(int argc, char** argv)
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 if(isCalculating)
                 {
-                    endTime = 0;
+                    abortFlag = 1;
                     THREAD_WAIT(calculateThread);
                 }
 
@@ -321,19 +319,17 @@ int main(int argc, char** argv)
                 if(isCalculating) 
                 {
                     DEBUG_INFO("Aborting search in progress.");
-                    endTime = 0;
+                    abortFlag = 1;
                     THREAD_WAIT(calculateThread);
                 }
                 isCalculating = 1;
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
 
-                int whiteTime = INT32_MAX;
-                int blackTime = INT32_MAX;
-                int whiteIncrement = 0;
-                int blackIncrement = 0;
+                int timeLeft = INT32_MAX;
+                int increment = 0;
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
-                threadContext->isPonder = 0;
+                isPonder = 0;
                 threadContext->maxNodes = INT32_MAX;
                 memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
 
@@ -341,69 +337,46 @@ int main(int argc, char** argv)
                 while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
                     if(strcmp(str, "infinite") == 0)
-                    {
                         isInfinite = 1;
-                    }
                     else if(strcmp(str, "ponder") == 0)
-                    {
-                        //Just fill up the TT table, don't print.
-                        threadContext->isPonder = 1;
-                    }
-                    else if(strcmp(str, "wtime") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &whiteTime);
-                    }
-                    else if(strcmp(str, "btime") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &blackTime);
-                    }
-                    else if(strcmp(str, "winc") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &whiteIncrement);
-                    }
-                    else if(strcmp(str, "binc") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &blackIncrement);
-                    }
-                    else if(strcmp(str, "depth") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) 
-                        {
-                            sscanf(str, "%d", &threadContext->maxDepth);
-                            threadContext->maxDepth = clamp(threadContext->maxDepth, 1, MAX_PLY);
-                        }
-                    }
-                    else if(strcmp(str, "nodes") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &threadContext->maxNodes);
-                    }
-                    else if(strcmp(str, "movetime") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) sscanf(str, "%d", &fixedMoveTime);
-                    }
-                    else if(strcmp(str, "searchmoves") == 0)
-                    {
-                        //Assume this is the final command in list.
-                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < MAX_REQUIRED_MOVES)
-                        {
-                            threadContext->searchedMoves[searchedMoveCount] = getStructFromString(board, str);
-                            searchedMoveCount++;
-                        }
-                    }
+                        isPonder = 1;
+                    else if(strcmp(str, "wtime") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &timeLeft);
+                    else if(strcmp(str, "btime") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &timeLeft);
+                    else if(strcmp(str, "winc") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &increment);
+                    else if(strcmp(str, "binc") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &increment);
+                    else if(strcmp(str, "depth") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &threadContext->maxDepth);
+                    else if(strcmp(str, "nodes") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &threadContext->maxNodes);
+                    else if(strcmp(str, "movetime") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        sscanf(str, "%d", &fixedMoveTime);
+                    else if(strcmp(str, "searchmoves") == 0) //Assume this is the final command in list.
+                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < MAX_REQUIRED_MOVES) 
+                            threadContext->searchedMoves[searchedMoveCount++] = getStructFromString(board, str);
                 }
 
+                threadContext->maxDepth = clamp(threadContext->maxDepth, 1, MAX_PLY);
+
                 //Finished parsing command modifers, setup & launch thread.
-                if(fixedMoveTime) endTime = clock() + (fixedMoveTime * CLOCKS_PER_SEC) / 1000; 
+                threadContext->startTime = clock();
+                if(fixedMoveTime)
+                    threadContext->softEndTime = threadContext->hardEndTime = threadContext->startTime + (fixedMoveTime * CLOCKS_PER_SEC) / 1000;
                 else if(isInfinite)
                 {
-                    endTime = LONG_MAX;
+                    threadContext->softEndTime = threadContext->hardEndTime = INT_MAX;
                     threadContext->maxDepth = MAX_PLY;
                 }
                 else
                 {
-                    if(ISWHITE(board->turn)) endTime = (whiteTime / 20) + (whiteIncrement / 2);
-                    else endTime = (blackTime / 20) + (blackIncrement / 2);
-                    endTime = (clock() + (endTime * CLOCKS_PER_SEC) / 1000)  - 50; //Subtracting UCI overhead from move time.
+                    int uciOverhead = _min(25, timeLeft / 2);
+                    clock_t softEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
+                    clock_t hardEndTime = timeLeft / 15 + increment / 2 - uciOverhead;
+                    threadContext->softEndTime = (threadContext->startTime + (softEndTime * CLOCKS_PER_SEC) / 1000);
+                    threadContext->hardEndTime = (threadContext->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
                 }
 
                 THREAD_START(calculateThread, calculateBestMove, threadContext);
@@ -414,12 +387,12 @@ int main(int argc, char** argv)
             {
                 if(isCalculating)
                 {
-                    threadContext->isPonder = 0;
+                    isPonder = 0;
                     THREAD_WAIT(calculateThread);
                 }
                 else
                 {
-                    threadContext->isPonder = 0;
+                    isPonder = 0;
                     THREAD_START(calculateThread, calculateBestMove, threadContext);
                 }
             }
@@ -428,8 +401,8 @@ int main(int argc, char** argv)
                 //Reap the thread, which will print out its results as it terminates.
                 if(isCalculating)
                 {
-                    threadContext->isPonder = 0;
-                    endTime = 0;
+                    isPonder = 0;
+                    abortFlag = 1;
                     isCalculating = 0;
                     THREAD_WAIT(calculateThread);
                 }
