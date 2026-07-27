@@ -4,7 +4,7 @@
 #include "hashtables/transpositiontable.h"
 #include "analyze/book.h"
 #include "pyrrhic/tbprobe.h"
-#include "analyze/engine.h"
+#include "analyze/search.h"
 #include "binpack/generate.h"
 #include <omp.h>
 #include <string.h>
@@ -15,6 +15,30 @@
 
 #ifndef NNUE
 #include "analyze/hce/tuner.h"
+#endif
+
+#ifdef SPSA
+
+#define SET_SPA_OPTION_INT(name) \
+    else if(strcmp(str, #name) == 0) \
+    { \
+        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
+            sscanf(str, "%d", &name); \
+        break; \
+    }
+    
+#define SET_SPA_OPTION_FLOAT(name) \
+    else if(strcmp(str, #name) == 0) \
+    { \
+        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
+        { \
+            int temp; \
+            sscanf(str, "%d", &temp); \
+            name = temp / 1000.0; \
+        } \
+        break; \
+    }
+
 #endif
 
 void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
@@ -86,6 +110,14 @@ int main(int argc, char** argv)
                 printf("option name historyBonusOffset type spin default %d min 50 max 600\n", historyBonusOffset);
                 printf("option name historyPenaltyScale type spin default %d min 50 max 600\n", historyPenaltyScale);
                 printf("option name historyPenaltyOffset type spin default %d min 50 max 600\n", historyPenaltyOffset);
+
+                printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
+                printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));
+                
+                printf("option name lmp_a type spin default %d min 500 max 7000\n", (int) (lmp_a * 1000));
+                printf("option name lmp_b type spin default %d min 500 max 7000\n", (int) (lmp_b * 1000));
+                printf("option name lmp_improving_a type spin default %d min 500 max 7000\n", (int) (lmp_improving_a * 1000));
+                printf("option name lmp_improving_b type spin default %d min 500 max 7000\n", (int) (lmp_improving_b * 1000));
                 #endif
                 printf("uciok\n");
                 fflush(stdout);
@@ -193,81 +225,24 @@ int main(int argc, char** argv)
                             break;
                         }
                         #ifdef SPSA
-                        else if(strcmp(str, "initial_aspiration_margin") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &initial_aspiration_margin);
-                            break;
-                        }
-                        else if(strcmp(str, "maximum_aspiration_margin") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &maximum_aspiration_margin);
-                        }
-                        else if(strcmp(str, "aspiration_margin_mult_factor") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                int temp;
-                                sscanf(str, "%d", &temp);
-                                aspiration_margin_mult_factor = temp / 1000.0;
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "reverse_futility_margin") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &reverse_futility_margin);
-                            break;
-                        }
-                        else if(strcmp(str, "reverse_futility_margin_improving") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &reverse_futility_margin_improving);
-                            break;
-                        }
-                        else if(strcmp(str, "futility_margin") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &futility_margin);
-                            break;
-                        }
-                        else if(strcmp(str, "probcut_offset") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &probcut_offset);
-                            break;
-                        }
-                        else if(strcmp(str, "probcut_offset_improving") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &probcut_offset_improving);
-                            break;
-                        }
-                        else if(strcmp(str, "historyBonusScale") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &historyBonusScale);
-                            break;
-                        }
-                        else if(strcmp(str, "historyBonusOffset") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &historyBonusOffset);
-                            break;
-                        }
-                        else if(strcmp(str, "historyPenaltyScale") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &historyPenaltyScale);
-                            break;
-                        }
-                        else if(strcmp(str, "historyPenaltyOffset") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                                sscanf(str, "%d", &historyPenaltyOffset);
-                            break;
-                        }
+                        SET_SPA_OPTION_INT(initial_aspiration_margin)
+                        SET_SPA_OPTION_INT(maximum_aspiration_margin)
+                        SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
+                        SET_SPA_OPTION_INT(reverse_futility_margin)
+                        SET_SPA_OPTION_INT(reverse_futility_margin_improving)
+                        SET_SPA_OPTION_INT(futility_margin)
+                        SET_SPA_OPTION_INT(probcut_offset)
+                        SET_SPA_OPTION_INT(probcut_offset_improving)
+                        SET_SPA_OPTION_INT(historyBonusScale)
+                        SET_SPA_OPTION_INT(historyBonusOffset)
+                        SET_SPA_OPTION_INT(historyPenaltyScale)
+                        SET_SPA_OPTION_INT(historyPenaltyOffset)
+                        SET_SPA_OPTION_FLOAT(lmr_a)
+                        SET_SPA_OPTION_FLOAT(lmr_b)
+                        SET_SPA_OPTION_FLOAT(lmp_a)
+                        SET_SPA_OPTION_FLOAT(lmp_b)
+                        SET_SPA_OPTION_FLOAT(lmp_improving_a)
+                        SET_SPA_OPTION_FLOAT(lmp_improving_b)
                         #endif
                         break;
                     }

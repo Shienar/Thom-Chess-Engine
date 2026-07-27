@@ -48,7 +48,6 @@ typedef struct moveIterator {
     int16_t* moveScores;
     uint8_t count;
     uint8_t visitedCount;
-    uint8_t skippedQuiets;
 } moveIterator;
 
 typedef struct table_entry_tt {

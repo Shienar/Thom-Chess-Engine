@@ -2,7 +2,7 @@
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
-#include "analyze/engine.h"
+#include "analyze/search.h"
 #include <math.h>
 #include <immintrin.h>
 #include <string.h>

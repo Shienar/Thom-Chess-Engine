@@ -1,4 +1,4 @@
-#include "analyze/engine.h"
+#include "analyze/search.h"
 #include "board/moves.h"
 #include "board/bitboard.h"
 #include "debug.h"
@@ -16,6 +16,7 @@ int suppressUCIMessages = 0;
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
 const int futility_pruning_depth = 2;
+const int quiet_futility_pruning_depth = 8;
 const int nullmove_pruning_depth = 5;
 const int probcut_depth = 8;
 const int probcut_depth_reduction = 4;
@@ -44,11 +45,25 @@ int historyBonusOffset = 137;
 int historyPenaltyScale = 392;
 int historyPenaltyOffset = 131;
 
-int lmrTable[MAX_PLY][MAX_MOVES] = {0};
+//a * log(depth) * log(moveCount) / b
+float lmr_a = 0.649f;
+float lmr_b = 3.363f;
 
+//a * depth^2 + b
+float lmp_a = 1.849f;
+float lmp_b = 5.0f;
+float lmp_improving_a = 1.434f;
+float lmp_improving_b = 4.0f;
+
+int lmrTable[MAX_PLY][MAX_MOVES] = {0};
+int lmpTable[2][MAX_PLY] = {0};
+
+int searchInit = 0;
 void initSearchTables()
 {
-    if(lmrTable[lmr_depth][10]) return;
+    if(searchInit) 
+        return;
+    searchInit = 1;
 
     for(int depth = lmr_depth; depth < MAX_PLY; depth++)
     {
@@ -56,8 +71,14 @@ void initSearchTables()
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
         {
             if(moveCount >= count)
-                lmrTable[depth][moveCount] = (int)( 0.99f + log(depth) * log(moveCount) / 3.35f);
+                lmrTable[depth][moveCount] = (int)( lmr_a + log(depth) * log(moveCount) / lmr_b );
         }
+    }
+
+    for(int depth = 0; depth < MAX_PLY; depth++)
+    {
+        lmpTable[0][depth] = lmp_a * depth * depth + lmp_b;
+        lmpTable[1][depth] = lmp_improving_a * depth * depth + lmp_improving_b;
     }
 }
 
@@ -239,8 +260,13 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     move_c* tt_move = NULL;
     move_c temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.
 
+    move_c bestMove = {0};
+
     int searchedQuietIndices[MAX_MOVES] = {0};
     int searchedQuietCount = 0;
+    int shouldSkipQuiets = 0;
+    
+    int lowestBound = alpha;
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
@@ -334,7 +360,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     //Improving
-    context->evalHistory[ply] = score;
+    int staticScore = score;
+    context->evalHistory[ply] = staticScore;
     if(inCheck) context->improving[ply] = 0;
     else context->improving[ply] = (ply >= 2) ? (score > context->evalHistory[ply - 2]) : 1;
 
@@ -466,21 +493,37 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
 
             if(moveFromStruct(board, *currentMove)) continue;
+            
+            int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
+
+            //Quiet move pruning.
+            if(!shouldSkipQuiets && isQuietMove && ply > 0 && abs(bestScore) < MIN_MATE_SCORE)
+            {
+                //Late move pruning
+                if(!pvNode && validMovesVisited > lmpTable[context->improving[ply]][ply])
+                {
+                    shouldSkipQuiets = 1;
+                    unmove(board);
+                    continue;
+                }
+            }
+            if(isQuietMove && shouldSkipQuiets)
+            {
+                unmove(board);
+                continue;
+            }
 
             #ifdef NNUE
             move_d detailedMove = board->history[board->historyIndex - 1];
             updateMoveAccumulator(board, detailedMove, 0, context->accumulator, context->refreshTable);
             #endif
-            
-            int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
 
             //Check extensions
             if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
             
-            //lmr
+            //Late move reduction
             if(!pvNode && isQuietMove && !context->improving[ply]) 
                 next_depth -= lmrTable[depth][validMovesVisited];
-
 
             if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
             else
@@ -508,6 +551,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             {
                 new_tt_entry.nodeType = NODE_BOUND_LOWER;
                 new_tt_entry.evaluation = score;
+                new_tt_entry.bestMove = currentMove->raw;
                 transposition_table_set(context->tt, new_tt_entry, ply);
                 destroy_move_iterator(iter);
 
@@ -533,6 +577,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             else if(score > bestScore)
             {
                 bestScore = score;
+                bestMove = *currentMove;
 
                 if(score > alpha)
                 {
@@ -552,16 +597,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(isQuietMove)
                 searchedQuietIndices[searchedQuietCount++] = (board->turn * 384) + ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
         }
-
-        if(bestScore < alpha)
-        {
-            //Don't save a bestmove since we couldn't find one that fits in window.
-            new_tt_entry.nodeType = NODE_BOUND_UPPER;
-            new_tt_entry.evaluation = bestScore;
-            new_tt_entry.bestMove = 0;
-            transposition_table_set(context->tt, new_tt_entry, ply);
-        }
         destroy_move_iterator(iter);
+        
+        new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ( (bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
+        new_tt_entry.evaluation = bestScore;
+        new_tt_entry.bestMove = bestMove.raw;
+        transposition_table_set(context->tt, new_tt_entry, ply);
     }
     
     if(!iter || validMovesVisited == 0)

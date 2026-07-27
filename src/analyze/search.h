@@ -20,16 +20,6 @@ extern int suppressUCIMessages;
 #define MIN_THREADS 1
 #define MAX_THREADS 64
 
-extern const int min_aspiration_depth;
-extern const int reverse_futility_pruning_depth;
-extern const int futility_pruning_depth;
-extern const int nullmove_pruning_depth;
-extern const int tt_reduction_depth;
-extern const int probcut_depth;
-extern const int probcut_depth_reduction;
-extern const int lmr_depth;
-extern const int singular_extension_depth;
-
 extern int initial_aspiration_margin;
 extern int maximum_aspiration_margin;
 extern float aspiration_margin_mult_factor;
@@ -49,6 +39,14 @@ extern int historyBonusScale;
 extern int historyBonusOffset;
 extern int historyPenaltyScale;
 extern int historyPenaltyOffset;
+
+extern float lmr_a;
+extern float lmr_b;
+
+extern float lmp_a;
+extern float lmp_b;
+extern float lmp_improving_a;
+extern float lmp_improving_b;
 
 
 void initSearchTables();

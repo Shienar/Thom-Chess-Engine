@@ -1,6 +1,6 @@
 #include "binpack/generate.h"
 #include "analyze/book.h"
-#include "analyze/engine.h"
+#include "analyze/search.h"
 #include "board/bitboard.h"
 
 binpackDetails details;

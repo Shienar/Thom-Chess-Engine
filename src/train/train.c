@@ -1,7 +1,7 @@
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
-#include "analyze/engine.h"
+#include "analyze/search.h"
 #include "train/train.h"
 #include "binpack/viri_binpack.h"
 #include "train/data_queue.h"
