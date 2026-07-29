@@ -128,7 +128,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     
     bitboard* board = context->board;
 
-    if(abortFlag || ((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime))
+    if(abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
     {
         abortFlag = 1;
         return 0;
@@ -203,14 +203,19 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 
     if(largestDelta && largestDelta + best < alpha) return best;
 
-    moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_CHECKS, NULL, tt_move, NULL, NULL, NULL, NULL);
+    moveIterator* iter = create_move_iterator(board, GET_CAPTURES_AND_CHECKS, 
+                                                NULL, NULL, 
+                                                NULL, tt_move, 
+                                                NULL, NULL,
+                                                NULL);
     move_c bestMove = {0};
     if(iter)
     {
         move_c* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            if(moveFromStruct(board, *currentMove)) continue;
+            if(moveFromStruct(board, *currentMove)) 
+                continue;
 
             #ifdef NNUE
             move_d detailedMove = board->history[board->historyIndex - 1];
@@ -264,7 +269,18 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int pvNode = (beta != alpha + 1);
     int inCheck = IS_IN_CHECK_ANY(board->flags);
     
-    move_c* pvMove = &context->pv.line[ply];
+    move_c* counterMove = NULL;
+    if(board->repetitionIndex >= 1)
+    {
+        move_c compact;
+        compact.raw = board->history[board->historyIndex - 1].compactMove;
+
+        int from = compact.startSquare;
+        int to = compact.endSquare;
+        counterMove = &context->countermove[from][to];
+    }
+
+    move_c* pvMove = (ply == 0) ? &context->pv.line[0] : NULL;
     move_c* tt_move = NULL;
     move_c temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.
 
@@ -275,6 +291,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int shouldSkipQuiets = 0;
     
     int lowestBound = alpha;
+
+    if(abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    {
+        abortFlag = 1;
+        return 0;
+    }
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
@@ -327,11 +349,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         score = old_tt_entry.evaluation;
     }
 
-    if(abortFlag || (ply >= 1 && isPonder == 0 && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
-    {
-        abortFlag = 1;
-        return 0;
-    }
     if(ply >= MAX_PLY - 1)
         return evaluate(context);
     if(depth <= 0)
@@ -404,13 +421,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
 
         //Null move pruning
-        if(score >= beta && depth >= nullmove_pruning_depth &&
+        if(score >= beta && depth >= nullmove_pruning_depth && 
+            !(board->historyIndex > 0 && board->history[board->historyIndex - 1].raw == 0) &&
             (board->pieces_all ^ (board->pieces[WHITE_KING] | board->pieces[BLACK_KING] | board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN])))
         {
             int r = 3 + depth / 6;
             applyNullMove(board);
             int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV);
-            applyNullMove(board);
+            revertNullMove(board);
             if(nullScore >= beta)
                 return beta;
         }
@@ -424,7 +442,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(score >= pBeta && pBeta < MIN_MATE_SCORE && (!hit || old_tt_entry.depth < nextDepth))
             {
                 int probCutScore = INT32_MIN;
-                moveIterator* iter = create_move_iterator(board, GET_WINNING_CAPTURES, pvMove, tt_move, NULL, context->killerMoves[ply], context->historyTable, NULL);
+                moveIterator* iter = create_move_iterator(board, GET_WINNING_CAPTURES,
+                                                            NULL, NULL,
+                                                            pvMove, tt_move, 
+                                                            context->historyTable, context->killerMoves[ply], 
+                                                            counterMove);
                 if(iter)
                 {
                     move_c* currentMove;
@@ -472,10 +494,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
     
     //TT reductions
-    if(depth >= tt_reduction_depth && pvNode && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
+    if(!context->excludedMove.raw && depth >= tt_reduction_depth && pvNode && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
         depth -= 1;
 
-    moveIterator* iter = create_move_iterator(board, GET_ALL_MOVES, pvMove, tt_move, (ply == 0) ? context->searchedMoves : NULL, context->killerMoves[ply], context->historyTable, &context->excludedMove);
+    moveIterator* iter = create_move_iterator(board, GET_ALL_MOVES,
+                                                (ply == 0) ? context->searchedMoves : NULL, &context->excludedMove,
+                                                pvMove, tt_move, 
+                                                context->historyTable, context->killerMoves[ply], 
+                                                counterMove);
     int validMovesVisited = 0;
     int bestScore = -INT32_MAX;
     if(iter)
@@ -583,6 +609,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     int16_t* straightArr = (int16_t*) context->historyTable;
                     for(int i = 0; i < searchedQuietCount; i++)
                     straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
+
+                    //Countermove heuristic
+                    if(board->repetitionIndex >= 2)
+                    {
+                        move_c compact;
+                        compact.raw = board->history[board->historyIndex - 2].compactMove;
+
+                        int from = compact.startSquare;
+                        int to = compact.endSquare;
+                        context->countermove[from][to] = *currentMove;
+                    }
                 }
 
                 return score;
@@ -600,9 +637,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     transposition_table_set(context->tt, new_tt_entry, ply);
                     alpha = score;
                     
+                    //Save PV
                     myPV->line[0] = *currentMove;
                     memcpy(&myPV->line[1], childPV.line, childPV.length * sizeof(move_c));
                     myPV->length = childPV.length + 1;
+
                 }
             }
             validMovesVisited++;
@@ -705,6 +744,12 @@ void printResultingMoves(move_c bestMove, move_c ponderMove, int isBookMove)
 
 void aspiration_window(searchThreadContext* context, int currentDepth)
 {
+    //context->pv is used to save last stable pv line.
+    //It is used for reporting and testing pv moves.
+    //Don't corrupt it.
+
+    PVar tempPV = {0};
+
     if(currentDepth < min_aspiration_depth)
     {
         #ifdef NNUE
@@ -712,7 +757,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         loadInputAccumulator(context->board, context->accumulator, BLACK);
         #endif
 
-        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &context->pv);
+        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV);
         context->completedDepth = currentDepth;
     }
     else
@@ -727,7 +772,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             loadInputAccumulator(context->board, context->accumulator, WHITE);
             loadInputAccumulator(context->board, context->accumulator, BLACK);
             #endif
-            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &context->pv);
+            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV);
 
             if(score <= alpha)
             {
@@ -757,6 +802,10 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             }
         }
     }
+    
+    //If the pv is stable (not half-done from abortion), save it.
+    if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && !abortFlag) 
+        memcpy(&context->pv, &tempPV, sizeof(PVar));
 }
 
 THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
@@ -764,7 +813,6 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     searchThreadContext* context = (searchThreadContext*)param;
     context->seldepth = 0;
     context->completedDepth = 0;
-    PVar tempPV;
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
@@ -772,15 +820,9 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
             break;
 
         aspiration_window(context, currentDepth);
-
-        if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && !abortFlag) 
-            memcpy(&tempPV, &context->pv, sizeof(PVar));
         
         if(abs(context->score) > MIN_MATE_SCORE) break;
     }
-
-    //Load the last stable pv
-    memcpy(&context->pv, &tempPV, sizeof(PVar));
 
     return 0;
 }
@@ -858,7 +900,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
     searchThreadContext* context = (searchThreadContext*)param;
     memset(context->historyTable, 0, sizeof(context->historyTable));
-    memset(context->killerMoves, 0, sizeof(context->killerMoves));
     
     int maxDepth = context->maxDepth;
     

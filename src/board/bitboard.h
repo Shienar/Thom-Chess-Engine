@@ -230,13 +230,11 @@ static inline void createDetailedMove(move_d* m, move_c c, bitboard* board)
 {
     assert(m);
 
-    m->startSquare = c.startSquare;
-    m->endSquare = c.endSquare;
-    m->promoteTo = c.promoteTo;
-    m->piece = findPieceOnSquare(board, m->startSquare);
+    m->compactMove = c.raw;
+    m->piece = findPieceOnSquare(board, c.startSquare);
 
-    m->capturedPiece = findPieceOnSquare(board, m->endSquare);
-    if(m->capturedPiece == EMPTY_PIECE && ISPAWN(m->piece) && board->enPassantSquare == m->capturedPiece)
+    m->capturedPiece = findPieceOnSquare(board, c.endSquare);
+    if(m->capturedPiece == EMPTY_PIECE && ISPAWN(m->piece) && board->enPassantSquare == c.endSquare)
         m->capturedPiece = FLIP_COLOR(m->piece);
 
     m->previousMovesSinceLastChange = board->movesSinceLastChange;

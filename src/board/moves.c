@@ -354,10 +354,10 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
     //Handle the initial capture
     gain[0] = pieceValuesSEE[m.capturedPiece];
 
-    uint64_t removedMask = singleBitMask(m.startSquare);
+    uint64_t removedMask = singleBitMask(((move_c)m.compactMove).startSquare);
 
     uint64_t occupied = board->pieces_all & ~removedMask;
-    uint64_t attackers = getAttackers(board, m.endSquare, occupied) & (~removedMask);
+    uint64_t attackers = getAttackers(board, ((move_c)m.compactMove).endSquare, occupied) & (~removedMask);
 
     side = FLIP_COLOR(side);
 
@@ -381,7 +381,7 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
         occupied &= ~removedMask;
         attackers &= ~removedMask;
         if(ISPAWN(attackerPiece) || ISBISHOP(attackerPiece) || ISROOK(attackerPiece) || ISQUEEN(attackerPiece)) 
-            attackers |= (getSlidingAttackers(board, m.endSquare, occupied) & (~removedMask));
+            attackers |= (getSlidingAttackers(board, ((move_c)m.compactMove).endSquare, occupied) & (~removedMask));
         
         side = FLIP_COLOR(side);
     }
@@ -396,7 +396,11 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
 }
 
 //Only used when move ordering matters (not perft)
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64], move_c* excludedMove)
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
+                                        move_c* requiredMoves, move_c* excludedMove,
+                                        move_c* pvMove, move_c* ttMove, 
+                                        int16_t history[2][6][64], move_c* killerMoves, 
+                                        move_c* counterMove)
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move_c));
@@ -425,7 +429,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
         move_d m;
         createDetailedMove(&m, iter->moveList[i], board);
         
-        if(excludedMove && m.arr[0] == excludedMove->raw)
+        if(excludedMove && m.compactMove == excludedMove->raw)
         {
             //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
             if(i > iter->visitedCount)
@@ -439,14 +443,10 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             }
             iter->visitedCount++;
         }
-        else if(ttMove && m.arr[0] == ttMove->raw)
+        else if(ttMove && m.compactMove == ttMove->raw)
             iter->moveScores[i] = TT_MOVE_SCORE;
-        else if(pvMove && m.arr[0] == pvMove->raw)
+        else if(pvMove && m.compactMove == pvMove->raw)
             iter->moveScores[i] = PV_MOVE_SCORE;
-        else if(killerMoves && m.arr[0] == killerMoves[0].raw)
-            iter->moveScores[i] = KILLER_1_SCORE;
-        else if(killerMoves && m.arr[0] == killerMoves[1].raw)
-            iter->moveScores[i] = KILLER_2_SCORE;
         else if(m.capturedPiece != EMPTY_PIECE)
         {
             int seeValue = staticExchangeEvaluation(board, m);
@@ -467,11 +467,21 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pv
             } 
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
         }
-        else if(m.promoteTo)
-            iter->moveScores[i] = CAPTURE_SCORE + m.promoteTo;
+        else if(killerMoves && m.compactMove == killerMoves[0].raw)
+            iter->moveScores[i] = KILLER_1_SCORE;
+        else if(killerMoves && m.compactMove == killerMoves[1].raw)
+            iter->moveScores[i] = KILLER_2_SCORE;
+        else if(((move_c)m.compactMove).promoteTo)
+            iter->moveScores[i] = PROMOTION_SCORE + ((move_c)m.compactMove).promoteTo;
         else if(history)
-            iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][m.endSquare];
+        {
+            iter->moveScores[i] = history[board->turn][PIECE(m.piece) / 2][((move_c)m.compactMove).endSquare];
+            
+            if(counterMove && m.compactMove == counterMove->raw)
+                iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE);
+        }
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
+
 
     }
 
@@ -631,7 +641,7 @@ int movePiece(bitboard *board, move_c compactMove)
     assert(board);
     move_d m;
     createDetailedMove(&m, compactMove, board);
-    assert(m.startSquare >= 0 && m.startSquare <= 63 && m.endSquare >= 0 && m.endSquare <= 63);
+    assert(compactMove.startSquare >= 0 && compactMove.startSquare <= 63 && compactMove.endSquare >= 0 && compactMove.endSquare <= 63);
 
     //Clear the en passant hash early. clear the en passant square later.
     //En passant square is required for legal moves, en passant hash can change by the end of the function.
@@ -640,20 +650,20 @@ int movePiece(bitboard *board, move_c compactMove)
     switch(PIECE(m.piece))
     {
         case PAWN:
-            int difference = abs(m.startSquare - m.endSquare);
+            int difference = abs(compactMove.startSquare - compactMove.endSquare);
             
             if(difference == 8 || difference == 16)
             {
-                if((ISWHITE(m.piece) && m.endSquare > 55) || (ISBLACK(m.piece) && m.endSquare < 8))
+                if((ISWHITE(m.piece) && compactMove.endSquare > 55) || (ISBLACK(m.piece) && compactMove.endSquare < 8))
                 {
                     //Promotion
-                    if(m.promoteTo == 0) m.promoteTo = QUEEN;
-                    board_clear_square(board, m.startSquare);
-                    board_set(board, m.endSquare, (COLOR(m.piece)|m.promoteTo));
+                    if(compactMove.promoteTo == 0) compactMove.promoteTo = QUEEN;
+                    board_clear_square(board, compactMove.startSquare);
+                    board_set(board, compactMove.endSquare, (COLOR(m.piece)|compactMove.promoteTo));
                 }
                 else
                 {
-                    board_move_piece_quietly(board, m.startSquare, m.endSquare);
+                    board_move_piece_quietly(board, compactMove.startSquare, compactMove.endSquare);
                 }
                 
                 //Update en passant square if necessary.
@@ -661,12 +671,12 @@ int movePiece(bitboard *board, move_c compactMove)
                 {
                     if(ISWHITE(m.piece)) 
                     {
-                        board->enPassantSquare = m.endSquare - 8;
+                        board->enPassantSquare = compactMove.endSquare - 8;
                         board->hashCode ^= getEnPassantHash(board);
                     }
                     else 
                     {
-                        board->enPassantSquare = m.endSquare + 8;
+                        board->enPassantSquare = compactMove.endSquare + 8;
                         board->hashCode ^= getEnPassantHash(board);
                     }
                 }
@@ -676,7 +686,7 @@ int movePiece(bitboard *board, move_c compactMove)
                 //Diagonal Capture
 
                 //Check for en passant.
-                if(m.endSquare == board->enPassantSquare)
+                if(compactMove.endSquare == board->enPassantSquare)
                 {
                     if(ISWHITE(m.piece)) 
                     {
@@ -689,53 +699,53 @@ int movePiece(bitboard *board, move_c compactMove)
                         board_clear_square(board, board->enPassantSquare + 8);
                     }
                 }
-                else m.capturedPiece = findPieceOnSquare(board, m.endSquare);
+                else m.capturedPiece = findPieceOnSquare(board, compactMove.endSquare);
 
-                if((ISWHITE(m.piece) && m.endSquare > 55) || (ISBLACK(m.piece) && m.endSquare < 8))
+                if((ISWHITE(m.piece) && compactMove.endSquare > 55) || (ISBLACK(m.piece) && compactMove.endSquare < 8))
                 {
                     //Promotion
-                    if(m.promoteTo == 0) m.promoteTo = QUEEN;
-                    board_clear_square(board, m.startSquare);
-                    board_clear_square(board, m.endSquare);
-                    board_set(board, m.endSquare, (COLOR(m.piece)|m.promoteTo));
+                    if(compactMove.promoteTo == 0) compactMove.promoteTo = QUEEN;
+                    board_clear_square(board, compactMove.startSquare);
+                    board_clear_square(board, compactMove.endSquare);
+                    board_set(board, compactMove.endSquare, (COLOR(m.piece)|compactMove.promoteTo));
                 }
                 else
                 {
-                    board_move_piece(board, m.startSquare, m.endSquare);
+                    board_move_piece(board, compactMove.startSquare, compactMove.endSquare);
                 }      
             }
             break;
         case ROOK:
-            if(m.startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
-            else if(m.startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
-            else if(m.startSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
-            else if(m.startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
+            if(compactMove.startSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
+            else if(compactMove.startSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
+            else if(compactMove.startSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
+            else if(compactMove.startSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
         case KNIGHT:
         case BISHOP:
         case QUEEN:
-            m.capturedPiece = findPieceOnSquare(board, m.endSquare);
-            board_move_piece(board, m.startSquare, m.endSquare);
+            m.capturedPiece = findPieceOnSquare(board, compactMove.endSquare);
+            board_move_piece(board, compactMove.startSquare, compactMove.endSquare);
             break;
         case KING:
             if(ISBLACK(m.piece)) 
             {
-                board->kingSquare[BLACK] = m.endSquare;
+                board->kingSquare[BLACK] = compactMove.endSquare;
                 if(KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
                 if(QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
             }
             else 
             {
-                board->kingSquare[WHITE] = m.endSquare;
+                board->kingSquare[WHITE] = compactMove.endSquare;
                 if(KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
                 if(QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
             }
 
-            m.capturedPiece = findPieceOnSquare(board, m.endSquare);
-            board_move_piece(board, m.startSquare, m.endSquare);
+            m.capturedPiece = findPieceOnSquare(board, compactMove.endSquare);
+            board_move_piece(board, compactMove.startSquare, compactMove.endSquare);
 
             //Castling
-            if(m.startSquare - m.endSquare == 2) board_move_piece_quietly(board, m.startSquare - 4, m.endSquare + 1);
-            else if(m.startSquare - m.endSquare == -2) board_move_piece_quietly(board, m.startSquare + 3, m.endSquare - 1);
+            if(compactMove.startSquare - compactMove.endSquare == 2) board_move_piece_quietly(board, compactMove.startSquare - 4, compactMove.endSquare + 1);
+            else if(compactMove.startSquare - compactMove.endSquare == -2) board_move_piece_quietly(board, compactMove.startSquare + 3, compactMove.endSquare - 1);
             break;
         default:
             DEBUG_ERROR("Attempted to move invalid piece type.");
@@ -748,13 +758,13 @@ int movePiece(bitboard *board, move_c compactMove)
 
     if(ISROOK(m.capturedPiece))
     {
-            if(m.endSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
-            else if(m.endSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
-            else if(m.endSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
-            else if(m.endSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
+            if(compactMove.endSquare == 7 && KINGSIDE_CASTLE_WHITE(board->flags)) { BAN_KINGCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[768]; }
+            else if(compactMove.endSquare == 0 && QUEENSIDE_CASTLE_WHITE(board->flags)) { BAN_QUEENCASTLE_W(board->flags); board->hashCode ^= zobrist_keys[769]; }
+            else if(compactMove.endSquare == 63 && KINGSIDE_CASTLE_BLACK(board->flags)) { BAN_KINGCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[770]; }
+            else if(compactMove.endSquare == 56 && QUEENSIDE_CASTLE_BLACK(board->flags)) { BAN_QUEENCASTLE_B(board->flags); board->hashCode ^= zobrist_keys[771]; }
     }
 
-    if(!(ISPAWN(m.piece) && abs(m.startSquare - m.endSquare) == 16) && board->enPassantSquare != -1) 
+    if(!(ISPAWN(m.piece) && abs(compactMove.startSquare - compactMove.endSquare) == 16) && board->enPassantSquare != -1) 
         board->enPassantSquare = NO_EP_SQUARE;
 
     //50 move rule counting
@@ -787,6 +797,15 @@ void applyNullMove(bitboard* board)
     assert(board);
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
+    moves_push(board, (move_d){0});
+}
+
+void revertNullMove(bitboard* board)
+{
+    assert(board);
+    board->turn ^= 1;
+    board->hashCode ^= zobrist_keys[780];
+    moves_pop(board);
 }
 
 move_c getStructFromString(bitboard* board, char* str)
@@ -895,7 +914,8 @@ move_d unmove(bitboard *board)
     assert(board);
 
     move_d m = moves_pop(board);
-    if(!IS_VALID_MOVE(m))
+    move_c compactMove = (move_c) m.compactMove;
+    if(!IS_VALID_MOVE(compactMove))
     {
         DEBUG_ERROR("No move history to undo.");
         return (move_d){0};
@@ -903,35 +923,35 @@ move_d unmove(bitboard *board)
     board->repetitionIndex--;
     board->lastChangeIndex = m.lastChangeIndex;
 
-    if(m.promoteTo)
+    if(compactMove.promoteTo)
     {
-        board_clear_square(board, m.endSquare);
-        board_set(board, m.startSquare, m.piece);
+        board_clear_square(board, compactMove.endSquare);
+        board_set(board, compactMove.startSquare, m.piece);
     }
-    else board_move_piece_quietly(board, m.endSquare, m.startSquare);
+    else board_move_piece_quietly(board, compactMove.endSquare, compactMove.startSquare);
 
     if(m.capturedPiece != EMPTY_PIECE) 
     {
-        if(m.prevEnPassantSquare == m.endSquare && ISPAWN(m.capturedPiece))
+        if(m.prevEnPassantSquare == compactMove.endSquare && ISPAWN(m.capturedPiece))
         {
-            if(ISWHITE(m.piece)) board_set(board, m.endSquare - 8, m.capturedPiece);
-            else board_set(board, m.endSquare + 8, m.capturedPiece);
+            if(ISWHITE(m.piece)) board_set(board, compactMove.endSquare - 8, m.capturedPiece);
+            else board_set(board, compactMove.endSquare + 8, m.capturedPiece);
         }
-        else board_set(board, m.endSquare, m.capturedPiece);
+        else board_set(board, compactMove.endSquare, m.capturedPiece);
     }
 
     if(ISKING(m.piece))
     {
-        if(ISWHITE(m.piece)) board->kingSquare[WHITE] = m.startSquare;
-        else board->kingSquare[BLACK] = m.startSquare;
+        if(ISWHITE(m.piece)) board->kingSquare[WHITE] = compactMove.startSquare;
+        else board->kingSquare[BLACK] = compactMove.startSquare;
         
         //undo castle
-        if(abs(m.endSquare - m.startSquare) == 2)
+        if(abs(compactMove.endSquare - compactMove.startSquare) == 2)
         {
-            if(m.endSquare == 2) board_move_piece_quietly(board, 3, 0);
-            else if(m.endSquare == 6) board_move_piece_quietly(board, 5, 7);
-            else if(m.endSquare == 58) board_move_piece_quietly(board, 59, 56);
-            else if(m.endSquare == 62) board_move_piece_quietly(board, 61, 63);
+            if(compactMove.endSquare == 2) board_move_piece_quietly(board, 3, 0);
+            else if(compactMove.endSquare == 6) board_move_piece_quietly(board, 5, 7);
+            else if(compactMove.endSquare == 58) board_move_piece_quietly(board, 59, 56);
+            else if(compactMove.endSquare == 62) board_move_piece_quietly(board, 61, 63);
         }
     }
     

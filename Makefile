@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -std=c99 -march=native -fopenmp
+CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
 
 #release is incompatible with trainer & debug, check here.
 ifneq ($(origin RELEASE),undefined)

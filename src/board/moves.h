@@ -35,12 +35,18 @@
 int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 
 #define TT_MOVE_SCORE 32000
-#define PV_MOVE_SCORE 31000
-#define KILLER_1_SCORE 30000
-#define KILLER_2_SCORE 29000
-#define MAX_HISTORY_SCORE 25000 //+- max bound
-#define CAPTURE_SCORE 25000 //+- min bound, used as an exact score for quiet promotions.
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, move_c* pvMove, move_c* ttMove, move_c* requiredMoves, move_c* killerMoves, int16_t history[2][6][64], move_c* excludedMove);
+#define PV_MOVE_SCORE 31999
+#define CAPTURE_SCORE 31000 //+- min bound, max bound is +- 31900, since queen has SEE weight of 900
+#define KILLER_1_SCORE 30999
+#define KILLER_2_SCORE 30998
+#define PROMOTION_SCORE 30997
+#define MAX_HISTORY_SCORE 30000 //+- max bound
+#define COUNTERMOVE_BONUS 10000 //added to history score
+moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
+                                        move_c* requiredMoves, move_c* excludedMove,
+                                        move_c* pvMove, move_c* ttMove, 
+                                        int16_t history[2][6][64], move_c* killerMoves, 
+                                        move_c* counterMove);
 move_c* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 
@@ -62,8 +68,8 @@ int movePiece(bitboard *board, move_c compactMove);
 int moveFromStruct(bitboard* board, move_c m);
 move_c getStructFromString(bitboard* board, char* str);
 
-//2 Calls result in an unchanged board state.
 void applyNullMove(bitboard* board);
+void revertNullMove(bitboard* board);
 
 move_d unmove(bitboard *board);
 

@@ -21,20 +21,17 @@ typedef union move_c {
     uint16_t raw;
     struct {
         uint16_t startSquare : 6;
-        uint16_t endSquare : 6;
-        uint16_t promoteTo: 4;
+        uint16_t endSquare   : 6;
+        uint16_t promoteTo   : 4;
     };
 } move_c;
 
 //Detailed move contains information necessary for unmoving. 
 typedef union move_d {
     uint64_t raw;
-    uint16_t arr[4]; // Compare arr[0] to see if two moves' start/end square & piece are equal.
     struct {
-        uint64_t startSquare                    :  6;
-        uint64_t endSquare                      :  6;
+        uint64_t compactMove                    : 16;
         uint64_t piece                          :  4;
-        uint64_t promoteTo                      :  4;
         uint64_t capturedPiece                  :  4;
         uint64_t prevEnPassantSquare            :  7;
         uint64_t previousMovesSinceLastChange   :  7;
@@ -175,7 +172,6 @@ typedef struct searchThreadContext {
     int maxNodes, countedNodes;
     clock_t startTime, softEndTime, hardEndTime;
     move_c searchedMoves[MAX_REQUIRED_MOVES];
-    move_c excludedMove;
 
     //Necessary search information
     int16_t score;
@@ -186,6 +182,7 @@ typedef struct searchThreadContext {
     #endif
     hashtable_tt* tt;
     PVar pv;
+    move_c excludedMove;
     
     //Improving heuristic
     int evalHistory[MAX_PLY];
@@ -196,6 +193,9 @@ typedef struct searchThreadContext {
 
     //History heuristic
     int16_t historyTable[2][6][64];
+
+    //Countermove heuristic
+    move_c countermove[64][64];
 } searchThreadContext;
 
 #endif

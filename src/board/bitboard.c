@@ -361,8 +361,10 @@ void board_print(bitboard* board, int printValues)
     int lastMoveEndSquare = -1;
     if(board->historyIndex > 0)
     {
-        lastMoveEndSquare = board->history[board->historyIndex - 1].endSquare;
-        lastMoveStartSquare = board->history[board->historyIndex - 1].startSquare;
+        move_c compactMove;
+        compactMove.raw = board->history[board->historyIndex - 1].compactMove;
+        lastMoveEndSquare = compactMove.endSquare;
+        lastMoveStartSquare = compactMove.startSquare;
     }
 
 
