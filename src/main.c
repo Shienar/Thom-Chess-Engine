@@ -6,16 +6,9 @@
 #include "pyrrhic/tbprobe.h"
 #include "analyze/search.h"
 #include "binpack/generate.h"
+#include "analyze/hce/tuner.h"
 #include <omp.h>
 #include <string.h>
-
-#ifdef TRAIN
-#include "train/train.h"
-#endif
-
-#ifndef NNUE
-#include "analyze/hce/tuner.h"
-#endif
 
 #ifdef SPSA
 
@@ -60,6 +53,8 @@ int main(int argc, char** argv)
     char sygyzyPath[1024] = {'\0'};
     int isPathDirty = 1; //Has sygyzy been initialized with the current path?
 
+    char debugLogPath[1024] = {'\0'};
+
 
     searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
     threadContext->board = board;
@@ -83,6 +78,7 @@ int main(int argc, char** argv)
                 printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
+                printf("option name LogFilePath type string default <empty>\n");
                 printf("option name SygyzyPath type string default <empty>\n");
                 printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
@@ -134,116 +130,127 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "setoption") == 0) 
             {
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "name") == 0)
+                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "name") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
-                    if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                    if(strcmp(str, "Hash") == 0)
                     {
-                        if(strcmp(str, "Hash") == 0)
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                uint64_t byteSize;
-                                sscanf(str, "%" PRIu64 "", &byteSize);
-                                tt_size_entries = (byteSize * 1024 * 1024) / sizeof(table_entry_tt);
-                                destroy_hashTable_tt(transpositionTable);
-                                transpositionTable = create_hashTable_tt();
-                                threadContext->tt = transpositionTable;
-                            }
-                            break;
+                            uint64_t byteSize;
+                            sscanf(str, "%" PRIu64 "", &byteSize);
+                            tt_size_entries = (byteSize * 1024 * 1024) / sizeof(table_entry_tt);
+                            destroy_hashTable_tt(transpositionTable);
+                            transpositionTable = create_hashTable_tt();
+                            threadContext->tt = transpositionTable;
                         }
-                        else if(strcmp(str, "Threads") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                if(isCalculating)
-                                {
-                                    DEBUG_ERROR("Cannot change thread count while calculating.");
-                                    break;
-                                }
-                                sscanf(str, "%d", &threadCount);
-                                threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
-                                omp_set_num_threads(threadCount);
-                            }
-                            
-                            break;
-                        }
-                        else if(strcmp(str, "Ponder") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                if(strcmp(str, "true") == 0) { enablePonder = 1; }
-                                else { enablePonder = 0; }
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "OwnBook") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                if(strcmp(str, "true") == 0) { useBook = 1; }
-                                else { useBook = 0; }
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "Clear") == 0)
-                        {
-                            str = _strtok(NULL, delim, &strtok_ptr);
-                            if(str && strcmp(str, "Hash") == 0)
-                            {
-                                clear_tt(transpositionTable);
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "SygyzyPath") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                strncpy(sygyzyPath, str, 1023);
-                                sygyzyPath[1023] = '\0';
-                                isPathDirty = 1;
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "SygyzyProbeLimit") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                sscanf(str, "%d", &sygyzyProbeLimit);
-                                sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
-                            }
-                            break;
-                        }
-                        else if(strcmp(str, "SyzygyProbeDepth") == 0)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                            {
-                                if(str) sscanf(str, "%d", &sygyzyProbeDepth);
-                                sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
-                            }
-                            break;
-                        }
-                        #ifdef SPSA
-                        SET_SPA_OPTION_INT(initial_aspiration_margin)
-                        SET_SPA_OPTION_INT(maximum_aspiration_margin)
-                        SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
-                        SET_SPA_OPTION_INT(reverse_futility_margin)
-                        SET_SPA_OPTION_INT(reverse_futility_margin_improving)
-                        SET_SPA_OPTION_INT(futility_margin)
-                        SET_SPA_OPTION_INT(probcut_offset)
-                        SET_SPA_OPTION_INT(probcut_offset_improving)
-                        SET_SPA_OPTION_INT(historyBonusScale)
-                        SET_SPA_OPTION_INT(historyBonusOffset)
-                        SET_SPA_OPTION_INT(historyPenaltyScale)
-                        SET_SPA_OPTION_INT(historyPenaltyOffset)
-                        SET_SPA_OPTION_FLOAT(lmr_a)
-                        SET_SPA_OPTION_FLOAT(lmr_b)
-                        SET_SPA_OPTION_FLOAT(lmp_a)
-                        SET_SPA_OPTION_FLOAT(lmp_b)
-                        SET_SPA_OPTION_FLOAT(lmp_improving_a)
-                        SET_SPA_OPTION_FLOAT(lmp_improving_b)
-                        #endif
                         break;
                     }
+                    else if(strcmp(str, "Threads") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            if(isCalculating)
+                            {
+                                DEBUG_ERROR("Cannot change thread count while calculating.");
+                                break;
+                            }
+                            sscanf(str, "%d", &threadCount);
+                            threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
+                            omp_set_num_threads(threadCount);
+                        }
+                        
+                        break;
+                    }
+                    else if(strcmp(str, "Ponder") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            if(strcmp(str, "true") == 0) { enablePonder = 1; }
+                            else { enablePonder = 0; }
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "OwnBook") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            if(strcmp(str, "true") == 0) { useBook = 1; }
+                            else { useBook = 0; }
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "Clear") == 0)
+                    {
+                        str = _strtok(NULL, delim, &strtok_ptr);
+                        if(str && strcmp(str, "Hash") == 0)
+                        {
+                            clear_tt(transpositionTable);
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "LogFilePath") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            strncpy(debugLogPath, str, 1023);
+                            debugLogPath[1023] = '\0';
+                            if(printDebugMessages)
+                            {
+                                disableDebugMessages();
+                                enableDebugMessages();
+                            }
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "SygyzyPath") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            strncpy(sygyzyPath, str, 1023);
+                            sygyzyPath[1023] = '\0';
+                            isPathDirty = 1;
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "SygyzyProbeLimit") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            sscanf(str, "%d", &sygyzyProbeLimit);
+                            sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
+                        }
+                        break;
+                    }
+                    else if(strcmp(str, "SyzygyProbeDepth") == 0)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            if(str) sscanf(str, "%d", &sygyzyProbeDepth);
+                            sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
+                        }
+                        break;
+                    }
+                    #ifdef SPSA
+                    SET_SPA_OPTION_INT(initial_aspiration_margin)
+                    SET_SPA_OPTION_INT(maximum_aspiration_margin)
+                    SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
+                    SET_SPA_OPTION_INT(reverse_futility_margin)
+                    SET_SPA_OPTION_INT(reverse_futility_margin_improving)
+                    SET_SPA_OPTION_INT(futility_margin)
+                    SET_SPA_OPTION_INT(probcut_offset)
+                    SET_SPA_OPTION_INT(probcut_offset_improving)
+                    SET_SPA_OPTION_INT(historyBonusScale)
+                    SET_SPA_OPTION_INT(historyBonusOffset)
+                    SET_SPA_OPTION_INT(historyPenaltyScale)
+                    SET_SPA_OPTION_INT(historyPenaltyOffset)
+                    SET_SPA_OPTION_FLOAT(lmr_a)
+                    SET_SPA_OPTION_FLOAT(lmr_b)
+                    SET_SPA_OPTION_FLOAT(lmp_a)
+                    SET_SPA_OPTION_FLOAT(lmp_b)
+                    SET_SPA_OPTION_FLOAT(lmp_improving_a)
+                    SET_SPA_OPTION_FLOAT(lmp_improving_b)
+                    #endif
+                    break;
                 }
             }
             else if(strcmp(str, "isready") == 0)
@@ -292,9 +299,7 @@ int main(int argc, char** argv)
                         load_fen_string_to_board(board, FEN);
                     }
                     else if(strcmp(str, "startpos") == 0)
-                    {
                         load_fen_string_to_board(board, STARTPOS_FEN);
-                    }
 
                     if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
                     {
@@ -306,11 +311,6 @@ int main(int argc, char** argv)
                             moveFromStruct(board, m);
                         }
                     }
-
-                    #ifdef NNUE
-                    loadInputAccumulator(board, playerAccumulator, WHITE);
-                    loadInputAccumulator(board, playerAccumulator, BLACK);
-                    #endif
                 }
                 break; 
             }
@@ -455,43 +455,12 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
-                #ifdef NNUE
-                loadInputAccumulator(board, playerAccumulator, WHITE);
-                loadInputAccumulator(board, playerAccumulator, BLACK);
-                int eval = forwardPropagate(board, playerAccumulator);
-                #else
-                int eval = hce_eval(board);
-                #endif
-                printf("%d\n", eval);
+                printf("%d\n", hce_eval(board));
                 break;
             }
-            #ifdef NNUE
-            else if(strcmp(str, "netinfo") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
-                print_network_statistics();
-                break;
-            }
-            #ifdef TRAIN
-            else if(strcmp(str, "train") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
-                
-                //Not a part of UCI.
-                //Format: "train <epoch count>"
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    int epochCount;
-                    sscanf(str, "%d", &epochCount);
-                    train(epochCount, 5e-4f);
-                }
-                break;
-            }
-            #endif
-            #else
             else if(strcmp(str, "tune") == 0)
             {
-                //Format: 'tune <double forcedK (0 for auto) > <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"
+                //Format: 'tune <double forcedK (0 for auto) > <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
 
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
                 
@@ -510,7 +479,7 @@ int main(int argc, char** argv)
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
 
-                sscanf(str, "%lld", &epochs);
+                sscanf(str, "%" PRId64" ", &epochs);
 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -536,18 +505,26 @@ int main(int argc, char** argv)
 
                 break;
             }
-            #endif
             else if(strcmp(str, "generate") == 0)
             {
+                //Format: 'generate "<outputFilePath>"'
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
-                generate();
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                generate(str);
                 break;
             }
             else if(strcmp(str, "binpackinfo") == 0)
             {
+                //Format: 'binpackinfo "<binpackFilePath>"
                 readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
-                binpackPrintInfo(VALIDATION_DATA_PATH);
-                binpackPrintInfo(TRAINING_DATA_PATH);
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                binpackPrintInfo(str);
                 break;
             }
             else if(strcmp(str, "quit") == 0) 
@@ -560,16 +537,10 @@ int main(int argc, char** argv)
         }
     }
 
-    #ifdef NNUE
-    if(raw_weights) free(raw_weights);
-    if(int_weights) free(int_weights);
-    if(playerAccumulator) free(playerAccumulator);
-    #endif
     if(threadContext) free(threadContext);
     destroy_hashTable_tt(transpositionTable);
     tb_free();
     if(board) free(board);
-    unloadBook(BOOK_PATH);
     disableDebugMessages();  //closes file if open.
 }
 
@@ -587,28 +558,15 @@ void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadConte
     if(knightAttacks[0] == 0) initKnightMoveTable();
     if(kingAttacks[0] == 0) initKingMoveTable();
 
-    #ifdef NNUE
-    loadQuantizedWeights();
-    #ifdef TRAIN
-    loadRawWeights();
-    #endif
-    #else
     init_HCE_tables();
-    #endif
 
     if(!transpositionTable) 
     {
         transpositionTable = create_hashTable_tt();
         context->tt = transpositionTable;
     }
-    #ifdef NNUE
-    if(!playerAccumulator) playerAccumulator = calloc(1, sizeof(accumulator));
-    if(!playingRefreshTable) playingRefreshTable = createRefreshTable();
-    
-    context->accumulator = playerAccumulator;
-    context->refreshTable = playingRefreshTable;
-    #endif
-    loadBook(BOOK_PATH);
+
+    loadBook();
     
     if(*isPathDirty)
     {

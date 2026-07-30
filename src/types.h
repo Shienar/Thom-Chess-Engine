@@ -8,11 +8,6 @@
 
 #define clamp(originalValue, minClamp, maxClamp) _min(maxClamp, _max(minClamp, originalValue));
 
-// Will get assigned by makefile in non-release builds.
-#ifndef PROJECT_CWD
-#define PROJECT_CWD ""
-#endif
-
 #define singleBitMask(x) (1ull << (x))
 #define MAX_MOVES 218
 
@@ -117,49 +112,6 @@ typedef struct magic {
     int8_t shiftOffset;
 } magic;
 
-#ifdef NNUE
-#define QA 255
-#define QB 64
-#define QA_RSHIFT 8
-#define QB_RSHIFT 6
-#define OUTPUT_SCALE_RSHIFT 4
-
-#define KING_BUCKETS 10
-#define BITS_PER_KING_BUCKET 768
-#define OUTPUT_BUCKETS 8
-#define BITBOARDS_PER_INPUT_SIDE (PIECE_COUNT * KING_BUCKETS)
-
-#define INPUT_BITS (2 * BITS_PER_KING_BUCKET * KING_BUCKETS)
-#define HALF_INPUT_BITS (INPUT_BITS / 2)
-#define ACCUMULATOR_NODES 1024
-#define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
-
-typedef struct quantized_weights {
-    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
-    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int8_t weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
-    int32_t weights2_bias[OUTPUT_BUCKETS];
-} quantized_weights;
-typedef struct training_weights {
-    float weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
-    float weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    float weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
-    float weights2_bias[OUTPUT_BUCKETS];
-} training_weights;
-
-typedef struct accumulator {
-    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
-    uint8_t accumulator[2][ACCUMULATOR_NODES_PER_SIDE]; 
-    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
-} accumulator;
-
-typedef struct accumulatorRefreshTable {
-    bitboard* boards[2][64];
-    accumulator accumulators[2][64];
-    uint8_t initialized[2][64];
-} accumulatorRefreshTable;
-#endif
-
 typedef struct PVar {
     int length;
     move_c line[MAX_PLY];
@@ -176,10 +128,6 @@ typedef struct searchThreadContext {
     //Necessary search information
     int16_t score;
     bitboard* board;
-    #ifdef NNUE
-    accumulator* accumulator;
-    accumulatorRefreshTable* refreshTable;
-    #endif
     hashtable_tt* tt;
     PVar pv;
     move_c excludedMove;

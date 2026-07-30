@@ -1,3 +1,4 @@
+#include "compatibility.h"
 #include "analyze/book.h"
 #include "debug.h"
 #include "board/bitboard.h"
@@ -9,71 +10,30 @@ int useBook = 0;
 uint64_t entryCount = 0;
 polyglot_book_entry *entries = NULL;
 
-void loadBook(const char* path)
+void loadBook()
 {
-    if(initBook) return;
+    if(initBook) 
+        return;
     initBook = 1;
 
-    #ifdef RELEASE
     entries = (polyglot_book_entry*) book_bin_start;
     entryCount = (uint64_t) (book_bin_end - book_bin_start);
     entryCount /= sizeof(polyglot_book_entry);
-
-    #else
-    FILE* input = fopen(path, "rb");
-    if(!input)
-    {
-        DEBUG_ERROR("Failed to read book file.");
-        return;
-    }
-
-    //Skip to end of file and count number of entries.
-    fseek(input, 0, SEEK_END);
-    entryCount = ftell(input);
-
-    if(!entryCount)
-    {
-        DEBUG_ERROR("Opening book is empty.");
-        fclose(input);
-        return;
-    }
-
-    entryCount/=sizeof(polyglot_book_entry);
-    entries = calloc(entryCount, sizeof(polyglot_book_entry));
-    
-    rewind(input);
-
-    size_t readItems = fread(entries, sizeof(polyglot_book_entry), entryCount, input);
-
-    if(entryCount < readItems) DEBUG_ERROR("%lld/%lld entries imported.", entryCount, readItems);
-    fclose(input);
-    #endif
-}
-
-void unloadBook()
-{
-    #ifndef RELEASE
-    if(entries)
-    {
-        free(entries);
-        entries = NULL;
-    }
-    #endif
 }
 
 move_c getBookMove(bitboard* board)
 {
-    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook) return (move_c) {0};
+    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook || board->repetitionIndex > MAX_BOOK_PLY) return (move_c) {0};
     uint64_t polyglotKey = board->hashCode;
     
     uint32_t totalWeight = 0;
-    move_c potentialMoves[512] = {0};
-    uint16_t moveWeights[512] = {0};
+    move_c potentialMoves[256] = {0};
+    uint16_t moveWeights[256] = {0};
     int moveCount = 0;
 
     for(polyglot_book_entry* entry = entries; entry < &entries[entryCount]; entry++)
     {
-        if(polyglotKey == __builtin_bswap64(entry->hashKey))
+        if(polyglotKey == bigEndian64(entry->hashKey))
         {
             /** Bits:
              *  0,1,2               to file
@@ -88,14 +48,14 @@ move_c getBookMove(bitboard* board)
              *  - 3 = Rook
              *  - 4 = Queen
              */
-            uint16_t moveBits = __builtin_bswap16(entry->move);
+            uint16_t moveBits = bigEndian16(entry->move);
             
             int endSquare = (moveBits&0x7) + 8*((moveBits&0x38)>>3);
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
             int promoteTo = ((moveBits&0x7000)>>12) + 1;
             
             move_c* tempMove = &potentialMoves[moveCount];
-            moveWeights[moveCount] = __builtin_bswap16(entry->weight);
+            moveWeights[moveCount] = bigEndian16(entry->weight);
             totalWeight+= moveWeights[moveCount];
 
             tempMove->promoteTo = promoteTo;

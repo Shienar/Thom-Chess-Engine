@@ -3,5 +3,5 @@
 .global book_bin_end
 
 book_bin_start:
-    .incbin "./import/gm2600.bin"
+    .incbin "./import/komodo.bin"
 book_bin_end:

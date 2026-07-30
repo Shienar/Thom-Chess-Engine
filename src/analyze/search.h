@@ -6,12 +6,7 @@
 #include "analyze/sygyzy.h"
 #include <time.h>
 
-#ifdef NNUE
-#include "analyze/nnue/accumulator.h"
-#include "analyze/nnue/neuralnet.h"
-#else
 #include "analyze/hce/hce.h"
-#endif
 
 extern volatile uint8_t abortFlag;
 extern volatile uint8_t isPonder;

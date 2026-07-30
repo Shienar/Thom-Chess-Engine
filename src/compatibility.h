@@ -10,6 +10,8 @@
     #define _LARGEFILE64_SOURCE 1
     #include <io.h>
 
+    #define resizeFile(file, offset) _chsize_s(_fileno(file), offset)
+
     #define _strtok(x, y, z) strtok_s(x, y, z)
 
     #define fseek_64 _fseeki64
@@ -54,9 +56,12 @@
     #include <pthread.h>
     #include <unistd.h>
     #include <sys/param.h>
-    #include <sys/mman.h>
     #include <sys/stat.h>
     #include <fcntl.h>
+    #include <sys/mman.h>
+    #include <string.h>
+
+    #define resizeFile(file, offset) ftruncate(fileno(file), offset)
 
     #define _strtok(x, y, z) strtok_r(x, y, z)
 
@@ -95,6 +100,24 @@
         void* data;
         size_t size;
     } mmap_handle_t;
+#endif
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    #define littleEndian16(x) (x)
+    #define littleEndian32(x) (x)
+    #define littleEndian64(x) (x)
+
+    #define bigEndian16(x) __builtin_bswap16(x)
+    #define bigEndian32(x) __builtin_bswap32(x)
+    #define bigEndian64(x) __builtin_bswap64(x)
+#else
+    #define littleEndian16(x) __builtin_bswap16(x)
+    #define littleEndian32(x) __builtin_bswap32(x)
+    #define littleEndian64(x) __builtin_bswap64(x)
+
+    #define bigEndian16(x) (x)
+    #define bigEndian32(x) (x)
+    #define bigEndian64(x) (x)
 #endif
 
 #endif

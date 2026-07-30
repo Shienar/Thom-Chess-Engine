@@ -82,16 +82,20 @@ uint64_t naiveBishop(int square, uint64_t occupancy, int useOccupancy)
     else
     {
         //Topleft
-        for(int r = row + 1, c = column - 1; r <= 6 && c >= 1; r++, c--) potentialMoves |= singleBitMask(8 * r + c);
+        for(int r = row + 1, c = column - 1; r <= 6 && c >= 1; r++, c--) 
+            potentialMoves |= singleBitMask(8 * r + c);
 
         //Topright
-        for(int r = row + 1, c = column + 1; r <= 6 && c <= 6; r++, c++) potentialMoves |= singleBitMask(8 * r + c);
+        for(int r = row + 1, c = column + 1; r <= 6 && c <= 6; r++, c++) 
+            potentialMoves |= singleBitMask(8 * r + c);
 
         //Bottomleft
-        for(int r = row - 1, c = column - 1; r >= 1 && c >= 1; r--, c--) potentialMoves |= singleBitMask(8 * r + c);
+        for(int r = row - 1, c = column - 1; r >= 1 && c >= 1; r--, c--) 
+            potentialMoves |= singleBitMask(8 * r + c);
 
         //Bottomright
-        for(int r = row - 1, c = column + 1; r >= 1 && c <= 6; r--, c++) potentialMoves |= singleBitMask(8 * r + c);
+        for(int r = row - 1, c = column + 1; r >= 1 && c <= 6; r--, c++) 
+            potentialMoves |= singleBitMask(8 * r + c);
     }
 
     return potentialMoves;
@@ -137,16 +141,20 @@ uint64_t naiveRook(int square, uint64_t occupancy, int useOccupancy)
     else
     {
         //Right
-        for(int c = column + 1; c <= 6; c++) potentialMoves |= singleBitMask(8 * row + c);
+        for(int c = column + 1; c <= 6; c++) 
+            potentialMoves |= singleBitMask(8 * row + c);
 
         //Left
-        for(int c = column - 1; c >= 1; c--) potentialMoves |= singleBitMask(8 * row + c);
+        for(int c = column - 1; c >= 1; c--) 
+            potentialMoves |= singleBitMask(8 * row + c);
 
         //Above
-        for(int r = row + 1; r <= 6; r++) potentialMoves |= singleBitMask(8 * r + column);
+        for(int r = row + 1; r <= 6; r++) 
+            potentialMoves |= singleBitMask(8 * r + column);
 
         //Below
-        for(int r = row - 1; r >= 1; r--) potentialMoves |= singleBitMask(8 * r + column);
+        for(int r = row - 1; r >= 1; r--) 
+            potentialMoves |= singleBitMask(8 * r + column);
     }
 
     return potentialMoves;
@@ -174,9 +182,7 @@ uint64_t createOccupancy(int index, uint64_t potentialMoveMask)
         potentialMoveMask &= (potentialMoveMask - 1);
 
         if(index & (1 << i))
-        {
             occupancy|= singleBitMask(sq);
-        }
     }
 
     return occupancy;
@@ -292,14 +298,22 @@ void initKnightMoveTable()
         *  8: endSquare = square - 10
         */
 
-        if(column - 2 >= 0 && row + 1 <= 7) knightAttacks[square]|=singleBitMask(square+6);
-        if(column - 1 >= 0 && row + 2 <= 7) knightAttacks[square]|=singleBitMask(square+15);
-        if(column + 1 <= 7 && row + 2 <= 7) knightAttacks[square]|=singleBitMask(square+17);
-        if(column + 2 <= 7 && row + 1 <= 7) knightAttacks[square]|=singleBitMask(square+10);
-        if(column + 2 <= 7 && row - 1 >= 0) knightAttacks[square]|=singleBitMask(square-6);
-        if(column + 1 <= 7 && row - 2 >= 0) knightAttacks[square]|=singleBitMask(square-15);
-        if(column - 1 >= 0 && row - 2 >= 0) knightAttacks[square]|=singleBitMask(square-17);
-        if(column - 2 >= 0 && row - 1 >= 0) knightAttacks[square]|=singleBitMask(square-10);
+        if(column - 2 >= 0 && row + 1 <= 7) 
+            knightAttacks[square]|=singleBitMask(square+6);
+        if(column - 1 >= 0 && row + 2 <= 7) 
+            knightAttacks[square]|=singleBitMask(square+15);
+        if(column + 1 <= 7 && row + 2 <= 7) 
+            knightAttacks[square]|=singleBitMask(square+17);
+        if(column + 2 <= 7 && row + 1 <= 7)
+            knightAttacks[square]|=singleBitMask(square+10);
+        if(column + 2 <= 7 && row - 1 >= 0)
+            knightAttacks[square]|=singleBitMask(square-6);
+        if(column + 1 <= 7 && row - 2 >= 0)
+            knightAttacks[square]|=singleBitMask(square-15);
+        if(column - 1 >= 0 && row - 2 >= 0)
+            knightAttacks[square]|=singleBitMask(square-17);
+        if(column - 2 >= 0 && row - 1 >= 0)
+            knightAttacks[square]|=singleBitMask(square-10);
     }
 }
 
@@ -328,13 +342,21 @@ void initKingMoveTable()
         *  7: endSquare = square - 8
         *  8: endSquare = square - 7
         */
-        if(column - 1 >= 0 && row + 1 <= 7) kingAttacks[square]|=singleBitMask(square+7);
-        if(row + 1 <= 7) kingAttacks[square]|=singleBitMask(square+8);
-        if(column + 1 <= 7 && row + 1 <= 7) kingAttacks[square]|=singleBitMask(square+9);
-        if(column - 1 >= 0) kingAttacks[square]|=singleBitMask(square-1);
-        if(column + 1 <= 7) kingAttacks[square]|=singleBitMask(square+1);
-        if(column - 1 >= 0 && row - 1 >= 0) kingAttacks[square]|=singleBitMask(square-9);
-        if(row - 1 >= 0) kingAttacks[square]|=singleBitMask(square-8);
-        if(column + 1 <= 7 && row - 1 >= 0) kingAttacks[square]|=singleBitMask(square-7);
+        if(column - 1 >= 0 && row + 1 <= 7) 
+            kingAttacks[square]|=singleBitMask(square+7);
+        if(row + 1 <= 7) 
+            kingAttacks[square]|=singleBitMask(square+8);
+        if(column + 1 <= 7 && row + 1 <= 7) 
+            kingAttacks[square]|=singleBitMask(square+9);
+        if(column - 1 >= 0) 
+            kingAttacks[square]|=singleBitMask(square-1);
+        if(column + 1 <= 7) 
+            kingAttacks[square]|=singleBitMask(square+1);
+        if(column - 1 >= 0 && row - 1 >= 0) 
+            kingAttacks[square]|=singleBitMask(square-9);
+        if(row - 1 >= 0) 
+            kingAttacks[square]|=singleBitMask(square-8);
+        if(column + 1 <= 7 && row - 1 >= 0) 
+            kingAttacks[square]|=singleBitMask(square-7);
     }
 }

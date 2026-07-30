@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+#define MAX_BOOK_PLY 6
+
 typedef struct polyglot_book_entry {
     uint64_t hashKey;
     uint16_t move;
@@ -10,18 +12,14 @@ typedef struct polyglot_book_entry {
     uint32_t learn;
 } polyglot_book_entry;
 
-#ifdef RELEASE
 extern const unsigned char book_bin_start[];
 extern const unsigned char book_bin_end[];
-#endif
 
 extern int useBook;
 extern uint64_t entryCount;
 extern polyglot_book_entry *entries;
 
-#define BOOK_PATH PROJECT_CWD "/import/gm2600.bin"
-void loadBook(const char* path);
-void unloadBook();
+void loadBook();
 
 //Returns a newly allocated move struct.
 move_c getBookMove(bitboard* board);

@@ -238,17 +238,14 @@ uint64_t zobrist_piece_keys[PIECE_COUNT][64];
 void initZobristPieceKeys()
 {
     for(int piece = 0; piece < PIECE_COUNT; piece++)
-    {
         for(int square = 0; square < 64; square++)
-        {
             zobrist_piece_keys[piece][square] = zobrist_keys[64 * (piece^1) + square];
-        }
-    }
 }
 
 uint64_t getEnPassantHash(bitboard* board)
 {
-    if(board->enPassantSquare == NO_EP_SQUARE) return 0;
+    if(board->enPassantSquare == NO_EP_SQUARE) 
+        return 0;
 
     int epSquare = board->enPassantSquare;
     int epRow = getRow(epSquare);
@@ -259,7 +256,7 @@ uint64_t getEnPassantHash(bitboard* board)
     if(getColumn(capturedPawnSquare) > 0) borderingPawnMask |= singleBitMask(capturedPawnSquare - 1);
     if(getColumn(capturedPawnSquare) < 7) borderingPawnMask |= singleBitMask(capturedPawnSquare + 1);
 
-    if(epRow == 5) 
+    if(epRow == 5)
     {
         if(borderingPawnMask & board->pieces[WHITE_PAWN]) 
             return zobrist_keys[772 + getColumn(epSquare)]; 

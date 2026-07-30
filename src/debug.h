@@ -10,6 +10,8 @@
 
 extern int printDebugMessages;
 
+extern char debugLogFile[1024];
+
 void enableDebugMessages();
 void disableDebugMessages();
 

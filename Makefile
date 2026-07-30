@@ -2,29 +2,6 @@
 CC = gcc
 CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
 
-#release is incompatible with trainer & debug, check here.
-ifneq ($(origin RELEASE),undefined)
-  ifneq ($(origin TRAIN),undefined)
-    $(error Trainer is incompatible with release's read-only weights)
-  endif
-  ifneq ($(origin DEBUG),undefined)
-    $(error Release version and debug version incompatible)
-  endif
-endif
-
-#Other flags that require a nnue.
-ifeq ($(origin NNUE), undefined)
-  ifneq ($(origin TRAIN),undefined)
-    $(error 'TRAIN' must also be compiled with 'NNUE')
-  endif
-  ifneq ($(origin KPERFT),undefined)
-    $(error 'KPERFT' should also be compiled with 'NNUE' and 'TRAIN')
-  endif
-  ifneq ($(origin NVIDIA),undefined)
-    $(error 'TRAIN' should also be compiled with 'NNUE' and 'TRAIN')
-  endif
-endif
-
 # Add debug or optimization flags to compiler flags
 ifdef DEBUG
 	CFLAGS += -g
@@ -57,53 +34,10 @@ SRCFILES = $(wildcard src/*.c) \
 		   $(wildcard src/board/*.c) \
 		   $(wildcard src/hashtables/*.c) \
 		   $(wildcard src/pyrrhic/tbprobe.c) \
- 		   $(wildcard src/binpack/*c)
-ifdef NNUE
-	SRCFILES += $(wildcard src/analyze/nnue/*.c)
-	CFLAGS += -DNNUE
-else
-	SRCFILES += $(wildcard src/analyze/hce/*.c)
-endif
+ 		   $(wildcard src/binpack/*c) \
+		   $(wildcard src/analyze/hce/*.c)
 
-ASMFILES = 
-ifdef RELEASE
-	CFLAGS += -DRELEASE
-	ASMFILES = src/incbin/include_book.s
-	ifdef NNUE
-		ASMFILES += src/incbin/include_network.s
-	endif
-else
-# 	define PROJECT_CWD as a string literal evaluating to the current path for file opening.
-	CFLAGS += -DPROJECT_CWD="\"$(CURDIR)\""
-endif
-
-ifdef TRAIN
-	ifdef HIP_PATH
-		HIP_ROOT = $(subst \,/,$(HIP_PATH))
-		CFLAGS += -I"$(HIP_ROOT)/include"
-		LIBS = -L"$(HIP_ROOT)/lib" -lamdhip64
-
-# 		Use "make NVIDIA=1" to compile on NVIDIA gpus. (untested)
-		ifdef NVIDIA
-			CFLAGS +=-D__HIP_PLATFORM_NVIDIA__
-			KC = nvcc
-			KFLAGS = -O3 --ptx -D__HIP_PLATFORM_NVIDIA__
-			KTARGET = $(OBJ_DIR)/train/kernels.nvptx
-		else
-			CFLAGS +=-D__HIP_PLATFORM_AMD__
-			KC = hipcc
-			KFLAGS = -O3 --genco --offload-arch=native -D__HIP_PLATFORM_AMD__
-			KTARGET = $(OBJ_DIR)/train/kernels.hsaco
-		endif
-	endif
-
-	SRCFILES += $(wildcard src/train/*.c)
-	CFLAGS += -DTRAIN
-
-	ifdef KPERFT
-		CFLAGS += -DPERFT_KERNELS
-	endif
-endif
+ASMFILES = $(wildcard src/incbin/*.s)
 
 OBJFILES := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCFILES))
 ASMOBJFILES := $(patsubst $(SRC_DIR)/%.s, $(OBJ_DIR)/%.o, $(ASMFILES))
@@ -123,7 +57,7 @@ endif
 
 .PHONY: all clean directories
 
-all: directories $(TARGET) $(KTARGET)
+all: directories $(TARGET)
 
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -136,9 +70,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.s | directories
 
 directories:
 	@mkdir -p $(OBJ_DIRS)
-
-$(KTARGET): src/train/kernels.hip
-	$(KC) $(KFLAGS) src/train/kernels.hip -o $(KTARGET)
 
 clean:
 	rm -rf $(TGT_DIR)

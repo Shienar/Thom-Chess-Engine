@@ -1002,7 +1002,7 @@ void refreshEvaluations(evalParameters_fp* currentParameters, evalParameters_fp*
 
 void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t epochs, double max_lr, double min_lr)
 {
-    printf("Tuning for %lld epochs at LR=[%g ... %g]...\n", epochs, max_lr, min_lr);
+    printf("Tuning for %" PRId64"  epochs at LR=[%g ... %g]...\n", epochs, max_lr, min_lr);
 
     for(int i = 0; i < PARAMETER_COUNT; i++)
     {

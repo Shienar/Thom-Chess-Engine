@@ -8,9 +8,6 @@
 
 typedef int16_t Viri_Score; //White-relative
 
-#define TRAINING_DATA_PATH PROJECT_CWD "/import/trainingData.viri"
-#define VALIDATION_DATA_PATH PROJECT_CWD "/import/validationData.viri"
-
 #define VIRI_PAWN 0
 #define VIRI_KNIGHT 1
 #define VIRI_BISHOP 2

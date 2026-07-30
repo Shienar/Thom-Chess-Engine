@@ -5,20 +5,21 @@
 
 binpackDetails details;
 
-void generate()
+void generate(const char* path)
 {
-    binpackPrintInfo(TRAINING_DATA_PATH);
-    unloadBook();
+    binpackPrintInfo(path);
     int concurrency = threadCount;
     threadCount = 1;
+    
     int wasDebugEnabled = printDebugMessages;
-    if(wasDebugEnabled) disableDebugMessages();
+    if(wasDebugEnabled) 
+        disableDebugMessages();
 
     suppressUCIMessages = 1;
     searchThreadContext* contextList = calloc(concurrency, sizeof(searchThreadContext));
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
-    details = binpack_open(TRAINING_DATA_PATH, 0);
+    details = binpack_open(path, 0);
 
     for(int i = 0; i < concurrency; i++)
     {
@@ -28,11 +29,6 @@ void generate()
         contextList[i].softEndTime = LONG_MAX,
         contextList[i].maxDepth = 9;
         contextList[i].maxNodes = 5000;
-
-        #ifdef NNUE
-        contextList[i].accumulator = calloc(1, sizeof(accumulator));
-        contextList[i].refreshTable = createRefreshTable();
-        #endif
 
         contextList[i].tt = create_hashTable_tt();
 
@@ -65,19 +61,16 @@ void generate()
         THREAD_WAIT(threadList[i]);
         destroy_hashTable_tt(contextList[i].tt);
         free(contextList[i].board);
-        #ifdef NNUE
-        destroyRefreshTable(contextList[i].refreshTable);
-        free(contextList[i].accumulator);
-        #endif
     }
+    
     threadCount = concurrency;
     suppressUCIMessages = 0;
     binpack_close(&details);
-    if(wasDebugEnabled) enableDebugMessages();
-    loadBook(BOOK_PATH);
+    if(wasDebugEnabled) 
+        enableDebugMessages();
     printf("Stopped generating data.\n");
     
-    binpackPrintInfo(TRAINING_DATA_PATH);
+    binpackPrintInfo(path);
 }
 
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)

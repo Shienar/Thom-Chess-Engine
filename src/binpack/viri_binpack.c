@@ -1,7 +1,9 @@
+#define _GNU_SOURCE
 #include "binpack/viri_binpack.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
 #include "debug.h"
+#include <string.h>
 
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -280,10 +282,8 @@ int readPackedBoard(binpackDetails* details, int readerIndex)
         memcpy(&extension_id, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), sizeof(extension_id));
         memcpy(&payload_length, rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) + sizeof(extension_id), sizeof(payload_length));
 
-        #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-        extension_id = __builtin_bswap16(extension_id);
-        payload_length = __builtin_bswap16(payload_length);
-        #endif
+        extension_id = littleEndian16(extension_id);
+        payload_length = littleEndian16(payload_length);
 
         uint64_t total_extension_bytes = sizeof(rDetails->packedBoard->occupancy) + 4 + payload_length;
         
@@ -321,7 +321,8 @@ void clearCorruptedGame(const char* fileName)
 
     uint32_t tail;
     fseek(file, -4, SEEK_END);
-    fread(&tail, sizeof(uint32_t), 1, file);
+    if(!fread(&tail, sizeof(uint32_t), 1, file)) 
+        return;
 
     //File terminates correctly
     if(!tail) return;
@@ -334,7 +335,8 @@ void clearCorruptedGame(const char* fileName)
     {
         fseek(file, search_pos, SEEK_SET);
         uint8_t byte;
-        fread(&byte, 1, 1, file);
+        if(!fread(&byte, 1, 1, file))
+            return;
         
         window = (window << 8) | byte;
         
@@ -346,11 +348,8 @@ void clearCorruptedGame(const char* fileName)
         search_pos--;
     }
 
-    #if defined(_WIN32) || defined(_WIN64)
-        _chsize_s(_fileno(file), clean_offset);
-    #else
-        ftruncate(fileno(file), clean_offset);
-    #endif
+    if(resizeFile(file, clean_offset))
+        DEBUG_ERROR("Failed to resize file %s", fileName);
 
     fclose(file);
 }
@@ -598,9 +597,9 @@ void binpackPrintInfo(const char* fileName)
     uint8_t r;
 
     printf("Binpack statistics:\n");
-    printf("\tUsable: %llu\n", usedCount);
-    printf("\tSkipped: %llu\n", skippedCount);
-    printf("\tTotal: %llu\n", usedCount + skippedCount);
+    printf("\tUsable: %" PRIu64" \n", usedCount);
+    printf("\tSkipped: %" PRIu64" \n", skippedCount);
+    printf("\tTotal: %" PRIu64" \n", usedCount + skippedCount);
     fflush(stdout);
 
     uint64_t recentlyRead = 0;
@@ -621,9 +620,9 @@ void binpackPrintInfo(const char* fileName)
             uint64_t totalCount = usedCount + skippedCount;
             printf("\033[4A");
             printf("\033[2K\rBinpack statistics:\n");
-            printf("\033[2K\r\tTotal: %llu\n", totalCount);
-            printf("\033[2K\r\tUsable: %llu (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
-            printf("\033[2K\r\tSkipped: %llu (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
+            printf("\033[2K\r\tTotal: %" PRIu64" \n", totalCount);
+            printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
+            printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
             fflush(stdout);
         }
     }
@@ -637,12 +636,12 @@ void binpackPrintInfo(const char* fileName)
 
     printf("\033[4A");
     printf("\033[2K\rBinpack statistics:\n");
-    printf("\033[2K\r\tTotal: %llu\n", totalCount);
-    printf("\033[2K\r\tUsable: %llu (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
-    printf("\033[2K\r\tSkipped: %llu (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
+    printf("\033[2K\r\tTotal: %" PRIu64" \n", totalCount);
+    printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
+    printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
     printf("\033[2K\r\tDuration: %.3f seconds\n", duration);
     printf("\033[2K\r\tPositions per second: %.4f\n", positionsPerSecond);
-    printf("\033[2K\r\tByte Size: %llu\n", (uint64_t)byteLength);
+    printf("\033[2K\r\tByte Size: %" PRIu64" \n", (uint64_t)byteLength);
     printf("\033[2K\r\tPositions per Byte: %.4f\n", positionsPerByte);
 
     binpack_close(&details);
@@ -653,7 +652,7 @@ void binpackPrintInfo(const char* fileName)
 int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries) 
 {
     char dataFileName[256];
-    char* extension = strstr(fileName, ".viri");
+    const char* extension = strstr(fileName, ".viri");
     size_t base_len = extension - fileName;
     snprintf(dataFileName, sizeof(dataFileName), "%.*s.head", (int)base_len, fileName);
 
@@ -670,7 +669,13 @@ int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries)
 
         int64_t offsetIndex = ftell_64(binpack);
         fwrite(&offsetIndex, sizeof(int64_t), 1, headerIndices);
-        fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack);
+        if(fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack) < 1)
+        {
+            DEBUG_ERROR("Failed to read from %s", fileName);
+            fclose(binpack);
+            fclose(headerIndices);
+            exit(1);
+        }
 
         int gameCount = 1;
         *headerEntries = 1;
@@ -688,7 +693,8 @@ int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries)
                     if(gameCount % 1000000 == 0) printf("\rPre-processing Games: %d", gameCount);
                     *headerEntries = *headerEntries + 1;
                 }
-                fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack);
+                if(fread(&packedBoardBuffer, sizeof(Viri_PackedBoard), 1, binpack) < 1)
+                    break;
             }
         }
         printf("\rPre-processing Games: %d\n", gameCount);\
@@ -702,7 +708,11 @@ int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries)
     *headerEntries = ftell_64(headerIndices) / sizeof(int64_t);
     rewind(headerIndices);
     int64_t* indices = calloc(*headerEntries, sizeof(int64_t));
-    fread(indices, sizeof(int64_t), *headerEntries, headerIndices);
+    if(fread(indices, sizeof(int64_t), *headerEntries, headerIndices) < *headerEntries)
+    {
+        DEBUG_ERROR("Failed to read header data.\n");
+        exit(1);
+    }
     fclose(headerIndices);
     return indices;
 
