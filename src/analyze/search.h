@@ -38,6 +38,8 @@ extern int historyBonusOffset;
 extern int historyPenaltyScale;
 extern int historyPenaltyOffset;
 
+extern int lowHistoryVal;
+
 extern float lmr_a;
 extern float lmr_b;
 

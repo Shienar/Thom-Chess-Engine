@@ -48,11 +48,13 @@ int historyBonusOffset = 137;
 int historyPenaltyScale = 392;
 int historyPenaltyOffset = 131;
 
+int lowHistoryVal = -123;
+
 //a * log(depth) * log(moveCount) / b
 float lmr_a = 0.649f;
 float lmr_b = 3.363f;
 
-//a * depth^2 + b
+//a * depth * depth + b
 float lmp_a = 1.849f;
 float lmp_b = 5.0f;
 float lmp_improving_a = 1.434f;
@@ -488,10 +490,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            //SEE pruning
-            if(iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50 * depth)
-                continue;
-
             int currentPiece = findPieceOnSquare(board, currentMove->startSquare);
             
             int next_depth = depth - 1;
@@ -541,6 +539,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             //Late move reduction
             if(!pvNode && isQuietMove && !context->improving[ply]) 
                 next_depth -= lmrTable[depth][validMovesVisited];
+
+            //SEE reduction
+            if(!pvNode && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50)
+                next_depth--;
+            
+            //History Reduction
+            if(!pvNode && isQuietMove && iter->moveScores[iter->visitedCount] < lowHistoryVal)
+                next_depth--;
 
             if(pvNode && validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
             else

@@ -104,6 +104,8 @@ int main(int argc, char** argv)
                 printf("option name historyBonusOffset type spin default %d min 50 max 600\n", historyBonusOffset);
                 printf("option name historyPenaltyScale type spin default %d min 50 max 600\n", historyPenaltyScale);
                 printf("option name historyPenaltyOffset type spin default %d min 50 max 600\n", historyPenaltyOffset);
+                
+                printf("option name lowHistoryVal type spin default %d min -500 max 0\n", lowHistoryVal);
 
                 printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
                 printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));
@@ -243,6 +245,7 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(historyBonusOffset)
                     SET_SPA_OPTION_INT(historyPenaltyScale)
                     SET_SPA_OPTION_INT(historyPenaltyOffset)
+                    SET_SPA_OPTION_INT(lowHistoryVal)
                     SET_SPA_OPTION_FLOAT(lmr_a)
                     SET_SPA_OPTION_FLOAT(lmr_b)
                     SET_SPA_OPTION_FLOAT(lmp_a)
