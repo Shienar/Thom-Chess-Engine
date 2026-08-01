@@ -42,11 +42,12 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 #define PROMOTION_SCORE 30997
 #define MAX_HISTORY_SCORE 30000 //+- max bound
 #define COUNTERMOVE_BONUS 10000 //added to history score
+#define FOLLOWUPMOVE_BONUS 9000 //added to history score
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
                                         move_c* requiredMoves, move_c* excludedMove,
                                         move_c* pvMove, move_c* ttMove, 
                                         int16_t history[2][6][64], move_c* killerMoves, 
-                                        move_c* counterMove);
+                                        move_c* counterMove, move_c* followUpMove);
 move_c* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 

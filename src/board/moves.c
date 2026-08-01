@@ -400,7 +400,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
                                         move_c* requiredMoves, move_c* excludedMove,
                                         move_c* pvMove, move_c* ttMove, 
                                         int16_t history[2][6][64], move_c* killerMoves, 
-                                        move_c* counterMove)
+                                        move_c* counterMove, move_c* followUpMove)
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move_c));
@@ -479,6 +479,9 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
             
             if(counterMove && m.compactMove == counterMove->raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE);
+                
+            if(followUpMove && m.compactMove == followUpMove->raw)
+                iter->moveScores[i] = _min(iter->moveScores[i] + FOLLOWUPMOVE_BONUS, MAX_HISTORY_SCORE);
         }
         else iter->moveScores[i] = (ISKING(m.piece)) ? -1 : m.piece;
 

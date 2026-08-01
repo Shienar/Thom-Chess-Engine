@@ -200,7 +200,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
                                                 NULL, NULL, 
                                                 NULL, tt_move, 
                                                 NULL, NULL,
-                                                NULL);
+                                                NULL, NULL);
     move_c bestMove = {0};
     if(iter)
     {
@@ -267,6 +267,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         int from = compact.startSquare;
         int to = compact.endSquare;
         counterMove = &context->countermove[from][to];
+    }
+
+    move_c* followUpMove = NULL;
+    if(board->repetitionIndex >= 2)
+    {
+        move_c compact;
+        compact.raw = board->history[board->historyIndex - 2].compactMove;
+
+        int from = compact.startSquare;
+        int to = compact.endSquare;
+        followUpMove = &context->followUpMove[from][to];
     }
 
     move_c* pvMove = (ply == 0) ? &context->pv.line[0] : NULL;
@@ -435,7 +446,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                                                             NULL, NULL,
                                                             pvMove, tt_move, 
                                                             context->historyTable, context->killerMoves[ply], 
-                                                            counterMove);
+                                                            counterMove, followUpMove);
                 if(iter)
                 {
                     move_c* currentMove;
@@ -481,7 +492,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                                                 (ply == 0) ? context->searchedMoves : NULL, &context->excludedMove,
                                                 pvMove, tt_move, 
                                                 context->historyTable, context->killerMoves[ply], 
-                                                counterMove);
+                                                counterMove, followUpMove);
     int validMovesVisited = 0;
     int bestScore = -INT32_MAX;
     if(iter)
@@ -600,6 +611,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         int from = compact.startSquare;
                         int to = compact.endSquare;
                         context->countermove[from][to] = *currentMove;
+                    }
+                    
+                    //Follow-up Move heuristic
+                    if(board->repetitionIndex >= 3)
+                    {
+                        move_c compact;
+                        compact.raw = board->history[board->historyIndex - 3].compactMove;
+
+                        int from = compact.startSquare;
+                        int to = compact.endSquare;
+                        context->followUpMove[from][to] = *currentMove;
                     }
                 }
 
