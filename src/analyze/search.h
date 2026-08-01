@@ -50,7 +50,7 @@ extern float lmp_improving_b;
 void initSearchTables();
 int perft(bitboard* board, int depth, int verbose);
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply);
-int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV);
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int isCutNode);
 THREAD_RETURN calculateBestMove(THREAD_PARAM param);
 
 #endif

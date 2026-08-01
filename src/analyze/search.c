@@ -205,6 +205,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         move_c* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
+            //SEE pruning
+            if(iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50)
+                continue;
+
             if(moveFromStruct(board, *currentMove)) 
                 continue;
 
@@ -239,7 +243,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     return best;
 }
 
-int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV)
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int cutNode)
 {
     assert(context);
     context->countedNodes++;
@@ -306,7 +310,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     table_entry_tt old_tt_entry = transposition_table_get(board, context->tt, &hit, ply);
     if(hit) 
     {
-        if(old_tt_entry.depth >= depth && (!pvNode || depth == 0)) 
+        if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha)) 
         {
             if(old_tt_entry.nodeType == NODE_BOUND_EXACT)
                 return old_tt_entry.evaluation;
@@ -404,13 +408,13 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
 
         //Null move pruning
-        if(score >= beta && depth >= nullmove_pruning_depth && 
+        if(score >= beta && depth >= nullmove_pruning_depth && cutNode &&
             !(board->historyIndex > 0 && board->history[board->historyIndex - 1].raw == 0) &&
             (board->pieces_all ^ (board->pieces[WHITE_KING] | board->pieces[BLACK_KING] | board->pieces[WHITE_PAWN] | board->pieces[BLACK_PAWN])))
         {
             int r = 3 + depth / 6;
             applyNullMove(board);
-            int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV);
+            int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, !cutNode);
             revertNullMove(board);
             if(nullScore >= beta)
                 return beta;
@@ -439,7 +443,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                         probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
                         if(probCutScore >= pBeta)
-                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV);
+                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV, !cutNode);
 
                         unmove(board);
 
@@ -468,7 +472,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
     
     //TT reductions
-    if(!context->excludedMove.raw && depth >= tt_reduction_depth && pvNode && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
+    if(!context->excludedMove.raw && depth >= tt_reduction_depth && (pvNode || cutNode) && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
         depth -= 1;
 
     moveIterator* iter = create_move_iterator(board, GET_ALL_MOVES,
@@ -484,6 +488,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
+            //SEE pruning
+            if(iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50 * depth)
+                continue;
+
             int currentPiece = findPieceOnSquare(board, currentMove->startSquare);
             
             int next_depth = depth - 1;
@@ -498,7 +506,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 int sDepth = depth / 2 + 1;
 
                 context->excludedMove = *tt_move;
-                int singularScore = principalVariationSearch(context, sBeta - 1, sBeta, sDepth, ply + 1, &childPV);
+                int singularScore = principalVariationSearch(context, sBeta - 1, sBeta, sDepth, ply + 1, &childPV, cutNode);
                 context->excludedMove.raw = 0;
 
                 if(singularScore < sBeta)
@@ -527,27 +535,28 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
 
             //Check extensions
-            if(IS_IN_CHECK_ANY(board->flags)) next_depth++;
+            if(IS_IN_CHECK_ANY(board->flags)) 
+                next_depth++;
             
             //Late move reduction
             if(!pvNode && isQuietMove && !context->improving[ply]) 
                 next_depth -= lmrTable[depth][validMovesVisited];
 
-            if(validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
+            if(pvNode && validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
             else
             {
                 //Scout
-                score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
+                score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, 1);
 
                 //LMR Re-search
                 if(score > alpha && next_depth < depth - 1)
                 {
                     next_depth = depth - 1;
-                    score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV);
+                    score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, !cutNode);
                 }
                 
                 //PVS Re-search
-                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV);
+                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
             }
             
             unmove(board);
@@ -718,7 +727,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
     if(currentDepth < min_aspiration_depth)
     {
-        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV);
+        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV, 0);
         context->completedDepth = currentDepth;
     }
     else
@@ -729,7 +738,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         int beta = context->score + aspiration_margin;
         while(1)
         {
-            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV);
+            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 0);
 
             if(score <= alpha)
             {

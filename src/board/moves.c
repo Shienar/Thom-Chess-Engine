@@ -519,8 +519,6 @@ move_c* iterate_next_move(moveIterator* iter)
         iter->moveList[iter->visitedCount] = iter->moveList[bestIndex];
         iter->moveList[bestIndex] = temp;
     }
-    else
-        iter->moveScores[bestIndex] = INT16_MIN;
     
     return &iter->moveList[iter->visitedCount++];
 }

@@ -1,6 +1,6 @@
 UCI-compliant HCE chess engine created in C.
 
-### BUILDING:
+## BUILDING:
 
 A release version of the engine should be compiled with 'make -j'.
 - 'make -j' will compile everything.
@@ -9,9 +9,9 @@ A release version of the engine should be compiled with 'make -j'.
 - 'make -j DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
 - 'make -j SPSA=1' will compile with uci options for SPSA tuning
 
-### COMMANDS:
+## COMMANDS:
 
-## UCI:
+### UCI:
 
 - Options:
     - Threads, default 1 [1, 64]
@@ -40,7 +40,7 @@ A release version of the engine should be compiled with 'make -j'.
 - stop
 - quit
 
-## Non-UCI:
+### Non-UCI:
 - Options:
     - LogFilePath, default ""
         - Save any debug error messages to a file at this path.
@@ -58,9 +58,9 @@ A release version of the engine should be compiled with 'make -j'.
 - binpackinfo "&lt;binpackFilePath&gt;"
     - Get information about a generated binpack
 
-### FEATURES:
+## FEATURES:
 
-## HCE:
+### HCE:
 - Raw Piece Values
 - Piece/Square Tables
 - Mobility
@@ -81,7 +81,7 @@ A release version of the engine should be compiled with 'make -j'.
 - King Safety Table
 - Tempo
 
-## Search:
+### Search:
 - Iterative Deepening
 - Transposition Table
 - Sygyzy
@@ -102,10 +102,12 @@ A release version of the engine should be compiled with 'make -j'.
     - Check Extensions
     - Late Move Pruning
     - Late Move Reductions
+    - SEE Pruning
 - Quiescent Search
     - Delta Pruning
+    - SEE Pruning
 
-### ACKNOWLEDGEMENTS:
+## ACKNOWLEDGEMENTS:
 
 - The engine currently uses the [komodo.bin](https://komodochess.com/downloads.htm) polyglot book truncated to ply 6
 - Ronald de Man's sygyzy tablebase is used for endgame analysis.
