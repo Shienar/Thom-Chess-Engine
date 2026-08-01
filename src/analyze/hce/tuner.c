@@ -101,6 +101,11 @@ void print_parameters(FILE* output, evalParameters_fp* currentParameters)
         fprintf(output, "P(%5d,%5d)%s ", params.connectedPawnBonus[row].mg, params.connectedPawnBonus[row].eg, (row == 7) ? "" : ",");
     fprintf(output, "\n\t},\n");
 
+    fprintf(output, "\t.neighborPawnBonus = {\n\t\t");
+    for(int row = 0; row < ROW_COUNT; row++)
+        fprintf(output, "P(%5d,%5d)%s ", params.neighborPawnBonus[row].mg, params.neighborPawnBonus[row].eg, (row == 7) ? "" : ",");
+    fprintf(output, "\n\t},\n");
+
     fprintf(output, "\t.doubledPawnBonus = {\n\t\t");
     for(int column = 0; column < COLUMN_COUNT; column++)
         fprintf(output, "P(%5d,%5d)%s ", params.doubledPawnBonus[column].mg, params.doubledPawnBonus[column].eg, (column == 7) ? "" : ",");
@@ -199,6 +204,11 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
             UPDATE_COEFFICIENTS(connectedPawnBonus, 1, +=, [row]);
 		}
 
+		//Neighboring pawns
+		int neighbors = __builtin_popcountll(borderingMask & board_rank[row]);
+		if(neighbors && row > 1)
+			UPDATE_COEFFICIENTS(neighborPawnBonus, neighbors, +=, [row]);
+
 		mask &= mask - 1;
 	}
 	
@@ -242,6 +252,11 @@ void initPawnCoefficients(bitboard* board, evalParameters* coefficients, evalPar
 		{
             UPDATE_COEFFICIENTS(connectedPawnBonus, 1, -=, [mirroredRow]);
 		}
+
+		//Neighboring pawns
+		int neighbors = __builtin_popcountll(borderingMask & board_rank[row]);
+		if(neighbors && mirroredRow > 1)
+			UPDATE_COEFFICIENTS(neighborPawnBonus, neighbors, -=, [mirroredRow]);
 
 		mask &= mask - 1;
 	}

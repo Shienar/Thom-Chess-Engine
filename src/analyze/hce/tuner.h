@@ -51,6 +51,7 @@ typedef union {
         evalfp_t minorPawnCover;
         evalfp_t passedPawnBonus[ROW_COUNT];
         evalfp_t connectedPawnBonus[ROW_COUNT];
+        evalfp_t neighborPawnBonus[ROW_COUNT];
         evalfp_t doubledPawnBonus[COLUMN_COUNT];
         evalfp_t isolatedPawnBonus[COLUMN_COUNT];
 
