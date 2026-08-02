@@ -377,7 +377,7 @@ int main(int argc, char** argv)
                 {
                     int uciOverhead = _min(25, timeLeft / 2);
                     clock_t softEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
-                    clock_t hardEndTime = timeLeft / 15 + increment / 2 - uciOverhead;
+                    clock_t hardEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
                     threadContext->softEndTime = (threadContext->startTime + (softEndTime * CLOCKS_PER_SEC) / 1000);
                     threadContext->hardEndTime = (threadContext->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
                 }

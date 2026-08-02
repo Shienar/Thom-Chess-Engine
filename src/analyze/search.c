@@ -520,6 +520,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                 if(singularScore < sBeta)
                     next_depth++;
+                //Multicut pruning, but we just take the strong singular and assume that there's going to be more.
+                else if(singularScore >= beta)
+                    return singularScore;
+                //Negative Extension
+                else if(cutNode && old_tt_entry.evaluation >= beta)
+                    next_depth--;
             }
 
             if(moveFromStruct(board, *currentMove)) continue;
@@ -808,6 +814,9 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     context->seldepth = 0;
     context->completedDepth = 0;
 
+    move_c bestMove = context->pv.line[0];
+    int lastScore = context->score;
+
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
         if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes > context->maxNodes / threadCount)) 
@@ -815,7 +824,19 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
         aspiration_window(context, currentDepth);
         
-        if(abs(context->score) > MIN_MATE_SCORE) break;
+        if(currentDepth > 7)
+        {
+            if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
+                context->softEndTime -= 0.25 * (context->softEndTime - clock());
+            else
+                context->softEndTime = context->hardEndTime;
+        }
+        
+        bestMove = context->pv.line[0];
+        lastScore = context->score;
+        
+        if(abs(context->score) > MIN_MATE_SCORE)
+            context->softEndTime -= 0.5 * (context->softEndTime - clock());
     }
 
     return 0;
@@ -897,7 +918,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     
     int maxDepth = context->maxDepth;
     
-    move_c bestMove, ponderMove = (move_c){0};
+    move_c bestMove = (move_c){0}; 
+    move_c ponderMove = (move_c){0};
     int helperThreadCount = threadCount - 1;
 
     bitboard* board = context->board;
@@ -943,15 +965,24 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         }
     }
     
+    int lastScore = 0;
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         aspiration_window(context, currentDepth);
 
         if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->maxNodes / threadCount))) break;
         
+        if(currentDepth > 7)
+        {
+            if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
+                context->softEndTime -= 0.25 * (context->softEndTime - clock());
+            else
+                context->softEndTime = context->hardEndTime;
+        }
+        
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
-
+        lastScore = context->score;
         
         if(!suppressUCIMessages)
         {
@@ -989,7 +1020,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             fflush(stdout);
         }
         
-        if(abs(context->score) >= MIN_MATE_SCORE) break;
+        if(abs(context->score) > MIN_MATE_SCORE)
+            context->softEndTime -= 0.5 * (context->softEndTime - clock());
     }
 
     if(helperThreadCount > 0)

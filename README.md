@@ -99,6 +99,7 @@ A release version of the engine should be compiled with 'make -j'.
     - Probcut
     - TT Reductions
     - Singular Extensions
+    - Multicut Pruning
     - Check Extensions
     - Late Move Pruning
     - Late Move Reductions
