@@ -59,5 +59,5 @@
 #define MAX_PROBE_LIMIT 7
 #define MIN_PROBE_DEPTH 6
 #define MAX_PROBE_DEPTH 32
-extern int sygyzyProbeLimit;
-extern int sygyzyProbeDepth;
+extern int syzygyProbeLimit;
+extern int syzygyProbeDepth;

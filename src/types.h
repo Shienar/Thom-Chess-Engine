@@ -124,6 +124,7 @@ typedef struct searchThreadContext {
     int maxNodes, countedNodes;
     clock_t startTime, softEndTime, hardEndTime;
     move_c searchedMoves[MAX_REQUIRED_MOVES];
+    uint8_t* abortFlag;
 
     //Necessary search information
     int16_t score;

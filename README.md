@@ -18,9 +18,9 @@ A release version of the engine should be compiled with 'make -j'.
     - Hash, default 4 [1, 4096]
     - Ponder, default off
     - OwnBook, default off
-    - SygyzyPath, default ""
-    - SygyzyProbeLimit, default 5 [3, 7]
-    - SygyzyProbeDepth, default 6 [5, 32]
+    - SyzygyPath, default ""
+    - SyzygyProbeLimit, default 5 [3, 7]
+    - SyzygyProbeDepth, default 6 [5, 32]
 - ucinewgame
 - isready
 - debug \[on/off\]
@@ -68,6 +68,7 @@ A release version of the engine should be compiled with 'make -j'.
 - Pawn cover of minor piece
 - Passed Pawns
 - Connected Pawns
+- Neighboring Pawns
 - Doubled Pawns
 - Isolated Pawns
 - Knight Outpost
@@ -84,7 +85,7 @@ A release version of the engine should be compiled with 'make -j'.
 ### Search:
 - Iterative Deepening
 - Transposition Table
-- Sygyzy
+- Syzygy
 - Aspiration Windows
 - LazySMP
 - Principal Variation Search
@@ -111,12 +112,12 @@ A release version of the engine should be compiled with 'make -j'.
 ## ACKNOWLEDGEMENTS:
 
 - The engine currently uses the [komodo.bin](https://komodochess.com/downloads.htm) polyglot book truncated to ply 6
-- Ronald de Man's sygyzy tablebase is used for endgame analysis.
-- Andrew Grant's sygyzy probing tool [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) is used to probe the sygyzy files.
+- Ronald de Man's syzygy tablebase is used for endgame analysis.
+- Andrew Grant's syzygy probing tool [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) is used to probe the syzygy files.
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
 - The lichess-big3-resolved.book dataset was used for tuning the HCE.
 - The open-sourced nature of the chess programming community was very helpful for me to get past various barriers. I'd like to mention the following in particular that were the most impactful:
-    - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & sygyzy implementation)
+    - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & syzygy implementation)
     - [Alexandria](https://github.com/PGG106/Alexandria) (For search implementation)
     - [Stash](https://gitlab.com/mhouppin/stash-bot) (For search implementation)
     - [Surge](https://github.com/nkarve/surge) (For movegen)

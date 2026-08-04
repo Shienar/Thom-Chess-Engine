@@ -34,7 +34,7 @@
 
 #endif
 
-void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board);
+void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadContext* context, bitboard** board);
 
 int main(int argc, char** argv)
 {
@@ -50,8 +50,8 @@ int main(int argc, char** argv)
     int quit = 0;
     int isReady = 0;
     
-    char sygyzyPath[1024] = {'\0'};
-    int isPathDirty = 1; //Has sygyzy been initialized with the current path?
+    char SyzygyPath[1024] = {'\0'};
+    int isPathDirty = 1; //Has syzygy been initialized with the current path?
 
     char debugLogPath[1024] = {'\0'};
 
@@ -60,6 +60,7 @@ int main(int argc, char** argv)
     threadContext->board = board;
     threadContext->maxDepth = MAX_PLY;
     threadContext->maxNodes = INT_MAX;
+    threadContext->abortFlag = &abortFlag;
 
     THREADTYPE calculateThread = THREAD_INIT;
 
@@ -79,9 +80,9 @@ int main(int argc, char** argv)
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
                 printf("option name LogFilePath type string default <empty>\n");
-                printf("option name SygyzyPath type string default <empty>\n");
-                printf("option name SygyzyProbeLimit type spin default 5 min 3 max 7\n"); //n-man sygyzy tablebase.
-                printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe sygyzy at non-root if at least n depth remaining in search.
+                printf("option name SyzygyPath type string default <empty>\n");
+                printf("option name SyzygyProbeLimit type spin default 5 min 3 max 7\n"); //n-man syzygy tablebase.
+                printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe syzygy at non-root if at least n depth remaining in search.
                 #ifdef SPSA
                 printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
                 printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
@@ -121,7 +122,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ucinewgame") == 0)
             {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 if(isCalculating)
                 {
                     abortFlag = 1;
@@ -204,22 +205,22 @@ int main(int argc, char** argv)
                         }
                         break;
                     }
-                    else if(strcmp(str, "SygyzyPath") == 0)
+                    else if(strcmp(str, "SyzygyPath") == 0)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            strncpy(sygyzyPath, str, 1023);
-                            sygyzyPath[1023] = '\0';
+                            strncpy(SyzygyPath, str, 1023);
+                            SyzygyPath[1023] = '\0';
                             isPathDirty = 1;
                         }
                         break;
                     }
-                    else if(strcmp(str, "SygyzyProbeLimit") == 0)
+                    else if(strcmp(str, "SyzygyProbeLimit") == 0)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            sscanf(str, "%d", &sygyzyProbeLimit);
-                            sygyzyProbeLimit = clamp(sygyzyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
+                            sscanf(str, "%d", &syzygyProbeLimit);
+                            syzygyProbeLimit = clamp(syzygyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
                         }
                         break;
                     }
@@ -227,8 +228,8 @@ int main(int argc, char** argv)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            if(str) sscanf(str, "%d", &sygyzyProbeDepth);
-                            sygyzyProbeDepth = clamp(sygyzyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
+                            if(str) sscanf(str, "%d", &syzygyProbeDepth);
+                            syzygyProbeDepth = clamp(syzygyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
                         }
                         break;
                     }
@@ -258,7 +259,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "isready") == 0)
             {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 printf("readyok\n");
                 fflush(stdout);
             }
@@ -273,7 +274,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "position") == 0)
             {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 if(isCalculating)
                 {
                     abortFlag = 1;
@@ -326,7 +327,7 @@ int main(int argc, char** argv)
                     THREAD_WAIT(calculateThread);
                 }
                 isCalculating = 1;
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
 
                 int timeLeft = INT32_MAX;
                 int increment = 0;
@@ -413,7 +414,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perft") == 0)
             {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
 
                 //Not a part of UCI.
                 //Format: "perft <depth>"
@@ -433,7 +434,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perftv") == 0)
             {
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
 
                 //verbose perft
                 //Not a part of UCI.
@@ -465,7 +466,7 @@ int main(int argc, char** argv)
             {
                 //Format: 'tune <double forcedK (0 for auto) > <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
 
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 
                 char inputPath[256] = {'\0'};
                 char outputPath[256] = {'\0'};
@@ -511,7 +512,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "generate") == 0)
             {
                 //Format: 'generate "<outputFilePath>"'
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -522,7 +523,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "binpackinfo") == 0)
             {
                 //Format: 'binpackinfo "<binpackFilePath>"
-                readyUp(&isPathDirty, &isReady, sygyzyPath, threadContext, &board);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -547,7 +548,7 @@ int main(int argc, char** argv)
     disableDebugMessages();  //closes file if open.
 }
 
-void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadContext* context, bitboard** board)
+void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadContext* context, bitboard** board)
 {
     if(*isReady) return;
 
@@ -573,7 +574,7 @@ void readyUp(int *isPathDirty, int *isReady, char* sygyzyPath, searchThreadConte
     
     if(*isPathDirty)
     {
-        tb_init(sygyzyPath);
+        tb_init(SyzygyPath);
         isPathDirty = 0;
     }
 

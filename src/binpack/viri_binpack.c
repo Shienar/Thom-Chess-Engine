@@ -294,11 +294,9 @@ int readPackedBoard(binpackDetails* details, int readerIndex)
         rDetails->current_ptr += sizeof(Viri_PackedBoard);
     }
 
-    #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-    packedBoard->occupancy = __builtin_bswap64(packedBoard->occupancy);
-    packedBoard->fullMoveCounter = __bultin_bswap16(packedBoard->fullMoveCounter);
-    packedBoard->score = __bultin_bswap16(packedBoard->score);
-    #endif
+    rDetails->packedBoard->occupancy = littleEndian64(rDetails->packedBoard->occupancy);
+    rDetails->packedBoard->fullMoveCounter = littleEndian16(rDetails->packedBoard->fullMoveCounter);
+    rDetails->packedBoard->score = littleEndian16(rDetails->packedBoard->score);
     
     if(rDetails->packedBoard->result == VIRI_WHITE_WIN) rDetails->currentGameWinner = VICTOR_WHITE;
     else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
@@ -396,13 +394,18 @@ binpackDetails binpack_open(const char* fileName, int numReaders)
             details.readerInfo[i].packedBoard = calloc(1, sizeof(Viri_PackedBoard));
             details.readerInfo[i].start_section = details.start_ptr + details.headerOffsets[i * sectionSize];
             details.readerInfo[i].current_ptr = details.readerInfo[i].start_section;
-            details.readerInfo[i].end_section = details.start_ptr + details.headerOffsets[(i + 1) * sectionSize - 1];
+
+            if(i < numReaders - 1)
+                details.readerInfo[i].end_section = details.start_ptr + details.headerOffsets[(i + 1) * sectionSize - 1];
+            else
+                details.readerInfo[i].end_section = details.end_ptr;
 
             readPackedBoard(&details, i);
         }
     }
 
     CREATE_MUTEX(details.lock);
+
 
     return details;
 }
@@ -411,6 +414,7 @@ void binpack_close(binpackDetails* details)
 {
     if(details->numReaders <= 0 && details->binpack)
     {
+        fflush(details->binpack);
         fclose(details->binpack);
         details->binpack = NULL;
     }
@@ -465,9 +469,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
             memcpy(&pair, rDetails->current_ptr, sizeof(Viri_MoveScorePair));
             rDetails->current_ptr += sizeof(Viri_MoveScorePair);
 
-            #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-            pair.move.raw = __builtin_bswap16(pair.move.raw);
-            #endif
+            pair.move.raw = littleEndian16(pair.move.raw);
 
             if(pair.raw == 0)
             {
@@ -550,23 +552,19 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
 
 void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count)
 {
-
-    #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-    packedBoard->occupancy = __builtin_bswap64(packedBoard->occupancy);
-    packedBoard->fullMoveCounter = __bultin_bswap16(packedBoard->fullMoveCounter);
-    packedBoard->score = __bultin_bswap16(packedBoard->score);
-    #endif
+    packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
+    packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
+    packedBoard->score = littleEndian16(packedBoard->score);
 
     LOCK_MUTEX(details->lock);
 
     fwrite(packedBoard, sizeof(Viri_PackedBoard), 1, details->binpack);
-    #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-        for(int i = 0; i < count; i++)
-        {
-            pairList[i].move = __builtin_bswap16(pairList[i].move);
-            pairList[i].score = __bultin_bswap16(pairList[i].score);
-        }
-    #endif
+
+    for(int i = 0; i < count; i++)
+    {
+        pairList[i].move = littleEndian16(pairList[i].move);
+        pairList[i].score = littleEndian16(pairList[i].score);
+    }
 
     fwrite(pairList, sizeof(Viri_MoveScorePair), count, details->binpack);
 
@@ -632,7 +630,7 @@ void binpackPrintInfo(const char* fileName)
     double positionsPerSecond = totalCount / duration;
 
     uint64_t byteLength = details.mmap_file.size;
-    float positionsPerByte = (float) byteLength / totalCount;
+    float bytesPerPosition = (float) byteLength / totalCount;
 
     printf("\033[4A");
     printf("\033[2K\rBinpack statistics:\n");
@@ -642,7 +640,7 @@ void binpackPrintInfo(const char* fileName)
     printf("\033[2K\r\tDuration: %.3f seconds\n", duration);
     printf("\033[2K\r\tPositions per second: %.4f\n", positionsPerSecond);
     printf("\033[2K\r\tByte Size: %" PRIu64" \n", (uint64_t)byteLength);
-    printf("\033[2K\r\tPositions per Byte: %.4f\n", positionsPerByte);
+    printf("\033[2K\r\tBytes per Position: %.4f\n", bytesPerPosition);
 
     binpack_close(&details);
 }

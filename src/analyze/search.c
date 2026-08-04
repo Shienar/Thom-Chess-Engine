@@ -3,7 +3,7 @@
 #include "board/bitboard.h"
 #include "debug.h"
 #include "analyze/book.h"
-#include "analyze/sygyzy.h"
+#include "analyze/syzygy.h"
 #include "pyrrhic/tbprobe.h"
 #include <string.h>
 #include <math.h>
@@ -13,7 +13,11 @@ int enablePonder = 0;
 int isCalculating = 0;
 int suppressUCIMessages = 0;
 
+//Global flag. Each context's abort flag will 
+//point to this with the exception of data generation 
+//since that involves multiple games from one process.
 volatile uint8_t abortFlag = 0;
+
 volatile uint8_t isPonder = 0;
 
 const int min_aspiration_depth = 5;
@@ -121,9 +125,9 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     
     bitboard* board = context->board;
 
-    if(abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    if(*context->abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
     {
-        abortFlag = 1;
+        *context->abortFlag = 1;
         return 0;
     }
     if(isDraw(board))
@@ -292,9 +296,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     
     int lowestBound = alpha;
 
-    if(abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    if(*context->abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
     {
-        abortFlag = 1;
+        *context->abortFlag = 1;
         return 0;
     }
 
@@ -354,10 +358,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(depth <= 0)
         return quiescentSearch(context, alpha, beta, ply);
     
-    //Sygyzy
-    if(!pvNode && depth >= sygyzyProbeDepth)
+    //Syzygy
+    if(!pvNode && depth >= syzygyProbeDepth)
     {
-        int result = getSygyzyResult(context->board);
+        int result = getSyzygyResult(context->board);
         if(result != -1)
         {
             if(result > 0)
@@ -758,10 +762,11 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     //Don't corrupt it.
 
     PVar tempPV = {0};
+    int score;
 
     if(currentDepth < min_aspiration_depth)
     {
-        context->score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV, 0);
+        score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV, 0);
         context->completedDepth = currentDepth;
     }
     else
@@ -772,7 +777,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         int beta = context->score + aspiration_margin;
         while(1)
         {
-            int score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 0);
+            score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 0);
 
             if(score <= alpha)
             {
@@ -789,11 +794,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
                 beta = score + aspiration_margin;
             }
             else
-            {
-                context->score = score;
-                context->completedDepth = currentDepth;
                 break;
-            }
 
             if(aspiration_margin > maximum_aspiration_margin)
             {
@@ -804,8 +805,12 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     }
     
     //If the pv is stable (not half-done from abortion), save it.
-    if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && !abortFlag) 
+    if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && *context->abortFlag == 0)
+    {
+        context->score = score;
+        context->completedDepth = currentDepth;
         memcpy(&context->pv, &tempPV, sizeof(PVar));
+    }
 }
 
 THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
@@ -819,7 +824,7 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
-        if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes > context->maxNodes / threadCount)) 
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->maxNodes / threadCount)) 
             break;
 
         aspiration_window(context, currentDepth);
@@ -911,9 +916,9 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
 THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 {
     srand(time(NULL));
-    abortFlag = 0;
 
     searchThreadContext* context = (searchThreadContext*)param;
+    *context->abortFlag = 0;
     memset(context->historyTable, 0, sizeof(context->historyTable));
     
     int maxDepth = context->maxDepth;
@@ -933,10 +938,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         context->pv.line[0] = getBookMove(board);
         if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move_c){0}, 1); isCalculating = 0; return 0; }
+        else LEAVE_BOOK_OPENING(context->board->flags);
     }
 
-    //Sygyzy move recommendations
-    filterSygyzyMoves(board, context->searchedMoves);
+    //Syzygy move recommendations
+    filterSyzygyMoves(board, context->searchedMoves);
 
     THREADTYPE *helperThreads = NULL;
     searchThreadContext* helperThreadContext = NULL;
@@ -950,6 +956,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
         for(int i = 0; i < helperThreadCount; i++) 
         {
+            helperThreadContext[i].abortFlag = context->abortFlag;
             helperThreadContext[i].board = &threadBoards[i];
             memcpy(helperThreadContext[i].board, board, sizeof(bitboard));
             helperThreadContext[i].startTime = context->startTime;
@@ -970,7 +977,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
 
-        if(!isPonder && currentDepth > 1 && (abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->maxNodes / threadCount))) break;
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->maxNodes / threadCount))) break;
         
         if(currentDepth > 7)
         {
@@ -1026,7 +1033,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
     if(helperThreadCount > 0)
     {   
-        abortFlag = 1;
+        *context->abortFlag = 1;
         for(int i = 0; i < helperThreadCount; i++) 
         {
             THREAD_WAIT(helperThreads[i]);

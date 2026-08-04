@@ -3,7 +3,7 @@
 
 #include "types.h"
 #include "hashtables/transpositiontable.h"
-#include "analyze/sygyzy.h"
+#include "analyze/syzygy.h"
 #include <time.h>
 
 #include "analyze/hce/hce.h"

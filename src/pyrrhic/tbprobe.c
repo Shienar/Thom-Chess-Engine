@@ -137,8 +137,8 @@ static size_t file_size(FD fd) {
 #endif
 }
 
-int sygyzyProbeLimit = 5;
-int sygyzyProbeDepth = 6;
+int syzygyProbeLimit = 5;
+int syzygyProbeDepth = 6;
 
 static LOCK_T tbMutex;
 static int initialized = 0;

@@ -4,10 +4,11 @@
 #include "board/bitboard.h"
 
 binpackDetails details;
+int exitWhile;
 
 void generate(const char* path)
 {
-    binpackPrintInfo(path);
+    exitWhile = 0;
     int concurrency = threadCount;
     threadCount = 1;
     
@@ -20,6 +21,7 @@ void generate(const char* path)
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
     details = binpack_open(path, 0);
+    details.startTime = clock();
 
     for(int i = 0; i < concurrency; i++)
     {
@@ -29,6 +31,7 @@ void generate(const char* path)
         contextList[i].softEndTime = LONG_MAX,
         contextList[i].maxDepth = 9;
         contextList[i].maxNodes = 5000;
+        contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
 
         contextList[i].tt = create_hashTable_tt();
 
@@ -53,18 +56,21 @@ void generate(const char* path)
     }
 
     cleanup:
+    exitWhile = 1;
 
     printf("Stopping all threads...\n");
-    abortFlag = 0;
     for(int i = 0; i < concurrency; i++) 
     {
+        *contextList[i].abortFlag = 1;
         THREAD_WAIT(threadList[i]);
         destroy_hashTable_tt(contextList[i].tt);
         free(contextList[i].board);
+        free(contextList[i].abortFlag);
     }
     
     threadCount = concurrency;
     suppressUCIMessages = 0;
+    
     binpack_close(&details);
     if(wasDebugEnabled) 
         enableDebugMessages();
@@ -86,7 +92,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
     uint8_t hit;
     
-    while(!abortFlag)
+    while(!exitWhile)
     {
         context->searchedMoves[0].raw = 0;
         context->pv.line[0].raw = 0;
