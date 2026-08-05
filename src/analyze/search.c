@@ -16,9 +16,9 @@ int suppressUCIMessages = 0;
 //Global flag. Each context's abort flag will 
 //point to this with the exception of data generation 
 //since that involves multiple games from one process.
-volatile uint8_t abortFlag = 0;
+uint8_t abortFlag = 0;
 
-volatile uint8_t isPonder = 0;
+uint8_t isPonder = 0;
 
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
@@ -594,7 +594,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 new_tt_entry.evaluation = score;
                 new_tt_entry.bestMove = currentMove->raw;
                 transposition_table_set(context->tt, new_tt_entry, ply);
-                destroy_move_iterator(iter);
 
                 if(isQuietMove)
                 {
@@ -634,6 +633,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         context->followUpMove[from][to] = *currentMove;
                     }
                 }
+
+                destroy_move_iterator(iter);
 
                 return score;
             }
@@ -1055,5 +1056,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
     printResultingMoves(bestMove, ponderMove, 0);
     isCalculating = 0;
+
+    memset(context->searchedMoves, 0, sizeof(context->searchedMoves));
+
     return 0;
 }

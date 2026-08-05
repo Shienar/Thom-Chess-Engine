@@ -8,8 +8,8 @@
 
 #include "analyze/hce/hce.h"
 
-extern volatile uint8_t abortFlag;
-extern volatile uint8_t isPonder;
+extern uint8_t abortFlag;
+extern uint8_t isPonder;
 
 extern int threadCount;
 extern int enablePonder;

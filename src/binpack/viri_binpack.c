@@ -160,7 +160,7 @@ void initViriTables()
     rookSqToFlag[63] = 4;
 }
 
-//Doesn't set score or game result, that can be done later by the caller.
+//Doesn't set whiteScore or game result, that can be done later by the caller.
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 {
     packedBoard->occupancy = board->pieces_all;
@@ -296,7 +296,7 @@ int readPackedBoard(binpackDetails* details, int readerIndex)
 
     rDetails->packedBoard->occupancy = littleEndian64(rDetails->packedBoard->occupancy);
     rDetails->packedBoard->fullMoveCounter = littleEndian16(rDetails->packedBoard->fullMoveCounter);
-    rDetails->packedBoard->score = littleEndian16(rDetails->packedBoard->score);
+    rDetails->packedBoard->whiteScore = littleEndian16(rDetails->packedBoard->whiteScore);
     
     if(rDetails->packedBoard->result == VIRI_WHITE_WIN) rDetails->currentGameWinner = VICTOR_WHITE;
     else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
@@ -352,62 +352,61 @@ void clearCorruptedGame(const char* fileName)
     fclose(file);
 }
 
-binpackDetails binpack_open(const char* fileName, int numReaders)
+void binpack_open(binpackDetails* details, const char* fileName, int numReaders)
 {
     initViriTables();
 
-    binpackDetails details = {0};
-    details.numReaders = numReaders;
+    //Assume we aren't opening twice on the same variable.
+    memset(details, 0, sizeof(binpackDetails));
+
+    details->numReaders = numReaders;
 
     clearCorruptedGame(fileName);
 
     if(numReaders <= 0) 
     {
-        details.binpack = fopen(fileName, "ab+");
-        if(!details.binpack) 
+        details->binpack = fopen(fileName, "ab+");
+        if(!details->binpack) 
         {
             printf("Failed to open binpack file for writing: %s\n", fileName);
             exit(1);
         }
 
-        details.readerInfo = NULL;
+        details->readerInfo = NULL;
     } 
     else
     {
-        if(mmap_open(fileName, &details.mmap_file)) 
+        if(mmap_open(fileName, &details->mmap_file)) 
         {
             printf("Failed to memory map binpack file: %s\n", fileName);
             exit(1);
         }
-        details.start_ptr = (uint8_t*)details.mmap_file.data;
-        details.end_ptr = details.start_ptr + details.mmap_file.size;
+        details->start_ptr = (uint8_t*)details->mmap_file.data;
+        details->end_ptr = details->start_ptr + details->mmap_file.size;
 
-        details.headerOffsets = binpack_acquireHeaderIndices(fileName, &details.headerEntries);
+        details->headerOffsets = binpack_acquireHeaderIndices(fileName, &details->headerEntries);
 
-        details.readerInfo = calloc(numReaders, sizeof(readerDetails));
+        details->readerInfo = calloc(numReaders, sizeof(readerDetails));
 
-        size_t sectionSize = details.headerEntries / numReaders;
+        size_t sectionSize = details->headerEntries / numReaders;
 
         for(int i = 0; i < numReaders; i++)
         {
-            details.readerInfo[i].board = calloc(1, sizeof(bitboard));
-            details.readerInfo[i].packedBoard = calloc(1, sizeof(Viri_PackedBoard));
-            details.readerInfo[i].start_section = details.start_ptr + details.headerOffsets[i * sectionSize];
-            details.readerInfo[i].current_ptr = details.readerInfo[i].start_section;
+            details->readerInfo[i].board = calloc(1, sizeof(bitboard));
+            details->readerInfo[i].packedBoard = calloc(1, sizeof(Viri_PackedBoard));
+            details->readerInfo[i].start_section = details->start_ptr + details->headerOffsets[i * sectionSize];
+            details->readerInfo[i].current_ptr = details->readerInfo[i].start_section;
 
             if(i < numReaders - 1)
-                details.readerInfo[i].end_section = details.start_ptr + details.headerOffsets[(i + 1) * sectionSize - 1];
+                details->readerInfo[i].end_section = details->start_ptr + details->headerOffsets[(i + 1) * sectionSize - 1];
             else
-                details.readerInfo[i].end_section = details.end_ptr;
+                details->readerInfo[i].end_section = details->end_ptr;
 
-            readPackedBoard(&details, i);
+            readPackedBoard(details, i);
         }
     }
 
-    CREATE_MUTEX(details.lock);
-
-
-    return details;
+    CREATE_MUTEX(details->lock);
 }
 
 void binpack_close(binpackDetails* details)
@@ -494,12 +493,13 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                 if(toPc != EMPTY_PIECE)
                 {
                     //Viriformat castling is king takes rook
+                    //This assumes standard chess variant.
                     if(ISKING(fromPc) && COLOR(fromPc) == COLOR(toPc))
                     {
-                        if(m.endSquare < m.startSquare)
-                            m.endSquare += 2 - (m.endSquare & 0x7);
+                        if((m.endSquare & 7) == 7)
+                            m.endSquare = m.startSquare + 2;
                         else
-                            m.endSquare += 6 - (m.endSquare & 0x7);
+                            m.endSquare = m.startSquare - 2;
                     }
                     else
                         isCapture = 1; //Doesn't include en passant, but that is handled by move type.
@@ -530,7 +530,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
         }
 
         if(!isCapture &&
-            abs(pair.score) <= 2000 && 
+            abs(pair.whiteScore) <= 2000 && 
             pair.move.moveType == 0 &&
             !IS_IN_CHECK_ANY(rDetails->board->flags) &&
             rDetails->board->halfMoveCount >= 8)
@@ -545,7 +545,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
     }
 
     *result = rDetails->currentGameWinner;
-    *eval = (ISWHITE(rDetails->board->turn)) ? pair.score : -pair.score;
+    *eval = pair.whiteScore;
     *brd =  *rDetails->board;
     return skippedUnusable + skippedUsable;
 }
@@ -554,7 +554,7 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
 {
     packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
     packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
-    packedBoard->score = littleEndian16(packedBoard->score);
+    packedBoard->whiteScore = littleEndian16(packedBoard->whiteScore);
 
     LOCK_MUTEX(details->lock);
 
@@ -563,7 +563,7 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
     for(int i = 0; i < count; i++)
     {
         pairList[i].move = littleEndian16(pairList[i].move);
-        pairList[i].score = littleEndian16(pairList[i].score);
+        pairList[i].whiteScore = littleEndian16(pairList[i].whiteScore);
     }
 
     fwrite(pairList, sizeof(Viri_MoveScorePair), count, details->binpack);
@@ -571,7 +571,7 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
     uint32_t zero = 0;
     fwrite(&zero, 4, 1, details->binpack);
 
-    details->writtenThisSession+=count;
+    details->writtenThisSession+=count + 1;
 
     if((clock() - details->lastPrintTime) / CLOCKS_PER_SEC > 10)
     {
@@ -585,7 +585,8 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
 
 void binpackPrintInfo(const char* fileName)
 {
-    binpackDetails details = binpack_open(fileName, 1);
+    binpackDetails details =  {0};
+    binpack_open(&details, fileName, 1);
     uint64_t usedCount = 1;
     uint64_t skippedCount = 0;
     

@@ -20,7 +20,7 @@ void generate(const char* path)
     searchThreadContext* contextList = calloc(concurrency, sizeof(searchThreadContext));
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
-    details = binpack_open(path, 0);
+    binpack_open(&details, path, 0);
     details.startTime = clock();
 
     for(int i = 0; i < concurrency; i++)
@@ -79,6 +79,29 @@ void generate(const char* path)
     binpackPrintInfo(path);
 }
 
+uint32_t rng_xorshift32(uint32_t* seed) 
+{
+    uint32_t x = *seed;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *seed = x;
+    return x;
+}
+
+/**
+ * Make eight random moves on the board, creating some random opening position. 
+ * Do a search on this position, returning me a score and a move. 
+ * The score gets applied to the current position and the move creates the next position.
+ * The final move of the game doesn't get included in the binpack.
+ * 
+ * If the initial position is noisy (abs(cp) > 300), skip that game and try another opening.
+ * 
+ * If one side is dominant (> 2000 cp) for 5 moves, adjudicate an early win.
+ * If both sides are tied for 5 moves after move 40 (cp in [-10, +10]), adjudicate an early draw
+ * 
+ * If the score is a mate score, we can terminate early & don't need to play out the full continuation.
+ */
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 {
     searchThreadContext* context = (searchThreadContext*) param;
@@ -88,89 +111,130 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
     int isNewGame = 1;
 
     Viri_PackedBoard* packedBoard = calloc(1, sizeof(Viri_PackedBoard));
-    Viri_MoveScorePair* pairList = calloc(MAX_POSITIONS_PER_GAME, sizeof(pairList));
+    Viri_MoveScorePair* pairList = calloc(MAX_POSITIONS_PER_GAME, sizeof(Viri_MoveScorePair));
 
-    uint8_t hit;
+    srand(time(NULL));
+    uint32_t seed = rand();
     
+    //Adjudication
+    int consecutiveHighScores = 0;
+    int consecutiveLowScores = 0;
+    int consecutiveDrawScores = 0;
+
     while(!exitWhile)
     {
-        context->searchedMoves[0].raw = 0;
-        context->pv.line[0].raw = 0;
+        if(isNewGame)
+        {
+            load_fen_string_to_board(context->board, STARTPOS_FEN);
+
+            //Play some random moves
+            //Early mate is possible, goto newloop is used as a break + continue;
+            for(int i = 0; i <= 8; i++)
+            {
+                move_c moveList[MAX_MOVES] = {0};
+                int count = generateMoveList(moveList, context->board, 0);
+                if(!count)
+                    goto newloop;
+                int index = rng_xorshift32(&seed) % count;
+                if(moveFromStruct(context->board, moveList[index]))
+                    goto newloop;
+            }
+            context->board->historyIndex = 0;
+
+            isNewGame = 0;
+            movesThisGame = 0;
+            consecutiveHighScores = 0;
+            consecutiveLowScores = 0;
+            consecutiveDrawScores = 0;
+
+            boardToPackedBoard(context->board, packedBoard);
+            packedBoard->result = UINT8_MAX;
+            continue;
+        }
+
+        assert(context->board->pieces[WHITE_KING] && context->board->pieces[BLACK_KING]);
 
         THREAD_START(searchThread, calculateBestMove, param);
         THREAD_WAIT(searchThread);
 
-        if(IS_IN_BOOK_OPENING(context->board->flags))
-            continue;
-        if(isNewGame)
-        {
-            table_entry_tt rootEntry = transposition_table_get(context->board, context->tt, &hit, 0);
-            boardToPackedBoard(context->board, packedBoard);
-            packedBoard->score = rootEntry.evaluation;
-            isNewGame = 0;
-            continue;
-        }
         move_c bestMove = context->pv.line[0];
-        if(!IS_VALID_MOVE(bestMove))
-        {
-            if(context->board->turn == WHITE)
-                packedBoard->result = VIRI_BLACK_WIN;
-            else
-                packedBoard->result = VIRI_WHITE_WIN;
 
-            binpack_writeGame(&details, packedBoard, pairList, movesThisGame);
-            movesThisGame = 0;
+        int whiteEval = (ISWHITE(context->board->turn)) ? context->score : - context->score;
+
+        if(whiteEval > MIN_MATE_SCORE)
+            packedBoard->result = VIRI_WHITE_WIN;
+        else if(whiteEval < -MIN_MATE_SCORE)
+            packedBoard->result = VIRI_BLACK_WIN;
+
+        consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
+        consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
+        consecutiveDrawScores = (whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+
+        if(consecutiveHighScores > 5) packedBoard->result = VIRI_WHITE_WIN;
+        else if(consecutiveLowScores > 5) packedBoard->result = VIRI_BLACK_WIN;
+        else if(consecutiveDrawScores > 5 && context->board->repetitionIndex > 40) packedBoard->result = VIRI_DRAW;
+
+        if(packedBoard->result < UINT8_MAX)
+        {
+            binpack_writeGame(&details, packedBoard, pairList, movesThisGame - 1);
             isNewGame = 1;
-            
-            memset(context->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
-            load_fen_string_to_board(context->board, STARTPOS_FEN);
-
             continue;
-         }
-
-        if(movesThisGame < MAX_POSITIONS_PER_GAME)
-        {
-            int piece = findPieceOnSquare(context->board, bestMove.startSquare);
-            int difference = bestMove.endSquare - bestMove.startSquare;
-
-            //Root entry in private TT should always hit.
-            table_entry_tt rootEntry = transposition_table_get(context->board, context->tt, &hit, 0);
-
-            pairList[movesThisGame].move.endSquare = bestMove.endSquare;
-            pairList[movesThisGame].move.startSquare = bestMove.startSquare;
-            pairList[movesThisGame].move.promotePiece = promoteMappingsToViri[bestMove.promoteTo];
-            if(bestMove.promoteTo) 
-                pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_PROMOTIONS;
-            else if(ISKING(piece) && abs(difference) == 2)
-            {
-                pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_CASTLING;
-
-                //Reformat move as king-takes rook
-                uint64_t rookMask = context->board->pieces[ROOK | COLOR(piece)];
-                if(difference > 0)
-                    rookMask &= (~0 << (bestMove.startSquare + 1));
-                else
-                    rookMask &= singleBitMask(bestMove.startSquare) - 1;
-
-                pairList[movesThisGame].move.endSquare = __builtin_ctzll(rookMask);
-            }
-            else if(ISPAWN(piece) && bestMove.endSquare == context->board->enPassantSquare)
-                pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_ENPASSANT;
-            else
-                pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
-
-            //White-relative
-            pairList[movesThisGame].score = (ISWHITE(context->board->turn)) ? rootEntry.evaluation : -rootEntry.evaluation;
-
-            movesThisGame++;
         }
 
-        //End of game or invalid move.
+        if(bestMove.raw == 0)
+            goto gameover;
+
+        int piece = findPieceOnSquare(context->board, bestMove.startSquare);
+        int difference = bestMove.endSquare - bestMove.startSquare;
+
+        pairList[movesThisGame].move.endSquare = bestMove.endSquare;
+        pairList[movesThisGame].move.startSquare = bestMove.startSquare;
+        pairList[movesThisGame].move.promotePiece = promoteMappingsToViri[bestMove.promoteTo];
+        if(bestMove.promoteTo) 
+            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_PROMOTIONS;
+        else if(ISKING(piece) && abs(difference) == 2)
+        {
+            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_CASTLING;
+
+            //Reformat move as king-takes rook (Assumes standard variant)
+            int rowOffset = getRow(bestMove.startSquare) * 8;
+            if(bestMove.endSquare > bestMove.startSquare)
+                pairList[movesThisGame].move.endSquare = rowOffset + 7;
+            else
+                pairList[movesThisGame].move.endSquare = rowOffset;
+        }
+        else if(ISPAWN(piece) && bestMove.endSquare == context->board->enPassantSquare)
+            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_ENPASSANT;
+        else
+            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
+
+        if(movesThisGame == 0)
+            packedBoard->whiteScore = whiteEval;
+        else
+            pairList[movesThisGame - 1].whiteScore = whiteEval;
+
+        movesThisGame++;
+        if(movesThisGame >= MAX_POSITIONS_PER_GAME)
+        {
+            //Determine game result without saving extra moves.
+            do
+            {
+                THREAD_START(searchThread, calculateBestMove, param);
+                THREAD_WAIT(searchThread);
+            }while(!moveFromStruct(context->board, context->pv.line[0]));
+            goto gameover;
+        }
+
+        //End of game
         if(moveFromStruct(context->board, bestMove))
         {
-            movesThisGame--;
-            if(!isDraw(context->board))
+            gameover:
+
+            if(isDraw(context->board))
+                packedBoard->result = VIRI_DRAW;
+            else
             {
+                //Should get detected early, this is a fallback.
                 packedBoard->result = getMateResult(context->board);
                 switch(packedBoard->result)
                 {
@@ -185,16 +249,13 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                         break;
                 }
             }
-            else
-                packedBoard->result = VIRI_DRAW;;
-            binpack_writeGame(&details, packedBoard, pairList, movesThisGame);
-            movesThisGame = 0;
-            isNewGame = 1;
-            
-            load_fen_string_to_board(context->board, STARTPOS_FEN);
 
+            binpack_writeGame(&details, packedBoard, pairList, movesThisGame - 1);
+            isNewGame = 1;
             continue;
         }
+
+        newloop:
     }
 
     free(packedBoard);

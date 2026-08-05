@@ -6,7 +6,8 @@
 
 //Reusing the format from https://github.com/cosmobobak/viriformat
 
-typedef int16_t Viri_Score; //White-relative
+//White-relative always.
+typedef int16_t Viri_Score; 
 
 #define VIRI_PAWN 0
 #define VIRI_KNIGHT 1
@@ -38,7 +39,7 @@ typedef struct {
     uint8_t stm  : 1;
     uint8_t halfmoveClock; //50-move rule tracking
     uint16_t fullMoveCounter;
-    Viri_Score score;
+    Viri_Score whiteScore;
     uint8_t result;
     uint8_t padding;
 } Viri_PackedBoard;
@@ -56,7 +57,7 @@ typedef union {
     uint32_t raw;
     struct {
         Viri_Move move;
-        Viri_Score score;
+        Viri_Score whiteScore;
     };
 } Viri_MoveScorePair;
 #pragma pack(pop)
@@ -98,7 +99,7 @@ extern uint8_t promoteMappingsToViri[10];
 extern uint8_t rookSqToFlag[64];
 
 //Same file pointer for all functions. The assumption is that you will either only read or only write.
-binpackDetails binpack_open(const char* fileName, int numReaders);
+void binpack_open(binpackDetails* details, const char* fileName, int numReaders);
 void binpack_close(binpackDetails* details);
 int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips);
 

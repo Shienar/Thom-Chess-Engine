@@ -873,9 +873,8 @@ move_c getStructFromString(bitboard* board, char* str)
 int moveFromStruct(bitboard* board, move_c m)
 {   
     assert(board);
-    assert(IS_VALID_MOVE(m));
 
-    if(movePiece(board, m) != 0) 
+    if(!IS_VALID_MOVE(m) || movePiece(board, m) != 0) 
     {
         DEBUG_ERROR("Failed to move piece from struct.");
         return -1;
@@ -888,7 +887,6 @@ int moveFromStruct(bitboard* board, move_c m)
         return -1;
     }
 
-    //Terminal gamestate validations have been moved to engine.c search functions.
     /*
     #ifndef NDEBUG
     uint64_t hc = getHashCode(board);
