@@ -145,14 +145,14 @@ void initViriTables()
     promoteMappingsFromViri[VIRI_PROMOTETO_QUEEN] = QUEEN;
 
     promoteMappingsToViri[0] = 0;
-    promoteMappingsToViri[WHITE_KNIGHT] = KNIGHT;
-    promoteMappingsToViri[BLACK_KNIGHT] = KNIGHT;
-    promoteMappingsToViri[WHITE_BISHOP] = BISHOP;
-    promoteMappingsToViri[BLACK_BISHOP] = BISHOP;
-    promoteMappingsToViri[WHITE_ROOK] = ROOK;
-    promoteMappingsToViri[BLACK_ROOK] = ROOK;
-    promoteMappingsToViri[WHITE_QUEEN] = QUEEN;
-    promoteMappingsToViri[BLACK_QUEEN] = QUEEN;
+    promoteMappingsToViri[WHITE_KNIGHT] = VIRI_PROMOTETO_KNIGHT;
+    promoteMappingsToViri[BLACK_KNIGHT] = VIRI_PROMOTETO_KNIGHT;
+    promoteMappingsToViri[WHITE_BISHOP] = VIRI_PROMOTETO_BISHOP;
+    promoteMappingsToViri[BLACK_BISHOP] = VIRI_PROMOTETO_BISHOP;
+    promoteMappingsToViri[WHITE_ROOK] = VIRI_PROMOTETO_ROOK;
+    promoteMappingsToViri[BLACK_ROOK] = VIRI_PROMOTETO_ROOK;
+    promoteMappingsToViri[WHITE_QUEEN] = VIRI_PROMOTETO_QUEEN;
+    promoteMappingsToViri[BLACK_QUEEN] = VIRI_PROMOTETO_QUEEN;
     
     rookSqToFlag[0] = 2;
     rookSqToFlag[7] = 1;
@@ -176,16 +176,18 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
         if(ISROOK(pc))
         {
             if(ISWHITE(pc) && 
+                getRow(sq) == getRow(board->kingSquare[WHITE]) &&
                 ((KINGSIDE_CASTLE_WHITE(board->flags) && sq > board->kingSquare[WHITE]) ||
                 (QUEENSIDE_CASTLE_WHITE(board->flags) && sq < board->kingSquare[WHITE])))
                     piece = VIRI_UNMOVED_ROOK;
             else if(ISBLACK(pc) && 
+                    getRow(sq) == getRow(board->kingSquare[BLACK]) &&
                     ((KINGSIDE_CASTLE_BLACK(board->flags) && sq > board->kingSquare[BLACK]) ||
                     (QUEENSIDE_CASTLE_BLACK(board->flags) && sq < board->kingSquare[BLACK])))
                         piece = VIRI_UNMOVED_ROOK | VIRI_BLACK_PIECE;
         }
     
-        if((insertIndex&1) == 0)
+        if(insertIndex&1)
             piece <<= 4;
         
         packedBoard->pieces[insertIndex / 2] |= piece;
@@ -199,20 +201,27 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 
     packedBoard->halfmoveClock = board->movesSinceLastChange;
     packedBoard->fullMoveCounter = board->halfMoveCount / 2;
+
+    packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
+    packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
+    packedBoard->whiteScore = littleEndian16(packedBoard->whiteScore);
 }
 
 void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 {
+    memset(board, 0, sizeof(bitboard));
+    memset(&board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
+    board->flags = 64;
+
+    packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
+    packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
+    packedBoard->whiteScore = littleEndian16(packedBoard->whiteScore);
+
     board->turn = packedBoard->stm == VIRI_BLACK_STM;
+    board->enPassantSquare = packedBoard->ep;
 
     board->halfMoveCount = 2 * (packedBoard->fullMoveCounter) + board->turn;
     board->movesSinceLastChange = packedBoard->halfmoveClock;
-
-    //Clear board
-    memset(&board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
-    memset(&board->pieces, 0, PIECE_COUNT * sizeof(uint64_t));
-    memset(&board->pieces_side, 0, 2 * sizeof(uint64_t));
-    board->pieces_all = 0;
 
     board->kingSquare[WHITE] = 64;
     board->kingSquare[BLACK] = 64;
@@ -224,7 +233,7 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
         int sq = __builtin_ctzll(mask);
         int byteIndex = offset / 2;
         int piece = packedBoard->pieces[byteIndex];
-        if(offset % 2) piece = piece&0xF;
+        if(!(offset % 2)) piece = piece&0xF;
         else piece >>= 4;
 
         if(piece&6)
@@ -251,6 +260,8 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 
     if(isThreatened(board, board->kingSquare[WHITE], WHITE)) board->flags|=16;
     else if(isThreatened(board, board->kingSquare[BLACK], BLACK)) board->flags|=32;
+
+    board->hashCode = getHashCode(board);
 }
 
 int readPackedBoard(binpackDetails* details, int readerIndex)
@@ -494,7 +505,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                 {
                     //Viriformat castling is king takes rook
                     //This assumes standard chess variant.
-                    if(ISKING(fromPc) && COLOR(fromPc) == COLOR(toPc))
+                    if(ISKING(fromPc) && ISROOK(toPc) && COLOR(fromPc) == COLOR(toPc))
                     {
                         if((m.endSquare & 7) == 7)
                             m.endSquare = m.startSquare + 2;
@@ -504,27 +515,16 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                     else
                         isCapture = 1; //Doesn't include en passant, but that is handled by move type.
                 }
-                
-                    
 
-                rDetails->board->repetitionIndex = 0;
                 rDetails->board->historyIndex = 0;
                 
                 if(movePiece(rDetails->board, m))
                 {
-                    //Skip to end of game.
-                    uint8_t* start = rDetails->current_ptr;
-                    while(rDetails->current_ptr + 4 <= rDetails->end_section) 
-                    {
-                        uint32_t value;
-                        memcpy(&value, rDetails->current_ptr, 4);
-                        
-                        if(value == 0) 
-                            break;
-                        rDetails->current_ptr++;
-                    }
-                    skippedUnusable += 1 + ((rDetails->current_ptr - start) / 4);
-                    continue;
+                    board_print(rDetails->board, 1);
+                    printf("Move error detected within binpack:\n");
+                    printf("\tOffset: 0x%llx\n", rDetails->current_ptr - details->start_ptr);
+                    printf("\tMove: %d->%d | Type=%d | Promote=%d", pair.move.startSquare, pair.move.endSquare, pair.move.moveType, pair.move.promotePiece);
+                    exit(1);
                 }
             }
         }
@@ -645,7 +645,6 @@ void binpackPrintInfo(const char* fileName)
 
     binpack_close(&details);
 }
-
 
 //Doesn't yet handle the 0-bitboard special entries.
 int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries) 
