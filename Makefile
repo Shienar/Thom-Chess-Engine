@@ -35,7 +35,8 @@ SRCFILES = $(wildcard src/*.c) \
 		   $(wildcard src/hashtables/*.c) \
 		   $(wildcard src/pyrrhic/tbprobe.c) \
  		   $(wildcard src/binpack/*c) \
-		   $(wildcard src/analyze/hce/*.c)
+		   $(wildcard src/analyze/hce/*.c) \
+		   $(wildcard src/analyze/nnue/*.c)
 
 ASMFILES = $(wildcard src/incbin/*.s)
 
@@ -55,9 +56,9 @@ ifeq ($(UNAME_S),Darwin)
 	LIBS += -pthread
 endif
 
-.PHONY: all clean directories
+.PHONY: all clean directories weights
 
-all: directories $(TARGET)
+all: directories weights $(TARGET) 
 
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -70,6 +71,13 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.s | directories
 
 directories:
 	@mkdir -p $(OBJ_DIRS)
+
+# If we don't have any weights, make incbin include an empty file to avoid errors.
+# NNUE eval will be disabled in the binary
+weights:
+ifeq ($(wildcard .\import\weights.nnue),)
+	touch .\import\weights.nnue
+endif
 
 clean:
 	rm -rf $(TGT_DIR)

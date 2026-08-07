@@ -533,7 +533,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
             abs(pair.whiteScore) <= 2000 && 
             pair.move.moveType == 0 &&
             !IS_IN_CHECK_ANY(rDetails->board->flags) &&
-            rDetails->board->halfMoveCount >= 8)
+            rDetails->board->halfMoveCount >= 16)
             {
                 if(skippedUsable >= minimumFENSkips)
                     break;

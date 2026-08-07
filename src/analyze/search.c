@@ -5,6 +5,7 @@
 #include "analyze/book.h"
 #include "analyze/syzygy.h"
 #include "pyrrhic/tbprobe.h"
+#include "analyze/nnue/neuralnet.h"
 #include <string.h>
 #include <math.h>
 
@@ -119,6 +120,11 @@ int perft(bitboard* board, int depth, int verbose)
     return nodes;
 }
 
+int evaluate(searchThreadContext* context)
+{
+    return (useNNUE) ? forwardPropagate(context->board, context->accumulator) : hce_eval(context->board);
+}
+
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 {
     context->countedNodes++;
@@ -133,7 +139,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     if(isDraw(board))
         return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1)
-        return hce_eval(context->board);
+        return evaluate(context);
 
     int lowestBound = alpha;
     move_c* tt_move = NULL;
@@ -168,7 +174,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     }
     else 
     {
-        best = hce_eval(context->board);
+        best = evaluate(context);
     
         table_entry_tt shallowEntry = {
             .depth = 0,
@@ -218,9 +224,18 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             if(moveFromStruct(board, *currentMove)) 
                 continue;
 
+            move_d lastMove = board->history[board->historyIndex - 1];
+            if(useNNUE)
+                updateMoveAccumulator(board, lastMove, 0, context->accumulator);
+
             int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
 
             unmove(board);
+
+            if(useNNUE)
+                updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+
+            
 
             if(score > best)
             {
@@ -354,7 +369,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     if(ply >= MAX_PLY - 1)
-        return hce_eval(context->board);
+        return evaluate(context);
     if(depth <= 0)
         return quiescentSearch(context, alpha, beta, ply);
     
@@ -381,7 +396,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         if(inCheck) score = -INT32_MAX;
         else
         {
-            score = hce_eval(context->board);
+            score = evaluate(context);
             table_entry_tt shallowEntry = {
                 .depth = 0,
                 .hashCode = board->hashCode,
@@ -457,12 +472,20 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     while((currentMove = iterate_next_move(iter)) != NULL)
                     {
                         if(moveFromStruct(board, *currentMove)) continue;
+                        
+                        move_d lastMove = board->history[board->historyIndex - 1];
+                        if(useNNUE)
+                            updateMoveAccumulator(board, lastMove, 0, context->accumulator);
 
                         probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
                         if(probCutScore >= pBeta)
                             probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV, !cutNode);
 
                         unmove(board);
+
+                        if(useNNUE)
+                            updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+
 
                         if(probCutScore >= pBeta)
                         {
@@ -534,6 +557,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             if(moveFromStruct(board, *currentMove)) continue;
             
+            move_d lastMove = board->history[board->historyIndex - 1];
+            if(useNNUE)
+                updateMoveAccumulator(board, lastMove, 0, context->accumulator);
+            
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
 
             //Quiet move pruning.
@@ -544,12 +571,16 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 {
                     shouldSkipQuiets = 1;
                     unmove(board);
+                    if(useNNUE)
+                        updateMoveAccumulator(board, lastMove, 1, context->accumulator);
                     continue;
                 }
             }
             if(isQuietMove && shouldSkipQuiets)
             {
                 unmove(board);
+                if(useNNUE)
+                    updateMoveAccumulator(board, lastMove, 1, context->accumulator);
                 continue;
             }
 
@@ -587,6 +618,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
             
             unmove(board);
+            if(useNNUE)
+                updateMoveAccumulator(board, lastMove, 1, context->accumulator);
             
             if(score >= beta)
             {

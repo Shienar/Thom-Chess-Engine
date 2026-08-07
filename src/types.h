@@ -117,6 +117,28 @@ typedef struct PVar {
     move_c line[MAX_PLY];
 } PVar;
 
+#define QA 255
+#define QB 64
+#define QA_RSHIFT 8
+#define QB_RSHIFT 6
+
+#define INPUT_BITS (2 * 768)
+#define HALF_INPUT_BITS (INPUT_BITS / 2)
+#define ACCUMULATOR_NODES 256
+#define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
+
+typedef struct nnue_weights {
+    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
+    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int16_t weights2[ACCUMULATOR_NODES];
+    int32_t weights2_bias;
+} nnue_weights;
+
+typedef struct accumulator {
+    uint64_t inputNodes[2 * PIECE_COUNT];
+    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
+} accumulator;
+
 #define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
     //UCI Thread settings or info
@@ -132,6 +154,8 @@ typedef struct searchThreadContext {
     hashtable_tt* tt;
     PVar pv;
     move_c excludedMove;
+    
+    accumulator* accumulator;
     
     //Improving heuristic
     int evalHistory[MAX_PLY];

@@ -1,4 +1,5 @@
 UCI-compliant HCE chess engine created in C.
+The NNUE requires AVX2 SIMD instructions.
 
 ## BUILDING:
 
@@ -44,6 +45,7 @@ A release version of the engine should be compiled with 'make -j'.
 - Options:
     - LogFilePath, default ""
         - Save any debug error messages to a file at this path.
+    - UseNNUE, default true
 - perft &lt;depth&gt;
 - perftv &lt;depth&gt;
     - verbose perft, shows positions per first move.
@@ -59,6 +61,10 @@ A release version of the engine should be compiled with 'make -j'.
     - Get information about a generated binpack
 
 ## FEATURES:
+
+### NNUE:
+- 2 x (768 -> 128) -> 1
+- Lizard SCReLU
 
 ### HCE:
 - Raw Piece Values

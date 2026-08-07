@@ -7,8 +7,12 @@
 #include "analyze/search.h"
 #include "binpack/generate.h"
 #include "analyze/hce/tuner.h"
+#include "analyze/nnue/neuralnet.h"
 #include <omp.h>
 #include <string.h>
+
+//TODO: Enforce Little-endian nnue
+//TODO: Convert to simple 2x (768->128) -> 1 NNUE.
 
 #ifdef SPSA
 
@@ -46,7 +50,7 @@ int main(int argc, char** argv)
     const char* delim = " \t\r\n";
     char* str = NULL;
     char* strtok_ptr = NULL;
-    
+
     int quit = 0;
     int isReady = 0;
     
@@ -54,7 +58,6 @@ int main(int argc, char** argv)
     int isPathDirty = 1; //Has syzygy been initialized with the current path?
 
     char debugLogPath[1024] = {'\0'};
-
 
     searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
     threadContext->board = board;
@@ -79,6 +82,7 @@ int main(int argc, char** argv)
                 printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
+                printf("option name UseNNUE type check default true\n");
                 printf("option name LogFilePath type string default <empty>\n");
                 printf("option name SyzygyPath type string default <empty>\n");
                 printf("option name SyzygyProbeLimit type spin default 5 min 3 max 7\n"); //n-man syzygy tablebase.
@@ -182,6 +186,16 @@ int main(int argc, char** argv)
                         }
                         break;
                     }
+                    else if(strcmp(str, "UseNNUE") == 0 && isNetworkLoaded)
+                    {
+                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                        {
+                            if(strcmp(str, "true") == 0) { useNNUE = 1; }
+                            else { useNNUE = 0; }
+                        }
+                        readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
+                        break;
+                    }
                     else if(strcmp(str, "Clear") == 0)
                     {
                         str = _strtok(NULL, delim, &strtok_ptr);
@@ -195,8 +209,13 @@ int main(int argc, char** argv)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            strncpy(debugLogPath, str, 1023);
-                            debugLogPath[1023] = '\0';
+                            if(strcmp(str, "<empty>") == 0)
+                                debugLogPath[0] = '\0';
+                            else
+                            {
+                                strncpy(debugLogPath, str, 1023);
+                                debugLogPath[1023] = '\0';
+                            }
                             if(printDebugMessages)
                             {
                                 disableDebugMessages();
@@ -209,8 +228,13 @@ int main(int argc, char** argv)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            strncpy(SyzygyPath, str, 1023);
-                            SyzygyPath[1023] = '\0';
+                            if(strcmp(str, "<empty>") == 0)
+                                debugLogPath[0] = '\0';
+                            else
+                            {
+                                strncpy(SyzygyPath, str, 1023);
+                                SyzygyPath[1023] = '\0';
+                            }
                             isPathDirty = 1;
                         }
                         break;
@@ -315,6 +339,12 @@ int main(int argc, char** argv)
                             moveFromStruct(board, m);
                         }
                     }
+                }
+
+                if(useNNUE)
+                {
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator, WHITE);
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator, BLACK);
                 }
                 break; 
             }
@@ -459,7 +489,13 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
-                printf("%d\n", hce_eval(board));
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
+                if(useNNUE)
+                {
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator, WHITE);
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator, BLACK);
+                }
+                printf("%d\n", useNNUE ? forwardPropagate(threadContext->board, threadContext->accumulator) : hce_eval(board));
                 break;
             }
             else if(strcmp(str, "tune") == 0)
@@ -541,10 +577,14 @@ int main(int argc, char** argv)
         }
     }
 
-    if(threadContext) free(threadContext);
+    if(threadContext->accumulator)
+        free(threadContext->accumulator);
+    if(threadContext) 
+        free(threadContext);
     destroy_hashTable_tt(transpositionTable);
     tb_free();
-    if(board) free(board);
+    if(board) 
+        free(board);
     disableDebugMessages();  //closes file if open.
 }
 
@@ -571,6 +611,21 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadConte
     }
 
     loadBook();
+
+    initNNUE();
+    if(useNNUE)
+    {
+        if(!context->accumulator)
+            context->accumulator = calloc(1, sizeof(accumulator));
+    }
+    else
+    {
+        if(context->accumulator)
+        {
+            free(context->accumulator);
+            context->accumulator = NULL;
+        }
+    }
     
     if(*isPathDirty)
     {
