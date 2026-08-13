@@ -131,7 +131,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     
     bitboard* board = context->board;
 
-    if(*context->abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    if(*context->abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->hardMaxNodes / threadCount))))
     {
         *context->abortFlag = 1;
         return 0;
@@ -311,7 +311,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     
     int lowestBound = alpha;
 
-    if(*context->abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->maxNodes / threadCount))))
+    if(*context->abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->hardMaxNodes / threadCount))))
     {
         *context->abortFlag = 1;
         return 0;
@@ -839,7 +839,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     }
     
     //If the pv is stable (not half-done from abortion), save it.
-    if(clock() <= context->hardEndTime && context->countedNodes < (context->maxNodes / threadCount) && *context->abortFlag == 0)
+    if(clock() <= context->hardEndTime && context->countedNodes < (context->hardMaxNodes / threadCount) && *context->abortFlag == 0)
     {
         context->score = score;
         context->completedDepth = currentDepth;
@@ -858,7 +858,7 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->maxNodes / threadCount)) 
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount)) 
             break;
 
         aspiration_window(context, currentDepth);
@@ -997,9 +997,15 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             helperThreadContext[i].hardEndTime = context->hardEndTime;
             helperThreadContext[i].softEndTime = context->softEndTime;
             helperThreadContext[i].maxDepth = context->maxDepth;
-            helperThreadContext[i].maxNodes = context->maxNodes;
+            helperThreadContext[i].hardMaxNodes = context->hardMaxNodes;
+            helperThreadContext[i].softMaxNodes = context->softMaxNodes;
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
             helperThreadContext[i].tt = context->tt;
+
+            if(useNNUE)
+            {
+                helperThreadContext[i].accumulator = calloc(1, sizeof(accumulator));
+            }
 
             memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16*sizeof(move_c));
             THREAD_START(helperThreads[i], helperThreadFunction, &helperThreadContext[i]);
@@ -1011,7 +1017,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
 
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->maxNodes / threadCount))) break;
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
         
         if(currentDepth > 7)
         {
@@ -1071,6 +1077,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         for(int i = 0; i < helperThreadCount; i++) 
         {
             THREAD_WAIT(helperThreads[i]);
+            if(useNNUE)
+            {
+                free(helperThreadContext[i].accumulator);
+            }
         }
         findBestThread(context, helperThreadContext, &bestMove, &ponderMove);
         

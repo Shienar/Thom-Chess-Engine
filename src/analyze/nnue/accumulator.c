@@ -33,7 +33,7 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, nnue_weig
     } 
 }
 
-void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
+void loadInputAccumulator(bitboard* board, accumulator* acc)
 {
     assert(board);
     assert(acc);
@@ -53,10 +53,8 @@ void loadInputAccumulator(bitboard* board, accumulator* acc, int color)
         inputs[PIECE_COUNT + PIECE_TYPE_COUNT + i] = FLIP_MASK(board->pieces[2 * i]);
     }
 
-    if(ISWHITE(color)) 
-        calculateAccumulator(&inputs[0], acc->rawAccumulator[WHITE],  weights);
-    if(ISBLACK(color))
-        calculateAccumulator(&inputs[PIECE_COUNT], acc->rawAccumulator[BLACK], weights);
+    calculateAccumulator(&inputs[0], acc->rawAccumulator[WHITE], weights);
+    calculateAccumulator(&inputs[PIECE_COUNT], acc->rawAccumulator[BLACK], weights);
 }
 
 void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove, accumulator* acc)
@@ -200,7 +198,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
         }
 
         /** Handle castled rook (Doesn't support Chess960) **/
-        if(ISKING(lastMove.piece) && abs(compactMove.startSquare - (compactMove.endSquare) == 2))
+        if(ISKING(lastMove.piece) && abs(compactMove.startSquare - compactMove.endSquare) == 2)
         {
             int castledRookFrom, castledRookTo;
             int castledRookOffset = ROOK | COLOR(lastMove.piece);
@@ -234,9 +232,9 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
             
             castledRookOffset = ISWHITE(castledRookOffset) ? PIECE(castledRookOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(castledRookOffset) / 2;
 
-            int inputNodeIndex = (PIECE_COUNT * side) + pieceOffset;
+            int inputNodeIndex = (PIECE_COUNT * side) + castledRookOffset;
             
-            uint64_t xorMask = singleBitMask(fromSq) | singleBitMask(toSq);
+            uint64_t xorMask = singleBitMask(castledRookFrom) | singleBitMask(castledRookTo);
 
             acc->inputNodes[inputNodeIndex]^=xorMask;
 
@@ -246,8 +244,8 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
             for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
             {
                 __m256i v_acc   = _mm256_loadu_si256((__m256i const*)&acc->rawAccumulator[side][j]);
-                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookFromIdx][j]);
-                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookToIdx][j]);
+                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookToIdx][j]);
+                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookFromIdx][j]);
                 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);
@@ -262,8 +260,7 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove,
     /*
     #ifndef NDEBUG
         accumulator realAccumValues = {0};
-        loadInputAccumulator(board, &realAccumValues, WHITE);
-        loadInputAccumulator(board, &realAccumValues, BLACK);
+        loadInputAccumulator(board, &realAccumValues);
         assert(memcmp(&realAccumValues.inputNodes, &acc->inputNodes, sizeof(acc->inputNodes)) == 0);
         assert(memcmp(&realAccumValues.rawAccumulator, &acc->rawAccumulator, sizeof(acc->rawAccumulator)) == 0);
     #endif

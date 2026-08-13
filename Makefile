@@ -56,9 +56,9 @@ ifeq ($(UNAME_S),Darwin)
 	LIBS += -pthread
 endif
 
-.PHONY: all clean directories weights
+.PHONY: all clean directories
 
-all: directories weights $(TARGET) 
+all: directories $(TARGET) 
 
 $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
@@ -66,18 +66,11 @@ $(TARGET): $(OBJFILES)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.s | directories
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.s import/weights.bin import/komodo.bin | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 directories:
 	@mkdir -p $(OBJ_DIRS)
-
-# If we don't have any weights, make incbin include an empty file to avoid errors.
-# NNUE eval will be disabled in the binary
-weights:
-ifeq ($(wildcard .\import\weights.nnue),)
-	touch .\import\weights.nnue
-endif
 
 clean:
 	rm -rf $(TGT_DIR)

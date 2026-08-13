@@ -4,9 +4,8 @@
 #include "types.h"
 #include "binpack/viri_binpack.h"
 
-#define MAX_POSITIONS_PER_GAME 90
-
 void generate(const char* path);
+uint32_t rng_xorshift32(uint32_t* seed);
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param);
 
 #endif

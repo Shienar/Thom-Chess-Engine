@@ -8,7 +8,7 @@
 
 int isNetworkLoaded = 1;
 int useNNUE = 1;
-nnue_weights* weights = (nnue_weights*) weights_bin_start;
+nnue_weights* weights = (nnue_weights*)weights_bin_start;
 
 void initNNUE()
 {
@@ -31,7 +31,7 @@ void initNNUE()
 
 //Lizard SCReLU.
 //https://chessprogramming.org/NNUE#lizard-screlu
-int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t weights[ACCUMULATOR_NODES], int32_t bias)
+int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t weights[ACCUMULATOR_NODES], int16_t bias)
 {
     const __m256i v_zero = _mm256_setzero_si256();
     const __m256i v_max = _mm256_set1_epi16(QA);
@@ -42,13 +42,13 @@ int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t w
     {
         __m256i v_us = _mm256_loadu_si256((const __m256i*)&inputValuesA[i]);
         __m256i v_them = _mm256_loadu_si256((const __m256i*)&inputValuesB[i]);
+
+        __m256i v_weights_us = _mm256_loadu_si256((const __m256i*)&weights[i]);
+        __m256i v_weights_them = _mm256_loadu_si256((const __m256i*)&weights[ACCUMULATOR_NODES_PER_SIDE + i]);
         
         //Clamp
         v_us = _mm256_min_epi16( _mm256_max_epi16(v_us, v_zero), v_max);
         v_them = _mm256_min_epi16( _mm256_max_epi16(v_them, v_zero), v_max);
-
-        __m256i v_weights_us = _mm256_loadu_si256((const __m256i*)&weights[i]);
-        __m256i v_weights_them = _mm256_loadu_si256((const __m256i*)&weights[ACCUMULATOR_NODES_PER_SIDE + i]);
 
 
         //SCReLU + Forward pass weight multiplication.

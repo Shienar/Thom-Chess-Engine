@@ -90,7 +90,16 @@ typedef struct {
     int writtenThisSession;
     clock_t lastPrintTime;
     clock_t startTime;
-} binpackDetails;
+} binpackDetails;  
+
+//Avoids some thread contention for writes after each individual game.
+#define MAX_POSITIONS_PER_GAME 90
+#define VIRI_WRITEBUFFER_SIZE 8
+typedef struct {
+    Viri_PackedBoard packedBoards[VIRI_WRITEBUFFER_SIZE];
+    Viri_MoveScorePair pairLists[VIRI_WRITEBUFFER_SIZE][MAX_POSITIONS_PER_GAME];
+    int movesThisGame[VIRI_WRITEBUFFER_SIZE];
+} generatedGameBuffer;
 
 extern uint8_t pieceMappingsFromViri[16];
 extern uint8_t pieceMappingsToViri[16];
@@ -105,7 +114,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
 
 int readPackedBoard(binpackDetails* details, int readerIndex);
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
-void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count);
+void binpack_writeGame(binpackDetails* details, generatedGameBuffer* buffer);
 
 void binpackPrintInfo(const char* fileName);
 int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries);

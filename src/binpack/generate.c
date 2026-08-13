@@ -2,6 +2,7 @@
 #include "analyze/book.h"
 #include "analyze/search.h"
 #include "board/bitboard.h"
+#include "analyze/nnue/neuralnet.h"
 
 binpackDetails details;
 int exitWhile;
@@ -30,8 +31,14 @@ void generate(const char* path)
         contextList[i].hardEndTime = LONG_MAX,
         contextList[i].softEndTime = LONG_MAX,
         contextList[i].maxDepth = 9;
-        contextList[i].maxNodes = 5000;
+        contextList[i].hardMaxNodes = 1000000;
+        contextList[i].softMaxNodes = 5000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
+
+        if(useNNUE)
+        {
+            contextList[i].accumulator = calloc(1, sizeof(accumulator));
+        }
 
         contextList[i].tt = create_hashTable_tt();
 
@@ -66,6 +73,11 @@ void generate(const char* path)
         destroy_hashTable_tt(contextList[i].tt);
         free(contextList[i].board);
         free(contextList[i].abortFlag);
+        
+        if(useNNUE)
+        {
+            free(contextList[i].accumulator);
+        }
     }
     
     threadCount = concurrency;
@@ -107,11 +119,11 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
     searchThreadContext* context = (searchThreadContext*) param;
     THREADTYPE searchThread = THREAD_INIT;
 
-    int movesThisGame = 0;
     int isNewGame = 1;
 
-    Viri_PackedBoard* packedBoard = calloc(1, sizeof(Viri_PackedBoard));
-    Viri_MoveScorePair* pairList = calloc(MAX_POSITIONS_PER_GAME, sizeof(Viri_MoveScorePair));
+    generatedGameBuffer* writeBuffer = calloc(1, sizeof(generatedGameBuffer));
+    int curGameIndex = 0;
+    int movesThisGame = 0;
 
     srand(time(NULL));
     uint32_t seed = rand();
@@ -123,6 +135,9 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
     while(!exitWhile)
     {
+        Viri_PackedBoard* packedBoard = &writeBuffer->packedBoards[curGameIndex];
+        Viri_MoveScorePair* pairList = writeBuffer->pairLists[curGameIndex];
+
         if(isNewGame)
         {
             load_fen_string_to_board(context->board, STARTPOS_FEN);
@@ -176,7 +191,13 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         if(packedBoard->result < UINT8_MAX)
         {
-            binpack_writeGame(&details, packedBoard, pairList, movesThisGame - 1);
+            writeBuffer->movesThisGame[curGameIndex] = movesThisGame - 1;
+            curGameIndex++;
+            if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
+            {
+                binpack_writeGame(&details, writeBuffer);
+                curGameIndex = 0;
+            }
             isNewGame = 1;
             continue;
         }
@@ -250,7 +271,13 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                 }
             }
 
-            binpack_writeGame(&details, packedBoard, pairList, movesThisGame - 1);
+            writeBuffer->movesThisGame[curGameIndex] = movesThisGame - 1;
+            curGameIndex++;
+            if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
+            {
+                binpack_writeGame(&details, writeBuffer);
+                curGameIndex = 0;
+            }
             isNewGame = 1;
             continue;
         }
@@ -258,7 +285,6 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
         newloop:
     }
 
-    free(packedBoard);
-    free(pairList);
+    free(writeBuffer);
     return 0;
 }

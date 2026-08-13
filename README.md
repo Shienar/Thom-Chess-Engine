@@ -63,7 +63,7 @@ A release version of the engine should be compiled with 'make -j'.
 ## FEATURES:
 
 ### NNUE:
-- 2 x (768 -> 128) -> 1
+- 2 x (768 -> 256) -> 1
 - Lizard SCReLU
 
 ### HCE:

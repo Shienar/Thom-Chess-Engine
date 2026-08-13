@@ -124,14 +124,14 @@ typedef struct PVar {
 
 #define INPUT_BITS (2 * 768)
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
-#define ACCUMULATOR_NODES 256
+#define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 
-typedef struct nnue_weights {
+typedef struct __attribute__((aligned(64))) nnue_weights {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
     int16_t weights2[ACCUMULATOR_NODES];
-    int32_t weights2_bias;
+    int16_t weights2_bias;
 } nnue_weights;
 
 typedef struct accumulator {
@@ -143,7 +143,7 @@ typedef struct accumulator {
 typedef struct searchThreadContext {
     //UCI Thread settings or info
     int maxDepth, seldepth, completedDepth, deepeningSkip;
-    int maxNodes, countedNodes;
+    int hardMaxNodes, softMaxNodes, countedNodes;
     clock_t startTime, softEndTime, hardEndTime;
     move_c searchedMoves[MAX_REQUIRED_MOVES];
     uint8_t* abortFlag;

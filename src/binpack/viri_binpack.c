@@ -550,28 +550,33 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
     return skippedUnusable + skippedUsable;
 }
 
-void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, Viri_MoveScorePair* pairList, int count)
+void binpack_writeGame(binpackDetails* details, generatedGameBuffer* buffer)
 {
-    packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
-    packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
-    packedBoard->whiteScore = littleEndian16(packedBoard->whiteScore);
+    for(int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
+    {
+        buffer->packedBoards[i].occupancy = littleEndian64(buffer->packedBoards[i].occupancy);
+        buffer->packedBoards[i].fullMoveCounter = littleEndian16(buffer->packedBoards[i].fullMoveCounter);
+        buffer->packedBoards[i].whiteScore = littleEndian16(buffer->packedBoards[i].whiteScore);
 
+        for(int j = 0; j < buffer->movesThisGame[i]; j++)
+        {
+            buffer->pairLists[i][j].move = littleEndian16(buffer->pairLists[i][j].move);
+            buffer->pairLists[i][j].whiteScore = littleEndian16(buffer->pairLists[i][j].whiteScore);
+        }
+    }
+    
+    uint32_t zero = 0;
     LOCK_MUTEX(details->lock);
 
-    fwrite(packedBoard, sizeof(Viri_PackedBoard), 1, details->binpack);
-
-    for(int i = 0; i < count; i++)
+    for(int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
     {
-        pairList[i].move = littleEndian16(pairList[i].move);
-        pairList[i].whiteScore = littleEndian16(pairList[i].whiteScore);
-    }
-
-    fwrite(pairList, sizeof(Viri_MoveScorePair), count, details->binpack);
-
-    uint32_t zero = 0;
-    fwrite(&zero, 4, 1, details->binpack);
-
-    details->writtenThisSession+=count + 1;
+        if(buffer->movesThisGame[i] <= 0) 
+            break;
+        fwrite(&buffer->packedBoards[i], sizeof(Viri_PackedBoard), 1, details->binpack);
+        fwrite(buffer->pairLists[i], sizeof(Viri_MoveScorePair), buffer->movesThisGame[i], details->binpack);
+        fwrite(&zero, 4, 1, details->binpack);
+        details->writtenThisSession+=buffer->movesThisGame[i] + 1;
+    } 
 
     if((clock() - details->lastPrintTime) / CLOCKS_PER_SEC > 10)
     {
@@ -579,8 +584,10 @@ void binpack_writeGame(binpackDetails* details, Viri_PackedBoard* packedBoard, V
         double duration = (double) ((details->lastPrintTime - details->startTime) / CLOCKS_PER_SEC);
         printf("\rGenerated %d positions this session (%.2f pos/sec)", details->writtenThisSession, details->writtenThisSession / duration);
     }
-
+    
     UNLOCK_MUTEX(details->lock);
+
+    memset(buffer, 0, sizeof(generatedGameBuffer));
 }
 
 void binpackPrintInfo(const char* fileName)

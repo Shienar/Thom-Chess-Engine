@@ -7,7 +7,7 @@
 /**
  * Reinitializes input nodes and accumulator based off of a bitboard.
  */
-void loadInputAccumulator(bitboard* board, accumulator* acc, int color);
+void loadInputAccumulator(bitboard* board, accumulator* acc);
 
 void updateMoveAccumulator(bitboard* board, move_d lastMove, int shouldUndoMove, accumulator* acc);
 #endif

@@ -11,9 +11,6 @@
 #include <omp.h>
 #include <string.h>
 
-//TODO: Enforce Little-endian nnue
-//TODO: Convert to simple 2x (768->128) -> 1 NNUE.
-
 #ifdef SPSA
 
 #define SET_SPA_OPTION_INT(name) \
@@ -62,7 +59,8 @@ int main(int argc, char** argv)
     searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
     threadContext->board = board;
     threadContext->maxDepth = MAX_PLY;
-    threadContext->maxNodes = INT_MAX;
+    threadContext->hardMaxNodes = INT32_MAX;
+    threadContext->softMaxNodes = INT32_MAX;
     threadContext->abortFlag = &abortFlag;
 
     THREADTYPE calculateThread = THREAD_INIT;
@@ -340,12 +338,6 @@ int main(int argc, char** argv)
                         }
                     }
                 }
-
-                if(useNNUE)
-                {
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator, WHITE);
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator, BLACK);
-                }
                 break; 
             }
             else if(strcmp(str, "go") == 0)
@@ -364,7 +356,8 @@ int main(int argc, char** argv)
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
                 isPonder = 0;
-                threadContext->maxNodes = INT32_MAX;
+                threadContext->hardMaxNodes = INT32_MAX;
+                threadContext->softMaxNodes = INT32_MAX;
                 memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move_c));
 
                 short searchedMoveCount = 0;
@@ -385,7 +378,7 @@ int main(int argc, char** argv)
                     else if(strcmp(str, "depth") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         sscanf(str, "%d", &threadContext->maxDepth);
                     else if(strcmp(str, "nodes") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &threadContext->maxNodes);
+                        sscanf(str, "%d", &threadContext->hardMaxNodes);
                     else if(strcmp(str, "movetime") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         sscanf(str, "%d", &fixedMoveTime);
                     else if(strcmp(str, "searchmoves") == 0) //Assume this is the final command in list.
@@ -413,8 +406,9 @@ int main(int argc, char** argv)
                     threadContext->hardEndTime = (threadContext->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
                 }
 
+                if(useNNUE)
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator);
                 THREAD_START(calculateThread, calculateBestMove, threadContext);
-
                 break;
             }
             else if(strcmp(str, "ponderhit") == 0)
@@ -491,10 +485,7 @@ int main(int argc, char** argv)
             {
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 if(useNNUE)
-                {
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator, WHITE);
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator, BLACK);
-                }
+                    loadInputAccumulator(threadContext->board, threadContext->accumulator);
                 printf("%d\n", useNNUE ? forwardPropagate(threadContext->board, threadContext->accumulator) : hce_eval(board));
                 break;
             }
