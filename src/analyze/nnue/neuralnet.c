@@ -22,8 +22,13 @@ void initNNUE()
         for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
             weights->weights1_bias[i] = littleEndian16(weights->weights1_bias[i]);
         
-            
-        weights->weights2_bias = littleEndian32(weights->weights2_bias);
+        for(int b = 0; b < OUTPUT_BUCKETS; b++)
+        {
+            for(int i = 0; i < ACCUMULATOR_NODES; i++)
+                weights->weights2[b][i] = littleEndian16(weights->weights2[b][i]);
+
+            weights->weights2_bias[b] = littleEndian16(weights->weights2_bias[b]);
+        }
     }
     else
         useNNUE = 0;
@@ -78,12 +83,15 @@ int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t w
     return output >> (QA_RSHIFT + QB_RSHIFT);
 }
 
+const int OUTPUT_BUCKET_DIVISOR = (32 + OUTPUT_BUCKETS - 1) / OUTPUT_BUCKETS;
 int forwardPropagate(bitboard* board, accumulator* acc)
 {
+    int bucket = (__builtin_popcountll(board->pieces_all) - 2) / OUTPUT_BUCKET_DIVISOR;
+    
     int output = calculateOutputLayer(acc->rawAccumulator[board->turn], 
                                       acc->rawAccumulator[FLIP_COLOR(board->turn)], 
-                                      weights->weights2, 
-                                      weights->weights2_bias);
+                                      weights->weights2[bucket], 
+                                      weights->weights2_bias[bucket]);
 
     return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 }

@@ -65,6 +65,7 @@ A release version of the engine should be compiled with 'make -j'.
 ### NNUE:
 - 2 x (768 -> 256) -> 1
 - Lizard SCReLU
+- 8 Output Buckets
 
 ### HCE:
 - Raw Piece Values

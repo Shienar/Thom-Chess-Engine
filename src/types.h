@@ -126,12 +126,13 @@ typedef struct PVar {
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
+#define OUTPUT_BUCKETS 8
 
 typedef struct __attribute__((aligned(64))) nnue_weights {
     int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
     int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int16_t weights2[ACCUMULATOR_NODES];
-    int16_t weights2_bias;
+    int16_t weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
+    int16_t weights2_bias[OUTPUT_BUCKETS];
 } nnue_weights;
 
 typedef struct accumulator {

@@ -854,6 +854,10 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     context->completedDepth = 0;
 
     move_c bestMove = context->pv.line[0];
+    
+    if(useNNUE)
+        loadInputAccumulator(context->board, context->accumulator);
+        
     int lastScore = context->score;
 
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
@@ -1012,6 +1016,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         }
     }
     
+    if(useNNUE)
+        loadInputAccumulator(context->board, context->accumulator);
     int lastScore = 0;
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {

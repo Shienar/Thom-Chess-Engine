@@ -406,8 +406,6 @@ int main(int argc, char** argv)
                     threadContext->hardEndTime = (threadContext->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
                 }
 
-                if(useNNUE)
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator);
                 THREAD_START(calculateThread, calculateBestMove, threadContext);
                 break;
             }
@@ -491,7 +489,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "tune") == 0)
             {
-                //Format: 'tune <double forcedK (0 for auto) > <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
+                //Format: 'tune <double forcedK (0 for auto)> <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
 
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 
