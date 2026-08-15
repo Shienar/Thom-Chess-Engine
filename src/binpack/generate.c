@@ -30,14 +30,15 @@ void generate(const char* path)
         contextList[i].startTime = 0,
         contextList[i].hardEndTime = LONG_MAX,
         contextList[i].softEndTime = LONG_MAX,
-        contextList[i].maxDepth = 9;
-        contextList[i].hardMaxNodes = 1000000;
-        contextList[i].softMaxNodes = 5000;
+        contextList[i].maxDepth = MAX_PLY;
+        contextList[i].hardMaxNodes = 100000;
+        contextList[i].softMaxNodes = 10000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
 
         if(useNNUE)
         {
             contextList[i].accumulator = calloc(1, sizeof(accumulator));
+            contextList[i].refreshTable = createRefreshTable();
         }
 
         contextList[i].tt = create_hashTable_tt();
@@ -77,6 +78,7 @@ void generate(const char* path)
         if(useNNUE)
         {
             free(contextList[i].accumulator);
+            destroyRefreshTable(contextList[i].refreshTable);
         }
     }
     
@@ -176,6 +178,13 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         int whiteEval = (ISWHITE(context->board->turn)) ? context->score : - context->score;
 
+        if(movesThisGame == 0 && abs(whiteEval) > 300)
+        {
+            //Reject noisy opening.
+            isNewGame = 1;
+            continue;
+        }
+
         if(whiteEval > MIN_MATE_SCORE)
             packedBoard->result = VIRI_WHITE_WIN;
         else if(whiteEval < -MIN_MATE_SCORE)
@@ -183,11 +192,11 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
         consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
-        consecutiveDrawScores = (whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+        consecutiveDrawScores = (context->board->halfMoveCount > 40 && whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
 
         if(consecutiveHighScores > 5) packedBoard->result = VIRI_WHITE_WIN;
         else if(consecutiveLowScores > 5) packedBoard->result = VIRI_BLACK_WIN;
-        else if(consecutiveDrawScores > 5 && context->board->repetitionIndex > 40) packedBoard->result = VIRI_DRAW;
+        else if(consecutiveDrawScores > 5) packedBoard->result = VIRI_DRAW;
 
         if(packedBoard->result < UINT8_MAX)
         {

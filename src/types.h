@@ -122,10 +122,15 @@ typedef struct PVar {
 #define QA_RSHIFT 8
 #define QB_RSHIFT 6
 
-#define INPUT_BITS (2 * 768)
+#define INPUT_BITS (2 * BITS_PER_KING_BUCKET * KING_BUCKETS)
 #define HALF_INPUT_BITS (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
+
+#define KING_BUCKETS 10
+#define BITS_PER_KING_BUCKET 768
+#define BITBOARDS_PER_INPUT_SIDE (PIECE_COUNT * KING_BUCKETS)
+
 #define OUTPUT_BUCKETS 8
 
 typedef struct __attribute__((aligned(64))) nnue_weights {
@@ -136,9 +141,22 @@ typedef struct __attribute__((aligned(64))) nnue_weights {
 } nnue_weights;
 
 typedef struct accumulator {
-    uint64_t inputNodes[2 * PIECE_COUNT];
+    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
     int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
 } accumulator;
+
+/**
+ * First half of indices are on king buckets on files a-d.
+ * Second half of indices are on king buckets on files e-h.
+ * 
+ * Full refreshes won't be necessary when moving within a 
+ * king bucket on the same half of board.
+ */
+typedef struct accumulatorRefreshTable {
+    bitboard* boards[2][2 * KING_BUCKETS];
+    accumulator accumulators[2][2 * KING_BUCKETS];
+    uint8_t initialized[2][2 * KING_BUCKETS];
+} accumulatorRefreshTable;
 
 #define MAX_REQUIRED_MOVES 32
 typedef struct searchThreadContext {
@@ -157,6 +175,7 @@ typedef struct searchThreadContext {
     move_c excludedMove;
     
     accumulator* accumulator;
+    accumulatorRefreshTable* refreshTable;
     
     //Improving heuristic
     int evalHistory[MAX_PLY];

@@ -64,8 +64,11 @@ A release version of the engine should be compiled with 'make -j'.
 
 ### NNUE:
 - 2 x (768 -> 256) -> 1
+    - 10 King Input Buckets
+        - Accumulator Refresh Tables
+        - Horizontal Mirroring
+    - 8 Output Buckets
 - Lizard SCReLU
-- 8 Output Buckets
 
 ### HCE:
 - Raw Piece Values

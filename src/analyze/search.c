@@ -226,14 +226,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
 
             move_d lastMove = board->history[board->historyIndex - 1];
             if(useNNUE)
-                updateMoveAccumulator(board, lastMove, 0, context->accumulator);
+                updateMoveAccumulator(board, lastMove, 0, context->accumulator, context->refreshTable);
 
             int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
 
             unmove(board);
 
             if(useNNUE)
-                updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+                updateMoveAccumulator(board, lastMove, 1, context->accumulator, context->refreshTable);
 
             
 
@@ -475,7 +475,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         
                         move_d lastMove = board->history[board->historyIndex - 1];
                         if(useNNUE)
-                            updateMoveAccumulator(board, lastMove, 0, context->accumulator);
+                            updateMoveAccumulator(board, lastMove, 0, context->accumulator, context->refreshTable);
 
                         probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
                         if(probCutScore >= pBeta)
@@ -484,7 +484,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         unmove(board);
 
                         if(useNNUE)
-                            updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+                            updateMoveAccumulator(board, lastMove, 1, context->accumulator, context->refreshTable);
 
 
                         if(probCutScore >= pBeta)
@@ -559,7 +559,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             
             move_d lastMove = board->history[board->historyIndex - 1];
             if(useNNUE)
-                updateMoveAccumulator(board, lastMove, 0, context->accumulator);
+                updateMoveAccumulator(board, lastMove, 0, context->accumulator, context->refreshTable);
             
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
 
@@ -572,7 +572,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     shouldSkipQuiets = 1;
                     unmove(board);
                     if(useNNUE)
-                        updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+                        updateMoveAccumulator(board, lastMove, 1, context->accumulator, context->refreshTable);
                     continue;
                 }
             }
@@ -580,7 +580,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             {
                 unmove(board);
                 if(useNNUE)
-                    updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+                    updateMoveAccumulator(board, lastMove, 1, context->accumulator, context->refreshTable);
                 continue;
             }
 
@@ -619,7 +619,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             
             unmove(board);
             if(useNNUE)
-                updateMoveAccumulator(board, lastMove, 1, context->accumulator);
+                updateMoveAccumulator(board, lastMove, 1, context->accumulator, context->refreshTable);
             
             if(score >= beta)
             {
@@ -856,7 +856,7 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     move_c bestMove = context->pv.line[0];
     
     if(useNNUE)
-        loadInputAccumulator(context->board, context->accumulator);
+        updateAccumulatorFromTable(context->board, context->accumulator, context->refreshTable);
         
     int lastScore = context->score;
 
@@ -867,10 +867,10 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
         aspiration_window(context, currentDepth);
         
-        if(currentDepth > 7)
+        if(currentDepth > 10)
         {
             if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
-                context->softEndTime -= 0.25 * (context->softEndTime - clock());
+                context->softEndTime -= 0.1 * (context->softEndTime - clock());
             else
                 context->softEndTime = context->hardEndTime;
         }
@@ -1009,6 +1009,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             if(useNNUE)
             {
                 helperThreadContext[i].accumulator = calloc(1, sizeof(accumulator));
+                helperThreadContext[i].refreshTable = createRefreshTable();
             }
 
             memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16*sizeof(move_c));
@@ -1017,7 +1018,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     }
     
     if(useNNUE)
-        loadInputAccumulator(context->board, context->accumulator);
+        updateAccumulatorFromTable(context->board, context->accumulator, context->refreshTable);
     int lastScore = 0;
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
@@ -1025,10 +1026,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
         if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
         
-        if(currentDepth > 7)
+        if(currentDepth > 10)
         {
             if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
-                context->softEndTime -= 0.25 * (context->softEndTime - clock());
+                context->softEndTime -= 0.1 * (context->softEndTime - clock());
             else
                 context->softEndTime = context->hardEndTime;
         }
@@ -1086,6 +1087,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             if(useNNUE)
             {
                 free(helperThreadContext[i].accumulator);
+                destroyRefreshTable(helperThreadContext[i].refreshTable);
             }
         }
         findBestThread(context, helperThreadContext, &bestMove, &ponderMove);

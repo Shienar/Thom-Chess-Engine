@@ -483,7 +483,7 @@ int main(int argc, char** argv)
             {
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 if(useNNUE)
-                    loadInputAccumulator(threadContext->board, threadContext->accumulator);
+                    updateAccumulatorFromTable(threadContext->board, threadContext->accumulator, threadContext->refreshTable);
                 printf("%d\n", useNNUE ? forwardPropagate(threadContext->board, threadContext->accumulator) : hce_eval(board));
                 break;
             }
@@ -568,6 +568,8 @@ int main(int argc, char** argv)
 
     if(threadContext->accumulator)
         free(threadContext->accumulator);
+    if(threadContext->refreshTable)
+        destroyRefreshTable(threadContext->refreshTable);
     if(threadContext) 
         free(threadContext);
     destroy_hashTable_tt(transpositionTable);
@@ -606,6 +608,8 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadConte
     {
         if(!context->accumulator)
             context->accumulator = calloc(1, sizeof(accumulator));
+        if(!context->refreshTable)
+            context->refreshTable = createRefreshTable();
     }
     else
     {
@@ -613,6 +617,11 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadConte
         {
             free(context->accumulator);
             context->accumulator = NULL;
+        }
+        if(context->refreshTable)
+        {
+            destroyRefreshTable(context->refreshTable);
+            context->refreshTable = NULL;
         }
     }
     
