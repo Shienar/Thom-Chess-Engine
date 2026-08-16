@@ -34,6 +34,7 @@ void generate(const char* path)
         contextList[i].hardMaxNodes = 100000;
         contextList[i].softMaxNodes = 10000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
+        contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero.
 
         if(useNNUE)
         {
@@ -119,16 +120,19 @@ uint32_t rng_xorshift32(uint32_t* seed)
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 {
     searchThreadContext* context = (searchThreadContext*) param;
-    THREADTYPE searchThread = THREAD_INIT;
 
     int isNewGame = 1;
 
     generatedGameBuffer* writeBuffer = calloc(1, sizeof(generatedGameBuffer));
+
+    for(int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
+        writeBuffer->packedBoards[i].whiteScore = INT16_MAX;
+
     int curGameIndex = 0;
     int movesThisGame = 0;
 
-    srand(time(NULL));
-    uint32_t seed = rand();
+    uint32_t seed = context->deepeningSkip;
+    context->deepeningSkip = 0;
     
     //Adjudication
     int consecutiveHighScores = 0;
@@ -146,7 +150,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
             //Play some random moves
             //Early mate is possible, goto newloop is used as a break + continue;
-            for(int i = 0; i <= 8; i++)
+            for(int i = 0; i < 8; i++)
             {
                 move_c moveList[MAX_MOVES] = {0};
                 int count = generateMoveList(moveList, context->board, 0);
@@ -171,8 +175,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         assert(context->board->pieces[WHITE_KING] && context->board->pieces[BLACK_KING]);
 
-        THREAD_START(searchThread, calculateBestMove, param);
-        THREAD_WAIT(searchThread);
+        calculateBestMove(param);
 
         move_c bestMove = context->pv.line[0];
 
@@ -192,7 +195,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
         consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
-        consecutiveDrawScores = (context->board->halfMoveCount > 40 && whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+        consecutiveDrawScores = (movesThisGame > 32 && whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
 
         if(consecutiveHighScores > 5) packedBoard->result = VIRI_WHITE_WIN;
         else if(consecutiveLowScores > 5) packedBoard->result = VIRI_BLACK_WIN;
@@ -200,8 +203,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         if(packedBoard->result < UINT8_MAX)
         {
-            writeBuffer->movesThisGame[curGameIndex] = movesThisGame - 1;
-            curGameIndex++;
+            writeBuffer->movesThisGame[curGameIndex] = movesThisGame;
+            curGameIndex++; 
             if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
             {
                 binpack_writeGame(&details, writeBuffer);
@@ -238,10 +241,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
         else
             pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
 
-        if(movesThisGame == 0)
-            packedBoard->whiteScore = whiteEval;
-        else
-            pairList[movesThisGame - 1].whiteScore = whiteEval;
+        pairList[movesThisGame].whiteScore = whiteEval;
 
         movesThisGame++;
         if(movesThisGame >= MAX_POSITIONS_PER_GAME)
@@ -249,9 +249,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             //Determine game result without saving extra moves.
             do
             {
-                THREAD_START(searchThread, calculateBestMove, param);
-                THREAD_WAIT(searchThread);
-            }while(!moveFromStruct(context->board, context->pv.line[0]));
+                calculateBestMove(param);
+            } while(!moveFromStruct(context->board, context->pv.line[0]));
             goto gameover;
         }
 
@@ -280,7 +279,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                 }
             }
 
-            writeBuffer->movesThisGame[curGameIndex] = movesThisGame - 1;
+            writeBuffer->movesThisGame[curGameIndex] = movesThisGame;
             curGameIndex++;
             if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
             {

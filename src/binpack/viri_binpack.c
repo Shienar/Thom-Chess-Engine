@@ -621,7 +621,7 @@ void binpackPrintInfo(const char* fileName)
         //Printout roughly every 10,000,000 entries.
         if(recentlyRead > 10000000)
         {
-            recentlyRead = 0;
+            recentlyRead -= 10000000;
 
             uint64_t totalCount = usedCount + skippedCount;
             printf("\033[4A");

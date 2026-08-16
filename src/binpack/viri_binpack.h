@@ -94,7 +94,7 @@ typedef struct {
 
 //Avoids some thread contention for writes after each individual game.
 #define MAX_POSITIONS_PER_GAME 90
-#define VIRI_WRITEBUFFER_SIZE 8
+#define VIRI_WRITEBUFFER_SIZE 256
 typedef struct {
     Viri_PackedBoard packedBoards[VIRI_WRITEBUFFER_SIZE];
     Viri_MoveScorePair pairLists[VIRI_WRITEBUFFER_SIZE][MAX_POSITIONS_PER_GAME];
