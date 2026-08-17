@@ -419,6 +419,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
+        //Stable Eval Reduction
+        if(score >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 1] - staticScore) < 35)
+            depth--;
+
         //Futility pruning
         if(depth <= futility_pruning_depth)
         {
