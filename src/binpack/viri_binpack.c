@@ -657,7 +657,7 @@ void binpackPrintInfo(const char* fileName)
 int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries) 
 {
     char dataFileName[256];
-    const char* extension = strstr(fileName, ".viri");
+    const char* extension = strstr(fileName, ".vf");
     size_t base_len = extension - fileName;
     snprintf(dataFileName, sizeof(dataFileName), "%.*s.head", (int)base_len, fileName);
 
