@@ -38,7 +38,7 @@ void generate(const char* path)
 
         if(useNNUE)
         {
-            contextList[i].accumulator = calloc(1, sizeof(accumulator));
+            contextList[i].accumulatorStack = calloc(MAX_PLY, sizeof(accumulator));
             contextList[i].refreshTable = createRefreshTable();
         }
 
@@ -78,7 +78,7 @@ void generate(const char* path)
         
         if(useNNUE)
         {
-            free(contextList[i].accumulator);
+            free(contextList[i].accumulatorStack);
             destroyRefreshTable(contextList[i].refreshTable);
         }
     }

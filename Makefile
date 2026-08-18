@@ -6,8 +6,18 @@ CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
 ifdef DEBUG
 	CFLAGS += -g
 else
+
+ifdef VERIFY
+$(error VERIFY cannot be compiled without DEBUG)	
+endif
+
 	CFLAGS += -O3
 	CFLAGS += -DNDEBUG
+endif
+
+# NNUE validation.
+ifdef VERIFY
+	CFLAGS += -DVERIFY
 endif
 
 # Define SPSA to compile with extra uci options.

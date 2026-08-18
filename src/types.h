@@ -141,8 +141,7 @@ typedef struct __attribute__((aligned(64))) nnue_weights {
 } nnue_weights;
 
 typedef struct accumulator {
-    uint64_t inputNodes[2 * BITBOARDS_PER_INPUT_SIDE];
-    int16_t rawAccumulator[2][ACCUMULATOR_NODES_PER_SIDE]; //Unactivated values. Efficiently updateable.
+    int16_t rawValues[2][ACCUMULATOR_NODES_PER_SIDE];
 } accumulator;
 
 /**
@@ -174,7 +173,7 @@ typedef struct searchThreadContext {
     PVar pv;
     move_c excludedMove;
     
-    accumulator* accumulator;
+    accumulator* accumulatorStack;
     accumulatorRefreshTable* refreshTable;
     
     //Improving heuristic

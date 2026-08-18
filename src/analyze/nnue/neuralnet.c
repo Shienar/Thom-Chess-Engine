@@ -88,8 +88,8 @@ int forwardPropagate(bitboard* board, accumulator* acc)
 {
     int bucket = (__builtin_popcountll(board->pieces_all) - 2) / OUTPUT_BUCKET_DIVISOR;
     
-    int output = calculateOutputLayer(acc->rawAccumulator[board->turn], 
-                                      acc->rawAccumulator[FLIP_COLOR(board->turn)], 
+    int output = calculateOutputLayer(acc->rawValues[board->turn], 
+                                      acc->rawValues[FLIP_COLOR(board->turn)], 
                                       weights->weights2[bucket], 
                                       weights->weights2_bias[bucket]);
 

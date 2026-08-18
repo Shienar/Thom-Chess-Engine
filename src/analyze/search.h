@@ -9,7 +9,7 @@
 #include "analyze/hce/hce.h"
 
 extern uint8_t abortFlag;
-extern uint8_t isPonder;
+extern volatile uint8_t isPonder;
 
 extern int threadCount;
 extern int enablePonder;

@@ -483,8 +483,8 @@ int main(int argc, char** argv)
             {
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext, &board);
                 if(useNNUE)
-                    updateAccumulatorFromTable(threadContext->board, threadContext->accumulator, threadContext->refreshTable);
-                printf("%d\n", useNNUE ? forwardPropagate(threadContext->board, threadContext->accumulator) : hce_eval(board));
+                    updateAccumulatorFromTable(threadContext->board, &threadContext->accumulatorStack[0], threadContext->refreshTable);
+                printf("%d\n", useNNUE ? forwardPropagate(threadContext->board, &threadContext->accumulatorStack[0]) : hce_eval(board));
                 break;
             }
             else if(strcmp(str, "tune") == 0)
@@ -566,8 +566,8 @@ int main(int argc, char** argv)
         }
     }
 
-    if(threadContext->accumulator)
-        free(threadContext->accumulator);
+    if(threadContext->accumulatorStack)
+        free(threadContext->accumulatorStack);
     if(threadContext->refreshTable)
         destroyRefreshTable(threadContext->refreshTable);
     if(threadContext) 
@@ -606,17 +606,17 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadConte
     initNNUE();
     if(useNNUE)
     {
-        if(!context->accumulator)
-            context->accumulator = calloc(1, sizeof(accumulator));
+        if(!context->accumulatorStack)
+            context->accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
         if(!context->refreshTable)
             context->refreshTable = createRefreshTable();
     }
     else
     {
-        if(context->accumulator)
+        if(context->accumulatorStack)
         {
-            free(context->accumulator);
-            context->accumulator = NULL;
+            free(context->accumulatorStack);
+            context->accumulatorStack = NULL;
         }
         if(context->refreshTable)
         {
