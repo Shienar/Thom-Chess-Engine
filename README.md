@@ -1,4 +1,5 @@
 UCI-compliant HCE chess engine created in C.
+All NNUE data was self-generated, starting from HCE-generated data.
 The NNUE requires AVX2 SIMD instructions.
 
 ## BUILDING:
@@ -66,10 +67,10 @@ A release version of the engine should be compiled with 'make -j'.
 ### NNUE:
 - 2 x (768 -> 256) -> 1
     - 10 King Input Buckets
-        - Accumulator Refresh Tables
         - Horizontal Mirroring
     - 8 Output Buckets
 - Lizard SCReLU
+- Accumulator Refresh Tables
 - Accumulator Stack
 
 ### HCE:
@@ -106,6 +107,7 @@ A release version of the engine should be compiled with 'make -j'.
     - Killer Move Heuristic
     - History Heuristic
     - Countermove Heuristic
+    - Razoring
     - Futility Pruning
     - Reverse Futility Pruning
     - Null Move Pruning
@@ -121,6 +123,20 @@ A release version of the engine should be compiled with 'make -j'.
     - Delta Pruning
     - SEE Pruning
 
+## ELO:
+
+The engine has not been officially released yet and does not have an official rating. The current best-guess elo rating for this engine is at around 2860 CCRL.
+
+--------------------------------------------------
+Results of Thom vs Stash23 (8+0.08, 1t, 4MB - 16MB, UHO_Lichess_4852_v1.epd):
+Elo: 33.40 +/- 14.24, nElo: 39.23 +/- 16.61
+LOS: 100.00 %, DrawRatio: 40.83 %, PairsRatio: 1.39
+Games: 1680, Wins: 764, Losses: 603, Draws: 313, Points: 920.5 (54.79 %)
+Ptnml(0-2): [84, 124, 343, 125, 164], WL/DD Ratio: 9.72
+LLR: 0.54 (18.2%) (-2.94, 2.94) [0.00, 1.00]
+--------------------------------------------------
+
+
 ## ACKNOWLEDGEMENTS:
 
 - The engine currently uses the [komodo.bin](https://komodochess.com/downloads.htm) polyglot book truncated to ply 6
@@ -128,6 +144,7 @@ A release version of the engine should be compiled with 'make -j'.
 - Andrew Grant's syzygy probing tool [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) is used to probe the syzygy files.
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
 - The lichess-big3-resolved.book dataset was used for tuning the HCE.
+- [Weather Factory](https://github.com/jnlt3/weather-factory) was used for SPSA tuning.
 - The open-sourced nature of the chess programming community was very helpful for me to get past various barriers. I'd like to mention the following in particular that were the most impactful:
     - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & syzygy implementation)
     - [Alexandria](https://github.com/PGG106/Alexandria) (For search implementation)

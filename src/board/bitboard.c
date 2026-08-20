@@ -6,14 +6,14 @@
 #include <math.h>
 
 uint64_t board_file[COLUMN_COUNT] = {
-    (0x0101010101010101 << 0),
-    (0x0101010101010101 << 1),
-    (0x0101010101010101 << 2),
-    (0x0101010101010101 << 3),
-    (0x0101010101010101 << 4),
-    (0x0101010101010101 << 5),
-    (0x0101010101010101 << 6),
-    (0x0101010101010101 << 7)
+    (0x0101010101010101ULL << 0),
+    (0x0101010101010101ULL << 1),
+    (0x0101010101010101ULL << 2),
+    (0x0101010101010101ULL << 3),
+    (0x0101010101010101ULL << 4),
+    (0x0101010101010101ULL << 5),
+    (0x0101010101010101ULL << 6),
+    (0x0101010101010101ULL << 7)
 };
 
 uint64_t board_rank[ROW_COUNT] = {
@@ -40,18 +40,18 @@ uint64_t bordering_files[COLUMN_COUNT] = {
 
 void getSquareName(int square, char* target)
 {
+    assert(target);
     assert(square >= 0 && square <= 63);
     
     //Output example: e4
-    char squareName[3] = {'\0'};
-    squareName[0] = columnNames[getColumn(square)];
-    squareName[1] = ('1' + getRow(square));
-    strncpy(target, squareName, 3);
+    target[0] = columnNames[getColumn(square)];
+    target[1] = '1' + getRow(square);
+    target[2] = '\0';
 }
 
 int getSquareNumber(char* squareName)
-{
-    return ((squareName[0] - 97) + 8*(squareName[1] - '0' - 1));
+{ 
+    return ((squareName[0] - 'a') + 8*(squareName[1] - '0' - 1));
 }
 
 int popLSB(uint64_t *bitboard)

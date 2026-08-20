@@ -77,7 +77,6 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
         .hashCode = tt->array[index].hashCode
     };
 
-
     if(existingEntry.hashCode)
     {
         //Don't overwrite existing with unknown nodes

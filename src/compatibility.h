@@ -38,13 +38,6 @@
     #define UNLOCK_MUTEX(mutex) LeaveCriticalSection(&mutex)
     #define DESTROY_MUTEX(mutex) DeleteCriticalSection(&mutex)
 
-    #define cond_t CONDITION_VARIABLE
-    #define CREATE_COND_VARIABLE(c) InitializeConditionVariable(&c)
-    #define SIGNAL_COND_VARIABLE(c) WakeConditionVariable(&c)
-    #define BROADCAST_COND_VARIABLE(c) WakeAllConditionVariable(&c)
-    #define WAIT_COND_VARIABLE(c, m) SleepConditionVariableCS(&c, &m, INFINITE)
-    #define DESTROY_COND_VARIABLE(c)
-
     typedef struct {
         HANDLE file_handle;
         HANDLE mapping_handle;
@@ -87,13 +80,6 @@
     #define LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
     #define UNLOCK_MUTEX(mutex) pthread_mutex_unlock(&mutex)
     #define DESTROY_MUTEX(mutex) pthread_mutex_destroy(&mutex)
-    
-    #define cond_t pthread_cond_t 
-    #define CREATE_COND_VARIABLE(c) pthread_cond_init(&c, NULL)
-    #define SIGNAL_COND_VARIABLE(c) pthread_cond_signal(&c)
-    #define BROADCAST_COND_VARIABLE(c) pthread_cond_broadcast(&c)
-    #define WAIT_COND_VARIABLE(c, m) pthread_cond_wait(&c, &m)
-    #define DESTROY_COND_VARIABLE(c) pthread_cond_destroy(&c)
 
     typedef struct {
         int fd;

@@ -23,7 +23,7 @@ void loadBook()
 
 move_c getBookMove(bitboard* board)
 {
-    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook || board->repetitionIndex > MAX_BOOK_PLY) return (move_c) {0};
+    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook || board->halfMoveCount > MAX_BOOK_PLY) return (move_c) {0};
     uint64_t polyglotKey = board->hashCode;
     
     move_c potentialMoves[MAX_MOVES] = {0};
@@ -68,11 +68,11 @@ move_c getBookMove(bitboard* board)
             if(ISKING(piece))
             {
                 if(tempMove->startSquare - tempMove->endSquare == 4) tempMove->endSquare+=2;
-                if(tempMove->startSquare - tempMove->endSquare == -3) tempMove->endSquare-=1;
+                else if(tempMove->startSquare - tempMove->endSquare == -3) tempMove->endSquare-=1;
             }
 
             moveCount++;
-            if(moveCount >= 512) break;
+            if(moveCount >= MAX_MOVES) break;
         }
     }
 
@@ -81,6 +81,5 @@ move_c getBookMove(bitboard* board)
 
     //Ignore weight and pick a random book move.
     //Book moves are for opening variety instead of strength.
-    int selectedIndex = rand()%moveCount;
-    return potentialMoves[selectedIndex];
+    return potentialMoves[rand() % moveCount];
 }

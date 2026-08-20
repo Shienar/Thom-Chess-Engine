@@ -7,7 +7,6 @@
 
 
 #if defined(_WIN32) || defined(_WIN64)
-
 //Readers only.
 int mmap_open(const char* filename, mmap_handle_t* handle) 
 {
@@ -522,7 +521,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
                 {
                     board_print(rDetails->board, 1);
                     printf("Move error detected within binpack:\n");
-                    printf("\tOffset: 0x%llx\n", rDetails->current_ptr - details->start_ptr);
+                    printf("\tOffset: 0x%" PRIx64 "\n", rDetails->current_ptr - details->start_ptr);
                     printf("\tMove: %d->%d | Type=%d | Promote=%d", pair.move.startSquare, pair.move.endSquare, pair.move.moveType, pair.move.promotePiece);
                     exit(1);
                 }
@@ -654,6 +653,7 @@ void binpackPrintInfo(const char* fileName)
 }
 
 //Doesn't yet handle the 0-bitboard special entries.
+//Creates a header file with byte offsets that can be used to safely jump around within the file.
 int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries) 
 {
     char dataFileName[256];

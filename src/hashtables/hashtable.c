@@ -213,7 +213,6 @@ const uint64_t zobrist_keys[781] = {
    0xF8D626AAAF278509ull,
 };
 
-uint64_t zobrist_piece_keys[PIECE_COUNT][64];
 /**
  * - Indexes 0-767 are for piece-square values.
  *  - Index = 64 * piece type + square
@@ -235,6 +234,7 @@ uint64_t zobrist_piece_keys[PIECE_COUNT][64];
  *      be using.
  * 
  */
+uint64_t zobrist_piece_keys[PIECE_COUNT][64];
 void initZobristPieceKeys()
 {
     for(int piece = 0; piece < PIECE_COUNT; piece++)

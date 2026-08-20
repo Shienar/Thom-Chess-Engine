@@ -5,8 +5,7 @@
 #include <stdint.h>
 
 /**
- * I'm replacing my old zobrist hashing value generation with polyglot's for convenience when
- * accessing opening books.
+ * Using polyglot's zobrist keys.
  * 
  * Documentation is at http://hgm.nubati.net/book_format.html
  */

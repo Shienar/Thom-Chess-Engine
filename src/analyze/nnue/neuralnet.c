@@ -15,20 +15,10 @@ void initNNUE()
     isNetworkLoaded = (weights_bin_end - weights_bin_start) > 0;
     if(isNetworkLoaded)
     {
-        for(int i = 0; i < HALF_INPUT_BITS; i++)
-            for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-                weights->weights1[i][j] = littleEndian16(weights->weights1[i][j]);
-                
-        for(int i = 0; i < ACCUMULATOR_NODES_PER_SIDE; i++)
-            weights->weights1_bias[i] = littleEndian16(weights->weights1_bias[i]);
-        
-        for(int b = 0; b < OUTPUT_BUCKETS; b++)
-        {
-            for(int i = 0; i < ACCUMULATOR_NODES; i++)
-                weights->weights2[b][i] = littleEndian16(weights->weights2[b][i]);
-
-            weights->weights2_bias[b] = littleEndian16(weights->weights2_bias[b]);
-        }
+        const size_t parameterCount = sizeof(nnue_weights) / sizeof(int16_t);
+        int16_t* ptr = (int16_t*) weights;
+        for(int i = 0; i < parameterCount; i++)
+            ptr[i] = littleEndian16(ptr[i]);
     }
     else
         useNNUE = 0;
@@ -54,7 +44,6 @@ int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t w
         //Clamp
         v_us = _mm256_min_epi16( _mm256_max_epi16(v_us, v_zero), v_max);
         v_them = _mm256_min_epi16( _mm256_max_epi16(v_them, v_zero), v_max);
-
 
         //SCReLU + Forward pass weight multiplication.
         __m256i v_us_output = _mm256_madd_epi16(_mm256_mullo_epi16(v_weights_us, v_us ), v_us);

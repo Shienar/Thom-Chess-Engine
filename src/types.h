@@ -84,7 +84,7 @@ typedef struct bitboard {
      * flags&16 == in_check_w
      * flags&32 == in_check_b
      * flags&64 == in book.
-     */ 
+     */
     uint8_t flags;
 
     uint8_t turn;
@@ -115,6 +115,7 @@ typedef struct magic {
 typedef struct PVar {
     int length;
     move_c line[MAX_PLY];
+    uint64_t hashCodes[MAX_PLY];
 } PVar;
 
 #define QA 255
