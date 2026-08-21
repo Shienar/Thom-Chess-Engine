@@ -173,6 +173,7 @@ typedef struct searchThreadContext {
     hashtable_tt* tt;
     PVar pv;
     move_c excludedMove;
+    uint8_t excludedPly;
     
     accumulator* accumulatorStack;
     accumulatorRefreshTable* refreshTable;

@@ -431,14 +431,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
-        //Razoring
-        if(score + razoring_a * depth * depth + razoring_b <= alpha)
-        {
-            int qScore = quiescentSearch(context, alpha - 1, alpha, ply);
-            if(qScore < alpha)
-                return qScore;
-        }
-
         //Stable Eval Reduction
         if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_reduction_val)
             depth--;
@@ -457,6 +449,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int reducedVal = context->improving[ply] ? score - reverse_futility_margin_improving * depth : score - reverse_futility_margin * depth;
             if(reducedVal >= beta) 
                 return reducedVal;
+        }
+
+        //Razoring
+        if(score + razoring_a * depth * depth + razoring_b <= alpha)
+        {
+            int qScore = quiescentSearch(context, alpha - 1, alpha, ply);
+            if(qScore < alpha)
+                return qScore;
         }
 
         //Null move pruning
@@ -558,6 +558,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 int sDepth = depth / 2 + 1;
 
                 context->excludedMove = *tt_move;
+                context->excludedPly = ply;
                 int singularScore = principalVariationSearch(context, sBeta - 1, sBeta, sDepth, ply, &childPV, cutNode);
                 context->excludedMove.raw = 0;
 
@@ -613,7 +614,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(useNNUE)
                 updateMoveAccumulator(board, board->history[board->historyIndex - 1], &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
-            if(pvNode && validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
+            if(pvNode && (validMovesVisited == 0 || score > alpha)) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
             else
             {
                 //Scout
@@ -707,14 +708,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
         destroy_move_iterator(iter);
         
-        new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ( (bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
-        new_tt_entry.evaluation = bestScore;
-        new_tt_entry.bestMove = bestMove.raw;
-        transposition_table_set(context->tt, new_tt_entry, ply);
     }
     
     if(!iter || validMovesVisited == 0)
     {
+        //We know its not a (stale-)mate position if an excluded move exists at this ply.
+        if(context->excludedMove.raw && context->excludedPly == ply)
+            return alpha;
+
         int victor = getMateResult(board);
         if(victor == VICTOR_WHITE)
             return (board->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
@@ -723,6 +724,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         else
             return 0;
     }
+    
+    new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ( (bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
+    new_tt_entry.evaluation = bestScore;
+    new_tt_entry.bestMove = bestMove.raw;
+    transposition_table_set(context->tt, new_tt_entry, ply);
+
     return bestScore;
 }
 

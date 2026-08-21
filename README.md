@@ -125,16 +125,16 @@ A release version of the engine should be compiled with 'make -j'.
 
 ## ELO:
 
-The engine has not been officially released yet and does not have an official rating. The current best-guess elo rating for this engine is at around 2860 CCRL.
+The engine has not been officially released yet and does not have an official rating. The current best-guess elo rating for this engine is at around 2910 CCRL.
 
 ```
 --------------------------------------------------
-Results of Thom vs Stash23 (8+0.08, 1t, 4MB - 16MB, UHO_Lichess_4852_v1.epd):
-Elo: 33.40 +/- 14.24, nElo: 39.23 +/- 16.61
-LOS: 100.00 %, DrawRatio: 40.83 %, PairsRatio: 1.39
-Games: 1680, Wins: 764, Losses: 603, Draws: 313, Points: 920.5 (54.79 %)
-Ptnml(0-2): [84, 124, 343, 125, 164], WL/DD Ratio: 9.72
-LLR: 0.54 (18.2%) (-2.94, 2.94) [0.00, 1.00]
+Results of Thom vs Stash25 (8+0.08, 1t, 4MB, UHO_Lichess_4852_v1.epd):
+Elo: -26.46 +/- 12.91, nElo: -31.33 +/- 15.23
+LOS: 0.00 %, DrawRatio: 41.40 %, PairsRatio: 0.71
+Games: 2000, Wins: 742, Losses: 894, Draws: 364, Points: 924.0 (46.20 %)
+Ptnml(0-2): [169, 174, 414, 126, 117], WL/DD Ratio: 11.94
+LLR: -0.52 (-17.7%) (-2.94, 2.94) [0.00, 1.00]
 --------------------------------------------------
 ```
 
