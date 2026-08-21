@@ -348,7 +348,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     };
     uint8_t hit;
     table_entry_tt old_tt_entry = transposition_table_get(board, context->tt, &hit, ply);
-    if(hit) 
+    if(hit && context->excludedMove.raw && old_tt_entry.bestMove == context->excludedMove.raw)
+        hit = 0;
+
+    if(hit)
     {
         if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha))
         {
@@ -401,7 +404,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!hit) 
     {
-        if(inCheck) score = -INT32_MAX;
+        if(inCheck) score = -SCORE_WIN;
         else
         {
             score = evaluate(context, ply);
@@ -534,7 +537,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                                                 context->historyTable, context->killerMoves[ply], 
                                                 counterMove, followUpMove);
     int validMovesVisited = 0;
-    int bestScore = -INT32_MAX;
+    int bestScore = -SCORE_WIN;
     if(iter)
     {
         move_c* currentMove;
@@ -806,7 +809,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
     if(currentDepth < min_aspiration_depth)
     {
-        score = principalVariationSearch(context, -INT32_MAX, INT32_MAX, currentDepth, 0, &tempPV, 0);
+        score = principalVariationSearch(context, -SCORE_WIN, SCORE_WIN, currentDepth, 0, &tempPV, 0);
         context->completedDepth = currentDepth;
     }
     else
@@ -838,8 +841,8 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
             if(aspiration_margin > maximum_aspiration_margin)
             {
-                alpha = -INT32_MAX;
-                beta = INT32_MAX;
+                alpha = -SCORE_WIN;
+                beta = SCORE_WIN;
             }
         }
     }
