@@ -1,7 +1,7 @@
 #ifndef TRANSPOSITIONTABLE
 #define TRANSPOSITIONTABLE
 
-#include "hashtables/hashtable.h"
+#include "hashtables/hash.h"
 
 extern uint64_t tt_size_entries;
 

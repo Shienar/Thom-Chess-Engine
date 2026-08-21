@@ -1,4 +1,4 @@
-#include "hashtables/hashtable.h"
+#include "hashtables/hash.h"
 #include "board/bitboard.h"
 #include "debug.h"
 #include <string.h>

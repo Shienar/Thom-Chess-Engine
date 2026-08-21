@@ -22,6 +22,9 @@ extern int initial_aspiration_margin;
 extern int maximum_aspiration_margin;
 extern float aspiration_margin_mult_factor;
 
+extern int razoring_a;
+extern int razoring_b;
+
 extern int delta_pruning_offset;
 
 extern int futility_margin;
@@ -47,6 +50,8 @@ extern float lmp_a;
 extern float lmp_b;
 extern float lmp_improving_a;
 extern float lmp_improving_b;
+
+extern int stable_eval_reduction_val;
 
 
 void initSearchTables();

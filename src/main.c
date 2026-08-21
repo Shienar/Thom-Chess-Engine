@@ -76,7 +76,7 @@ int main(int argc, char** argv)
             {
                 printf("id name ChessBot 0.1\n");
                 printf("id author Grant Vizaniaris\n");
-                printf("option name Hash type spin default 4 min 1 max 4096\n");
+                printf("option name Hash type spin default 256 min 1 max 4096\n");
                 printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
                 printf("option name OwnBook type check default false\n");
@@ -90,7 +90,9 @@ int main(int argc, char** argv)
                 printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
                 printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
 
-                
+                printf("option name razoring_a type spin default %d min 25 max 250\n", razoring_a);
+                printf("option name razoring_b type spin default %d min 25 max 250\n", razoring_b);
+
                 printf("option name delta_pruning_offset type spin default %d min 10 max 200\n", delta_pruning_offset);
 
                 printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
@@ -117,6 +119,8 @@ int main(int argc, char** argv)
                 printf("option name lmp_b type spin default %d min 500 max 7000\n", (int) (lmp_b * 1000));
                 printf("option name lmp_improving_a type spin default %d min 500 max 7000\n", (int) (lmp_improving_a * 1000));
                 printf("option name lmp_improving_b type spin default %d min 500 max 7000\n", (int) (lmp_improving_b * 1000));
+                
+                printf("option name stable_eval_reduction_val type spin default %d min 0 max 75\n", stable_eval_reduction_val);
                 #endif
                 printf("uciok\n");
                 fflush(stdout);
@@ -259,6 +263,8 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(initial_aspiration_margin)
                     SET_SPA_OPTION_INT(maximum_aspiration_margin)
                     SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
+                    SET_SPA_OPTION_INT(razoring_a)
+                    SET_SPA_OPTION_INT(razoring_b)
                     SET_SPA_OPTION_INT(reverse_futility_margin)
                     SET_SPA_OPTION_INT(reverse_futility_margin_improving)
                     SET_SPA_OPTION_INT(futility_margin)
@@ -269,6 +275,7 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(historyPenaltyScale)
                     SET_SPA_OPTION_INT(historyPenaltyOffset)
                     SET_SPA_OPTION_INT(lowHistoryVal)
+                    SET_SPA_OPTION_INT(stable_eval_reduction_val)
                     SET_SPA_OPTION_FLOAT(lmr_a)
                     SET_SPA_OPTION_FLOAT(lmr_b)
                     SET_SPA_OPTION_FLOAT(lmp_a)

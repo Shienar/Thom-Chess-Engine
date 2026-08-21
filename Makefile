@@ -52,8 +52,8 @@ ASMFILES = $(wildcard src/incbin/*.s)
 
 OBJFILES := $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCFILES))
 ASMOBJFILES := $(patsubst $(SRC_DIR)/%.s, $(OBJ_DIR)/%.o, $(ASMFILES))
-OBJFILES += $(ASMOBJFILES)
 DEPS     := $(OBJFILES:.o=.d)
+OBJFILES += $(ASMOBJFILES)
 
 OBJ_DIRS := $(sort $(dir $(OBJFILES)))
 
@@ -83,6 +83,6 @@ directories:
 	@mkdir -p $(OBJ_DIRS)
 
 clean:
-	rm -rf $(TGT_DIR)
+	rm -f $(OBJFILES) $(DEPS) $(TARGET)
 
 -include $(DEPS)

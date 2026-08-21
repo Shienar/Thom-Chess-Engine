@@ -33,6 +33,10 @@ const int tt_reduction_min_depth_offset = 3;
 const int lmr_depth = 4;
 const int singular_extension_depth = 7;
 
+//ax^2 + b
+int razoring_a = 122;
+int razoring_b = 63;
+
 int initial_aspiration_margin = 38;
 int maximum_aspiration_margin = 150;
 float aspiration_margin_mult_factor = 2.0f;
@@ -54,6 +58,8 @@ int historyPenaltyScale = 392;
 int historyPenaltyOffset = 131;
 
 int lowHistoryVal = -123;
+
+int stable_eval_reduction_val = 39;
 
 //a * log(depth) * log(moveCount) / b
 float lmr_a = 0.649f;
@@ -281,7 +287,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int inCheck = IS_IN_CHECK_ANY(board->flags);
     
     move_c* counterMove = NULL;
-    if(board->repetitionIndex >= 1)
+    if(board->historyIndex >= 1)
     {
         move_c compact;
         compact.raw = board->history[board->historyIndex - 1].compactMove;
@@ -292,7 +298,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
 
     move_c* followUpMove = NULL;
-    if(board->repetitionIndex >= 2)
+    if(board->historyIndex >= 2)
     {
         move_c compact;
         compact.raw = board->history[board->historyIndex - 2].compactMove;
@@ -423,7 +429,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
         //Razoring
-        if(depth <= 1 && score + 100 <= alpha)
+        if(score + razoring_a * depth * depth + razoring_b <= alpha)
         {
             int qScore = quiescentSearch(context, alpha - 1, alpha, ply);
             if(qScore < alpha)
@@ -431,27 +437,23 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
 
         //Stable Eval Reduction
-        if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < 35)
+        if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_reduction_val)
             depth--;
 
         //Futility pruning
         if(depth <= futility_pruning_depth)
         {
-            int boostedVal;
-            if(context->improving[ply]) boostedVal = score + futility_margin_improving;
-            else boostedVal = score + futility_margin;
-
-            if(boostedVal <= alpha) return boostedVal;
+            int boostedVal = context->improving[ply] ? score + futility_margin_improving : score + futility_margin;
+            if(boostedVal <= alpha) 
+                return boostedVal;
         }
 
         //Reverse Futility Pruning
         if(depth <= reverse_futility_pruning_depth)
         {
-            int reducedVal;
-            if(context->improving[ply]) reducedVal = score - reverse_futility_margin_improving * depth;
-            else reducedVal = score - reverse_futility_margin * depth;
-
-            if(reducedVal >= beta) return reducedVal;
+            int reducedVal = context->improving[ply] ? score - reverse_futility_margin_improving * depth : score - reverse_futility_margin * depth;
+            if(reducedVal >= beta) 
+                return reducedVal;
         }
 
         //Null move pruning
@@ -570,9 +572,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(moveFromStruct(board, *currentMove)) 
                 continue;
             
-            if(useNNUE)
-                updateMoveAccumulator(board, board->history[board->historyIndex - 1], &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
-            
             int isQuietMove = (!IS_IN_CHECK_ANY(board->flags) && !isCapture && !currentMove->promoteTo);
 
             //Quiet move pruning.
@@ -607,6 +606,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             //History Reduction
             if(!pvNode && isQuietMove && iter->moveScores[iter->visitedCount] < lowHistoryVal)
                 next_depth--;
+
+            if(useNNUE)
+                updateMoveAccumulator(board, board->history[board->historyIndex - 1], &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
             if(pvNode && validMovesVisited == 0) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
             else
@@ -668,7 +670,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
 
                         //Countermove heuristic
-                        if(board->repetitionIndex >= 2)
+                        if(board->historyIndex >= 2)
                         {
                             move_c compact;
                             compact.raw = board->history[board->historyIndex - 2].compactMove;
@@ -679,7 +681,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         }
                         
                         //Follow-up Move heuristic
-                        if(board->repetitionIndex >= 3)
+                        if(board->historyIndex >= 3)
                         {
                             move_c compact;
                             compact.raw = board->history[board->historyIndex - 3].compactMove;
@@ -842,8 +844,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         }
     }
     
-    //If the pv is stable (not half-done from abortion), save it.
-    if(clock() <= context->hardEndTime && context->countedNodes < (context->hardMaxNodes / threadCount) && *context->abortFlag == 0)
+    if(*context->abortFlag == 0)
     {
         context->score = score;
         context->completedDepth = currentDepth;

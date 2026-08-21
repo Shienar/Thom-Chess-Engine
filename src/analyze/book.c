@@ -2,7 +2,7 @@
 #include "analyze/book.h"
 #include "debug.h"
 #include "board/bitboard.h"
-#include "hashtables/hashtable.h"
+#include "hashtables/hash.h"
 #include <stdint.h>
 
 int initBook = 0;
