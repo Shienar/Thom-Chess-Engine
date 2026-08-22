@@ -36,10 +36,10 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 
 #define TT_MOVE_SCORE 32000
 #define PV_MOVE_SCORE 31999
-#define CAPTURE_SCORE 31000 //+- min bound, max bound is +- 31900, since queen has SEE weight of 900
-#define KILLER_1_SCORE 30999
-#define KILLER_2_SCORE 30998
-#define PROMOTION_SCORE 30997
+#define CAPTURE_SCORE 30100 //+- min bound, max bound is 31800 (Captured queen, promote to queen, promote from pawn. 30100 + 900 + 900 - 100)
+#define KILLER_1_SCORE 30099
+#define KILLER_2_SCORE 30098
+#define PROMOTION_SCORE 30080
 #define MAX_HISTORY_SCORE 30000 //+- max bound
 #define COUNTERMOVE_BONUS 10000 //added to history score
 #define FOLLOWUPMOVE_BONUS 9000 //added to history score

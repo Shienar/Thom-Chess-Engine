@@ -24,7 +24,6 @@ volatile uint8_t isPonder = 0;
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
 const int futility_pruning_depth = 2;
-const int quiet_futility_pruning_depth = 8;
 const int nullmove_pruning_depth = 5;
 const int probcut_depth = 8;
 const int probcut_depth_reduction = 4;
@@ -59,7 +58,7 @@ int historyPenaltyOffset = 131;
 
 int lowHistoryVal = -123;
 
-int stable_eval_reduction_val = 39;
+int stable_eval_margin = 39;
 
 //a * log(depth) * log(moveCount) / b
 float lmr_a = 0.649f;
@@ -224,19 +223,27 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
                                                 NULL, tt_move, 
                                                 NULL, NULL,
                                                 NULL, NULL);
+
+    int validMovesVisited = 0;
     move_c bestMove = {0};
     if(iter)
     {
         move_c* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            int moveScore = iter->moveScores[iter->visitedCount - 1];
-            //SEE pruning
-            if(moveScore < -CAPTURE_SCORE - 50)
-                continue;
+            int moveScore = iter->moveScores[iter->visitedCount - 1]; 
 
             if(moveFromStruct(board, *currentMove)) 
                 continue;
+
+            //SEE pruning
+            if(!IS_IN_CHECK_ANY(board->flags) && moveScore < -CAPTURE_SCORE - 50)
+            {
+                unmove(board);
+                continue;
+            }
+
+            validMovesVisited++;
 
             if(useNNUE)
                 updateMoveAccumulator(board, board->history[board->historyIndex - 1], &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
@@ -260,19 +267,22 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         destroy_move_iterator(iter);
     }
     
-    table_entry_tt shallowEntry = {
-        .depth = 0,
-        .hashCode = board->hashCode,
-        .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ( (best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
-        .evaluation = best,
-        .age = board->halfMoveCount,
-        .bestMove = bestMove.raw
-    };
-    transposition_table_set(context->tt, shallowEntry, ply);
+    if(validMovesVisited > 0)
+    {
+        table_entry_tt shallowEntry = {
+            .depth = 0,
+            .hashCode = board->hashCode,
+            .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ( (best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
+            .evaluation = best,
+            .age = board->halfMoveCount,
+            .bestMove = bestMove.raw
+        };
+        transposition_table_set(context->tt, shallowEntry, ply);
+    }
     return best;
 }
 
-int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int cutNode)
+int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int pvNode, int cutNode)
 {
     assert(context);
     context->countedNodes++;
@@ -283,7 +293,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     myPV->length = 0;
     PVar childPV;
 
-    int pvNode = (beta != alpha + 1);
     int inCheck = IS_IN_CHECK_ANY(board->flags);
     
     move_c* counterMove = NULL;
@@ -432,7 +441,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(!pvNode && !inCheck && abs(score) < MIN_MATE_SCORE)
     {
         //Stable Eval Reduction
-        if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_reduction_val)
+        if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_margin)
             depth--;
 
         //Futility pruning
@@ -467,7 +476,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int r = 3 + depth / 6;
             applyNullMove(board);
             memcpy(&context->accumulatorStack[ply + 1], &context->accumulatorStack[ply], sizeof(accumulator));
-            int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, !cutNode);
+            int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, 0, !cutNode);
             revertNullMove(board);
             if(nullScore >= beta)
                 return beta;
@@ -499,7 +508,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                         probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
                         if(probCutScore >= pBeta)
-                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV, !cutNode);
+                            probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV, 0, !cutNode);
 
                         unmove(board);
 
@@ -559,11 +568,18 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                 context->excludedMove = *tt_move;
                 context->excludedPly = ply;
-                int singularScore = principalVariationSearch(context, sBeta - 1, sBeta, sDepth, ply, &childPV, cutNode);
+                int singularScore = principalVariationSearch(context, sBeta - 1, sBeta, sDepth, ply, &childPV, 0, cutNode);
                 context->excludedMove.raw = 0;
 
                 if(singularScore < sBeta)
-                    next_depth++;
+                {
+                    if(singularScore + 25 * depth < sBeta)
+                        next_depth += 3;
+                    else if(singularScore + 10 * depth < sBeta)
+                        next_depth += 2;
+                    else
+                        next_depth++;
+                }
                 //Multicut pruning, but we just take the strong singular and assume that there's going to be more.
                 else if(singularScore >= beta)
                     return singularScore;
@@ -614,21 +630,21 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(useNNUE)
                 updateMoveAccumulator(board, board->history[board->historyIndex - 1], &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
-            if(pvNode && (validMovesVisited == 0 || score > alpha)) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
+            if(pvNode && (validMovesVisited == 0 || score > alpha)) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             else
             {
                 //Scout
-                score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, 1);
+                score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, 0, 1);
 
                 //LMR Re-search
                 if(score > alpha && next_depth < depth - 1)
                 {
                     next_depth = depth - 1;
-                    score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, !cutNode);
+                    score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, 0, !cutNode);
                 }
                 
                 //PVS Re-search
-                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 0);
+                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             }
             
             unmove(board);
@@ -816,7 +832,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
     if(currentDepth < min_aspiration_depth)
     {
-        score = principalVariationSearch(context, -SCORE_WIN, SCORE_WIN, currentDepth, 0, &tempPV, 0);
+        score = principalVariationSearch(context, -SCORE_WIN, SCORE_WIN, currentDepth, 0, &tempPV, 1, 0);
         context->completedDepth = currentDepth;
     }
     else
@@ -827,7 +843,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
         int beta = context->score + aspiration_margin;
         while(1)
         {
-            score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 0);
+            score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 1, 0);
 
             if(score <= alpha)
             {

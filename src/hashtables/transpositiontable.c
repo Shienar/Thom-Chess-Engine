@@ -87,7 +87,11 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
         if(entry.hashCode == (existingEntry.hashCode ^ existingEntry.data))
         {
             if(existingEntry.depth >= entry.depth + 2)
+            {
+                if(!IS_VALID_MOVE(((move_c) existingEntry.bestMove)))
+                    existingEntry.bestMove = entry.bestMove;
                 return;
+            }
             
             if(!IS_VALID_MOVE(((move_c) entry.bestMove)))
                 entry.bestMove = existingEntry.bestMove;

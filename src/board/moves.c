@@ -350,9 +350,12 @@ int staticExchangeEvaluation(bitboard* board, move_d m)
     int ply = 0;
 
     int side = COLOR(m.piece);
+    int promoteTo = ((move_c)m.compactMove).promoteTo;
 
     //Handle the initial capture
     gain[0] = pieceValuesSEE[m.capturedPiece];
+    if(promoteTo)
+        gain[0] += pieceValuesSEE[promoteTo] - pieceValuesSEE[PAWN];
 
     uint64_t removedMask = singleBitMask(((move_c)m.compactMove).startSquare);
 
