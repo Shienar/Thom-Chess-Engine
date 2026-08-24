@@ -11,38 +11,23 @@
 #define singleBitMask(x) (1ull << (x))
 #define MAX_MOVES 218
 
-//Compact move contains the bare minimum move information.
-typedef union move_c {
+typedef union move {
     uint16_t raw;
     struct {
         uint16_t startSquare : 6;
         uint16_t endSquare   : 6;
         uint16_t promoteTo   : 4;
     };
-} move_c;
-
-//Detailed move contains information necessary for unmoving. 
-typedef union move_d {
-    uint64_t raw;
-    struct {
-        uint64_t compactMove                    : 16;
-        uint64_t piece                          :  4;
-        uint64_t capturedPiece                  :  4;
-        uint64_t prevEnPassantSquare            :  7;
-        uint64_t previousMovesSinceLastChange   :  7;
-        uint64_t prevFlags                      :  6;
-        uint64_t lastChangeIndex                : 16;
-    };
-} move_d;
+} move;
 
 typedef struct moveIterator {
-    move_c* moveList;
+    move* moveList;
     int16_t* moveScores;
     uint8_t count;
     uint8_t visitedCount;
 } moveIterator;
 
-typedef struct table_entry_tt {
+typedef struct tt_entry {
     uint64_t hashCode;
     union {
         uint64_t data;
@@ -54,12 +39,18 @@ typedef struct table_entry_tt {
             uint8_t nodeType;
         };
     };
-} table_entry_tt;
+} tt_entry;
 
 typedef struct hashtable_tt {
-    table_entry_tt* array;
+    tt_entry* array;
     size_t capacity;
+    size_t usedSlots;
 } hashtable_tt;
+
+typedef struct {
+    uint64_t* hashCodes;
+    int capacity;
+} repetitionVector;
 
 //a1 = 0, h1 = 7
 //...
@@ -68,41 +59,26 @@ typedef struct hashtable_tt {
 #define PIECE_TYPE_COUNT 6
 #define MAX_PLY 40
 typedef struct bitboard {
+    uint64_t hashCode;
     uint64_t pieces[PIECE_COUNT];
-
     uint64_t pieces_side[2];
     uint64_t pieces_all;
 
-    uint8_t pieceArr[64];
-    uint8_t kingSquare[2];
-
-    /**
-     * flags&1 == canKingsideCastle_w
-     * flags&2 == canQueensideCastle_w 
-     * flags&4 == canKingsideCastle_b
-     * flags&8 == canQueensideCastle_b
-     * flags&16 == in_check_w
-     * flags&32 == in_check_b
-     * flags&64 == in book.
-     */
-    uint8_t flags;
-
-    uint8_t turn;
-
-    uint8_t movesSinceLastChange;
-
-    move_d history[MAX_PLY];
-    uint8_t historyIndex;
-    uint64_t repetitionHashCodes[4096];
-    uint16_t repetitionIndex;
+    uint16_t halfMoveCount;
     uint16_t lastChangeIndex;
 
-    //A pawn can capture to this square.
+    uint8_t pieceArr[64];
+    uint8_t kingSquare[2];
+    uint8_t halfmoveClock;
     int8_t enPassantSquare;
 
-    uint16_t halfMoveCount;
-
-    uint64_t hashCode;
+    uint8_t canKingsideCastle_w  : 1;
+    uint8_t canQueensideCastle_w : 1;
+    uint8_t canKingsideCastle_b  : 1;
+    uint8_t canQueensideCastle_b : 1;
+    uint8_t in_check             : 1;
+    uint8_t in_book              : 1;
+    uint8_t turn                 : 1;
 } bitboard;
 
 typedef struct magic {
@@ -114,7 +90,7 @@ typedef struct magic {
 
 typedef struct PVar {
     int length;
-    move_c line[MAX_PLY];
+    move line[MAX_PLY];
     uint64_t hashCodes[MAX_PLY];
 } PVar;
 
@@ -153,7 +129,7 @@ typedef struct accumulator {
  * king bucket on the same half of board.
  */
 typedef struct accumulatorRefreshTable {
-    bitboard* boards[2][2 * KING_BUCKETS];
+    bitboard boards[2][2 * KING_BUCKETS];
     accumulator accumulators[2][2 * KING_BUCKETS];
     uint8_t initialized[2][2 * KING_BUCKETS];
 } accumulatorRefreshTable;
@@ -164,16 +140,17 @@ typedef struct searchThreadContext {
     int maxDepth, seldepth, completedDepth, deepeningSkip;
     int hardMaxNodes, softMaxNodes, countedNodes;
     clock_t startTime, softEndTime, hardEndTime;
-    move_c searchedMoves[MAX_REQUIRED_MOVES];
+    move searchedMoves[MAX_REQUIRED_MOVES];
     uint8_t* abortFlag;
 
     //Necessary search information
     int16_t score;
-    bitboard* board;
+    bitboard boardStack[MAX_PLY];
+    move moveStack[MAX_PLY];
+    repetitionVector repetitions;
     hashtable_tt* tt;
     PVar pv;
-    move_c excludedMove;
-    uint8_t excludedPly;
+    move excludedMove[MAX_PLY];
     
     accumulator* accumulatorStack;
     accumulatorRefreshTable* refreshTable;
@@ -183,14 +160,14 @@ typedef struct searchThreadContext {
     int8_t improving[MAX_PLY];
 
     //Killer heuristic
-    move_c killerMoves[MAX_PLY][2];
+    move killerMoves[MAX_PLY][2];
 
     //History heuristic
     int16_t historyTable[2][6][64];
 
     //Continuation heuristics
-    move_c countermove[64][64];
-    move_c followUpMove[64][64];
+    move countermove[2][6][64];
+    move followUpMove[2][6][64];
 } searchThreadContext;
 
 #endif

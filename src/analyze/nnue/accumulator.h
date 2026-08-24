@@ -20,10 +20,8 @@ static inline uint64_t mirrorBoard(uint64_t x)
  */
 void loadInputAccumulator(bitboard* board, accumulator* acc);
 
-void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputAcc, accumulator* outputAcc, accumulatorRefreshTable* refreshTable);
+void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, int isEnPassant, accumulator* inputAcc, accumulator* outputAcc, accumulatorRefreshTable* refreshTable);
 
 void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorRefreshTable* refreshTable);
 
-accumulatorRefreshTable* createRefreshTable();
-void destroyRefreshTable(accumulatorRefreshTable* refreshTable);
 #endif

@@ -26,7 +26,6 @@ void generate(const char* path)
 
     for(int i = 0; i < concurrency; i++)
     {
-        contextList[i].board = create_board(NULL);
         contextList[i].startTime = 0,
         contextList[i].hardEndTime = LONG_MAX,
         contextList[i].softEndTime = LONG_MAX,
@@ -38,8 +37,8 @@ void generate(const char* path)
 
         if(useNNUE)
         {
-            contextList[i].accumulatorStack = calloc(MAX_PLY, sizeof(accumulator));
-            contextList[i].refreshTable = createRefreshTable();
+            contextList[i].accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
+            contextList[i].refreshTable = calloc(1, sizeof(accumulatorRefreshTable));;
         }
 
         contextList[i].tt = create_hashTable_tt();
@@ -73,13 +72,12 @@ void generate(const char* path)
         *contextList[i].abortFlag = 1;
         THREAD_WAIT(threadList[i]);
         destroy_hashTable_tt(contextList[i].tt);
-        free(contextList[i].board);
         free(contextList[i].abortFlag);
         
         if(useNNUE)
         {
             free(contextList[i].accumulatorStack);
-            destroyRefreshTable(contextList[i].refreshTable);
+            free(contextList[i].refreshTable);
         }
     }
     
@@ -120,6 +118,7 @@ uint32_t rng_xorshift32(uint32_t* seed)
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 {
     searchThreadContext* context = (searchThreadContext*) param;
+    bitboard* board = &context->boardStack[0];
 
     int isNewGame = 1;
 
@@ -146,21 +145,20 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         if(isNewGame)
         {
-            load_fen_string_to_board(context->board, STARTPOS_FEN);
+            load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
 
             //Play some random moves
             //Early mate is possible, goto newloop is used as a break + continue;
             for(int i = 0; i < 8; i++)
             {
-                move_c moveList[MAX_MOVES] = {0};
-                int count = generateMoveList(moveList, context->board, 0);
+                move moveList[MAX_MOVES] = {0};
+                int count = generateMoveList(moveList, board, 0);
                 if(!count)
                     goto newloop;
                 int index = rng_xorshift32(&seed) % count;
-                if(moveFromStruct(context->board, moveList[index]))
+                if(moveFromStruct(board, board, moveList[index], &context->repetitions))
                     goto newloop;
             }
-            context->board->historyIndex = 0;
 
             isNewGame = 0;
             movesThisGame = 0;
@@ -168,18 +166,18 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             consecutiveLowScores = 0;
             consecutiveDrawScores = 0;
 
-            boardToPackedBoard(context->board, packedBoard);
+            boardToPackedBoard(board, packedBoard);
             packedBoard->result = UINT8_MAX;
             continue;
         }
 
-        assert(context->board->pieces[WHITE_KING] && context->board->pieces[BLACK_KING]);
+        assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
 
         calculateBestMove(param);
 
-        move_c bestMove = context->pv.line[0];
+        move bestMove = context->pv.line[0];
 
-        int whiteEval = (ISWHITE(context->board->turn)) ? context->score : - context->score;
+        int whiteEval = (ISWHITE(board->turn)) ? context->score : - context->score;
 
         if(movesThisGame == 0 && abs(whiteEval) > 300)
         {
@@ -217,7 +215,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
         if(bestMove.raw == 0)
             goto gameover;
 
-        int piece = findPieceOnSquare(context->board, bestMove.startSquare);
+        int piece = findPieceOnSquare(board, bestMove.startSquare);
         int difference = bestMove.endSquare - bestMove.startSquare;
 
         pairList[movesThisGame].move.endSquare = bestMove.endSquare;
@@ -236,7 +234,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             else
                 pairList[movesThisGame].move.endSquare = rowOffset;
         }
-        else if(ISPAWN(piece) && bestMove.endSquare == context->board->enPassantSquare)
+        else if(ISPAWN(piece) && bestMove.endSquare == board->enPassantSquare)
             pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_ENPASSANT;
         else
             pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
@@ -250,21 +248,21 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             do
             {
                 calculateBestMove(param);
-            } while(!moveFromStruct(context->board, context->pv.line[0]));
+            } while(!moveFromStruct(board, board, context->pv.line[0], &context->repetitions));
             goto gameover;
         }
 
         //End of game
-        if(moveFromStruct(context->board, bestMove))
+        if(moveFromStruct(board, board, bestMove, &context->repetitions))
         {
             gameover:
 
-            if(isDraw(context->board))
+            if(isDraw(board, &context->repetitions))
                 packedBoard->result = VIRI_DRAW;
             else
             {
                 //Should get detected early, this is a fallback.
-                packedBoard->result = getMateResult(context->board);
+                packedBoard->result = getMateResult(board);
                 switch(packedBoard->result)
                 {
                     case VICTOR_BLACK:

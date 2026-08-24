@@ -51,34 +51,6 @@
 #define SCORE_WIN 32000
 #define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
 
-
-/**
- * flags&1 == canKingsideCastle_w
- * flags&2 == canQueensideCastle_w 
- * flags&4 == canKingsideCastle_b
- * flags&8 == canQueensideCastle_b
- * flags&16 == in_check_w
- * flags&32 == in_check_b
- */
-#define KINGSIDE_CASTLE_WHITE(flag) (flag&1)
-#define QUEENSIDE_CASTLE_WHITE(flag) (flag&2)
-#define KINGSIDE_CASTLE_BLACK(flag) (flag&4)
-#define QUEENSIDE_CASTLE_BLACK(flag) (flag&8)
-#define BAN_KINGCASTLE_W(flag) (flag&=(~1))
-#define BAN_QUEENCASTLE_W(flag) (flag&=(~2))
-#define BAN_KINGCASTLE_B(flag) (flag&=(~4))
-#define BAN_QUEENCASTLE_B(flag) (flag&=(~8))
-
-#define IS_IN_CHECK_W(flag) ((flag&0x10))
-#define IS_IN_CHECK_B(flag) ((flag&0x20))
-#define IS_IN_CHECK_ANY(flag) ((flag&0x30))
-#define CHECK_W(flag) (flag|=16)
-#define CHECK_B(flag) (flag|=32)
-#define UNCHECK_W(flag) (flag&=(~16))
-#define UNCHECK_B(flag) (flag&=(~32))
-#define IS_IN_BOOK_OPENING(flag) (flag&64)
-#define LEAVE_BOOK_OPENING(flag) (flag&=(~64))
-
 #define NO_EP_SQUARE 64
 
 #define VICTOR_NONE 0
@@ -127,16 +99,15 @@ void getSquareName(int square, char* target);
 int getSquareNumber(char* squareName);
 #define findPieceOnSquare(board, square) (board->pieceArr[square])
 
-int isDraw(bitboard* board);
+int isDraw(bitboard* board, repetitionVector* repetitions);
 int getMateResult(bitboard* board);
 
 //Required by pyrrhic.
 //Return index of popped bit in range [0,63]
 int popLSB(uint64_t *bitboard);
 
-bitboard* create_board(const char* fenString);
 void export_fen_from_board(bitboard* board, char* outputFenString);
-void load_fen_string_to_board(bitboard* board, const char* fenString);
+void load_fen_string_to_board(bitboard* board, const char* fenString, repetitionVector* repetitions);
 
 static inline void board_clear_square(bitboard* board, int square)
 {
@@ -217,30 +188,13 @@ void board_print(bitboard* board, int printValues);
 void values_print(bitboard* board);
 void bitmask_print(uint64_t mask, char fill);
 
-int moves_push(bitboard* board, move_d m);
-move_d moves_pop(bitboard* board);
-static inline void createCompactMove(move_c* m, int startSquare, int endSquare, int promoteTo)
+static inline void createCompactMove(move* m, int startSquare, int endSquare, int promoteTo)
 {
     assert(m);
     m->startSquare = startSquare;
     m->endSquare = endSquare;
     m->promoteTo = promoteTo;
 }
-static inline void createDetailedMove(move_d* m, move_c c, bitboard* board)
-{
-    assert(m);
 
-    m->compactMove = c.raw;
-    m->piece = findPieceOnSquare(board, c.startSquare);
-
-    m->capturedPiece = findPieceOnSquare(board, c.endSquare);
-    if(m->capturedPiece == EMPTY_PIECE && ISPAWN(m->piece) && board->enPassantSquare == c.endSquare)
-        m->capturedPiece = FLIP_COLOR(m->piece);
-
-    m->previousMovesSinceLastChange = board->movesSinceLastChange;
-    m->prevEnPassantSquare = board->enPassantSquare;
-    m->prevFlags = board->flags;
-}
-
-int containsRepetition(bitboard* board);
+int countRepetitions(bitboard* board, repetitionVector* repetitions);
 #endif

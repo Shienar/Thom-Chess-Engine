@@ -90,19 +90,19 @@ void loadInputAccumulator(bitboard* board, accumulator* acc)
     calculateAccumulator(&inputs[baseIndex_b], acc->rawValues[BLACK], BITS_PER_KING_BUCKET * blackBucket);
 }
 
-void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputAcc, accumulator* outputAcc, accumulatorRefreshTable* refreshTable)
+void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, int isEnPassant, accumulator* inputAcc, accumulator* outputAcc, accumulatorRefreshTable* refreshTable)
 {
     assert(board);
     assert(inputAcc);
     assert(outputAcc);
+    assert(IS_VALID_MOVE(lastMove));
 
-    move_c compactMove = (move_c)lastMove.compactMove;
-    assert(IS_VALID_MOVE(compactMove));
-
-    if(ISKING(lastMove.piece) &&
-        (((getColumn(compactMove.startSquare) > 3) != (getColumn(compactMove.endSquare) > 3)) ||
-         (ISWHITE(lastMove.piece) && kingBuckets[compactMove.startSquare] != kingBuckets[compactMove.endSquare]) ||
-         (ISBLACK(lastMove.piece) && kingBuckets[FLIP_SQUARE(compactMove.startSquare)] != kingBuckets[FLIP_SQUARE(compactMove.endSquare)])))
+    int piece = (lastMove.promoteTo) ? PAWN | (FLIP_COLOR(board->turn)) : (!isEnPassant) ? findPieceOnSquare(board, lastMove.endSquare) : FLIP_COLOR(capturedPiece);
+    
+    if(ISKING(piece) &&
+        (((getColumn(lastMove.startSquare) > 3) != (getColumn(lastMove.endSquare) > 3)) ||
+         (ISWHITE(piece) && kingBuckets[lastMove.startSquare] != kingBuckets[lastMove.endSquare]) ||
+         (ISBLACK(piece) && kingBuckets[FLIP_SQUARE(lastMove.startSquare)] != kingBuckets[FLIP_SQUARE(lastMove.endSquare)])))
          {
             updateAccumulatorFromTable(board, outputAcc, refreshTable);
             return;
@@ -119,9 +119,9 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputA
         int ksq = (side == WHITE) ? board->kingSquare[WHITE] : FLIP_SQUARE(board->kingSquare[BLACK]);
 
         /** Handle moving piece **/
-        int fromSq = compactMove.startSquare;
-        int toSq = compactMove.endSquare;
-        int pieceOffset = lastMove.piece;
+        int fromSq = lastMove.startSquare;
+        int toSq = lastMove.endSquare;
+        int pieceOffset = piece;
         
         if(side == BLACK)
         {
@@ -136,10 +136,10 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputA
         pieceOffset = ISWHITE(pieceOffset) ? PIECE(pieceOffset) / 2 :  (PIECE_TYPE_COUNT) + PIECE(pieceOffset) / 2;
         
         int fromIdx, toIdx;
-        if(compactMove.promoteTo) 
+        if(lastMove.promoteTo) 
         {
-            int relativeColor = (side == WHITE) ? COLOR(lastMove.piece) : FLIP_COLOR(lastMove.piece);
-            int promotePieceOffset = ISWHITE(relativeColor) ? PIECE(compactMove.promoteTo) / 2 :  (PIECE_TYPE_COUNT) + PIECE(compactMove.promoteTo) / 2;
+            int relativeColor = (side == WHITE) ? COLOR(piece) : FLIP_COLOR(piece);
+            int promotePieceOffset = ISWHITE(relativeColor) ? PIECE(lastMove.promoteTo) / 2 :  (PIECE_TYPE_COUNT) + PIECE(lastMove.promoteTo) / 2;
             
             fromIdx = (64 * ((PIECE_COUNT * kingBuckets[ksq]) + pieceOffset)) + fromSq;
             toIdx = (64 * ((PIECE_COUNT * kingBuckets[ksq]) + promotePieceOffset)) + toSq;
@@ -151,14 +151,14 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputA
         }
 
         /** Handle captured piece **/
-        if(lastMove.capturedPiece != EMPTY_PIECE)
+        if(capturedPiece != EMPTY_PIECE)
         {
-            int capturedPieceOffset = lastMove.capturedPiece;
-            int capturedPieceSquare = compactMove.endSquare;
-
-            if(ISPAWN(lastMove.piece) && (compactMove.endSquare == lastMove.prevEnPassantSquare))
+            int capturedPieceOffset = capturedPiece;
+            int capturedPieceSquare = lastMove.endSquare;
+ 
+            if(isEnPassant)
             {
-                if(ISWHITE(lastMove.piece)) capturedPieceSquare -=8;
+                if(ISWHITE(piece)) capturedPieceSquare -=8;
                 else capturedPieceSquare +=8;
             }
 
@@ -190,21 +190,21 @@ void updateMoveAccumulator(bitboard* board, move_d lastMove, accumulator* inputA
             }
         }
         /** Handle castled rook (Doesn't support Chess960) **/
-        else if(ISKING(lastMove.piece) && abs(compactMove.startSquare - compactMove.endSquare) == 2)
+        else if(ISKING(piece) && abs(lastMove.startSquare - lastMove.endSquare) == 2)
         {
             int castledRookFrom, castledRookTo;
-            int castledRookOffset = ROOK | COLOR(lastMove.piece);
-            if(getColumn(compactMove.endSquare) == 6)
+            int castledRookOffset = ROOK | COLOR(piece);
+            if(getColumn(lastMove.endSquare) == 6)
             {
                 //Kingside Castle
-                castledRookFrom = compactMove.startSquare + 3;
-                castledRookTo = compactMove.startSquare + 1;
+                castledRookFrom = lastMove.startSquare + 3;
+                castledRookTo = lastMove.startSquare + 1;
             }
             else
             {
                 //Queenside Castle
-                castledRookFrom = compactMove.startSquare - 4;
-                castledRookTo = compactMove.startSquare - 1;
+                castledRookFrom = lastMove.startSquare - 4;
+                castledRookTo = lastMove.startSquare - 1;
             }
             
             if(side == BLACK)
@@ -389,42 +389,23 @@ void updateAccumulatorFromTable(bitboard* board, accumulator* acc,  accumulatorR
     //Update the accumulator & board in table to match given board.
     if(!refreshTable->initialized[WHITE][bucketIndex_w])
     {
-        memcpy(refreshTable->boards[WHITE][bucketIndex_w]->pieces, board->pieces, sizeof(board->pieces));
-        memcpy(refreshTable->boards[WHITE][bucketIndex_w]->kingSquare, board->kingSquare, sizeof(board->kingSquare));
-        loadInputAccumulator(refreshTable->boards[WHITE][bucketIndex_w], &refreshTable->accumulators[WHITE][bucketIndex_w]);
+        memcpy(refreshTable->boards[WHITE][bucketIndex_w].pieces, board->pieces, sizeof(board->pieces));
+        memcpy(refreshTable->boards[WHITE][bucketIndex_w].kingSquare, board->kingSquare, sizeof(board->kingSquare));
+        loadInputAccumulator(&refreshTable->boards[WHITE][bucketIndex_w], &refreshTable->accumulators[WHITE][bucketIndex_w]);
         refreshTable->initialized[WHITE][bucketIndex_w] = 1;
     }
-    else updateBoardAccumulator(board, refreshTable->boards[WHITE][bucketIndex_w], &refreshTable->accumulators[WHITE][bucketIndex_w], WHITE);
+    else updateBoardAccumulator(board, &refreshTable->boards[WHITE][bucketIndex_w], &refreshTable->accumulators[WHITE][bucketIndex_w], WHITE);
 
     if(!refreshTable->initialized[BLACK][bucketIndex_b])
     {
-        memcpy(refreshTable->boards[BLACK][bucketIndex_b]->pieces, board->pieces, sizeof(board->pieces));
-        memcpy(refreshTable->boards[BLACK][bucketIndex_b]->kingSquare, board->kingSquare, sizeof(board->kingSquare));
-        loadInputAccumulator(refreshTable->boards[BLACK][bucketIndex_b], &refreshTable->accumulators[BLACK][bucketIndex_b]);
+        memcpy(refreshTable->boards[BLACK][bucketIndex_b].pieces, board->pieces, sizeof(board->pieces));
+        memcpy(refreshTable->boards[BLACK][bucketIndex_b].kingSquare, board->kingSquare, sizeof(board->kingSquare));
+        loadInputAccumulator(&refreshTable->boards[BLACK][bucketIndex_b], &refreshTable->accumulators[BLACK][bucketIndex_b]);
         refreshTable->initialized[BLACK][bucketIndex_b] = 1;
     }
-    else updateBoardAccumulator(board, refreshTable->boards[BLACK][bucketIndex_b], &refreshTable->accumulators[BLACK][bucketIndex_b], BLACK);
+    else updateBoardAccumulator(board, &refreshTable->boards[BLACK][bucketIndex_b], &refreshTable->accumulators[BLACK][bucketIndex_b], BLACK);
     
     //Copy updated table values back to board.
     memcpy(acc->rawValues[WHITE], refreshTable->accumulators[WHITE][bucketIndex_w].rawValues[WHITE], sizeof(int16_t) * ACCUMULATOR_NODES_PER_SIDE);
     memcpy(acc->rawValues[BLACK], refreshTable->accumulators[BLACK][bucketIndex_b].rawValues[BLACK], sizeof(int16_t) * ACCUMULATOR_NODES_PER_SIDE);
-}
-
-accumulatorRefreshTable* createRefreshTable()
-{
-    accumulatorRefreshTable* table = calloc(1, sizeof(accumulatorRefreshTable));
-    for(int color = 0; color < 2; color++)
-        for(int newKSq = 0; newKSq < 2 * KING_BUCKETS; newKSq++)
-            table->boards[color][newKSq] = create_board(NULL);
-    return table;
-}
-
-void destroyRefreshTable(accumulatorRefreshTable* refreshTable)
-{
-    if(!refreshTable) return;
-
-    for(int i = 0; i < 2; i++)
-        for(int j = 0; j < 2 * KING_BUCKETS; j++)
-            free(refreshTable->boards[i][j]);
-    free(refreshTable);
 }

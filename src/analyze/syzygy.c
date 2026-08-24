@@ -1,6 +1,6 @@
 #include "analyze/syzygy.h"
 
-void getFromPyrrhic(bitboard* board, move_c* dest, unsigned result)
+void getFromPyrrhic(bitboard* board, move* dest, unsigned result)
 {
     dest->endSquare = TB_RESULT_TO(result);
     dest->startSquare = TB_RESULT_FROM(result);
@@ -23,10 +23,10 @@ void getFromPyrrhic(bitboard* board, move_c* dest, unsigned result)
     }
 }
 
-void filterSyzygyMoves(bitboard* board, move_c* requiredMoves)
+void filterSyzygyMoves(bitboard* board, move* requiredMoves)
 {
     //3-n man syzygy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || (IS_IN_CHECK_ANY(board->flags))) return;
+    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || board->in_check) return;
 
     //Don't probe syzygy if the GUI assigned required search moves.
     if(IS_VALID_MOVE(requiredMoves[0])) return;
@@ -36,7 +36,7 @@ void filterSyzygyMoves(bitboard* board, move_c* requiredMoves)
                                     board->pieces[BLACK_KING]   | board->pieces[WHITE_KING],    board->pieces[BLACK_QUEEN]  | board->pieces[WHITE_QUEEN], 
                                     board->pieces[BLACK_ROOK]   | board->pieces[WHITE_ROOK],    board->pieces[BLACK_BISHOP] | board->pieces[WHITE_BISHOP],
                                     board->pieces[BLACK_KNIGHT] | board->pieces[WHITE_KNIGHT],  board->pieces[BLACK_PAWN]   | board->pieces[WHITE_PAWN],
-                                    (unsigned) board->movesSinceLastChange,
+                                    (unsigned) board->halfmoveClock,
                                     (board->enPassantSquare == NO_EP_SQUARE) ? 0 : board->enPassantSquare, 
                                     !board->turn,
                                     moveResults);
@@ -67,7 +67,7 @@ void filterSyzygyMoves(bitboard* board, move_c* requiredMoves)
 int getSyzygyResult(bitboard* board)
 {
     //3-n man syzygy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || (IS_IN_CHECK_ANY(board->flags))) return -1;
+    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || board->in_check) return -1;
 
     uint32_t ep = board->enPassantSquare;
     if(ep == -1) ep = 0;

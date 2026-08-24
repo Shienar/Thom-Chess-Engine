@@ -9,7 +9,7 @@ A release version of the engine should be compiled with 'make -j'.
 - 'make clean' will remove target
 - 'make -j NEW=1' will compile with target '.\target\Thom_new.exe'. This is used to easily conduct SPRT tests against a copy.
 - 'make -j DEBUG=1' will compile with fewer compiler optimizations to allow for easier gdb debugging.
-- 'make -j VERIFY=1' will include assertions to double-check the validity of efficient accumulator updates. Requires DEBUG=1.
+- 'make -j VERIFY=1' will include assertions to double-check the validity of efficient accumulator updates & hash code updates. Requires DEBUG=1.
 - 'make -j SPSA=1' will compile with uci options for SPSA tuning
 
 ## COMMANDS:

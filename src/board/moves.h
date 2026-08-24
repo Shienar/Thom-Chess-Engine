@@ -32,7 +32,7 @@
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
 
-int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
+int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
 #define TT_MOVE_SCORE 32000
 #define PV_MOVE_SCORE 31999
@@ -44,11 +44,11 @@ int generateMoveList(move_c* movesList, bitboard* board, int capturesOnly);
 #define COUNTERMOVE_BONUS 10000 //added to history score
 #define FOLLOWUPMOVE_BONUS 9000 //added to history score
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
-                                        move_c* requiredMoves, move_c* excludedMove,
-                                        move_c* pvMove, move_c* ttMove, 
-                                        int16_t history[2][6][64], move_c* killerMoves, 
-                                        move_c* counterMove, move_c* followUpMove);
-move_c* iterate_next_move(moveIterator* iter);
+                                        move* requiredMoves, move* excludedMove,
+                                        move* pvMove, move* ttMove, 
+                                        int16_t history[2][6][64], move* killerMoves, 
+                                        move* counterMove, move* followUpMove);
+move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 
 
@@ -63,15 +63,11 @@ uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
 uint64_t pyrrhicKingAttacks(int square);
 uint64_t kingMoves(bitboard* board, int square, int color);
 
-int movePiece(bitboard *board, move_c compactMove);
+int movePiece(bitboard* board, move compactMove, repetitionVector* repetitions);
 
-//Assigns captured piece.
-int moveFromStruct(bitboard* board, move_c m);
-move_c getStructFromString(bitboard* board, char* str);
+int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector* repetitions);
+move getStructFromString(bitboard* board, char* str);
 
-void applyNullMove(bitboard* board);
-void revertNullMove(bitboard* board);
-
-move_d unmove(bitboard *board);
+void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repetitions);
 
 #endif

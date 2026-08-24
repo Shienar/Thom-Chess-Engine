@@ -289,10 +289,10 @@ uint64_t getHashCode(bitboard* board)
         mask&=(mask - 1);
     }
     
-    if(KINGSIDE_CASTLE_WHITE(board->flags)) returnValue^=zobrist_keys[768];
-    if(QUEENSIDE_CASTLE_WHITE(board->flags)) returnValue^=zobrist_keys[769];
-    if(KINGSIDE_CASTLE_BLACK(board->flags)) returnValue^=zobrist_keys[770];
-    if(QUEENSIDE_CASTLE_BLACK(board->flags)) returnValue^=zobrist_keys[771];
+    if(board->canKingsideCastle_w) returnValue^=zobrist_keys[768];
+    if(board->canQueensideCastle_w) returnValue^=zobrist_keys[769];
+    if(board->canKingsideCastle_b) returnValue^=zobrist_keys[770];
+    if(board->canQueensideCastle_b) returnValue^=zobrist_keys[771];
 
 
     returnValue ^= getEnPassantHash(board);

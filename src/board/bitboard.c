@@ -61,12 +61,29 @@ int popLSB(uint64_t *bitboard)
     return LSB_Index;
 }
 
-int isDraw(bitboard* board)
+int countRepetitions(bitboard* board, repetitionVector* repetitions)
+{
+    int index = board->halfMoveCount;
+    int count = 1;
+    uint64_t checkedVal = repetitions->hashCodes[index];
+    for(index = index - 4; index >= board->lastChangeIndex; index -= 2)
+    {
+        if(checkedVal == repetitions->hashCodes[index])
+        {
+            count++;
+            if(count >= 3)
+                return count;
+        }
+    }
+    return count;
+}
+
+int isDraw(bitboard* board, repetitionVector* repetitions)
 {
     //Repetition
-    if(containsRepetition(board)) return VICTOR_DRAW_THREEFOLD;
+    if(countRepetitions(board, repetitions) >= 3) return VICTOR_DRAW_THREEFOLD;
     //50-move rule
-    else if(board->movesSinceLastChange >= 100) return VICTOR_DRAW_FIFTY_MOVE_RULE; //Variable stores half-moves
+    else if(board->halfmoveClock >= 100) return VICTOR_DRAW_FIFTY_MOVE_RULE; //Variable stores half-moves
     //Trivial insufficent material
     else if((board->pieces[BLACK_KING]|board->pieces[WHITE_KING]) == board->pieces_all) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
     //Other insufficient material
@@ -98,12 +115,12 @@ int getMateResult(bitboard* board)
 {
     if(board->turn == WHITE)
     {
-        if(IS_IN_CHECK_W(board->flags)) return VICTOR_BLACK;
+        if(board->in_check) return VICTOR_BLACK;
         else return VICTOR_DRAW_STALEMATE_WHITE;
     }
     else
     {
-        if(IS_IN_CHECK_B(board->flags)) return VICTOR_WHITE;
+        if(board->in_check) return VICTOR_WHITE;
         else return VICTOR_DRAW_STALEMATE_BLACK;
     }
 }
@@ -151,10 +168,10 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
     char castlingRights[5] = {'\0'};
     castlingRights[0] = '-';
     int writeIndex = 0;
-    if(KINGSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'K'; writeIndex++;}
-    if(QUEENSIDE_CASTLE_WHITE(board->flags)) { castlingRights[writeIndex] = 'Q'; writeIndex++;}
-    if(KINGSIDE_CASTLE_BLACK(board->flags)) { castlingRights[writeIndex] = 'k'; writeIndex++;}
-    if(QUEENSIDE_CASTLE_BLACK(board->flags)) castlingRights[writeIndex] = 'q';
+    if(board->canKingsideCastle_w) { castlingRights[writeIndex] = 'K'; writeIndex++;}
+    if(board->canQueensideCastle_w) { castlingRights[writeIndex] = 'Q'; writeIndex++;}
+    if(board->canKingsideCastle_b) { castlingRights[writeIndex] = 'k'; writeIndex++;}
+    if(board->canQueensideCastle_b) castlingRights[writeIndex] = 'q';
 
     char enPassantSquare[3] = {'\0'};
     if(board->enPassantSquare == NO_EP_SQUARE) enPassantSquare[0] = '-';
@@ -164,12 +181,13 @@ void export_fen_from_board(bitboard* board, char* outputFenString)
                                                             activeColor,
                                                             castlingRights,
                                                             enPassantSquare,
-                                                            board->movesSinceLastChange,
+                                                            board->halfmoveClock,
                                                             (int)board->halfMoveCount/2);
 }
 
-void load_fen_string_to_board(bitboard* board, const char* fenString)
+void load_fen_string_to_board(bitboard* board, const char* fenString, repetitionVector* repetitions)
 {
+    memset(board, 0, sizeof(bitboard));
     assert(board);
     assert(fenString);
 
@@ -288,54 +306,55 @@ void load_fen_string_to_board(bitboard* board, const char* fenString)
     for(int pc = 1; pc < PIECE_COUNT; pc+=2) board->pieces_side[BLACK] |= board->pieces[pc];
     board->pieces_all = board->pieces_side[BLACK]|board->pieces_side[WHITE];
 
-    board->flags = 64;
     //Castling Rights
     if(castlingAvailability[0] != '-')
     {
         for(int i = 0; i < 4; i++)
         {
-            if(castlingAvailability[i] == 'K') board->flags|=1;
-            else if(castlingAvailability[i] == 'Q') board->flags|=2;
-            else if(castlingAvailability[i] == 'k') board->flags|=4;
-            else if(castlingAvailability[i] == 'q') board->flags|=8;
+            if(castlingAvailability[i] == 'K') board->canKingsideCastle_w = 1;
+            else if(castlingAvailability[i] == 'Q') board->canQueensideCastle_w = 1;
+            else if(castlingAvailability[i] == 'k') board->canKingsideCastle_b = 1;
+            else if(castlingAvailability[i] == 'q') board->canQueensideCastle_b = 1;
             else break;
         }
     }
 
-    //Check
-    if(isThreatened(board, board->kingSquare[WHITE], WHITE)) board->flags|=16;
-    else if(isThreatened(board, board->kingSquare[BLACK], BLACK)) board->flags|=32;
+    board->in_book = 1;
 
     //Turn
     if(activeColor == 'w') board->turn = WHITE;
     else board->turn = BLACK;
 
-    //50 move rule
-    board->movesSinceLastChange = halfMoveClock;
-    board->halfMoveCount = fullMoveCount * 2;
+    //Check
+    if(isThreatened(board, board->kingSquare[board->turn], board->turn)) board->in_check = 1;
 
+    //50 move rule
+    board->halfmoveClock = halfMoveClock;
+    board->halfMoveCount = fullMoveCount * 2 + board->turn;
     
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
     else board->enPassantSquare = NO_EP_SQUARE;
 
     board->hashCode = getHashCode(board);
+    board->lastChangeIndex = board->halfMoveCount;
 
-    memset(board->history, 0, MAX_PLY * sizeof(move_d));
-    board->historyIndex = 0;
+     //3-fold
+    if(repetitions)
+    {
+        if(repetitions->hashCodes)
+            free(repetitions->hashCodes);
 
-    memset(board->repetitionHashCodes, 0, 4096 * sizeof(uint64_t));
-    board->repetitionIndex = 0;
-    board->lastChangeIndex = 0;
-    board->repetitionHashCodes[board->repetitionIndex++] = board->hashCode;
-}
+        repetitions->capacity = 16;
+        repetitions->hashCodes = calloc(repetitions->capacity, sizeof(uint64_t));
 
-//Resets the board to an opening position
-bitboard* create_board(const char* fenString)
-{
-    if(!fenString) fenString = STARTPOS_FEN;
-    bitboard* board = calloc(1, sizeof(bitboard));
-    load_fen_string_to_board(board, fenString);
-    return board;
+        while(repetitions->capacity <= board->halfMoveCount)
+        {
+            repetitions->capacity *= 2;
+            repetitions->hashCodes = realloc(repetitions->hashCodes, repetitions->capacity * sizeof(uint64_t));
+        }
+        
+        repetitions->hashCodes[board->halfMoveCount] = board->hashCode;
+    }
 }
 
 void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
@@ -359,14 +378,6 @@ void board_print(bitboard* board, int printValues)
 
     int lastMoveStartSquare = -1;
     int lastMoveEndSquare = -1;
-    if(board->historyIndex > 0)
-    {
-        move_c compactMove;
-        compactMove.raw = board->history[board->historyIndex - 1].compactMove;
-        lastMoveEndSquare = compactMove.endSquare;
-        lastMoveStartSquare = compactMove.startSquare;
-    }
-
 
     //8 rows x (8 columns of spaces + null terminator)
     char boardArray[8][9] = {"        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0", "        \0"};
@@ -442,26 +453,22 @@ void values_print(bitboard* board)
     if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
     printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare[WHITE], board->kingSquare[BLACK]);
     
+    printf("Castling Rights: ");
+    if(board->canKingsideCastle_w) printf("K");
+    if(board->canQueensideCastle_w) printf("Q");
+    if(board->canKingsideCastle_b) printf("k");
+    if(board->canQueensideCastle_b) printf("q");
+    printf("\n");
 
-    if(board->flags&0xF)
-    {
-        printf("Castling Rights: ");
-        if(KINGSIDE_CASTLE_WHITE(board->flags)) printf("K");
-        if(QUEENSIDE_CASTLE_WHITE(board->flags)) printf("Q");
-        if(KINGSIDE_CASTLE_BLACK(board->flags)) printf("k");
-        if(QUEENSIDE_CASTLE_BLACK(board->flags)) printf("q");
-        printf("\n");
-    }
-
-    if(IS_IN_CHECK_ANY(board->flags))
+    if(board->in_check)
     {
         printf("Check: ");
-        if(IS_IN_CHECK_W(board->flags)) printf("W\n");
+        if(ISWHITE(board->turn)) printf("W\n");
         else printf("B\n");
         printf("\n");
     }
 
-    printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->movesSinceLastChange);
+    printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->halfmoveClock);
     if(board->enPassantSquare != NO_EP_SQUARE) printf("En passant square: %d\n", board->enPassantSquare);
     printf("Hashcode: 0x%016" PRIx64 "\n", board->hashCode);
     char FEN[128];
@@ -500,44 +507,4 @@ void bitmask_print(uint64_t mask, char fill)
         printf(TEXT_NONE TEXT_BOLD"  |" TEXT_NONE "\n ");
     }
     printf(TEXT_BOLD "\t\t|                     |\n \t\t%% - a b c d e f g h - %%\n" TEXT_NONE);
-}
-
-
-int moves_push(bitboard* board, move_d m)
-{
-    assert(board);
-
-    if(board->historyIndex >= MAX_PLY)
-    {
-        DEBUG_ERROR("Attempted to push a move past limit.");
-    }
-    else board->history[board->historyIndex++] = m;
-
-    return board->historyIndex;
-}
-
-move_d moves_pop(bitboard* board)
-{
-    assert(board);
-
-    if(board->historyIndex == 0) return (move_d){0};
-
-    return board->history[--board->historyIndex];
-}
-
-
-int containsRepetition(bitboard* board)
-{
-    int index = board->repetitionIndex - 1;
-    int count = 1;
-    uint64_t checkedVal = board->repetitionHashCodes[index];
-    for(index = index - 4; index >= board->lastChangeIndex; index -= 2)
-    {
-        if(checkedVal == board->repetitionHashCodes[index])
-        {
-            count++;
-            if(count >= 3) return 1;
-        }
-    }
-    return 0;
 }

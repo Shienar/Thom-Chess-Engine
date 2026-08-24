@@ -5,7 +5,7 @@
 #include <string.h>
 
 hashtable_tt* transpositionTable = NULL;
-uint64_t tt_size_entries = (1024 * 1024 * 256) / sizeof(table_entry_tt);
+uint64_t tt_size_entries = (1024 * 1024 * 256) / sizeof(tt_entry);
 
 hashtable_tt* create_hashTable_tt()
 {
@@ -14,7 +14,7 @@ hashtable_tt* create_hashTable_tt()
 
     newTable->capacity = tt_size_entries;
 
-    newTable->array = calloc(newTable->capacity, sizeof(table_entry_tt));
+    newTable->array = calloc(newTable->capacity, sizeof(tt_entry));
     if(!newTable->array)
     {
         free(newTable);
@@ -34,10 +34,14 @@ void destroy_hashTable_tt(hashtable_tt* ht)
 
 void clear_tt(hashtable_tt* tt)
 {
-    if(tt && tt->array) memset(tt->array, 0, tt->capacity * sizeof(table_entry_tt));
+    if(tt && tt->array) 
+    {
+        memset(tt->array, 0, tt->capacity * sizeof(tt_entry));
+        tt->usedSlots = 0;
+    }
 }
 
-table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply)
+tt_entry transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply)
 {
     if(board && tt)
     {
@@ -50,7 +54,7 @@ table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_
         if((existingHash ^ existingData) == hashCode)
         {
             *hit = 1;
-            table_entry_tt hitEntry = {
+            tt_entry hitEntry = {
                 .hashCode = hashCode,
                 .data = existingData
             };
@@ -63,16 +67,16 @@ table_entry_tt transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_
     }
 
     *hit = 0;
-    return (table_entry_tt){0};
+    return (tt_entry){0};
 }
 
-void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
+void transposition_table_set(hashtable_tt* tt, tt_entry entry, int ply)
 {
     assert(tt);
 
     size_t index = entry.hashCode%tt->capacity;
 
-    table_entry_tt existingEntry = {
+    tt_entry existingEntry = {
         .data = tt->array[index].data,
         .hashCode = tt->array[index].hashCode
     };
@@ -88,14 +92,18 @@ void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply)
         {
             if(existingEntry.depth >= entry.depth + 2)
             {
-                if(!IS_VALID_MOVE(((move_c) existingEntry.bestMove)))
+                if(!IS_VALID_MOVE(((move) existingEntry.bestMove)))
                     existingEntry.bestMove = entry.bestMove;
                 return;
             }
             
-            if(!IS_VALID_MOVE(((move_c) entry.bestMove)))
+            if(!IS_VALID_MOVE(((move) entry.bestMove)))
                 entry.bestMove = existingEntry.bestMove;
         }
+    }
+    else
+    {
+        tt->usedSlots++;
     }
 
     if(entry.evaluation > MIN_MATE_SCORE) entry.evaluation += ply; 

@@ -21,12 +21,12 @@ void loadBook()
     entryCount /= sizeof(polyglot_book_entry);
 }
 
-move_c getBookMove(bitboard* board)
+move getBookMove(bitboard* board)
 {
-    if(!IS_IN_BOOK_OPENING(board->flags) || !useBook || board->halfMoveCount > MAX_BOOK_PLY) return (move_c) {0};
+    if(!board->in_book || !useBook || board->halfMoveCount > MAX_BOOK_PLY) return (move) {0};
     uint64_t polyglotKey = board->hashCode;
     
-    move_c potentialMoves[MAX_MOVES] = {0};
+    move potentialMoves[MAX_MOVES] = {0};
     int moveCount = 0;
 
     //uint32_t totalWeight = 0;
@@ -49,13 +49,13 @@ move_c getBookMove(bitboard* board)
              *  - 3 = Rook
              *  - 4 = Queen
              */
-            uint16_t moveBits = bigEndian16(entry->move);
+            uint16_t moveBits = bigEndian16(entry->bestMove);
             
             int endSquare = (moveBits&0x7) + 8*((moveBits&0x38)>>3);
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
             int promoteTo = ((moveBits&0x7000)>>12) + 1;
             
-            move_c* tempMove = &potentialMoves[moveCount];
+            move* tempMove = &potentialMoves[moveCount];
             //moveWeights[moveCount] = bigEndian16(entry->weight);
             //totalWeight+= moveWeights[moveCount];
 
@@ -77,7 +77,7 @@ move_c getBookMove(bitboard* board)
     }
 
     if(moveCount == 0) 
-        return (move_c){0};
+        return (move){0};
 
     //Ignore weight and pick a random book move.
     //Book moves are for opening variety instead of strength.

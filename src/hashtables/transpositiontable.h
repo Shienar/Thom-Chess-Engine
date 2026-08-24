@@ -31,9 +31,9 @@ void destroy_hashTable_tt(hashtable_tt* ht);
 
 void clear_tt(hashtable_tt* tt);
 
-table_entry_tt transposition_table_get(struct bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply);
+tt_entry transposition_table_get(struct bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply);
 
-void transposition_table_set(hashtable_tt* tt, table_entry_tt entry, int ply);
+void transposition_table_set(hashtable_tt* tt, tt_entry entry, int ply);
 
 void clear_tt(hashtable_tt* tt);
 

@@ -6,6 +6,6 @@
 #include "pyrrhic/tbprobe.h"
 
 int getSyzygyResult(bitboard* board);
-void filterSyzygyMoves(bitboard* board, move_c* requiredMoves);
+void filterSyzygyMoves(bitboard* board, move* requiredMoves);
 
 #endif

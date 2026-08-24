@@ -791,7 +791,7 @@ void initDataEntries(const char* dataPath)
         sscanf(eval, "[%lf]\n", &result);
         *(eval - 1) = '\0';
 
-        load_fen_string_to_board(&board, buffer);
+        load_fen_string_to_board(&board, buffer, NULL);
 
         //White relative
         tuner_entries[insertIndex].result = result;
