@@ -105,8 +105,10 @@ A release version of the engine should be compiled with 'make -j'.
     - Mate Distance Pruning
     - Improving Heuristic
     - Killer Move Heuristic
-    - History Heuristic
-    - Countermove Heuristic
+    - Quiet History Heuristic
+    - Capture History Heuristic
+    - Countermove History Heuristic
+    - Followup History Heuristic
     - Razoring
     - Futility Pruning
     - Reverse Futility Pruning
@@ -129,12 +131,12 @@ The engine has not been officially released yet and does not have an official ra
 
 ```
 --------------------------------------------------
-Results of Thom vs Stash25 (8+0.08, 1t, 4MB, UHO_Lichess_4852_v1.epd):
-Elo: -26.46 +/- 12.91, nElo: -31.33 +/- 15.23
-LOS: 0.00 %, DrawRatio: 41.40 %, PairsRatio: 0.71
-Games: 2000, Wins: 742, Losses: 894, Draws: 364, Points: 924.0 (46.20 %)
-Ptnml(0-2): [169, 174, 414, 126, 117], WL/DD Ratio: 11.94
-LLR: -0.52 (-17.7%) (-2.94, 2.94) [0.00, 1.00]
+Results of Thom vs Stash25 (8+0.08, 1t, 16MB, UHO_Lichess_4852_v1.epd):
+Elo: -18.82 +/- 15.21, nElo: -22.10 +/- 17.82
+LOS: 0.75 %, DrawRatio: 37.95 %, PairsRatio: 0.80
+Games: 1460, Wins: 531, Losses: 610, Draws: 319, Points: 690.5 (47.29 %)
+Ptnml(0-2): [116, 136, 277, 113, 88], WL/DD Ratio: 6.91
+LLR: -0.27 (-9.2%) (-2.94, 2.94) [0.00, 1.00]
 --------------------------------------------------
 ```
 

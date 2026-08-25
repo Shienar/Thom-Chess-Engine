@@ -51,7 +51,7 @@ int reverse_futility_margin_improving = 122;
 int probcut_offset = 400;
 int probcut_offset_improving = 250;
 
-int historyBonusScale = 290;
+int historyBonusScale = 290;    
 int historyBonusOffset = 137;
 int historyPenaltyScale = 392;
 int historyPenaltyOffset = 131;
@@ -220,9 +220,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         return best;
 
     moveIterator* iter = create_move_iterator(curBoard, GET_CAPTURES_AND_CHECKS, 
-                                                NULL, NULL, 
+                                                NULL, &context->excludedMove[ply], 
                                                 NULL, tt_move, 
-                                                NULL, NULL,
+                                                context->historyTable, context->captureHistoryTable, 
+                                                NULL,
                                                 NULL, NULL);
 
     int validMovesVisited = 0;
@@ -237,7 +238,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             context->moveStack[ply] = *currentMove;
 
             //SEE pruning
-            if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50)
+            if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
                 continue;
 
             validMovesVisited++;
@@ -493,9 +494,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             {
                 int probCutScore = INT32_MIN;
                 moveIterator* iter = create_move_iterator(curBoard, GET_WINNING_CAPTURES,
-                                                            NULL, NULL,
+                                                            NULL, &context->excludedMove[ply],
                                                             pvMove, tt_move, 
-                                                            context->historyTable, context->killerMoves[ply], 
+                                                            context->historyTable, context->captureHistoryTable, 
+                                                            context->killerMoves[ply], 
                                                             counterMove, followUpMove);
                 if(iter)
                 {
@@ -552,7 +554,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     moveIterator* iter = create_move_iterator(curBoard, GET_ALL_MOVES,
                                                 (ply == 0) ? context->searchedMoves : NULL, &context->excludedMove[ply],
                                                 pvMove, tt_move, 
-                                                context->historyTable, context->killerMoves[ply], 
+                                                context->historyTable, context->captureHistoryTable, 
+                                                context->killerMoves[ply], 
                                                 counterMove, followUpMove);
     int validMovesVisited = 0;
     int bestScore = -SCORE_WIN;
@@ -572,7 +575,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 capturedPiece = FLIP_COLOR(currentPiece);
                 isEP = 1;
             }
-            int isCapture = capturedPiece != EMPTY_PIECE || isEP;
+            int isCapture = capturedPiece != EMPTY_PIECE;
 
             //Singular Extension
             if(hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 && 
@@ -629,7 +632,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 next_depth -= lmrTable[depth][validMovesVisited];
 
             //SEE reduction
-            if(!pvNode && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE - 50)
+            if(!pvNode && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
                 next_depth--;
             
             //History Reduction
@@ -716,6 +719,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                             context->followUpMove[side][piece][to] = *currentMove;
                         }
                     }
+                    else if(capturedPiece != EMPTY_PIECE)
+                    {
+                        //Capture History Herustic
+                        context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] += historyBonusScale * depth + historyBonusOffset;
+                        context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] = _min(context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], MAX_HISTORY_SCORE);
+                    }
 
                     destroy_move_iterator(iter);
 
@@ -726,6 +735,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             if(isQuietMove)
                 searchedQuietIndices[searchedQuietCount++] = (curBoard->turn * 384) + ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
+            else if(capturedPiece != EMPTY_PIECE)
+            {
+                //Capture History Herustic
+                context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] -= historyPenaltyScale * depth + historyPenaltyOffset;
+                context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] = _max(context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], -MAX_HISTORY_SCORE);
+            }
         }
         destroy_move_iterator(iter);
         
@@ -997,6 +1012,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     searchThreadContext* context = (searchThreadContext*)param;
     *context->abortFlag = 0;
     memset(context->historyTable, 0, sizeof(context->historyTable));
+    memset(context->captureHistoryTable, 0, sizeof(context->captureHistoryTable));
+    memset(context->countermove, 0, sizeof(context->countermove));
+    memset(context->followUpMove, 0, sizeof(context->followUpMove));
     
     int maxDepth = context->maxDepth;
     

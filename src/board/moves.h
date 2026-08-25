@@ -36,17 +36,18 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
 #define TT_MOVE_SCORE 32000
 #define PV_MOVE_SCORE 31999
-#define CAPTURE_SCORE 30100 //+- min bound, max bound is 31800 (Captured queen, promote to queen, promote from pawn. 30100 + 900 + 900 - 100)
-#define KILLER_1_SCORE 30099
-#define KILLER_2_SCORE 30098
-#define PROMOTION_SCORE 30080
-#define MAX_HISTORY_SCORE 30000 //+- max bound
-#define COUNTERMOVE_BONUS 10000 //added to history score
-#define FOLLOWUPMOVE_BONUS 9000 //added to history score
+#define CAPTURE_SCORE 17000 //+- min bound(-ish). Max SEE bonus is 1700 for capture-queen promotion. +-256 history bonus added
+#define KILLER_1_SCORE 16399
+#define KILLER_2_SCORE 16398
+#define PROMOTION_SCORE 16385
+#define MAX_HISTORY_SCORE 16384 //+- max bound
+#define COUNTERMOVE_BONUS 6000 //added to history score
+#define FOLLOWUPMOVE_BONUS 5000 //added to history score
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
                                         move* requiredMoves, move* excludedMove,
                                         move* pvMove, move* ttMove, 
-                                        int16_t history[2][6][64], move* killerMoves, 
+                                        int16_t history[2][6][64], int16_t captureHistory[6][64][6],
+                                        move* killerMoves, 
                                         move* counterMove, move* followUpMove);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);

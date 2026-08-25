@@ -343,7 +343,7 @@ int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
     return -1;
 }
 
-static const int pieceValuesSEE[15] = {100, 100, 300, 300, 325, 325, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
+static const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
 int staticExchangeEvaluation(bitboard* board, move m)
 {
     int gain[MAX_PLY];
@@ -407,7 +407,8 @@ int staticExchangeEvaluation(bitboard* board, move m)
 moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
                                         move* requiredMoves, move* excludedMove,
                                         move* pvMove, move* ttMove, 
-                                        int16_t history[2][6][64], move* killerMoves, 
+                                        int16_t history[2][6][64], int16_t captureHistory[6][64][6],
+                                        move* killerMoves, 
                                         move* counterMove, move* followUpMove)
 {
     moveIterator* iter = malloc(sizeof(moveIterator));
@@ -465,8 +466,9 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
         else if(isCapture)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
-            if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue;
-            else if(capturesOnly == GET_WINNING_CAPTURES && seeValue < -50)
+            int historyBonus = captureHistory[currentPiece / 2][iter->moveList[i].endSquare][capturedPiece / 2] / 64;
+            if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue + historyBonus;
+            else if(capturesOnly == GET_WINNING_CAPTURES)
             {
                 if(i > iter->visitedCount)
                 {
@@ -479,7 +481,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
                 }
                 iter->visitedCount++;
             } 
-            else iter->moveScores[i] = -CAPTURE_SCORE + seeValue;
+            else iter->moveScores[i] = -CAPTURE_SCORE + seeValue + historyBonus;
         }
         else if(killerMoves && iter->moveList[i].raw == killerMoves[0].raw)
             iter->moveScores[i] = KILLER_1_SCORE;

@@ -109,6 +109,7 @@ int main(int argc, char** argv)
                 printf("option name historyPenaltyScale type spin default %d min 50 max 600\n", historyPenaltyScale);
                 printf("option name historyPenaltyOffset type spin default %d min 50 max 600\n", historyPenaltyOffset);
                 
+                
                 printf("option name lowHistoryVal type spin default %d min -500 max 0\n", lowHistoryVal);
 
                 printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
@@ -119,7 +120,7 @@ int main(int argc, char** argv)
                 printf("option name lmp_improving_a type spin default %d min 500 max 7000\n", (int) (lmp_improving_a * 1000));
                 printf("option name lmp_improving_b type spin default %d min 500 max 7000\n", (int) (lmp_improving_b * 1000));
                 
-                printf("option name stable_eval_reduction_val type spin default %d min 0 max 75\n", stable_eval_reduction_val);
+                printf("option name stable_eval_margin type spin default %d min 0 max 75\n", stable_eval_margin);
                 #endif
                 printf("uciok\n");
                 fflush(stdout);
@@ -274,7 +275,7 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(historyPenaltyScale)
                     SET_SPA_OPTION_INT(historyPenaltyOffset)
                     SET_SPA_OPTION_INT(lowHistoryVal)
-                    SET_SPA_OPTION_INT(stable_eval_reduction_val)
+                    SET_SPA_OPTION_INT(stable_eval_margin)
                     SET_SPA_OPTION_FLOAT(lmr_a)
                     SET_SPA_OPTION_FLOAT(lmr_b)
                     SET_SPA_OPTION_FLOAT(lmp_a)

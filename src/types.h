@@ -164,6 +164,7 @@ typedef struct searchThreadContext {
 
     //History heuristic
     int16_t historyTable[2][6][64];
+    int16_t captureHistoryTable[6][64][6];
 
     //Continuation heuristics
     move countermove[2][6][64];

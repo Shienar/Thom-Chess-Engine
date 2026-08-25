@@ -51,7 +51,7 @@ extern float lmp_b;
 extern float lmp_improving_a;
 extern float lmp_improving_b;
 
-extern int stable_eval_reduction_val;
+extern int stable_eval_margin;
 
 
 void initSearchTables();
