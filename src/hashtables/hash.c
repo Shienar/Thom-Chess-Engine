@@ -270,11 +270,12 @@ uint64_t getEnPassantHash(bitboard* board)
     return 0;
 }
 
-uint64_t getHashCode(bitboard* board)
+void generateHashCode(bitboard* board)
 {
-    if(!board) return 0;
+    if(!board) return;
 
-    uint64_t returnValue = 0;
+    board->hashCode = 0;
+    board->pawnHash = 0;
 
     int piece;
     uint64_t mask = board->pieces_all;
@@ -284,20 +285,24 @@ uint64_t getHashCode(bitboard* board)
 
         piece = findPieceOnSquare(board, square);
 
-        if(piece != EMPTY_PIECE)  returnValue^=zobrist_piece_keys[piece][square];
+        if(piece != EMPTY_PIECE)
+        {
+            board->hashCode^=zobrist_piece_keys[piece][square];
+
+            if(ISPAWN(piece))
+                board->pawnHash^=zobrist_piece_keys[piece][square];
+        }
 
         mask&=(mask - 1);
     }
     
-    if(board->canKingsideCastle_w) returnValue^=zobrist_keys[768];
-    if(board->canQueensideCastle_w) returnValue^=zobrist_keys[769];
-    if(board->canKingsideCastle_b) returnValue^=zobrist_keys[770];
-    if(board->canQueensideCastle_b) returnValue^=zobrist_keys[771];
+    if(board->canKingsideCastle_w)  board->hashCode^=zobrist_keys[768];
+    if(board->canQueensideCastle_w) board->hashCode^=zobrist_keys[769];
+    if(board->canKingsideCastle_b)  board->hashCode^=zobrist_keys[770];
+    if(board->canQueensideCastle_b) board->hashCode^=zobrist_keys[771];
 
 
-    returnValue ^= getEnPassantHash(board);
+    board->hashCode ^= getEnPassantHash(board);
 
-    if(ISWHITE(board->turn)) returnValue^=zobrist_keys[780];
-
-    return returnValue;
+    if(ISWHITE(board->turn)) board->hashCode^=zobrist_keys[780];
 }

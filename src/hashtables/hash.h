@@ -15,6 +15,6 @@ extern uint64_t zobrist_piece_keys[PIECE_COUNT][64];
 void initZobristPieceKeys();
 
 uint64_t getEnPassantHash(bitboard* board);
-uint64_t getHashCode(bitboard* board);
+void generateHashCode(bitboard* board);
 
 #endif

@@ -109,6 +109,7 @@ A release version of the engine should be compiled with 'make -j'.
     - Capture History Heuristic
     - Countermove History Heuristic
     - Followup History Heuristic
+    - Static Eval Correction History
     - Razoring
     - Futility Pruning
     - Reverse Futility Pruning

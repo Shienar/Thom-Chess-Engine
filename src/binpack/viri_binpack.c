@@ -271,7 +271,7 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 
     if(isThreatened(board, board->kingSquare[board->turn], board->turn)) board->in_check = 1;
 
-    board->hashCode = getHashCode(board);
+    generateHashCode(board);
 }
 
 int readPackedBoard(binpackDetails* details, int readerIndex)

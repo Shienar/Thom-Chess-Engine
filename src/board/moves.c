@@ -909,11 +909,27 @@ int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector
         return -1;
 
     #ifdef VERIFY
-        uint64_t hc = getHashCode(newBoard);
-        if(newBoard->hashCode != hc)
+        bitboard temp;
+        memcpy(&temp, newBoard, sizeof(bitboard));
+        generateHashCode(&temp);
+        if(newBoard->hashCode != temp.hashCode)
         {
-            uint64_t xor = hc ^ newBoard->hashCode;
-            printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->hashCode, hc, xor);
+            uint64_t xor = temp.hashCode ^ newBoard->hashCode;
+            printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->hashCode, temp.hashCode, xor);
+            for(int i = 780; i >= 0; i--)
+            {
+                if(zobrist_keys[i] == xor) 
+                {
+                    printf("\tXOR = zobrist_keys[%d]\n", i);
+                    break;
+                }
+            }
+            assert(0);
+        }
+        else if(newBoard->pawnHash != temp.pawnHash)
+        {
+            uint64_t xor = temp.pawnHash ^ newBoard->pawnHash;
+            printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->pawnHash, temp.pawnHash, xor);
             for(int i = 780; i >= 0; i--)
             {
                 if(zobrist_keys[i] == xor) 

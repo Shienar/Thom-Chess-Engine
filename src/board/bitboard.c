@@ -335,7 +335,7 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
     if(enPassantTargetSquare[0] != '-') board->enPassantSquare = getSquareNumber(enPassantTargetSquare);
     else board->enPassantSquare = NO_EP_SQUARE;
 
-    board->hashCode = getHashCode(board);
+    generateHashCode(board);
     board->lastChangeIndex = board->halfMoveCount;
 
      //3-fold

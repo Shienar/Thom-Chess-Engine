@@ -41,6 +41,7 @@ int maximum_aspiration_margin = 150;
 float aspiration_margin_mult_factor = 2.0f;
 
 int delta_pruning_offset = 52;
+int delta_pruning_nnue_offset = 998;
 
 int futility_margin = 403;
 int futility_margin_improving = 368;
@@ -183,6 +184,8 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     else 
     {
         best = evaluate(context, ply);
+        int16_t correction = context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)] / 1024;
+        best += correction;
     
         tt_entry shallowEntry = {
             .depth = 0,
@@ -198,25 +201,27 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     alpha = _max(alpha, best);
 
     //Delta pruning
-    //NNUE was trained off of HCE so this still works well enough for now.
-    //It still might be worth adjusting this though. Every NNUE iteration strays 
-    //farther from the HCE.
-    int largestDelta = delta_pruning_offset;
+    //NNUE is initially trained on HCE data, but it strays away from it after a few iterations.
+    if(!useNNUE)
+    {
+        int largestDelta = delta_pruning_offset;
 
-    int opposingColor = FLIP_COLOR(curBoard->turn);
+        int opposingColor = FLIP_COLOR(curBoard->turn);
 
-    if(curBoard->pieces[QUEEN | opposingColor])
-        largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[QUEEN / 2]);
-    else if(curBoard->pieces[ROOK | opposingColor])
-        largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[ROOK / 2]);
-    else if(curBoard->pieces[BISHOP | opposingColor])
-        largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[BISHOP / 2]);
-    else if(curBoard->pieces[KNIGHT | opposingColor])
-        largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[KNIGHT / 2]);
-    else if(curBoard->pieces[PAWN | opposingColor])
-        largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[PAWN / 2]);
-
-    if(largestDelta + best < alpha) 
+        if(curBoard->pieces[QUEEN | opposingColor])
+            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[QUEEN / 2]);
+        else if(curBoard->pieces[ROOK | opposingColor])
+            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[ROOK / 2]);
+        else if(curBoard->pieces[BISHOP | opposingColor])
+            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[BISHOP / 2]);
+        else if(curBoard->pieces[KNIGHT | opposingColor])
+            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[KNIGHT / 2]);
+        else if(curBoard->pieces[PAWN | opposingColor])
+            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[PAWN / 2]);
+        if(largestDelta + best < alpha) 
+            return best;
+    }
+    else if(delta_pruning_nnue_offset + best < alpha)
         return best;
 
     moveIterator* iter = create_move_iterator(curBoard, GET_CAPTURES_AND_CHECKS, 
@@ -419,6 +424,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         else
         {
             score = evaluate(context, ply);
+            int16_t correction = context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)] / 1024;
+            score += correction;
+
             tt_entry shallowEntry = {
                 .depth = 0,
                 .hashCode = curBoard->hashCode,
@@ -683,6 +691,15 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
                 if(alpha >= beta)
                 {
+                    //Correction History
+                    if(abs(score) < MIN_MATE_SCORE)
+                    {
+                        int16_t error = clamp(1024 * (score - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+                        int16_t weight = _min(depth * depth + 2, 256);
+                        int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
+                        *oldHist = clamp(*oldHist + weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+                    }
+
                     if(isQuietMove)
                     {
                         //Killer heuristic
@@ -765,6 +782,15 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     new_tt_entry.evaluation = bestScore;
     new_tt_entry.bestMove = bestMove.raw;
     transposition_table_set(context->tt, new_tt_entry, ply);
+
+    //Correction History
+    if(new_tt_entry.nodeType == NODE_BOUND_EXACT && abs(score) < MIN_MATE_SCORE)
+    {
+        int16_t error = clamp(1024 * (score - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+        int16_t weight = _min(depth * depth + 2, 256);
+        int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
+        *oldHist += clamp(weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+    }
 
     return bestScore;
 }

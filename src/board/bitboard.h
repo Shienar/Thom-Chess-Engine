@@ -122,7 +122,8 @@ static inline void board_clear_square(bitboard* board, int square)
     board->pieces_all &= ~singleBitMask(square);
     board->pieceArr[square] = EMPTY_PIECE;
     board->hashCode ^= zobrist_piece_keys[pieceType][square];
-
+    if(ISPAWN(pieceType))
+        board->pawnHash ^= zobrist_piece_keys[pieceType][square];
 }
 
 //Assumes the target square is empty.
@@ -137,6 +138,8 @@ static inline void board_set(bitboard* board, int square, int piece)
     board->pieces_all |= singleBitMask(square);
     board->pieceArr[square] = piece;
     board->hashCode ^= zobrist_piece_keys[piece][square];
+    if(ISPAWN(piece))
+        board->pawnHash ^= zobrist_piece_keys[piece][square];
 }
 
 //Allows for capture.
@@ -147,6 +150,8 @@ static inline void board_move_piece(bitboard* board, int from, int to)
     assert(piece != EMPTY_PIECE);
 
     board->hashCode ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+    if(ISPAWN(piece))
+        board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
     uint64_t mask = singleBitMask(from) | singleBitMask(to);
     board->pieces[piece] ^= mask;
@@ -158,6 +163,8 @@ static inline void board_move_piece(bitboard* board, int from, int to)
     if(targetPiece != EMPTY_PIECE)
     {
         board->hashCode ^= zobrist_piece_keys[targetPiece][to];
+        if(ISPAWN(targetPiece))
+            board->pawnHash ^= zobrist_piece_keys[targetPiece][to];
         board->pieces_side[COLOR(targetPiece)] &= ~singleBitMask(to);
         board->pieces[targetPiece] &= ~singleBitMask(to);
     }   
@@ -173,6 +180,8 @@ static inline void board_move_piece_quietly(bitboard* board, int from, int to)
     assert(piece != EMPTY_PIECE);
 
     board->hashCode ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+    if(ISPAWN(piece))
+        board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
     uint64_t mask = singleBitMask(from) | singleBitMask(to);
     board->pieces[piece] ^= mask;

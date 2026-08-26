@@ -60,6 +60,7 @@ typedef struct {
 #define MAX_PLY 40
 typedef struct bitboard {
     uint64_t hashCode;
+    uint64_t pawnHash;
     uint64_t pieces[PIECE_COUNT];
     uint64_t pieces_side[2];
     uint64_t pieces_all;
@@ -135,6 +136,8 @@ typedef struct accumulatorRefreshTable {
 } accumulatorRefreshTable;
 
 #define MAX_REQUIRED_MOVES 32
+#define CORRHIST_SIZE 16384
+#define MAX_CORRHIST_VAL 16384
 typedef struct searchThreadContext {
     //UCI Thread settings or info
     int maxDepth, seldepth, completedDepth, deepeningSkip;
@@ -169,6 +172,9 @@ typedef struct searchThreadContext {
     //Continuation heuristics
     move countermove[2][6][64];
     move followUpMove[2][6][64];
+
+    //Correction History
+    int16_t pawnCorrHist[2][CORRHIST_SIZE];
 } searchThreadContext;
 
 #endif
