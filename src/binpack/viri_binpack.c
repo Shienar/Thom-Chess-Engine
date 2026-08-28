@@ -321,7 +321,7 @@ int readPackedBoard(binpackDetails* details, int readerIndex)
     
     if(rDetails->packedBoard->result == VIRI_WHITE_WIN) rDetails->currentGameWinner = VICTOR_WHITE;
     else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
-    else rDetails->currentGameWinner = VICTOR_DRAW_GENERIC;
+    else rDetails->currentGameWinner = VICTOR_DRAW;
 
     packedBoardToBoard(rDetails->board, rDetails->packedBoard);
 

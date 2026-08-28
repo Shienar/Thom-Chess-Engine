@@ -141,12 +141,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         *context->abortFlag = 1;
         return 0;
     }
-    if(isDraw(curBoard, &context->repetitions))
+
+    if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1)
         return evaluate(context, ply);
         
     bitboard* nextBoard = &context->boardStack[ply + 1];
+    move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
 
     context->seldepth = _max(context->seldepth, ply);
     
@@ -182,11 +184,11 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         transposition_table_set(context->tt, shallowEntry, ply);
     }
 
-    if(best >= beta) return best;
+    //Stand Pat
     alpha = _max(alpha, best);
+    if(alpha >= beta) return best;
 
     //Delta pruning
-    //NNUE is initially trained on HCE data, but it strays away from it after a few iterations.
     if(!useNNUE)
     {
         int largestDelta = delta_pruning_offset;
@@ -209,7 +211,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     else if(delta_pruning_nnue_offset + best < alpha)
         return best;
 
-    moveIterator* iter = create_move_iterator(context, GET_CAPTURES_AND_CHECKS, ply, NULL, tt_move);
+    moveIterator* iter = create_move_iterator(context, curBoard->in_check ? GET_ALL_MOVES : GET_CAPTURES_AND_CHECKS, ply, pvMove, tt_move);
 
     int validMovesVisited = 0;
     move bestMove = {0};
@@ -269,6 +271,9 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
         };
         transposition_table_set(context->tt, shallowEntry, ply);
     }
+    else if(curBoard->in_check)
+        return -SCORE_WIN + ply;
+
     return best;
 }
 
@@ -301,9 +306,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     context->seldepth = _max(context->seldepth, ply);
     
-    if(isDraw(curBoard, &context->repetitions)) 
+    if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
-
     //Mate distance pruning for non-root nodes.
     if(ply != 0)
     {
@@ -519,7 +523,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             //Singular Extension
             if(hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 && 
-               old_tt_entry.nodeType == NODE_BOUND_LOWER && !context->excludedMove[ply].raw)
+               old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw)
             {
                 int sBeta = old_tt_entry.evaluation - 3 * depth;
                 int sDepth = depth / 2 + 1;
@@ -538,10 +542,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         next_depth++;
                 }
                 //Multicut pruning, but we just take the strong singular and assume that there's going to be more.
-                else if(singularScore >= beta)
+                else if(singularScore >= beta && abs(singularScore) < MIN_MATE_SCORE)
                     return singularScore;
                 //Negative Extension
-                else if(cutNode && old_tt_entry.evaluation >= beta)
+                else if(cutNode || old_tt_entry.evaluation >= beta)
                     next_depth--;
             }
 
@@ -563,13 +567,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             context->moveStack[ply] = *currentMove;
             
             int isQuietMove = (!nextBoard->in_check && !isCapture && !currentMove->promoteTo);
-
             
             if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE)
                 continue;
 
             //Check extensions
-            if(nextBoard->in_check)
+            if(!pvNode && nextBoard->in_check)
                 next_depth++;
             
             //Late move reduction
@@ -606,6 +609,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             }
             
+            validMovesVisited++;
             if(score > bestScore)
             {
                 bestScore = score;
@@ -614,31 +618,20 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 if(score > alpha)
                 {
                     alpha = score;
-
-                    new_tt_entry.nodeType = (score < beta) ? NODE_BOUND_EXACT : NODE_BOUND_LOWER;
-                    new_tt_entry.evaluation = score;
-                    new_tt_entry.bestMove = currentMove->raw;
-                    transposition_table_set(context->tt, new_tt_entry, ply);
                     
                     //Save PV
-                    myPV->line[0] = *currentMove;
-                    myPV->hashCodes[0] = curBoard->hashCode;
-                    memcpy(&myPV->line[1], childPV.line, childPV.length * sizeof(move));
-                    memcpy(&myPV->hashCodes[1], childPV.hashCodes, childPV.length * sizeof(uint64_t));
-                    myPV->length = childPV.length + 1;
+                    if(pvNode)
+                    {
+                        myPV->line[0] = *currentMove;
+                        myPV->hashCodes[0] = curBoard->hashCode;
+                        memcpy(&myPV->line[1], childPV.line, childPV.length * sizeof(move));
+                        memcpy(&myPV->hashCodes[1], childPV.hashCodes, childPV.length * sizeof(uint64_t));
+                        myPV->length = childPV.length + 1;
+                    }
                 }
 
                 if(alpha >= beta)
                 {
-                    //Correction History
-                    if(abs(score) < MIN_MATE_SCORE)
-                    {
-                        int16_t error = clamp(1024 * (score - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
-                        int16_t weight = _min(depth * depth + 2, 256);
-                        int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
-                        *oldHist = clamp(*oldHist + weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
-                    }
-
                     if(isQuietMove)
                     {
                         //Killer heuristic
@@ -685,12 +678,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] = _min(context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], MAX_HISTORY_SCORE);
                     }
 
-                    destroy_move_iterator(iter);
-
-                    return score;
+                    break;
                 }
             }
-            validMovesVisited++;
 
             if(isQuietMove)
                 searchedQuietIndices[searchedQuietCount++] = ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
@@ -726,9 +716,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     transposition_table_set(context->tt, new_tt_entry, ply);
 
     //Correction History
-    if(new_tt_entry.nodeType == NODE_BOUND_EXACT && abs(score) < MIN_MATE_SCORE)
+    if((bestScore >= beta || new_tt_entry.nodeType == NODE_BOUND_EXACT) && abs(bestScore) < MIN_MATE_SCORE)
     {
-        int16_t error = clamp(1024 * (score - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+        int16_t error = clamp(1024 * (bestScore - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
         int16_t weight = _min(depth * depth + 2, 256);
         int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
         *oldHist += clamp(weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);

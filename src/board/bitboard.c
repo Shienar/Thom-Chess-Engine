@@ -80,34 +80,35 @@ int countRepetitions(bitboard* board, repetitionVector* repetitions)
 
 int isDraw(bitboard* board, repetitionVector* repetitions)
 {
+    int repeats = countRepetitions(board, repetitions);
     //Repetition
-    if(countRepetitions(board, repetitions) >= 3) return VICTOR_DRAW_THREEFOLD;
+    if(repeats >= 3) return VICTOR_DRAW;
     //50-move rule
-    else if(board->halfmoveClock >= 100) return VICTOR_DRAW_FIFTY_MOVE_RULE; //Variable stores half-moves
+    else if(board->halfmoveClock >= 100) return VICTOR_DRAW; //Variable stores half-moves
     //Trivial insufficent material
-    else if((board->pieces[BLACK_KING]|board->pieces[WHITE_KING]) == board->pieces_all) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+    else if((board->pieces[BLACK_KING]|board->pieces[WHITE_KING]) == board->pieces_all) return VICTOR_DRAW;
     //Other insufficient material
     else
     {
         //King + Minor Piece vs King
         if(board->pieces_side[BLACK] == board->pieces[BLACK_KING] && board->pieces[WHITE_PAWN] == 0 && board->pieces[WHITE_ROOK] == 0 && board->pieces[WHITE_QUEEN] == 0)
         {
-            if(__builtin_popcountll(board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT]) <= 1) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+            if(__builtin_popcountll(board->pieces[WHITE_BISHOP]|board->pieces[WHITE_KNIGHT]) <= 1) return VICTOR_DRAW;
         }
         else if(board->pieces_side[WHITE] == board->pieces[WHITE_KING] && board->pieces[BLACK_PAWN] == 0 && board->pieces[BLACK_ROOK] == 0 && board->pieces[BLACK_QUEEN] == 0)
         {
-            if(__builtin_popcountll(board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT]) <= 1) return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+            if(__builtin_popcountll(board->pieces[BLACK_BISHOP]|board->pieces[BLACK_KNIGHT]) <= 1) return VICTOR_DRAW;
         }
         //King + Bishops vs King + Bishops (Same color bishops)
         else if(board->pieces_all == (board->pieces[WHITE_KING]|board->pieces[WHITE_BISHOP]|board->pieces[BLACK_KING]|board->pieces[BLACK_BISHOP]) && 
                 ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&LIGHT_SQUARES) ||
                  (board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP]) == ((board->pieces[BLACK_BISHOP]|board->pieces[WHITE_BISHOP])&DARK_SQUARES))) 
         {
-            return VICTOR_DRAW_INSUFFICIENT_MATERIAL;
+            return VICTOR_DRAW;
         }
     }
 
-    return 0;
+    return VICTOR_NONE;
 }
 
 //Only called when it has already been determined that there's no legal moves.
@@ -116,12 +117,12 @@ int getMateResult(bitboard* board)
     if(board->turn == WHITE)
     {
         if(board->in_check) return VICTOR_BLACK;
-        else return VICTOR_DRAW_STALEMATE_WHITE;
+        else return VICTOR_DRAW;
     }
     else
     {
         if(board->in_check) return VICTOR_WHITE;
-        else return VICTOR_DRAW_STALEMATE_BLACK;
+        else return VICTOR_DRAW;
     }
 }
 
