@@ -343,7 +343,7 @@ int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
     return -1;
 }
 
-static const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
+const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
 int staticExchangeEvaluation(bitboard* board, move m)
 {
     int gain[MAX_PLY];
@@ -404,27 +404,22 @@ int staticExchangeEvaluation(bitboard* board, move m)
 }
 
 //Only used when move ordering matters (not perft)
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
-                                        move* requiredMoves, move* excludedMove,
-                                        move* pvMove, move* ttMove, 
-                                        int16_t history[2][6][64], int16_t captureHistory[6][64][6],
-                                        move* killerMoves, 
-                                        move* counterMove, move* followUpMove)
+moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove)
 {
-    moveIterator* iter = malloc(sizeof(moveIterator));
+    moveIterator* iter = calloc(1, sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
     iter->moveScores = malloc(MAX_MOVES * sizeof(int16_t));
-    iter->count = 0;
-    iter->visitedCount = 0;
 
-    if(requiredMoves && IS_VALID_MOVE(requiredMoves[0]))
+    bitboard* board = &context->boardStack[ply];
+
+    if(ply == 0 && IS_VALID_MOVE(context->searchedMoves[0]))
     {
         for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
         {
-            if(IS_VALID_MOVE(requiredMoves[i])) 
+            if(IS_VALID_MOVE(context->searchedMoves[i])) 
             {
                 iter->count++;
-                iter->moveList[i] = requiredMoves[i];
+                iter->moveList[i] = context->searchedMoves[i];
             }
             else break;
         }
@@ -432,6 +427,26 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
     else iter->count = generateMoveList(iter->moveList, board, capturesOnly);
 
     if(!iter->count) { destroy_move_iterator(iter); return NULL; }
+
+    move* counterMove = NULL;
+    if(ply >= 1 && context->moveStack[ply - 1].raw)
+    {
+        int side = context->boardStack[ply - 1].turn;
+        int from = context->moveStack[ply - 1].startSquare;
+        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
+        int to = context->moveStack[ply - 1].endSquare;
+        counterMove = &context->countermove[side][piece][to];
+    }
+
+    move* followUpMove = NULL;
+    if(ply >= 2 && context->moveStack[ply - 2].raw)
+    {
+        int side = context->boardStack[ply - 2].turn;
+        int from = context->moveStack[ply - 2].startSquare;
+        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
+        int to = context->moveStack[ply - 2].endSquare;
+        followUpMove = &context->followUpMove[side][piece][to];
+    }
     
     for(int i = 0; i < iter->count; i++)
     {
@@ -445,7 +460,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
         }
         int isCapture = capturedPiece != EMPTY_PIECE || isEP;
 
-        if(excludedMove && iter->moveList[i].raw == excludedMove->raw)
+        if(context->excludedMove[ply].raw && iter->moveList[i].raw == context->excludedMove[ply].raw)
         {
             //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
             if(i > iter->visitedCount)
@@ -466,7 +481,7 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
         else if(isCapture)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
-            int historyBonus = captureHistory[currentPiece / 2][iter->moveList[i].endSquare][capturedPiece / 2] / 64;
+            int historyBonus = context->captureHistoryTable[currentPiece / 2][iter->moveList[i].endSquare][capturedPiece / 2] / 64;
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue + historyBonus;
             else if(capturesOnly == GET_WINNING_CAPTURES)
             {
@@ -483,25 +498,20 @@ moveIterator* create_move_iterator(bitboard* board, int capturesOnly,
             } 
             else iter->moveScores[i] = -CAPTURE_SCORE + seeValue + historyBonus;
         }
-        else if(killerMoves && iter->moveList[i].raw == killerMoves[0].raw)
+        else if(iter->moveList[i].raw == context->killerMoves[ply][0].raw)
             iter->moveScores[i] = KILLER_1_SCORE;
-        else if(killerMoves && iter->moveList[i].raw == killerMoves[1].raw)
+        else if(iter->moveList[i].raw == context->killerMoves[ply][1].raw)
             iter->moveScores[i] = KILLER_2_SCORE;
         else if(iter->moveList[i].promoteTo)
             iter->moveScores[i] = PROMOTION_SCORE + iter->moveList[i].promoteTo;
-        else if(history)
+        else
         {
-            iter->moveScores[i] = history[board->turn][findPieceOnSquare(board, iter->moveList[i].startSquare) / 2][iter->moveList[i].endSquare];
+            iter->moveScores[i] = context->historyTable[board->turn][currentPiece / 2][iter->moveList[i].endSquare];
 
             if(counterMove && iter->moveList[i].raw == counterMove->raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE);
             else if(followUpMove && iter->moveList[i].raw == followUpMove->raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + FOLLOWUPMOVE_BONUS, MAX_HISTORY_SCORE);
-        }
-        else 
-        {
-            int pc = findPieceOnSquare(board, iter->moveList[i].startSquare);
-            iter->moveScores[i] = (ISKING(pc)) ? -1 : pc;
         }
     }
     return iter;
@@ -556,8 +566,6 @@ int isThreatened(bitboard* board, int square, int defendingColor)
 {
     int attackingColor = FLIP_COLOR(defendingColor);
 
-    uint64_t enemyPieces = board->pieces_side[attackingColor];
-    uint64_t allyPieces = board->pieces_side[defendingColor];
     if(pawnAttacks[defendingColor][square] & board->pieces[PAWN | attackingColor])
         return THREAT_TYPE_PAWN;
     if(knightAttacks[square] & board->pieces[KNIGHT | attackingColor])
@@ -567,6 +575,9 @@ int isThreatened(bitboard* board, int square, int defendingColor)
         
     uint64_t bishopqueen = board->pieces[BISHOP | attackingColor] | board->pieces[QUEEN | attackingColor];
     uint64_t rookqueen = board->pieces[ROOK | attackingColor] | board->pieces[QUEEN | attackingColor];
+
+    uint64_t enemyPieces = board->pieces_side[attackingColor];
+    uint64_t allyPieces = board->pieces_side[defendingColor];
 
     if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) 
         return THREAT_TYPE_BISHOPQUEEN;
@@ -616,38 +627,27 @@ uint64_t kingMoves(bitboard* board, int square, int color)
     {
         returnedValue&=(~board->pieces_side[WHITE]);
 
-        //uint64_t betweenMask = 0x60; //Squares 5 and 6 between king on 4 and rook on 7
-
         if(board->canKingsideCastle_w && !board->in_check && !(board->pieces_all&0x60) && 
                                                         !isThreatened(board, square, color) && 
-                                                        !isThreatened(board, square+1, color) && 
-                                                        !isThreatened(board, square+2, color)) returnedValue|=0x40;
-
-        //betweenMask = 0xE; //Square 1 and 2 and 3 between rook on 0 and king on 4
+                                                        !isThreatened(board, square+1, color)) returnedValue|=0x40;
 
         if(board->canQueensideCastle_w && !board->in_check && !(board->pieces_all&0xE) && 
                                                         !isThreatened(board, square, color) && 
-                                                        !isThreatened(board, square-1, color) && 
-                                                        !isThreatened(board, square-2, color)) returnedValue|=0x4;
+                                                        !isThreatened(board, square-1, color)) returnedValue|=0x4;
         
     }
     else
     {
         returnedValue&=(~board->pieces_side[BLACK]);
 
-        //uint64_t betweenMask = 0x6000000000000000; //Squares 61 and 62 between king on 60 and rook on 63
-
         //Black kingside
         if(board->canKingsideCastle_b && !board->in_check && !(board->pieces_all&0x6000000000000000) && 
                                                             !isThreatened(board, square, color) &&
-                                                            !isThreatened(board, square+1, color) && 
-                                                            !isThreatened(board, square+2, color)) returnedValue|=0x4000000000000000;
+                                                            !isThreatened(board, square+1, color)) returnedValue|=0x4000000000000000;
 
-        //betweenMask = 0x0E00000000000000; //Square 57 and 58 and 59 between rook on 56 and king on 60
         if(board->canQueensideCastle_b && !board->in_check && !(board->pieces_all&0x0E00000000000000) &&
                                                             !isThreatened(board, square, color) &&
-                                                            !isThreatened(board, square-1, color) && 
-                                                            !isThreatened(board, square-2, color)) returnedValue|=0x0400000000000000;
+                                                            !isThreatened(board, square-1, color)) returnedValue|=0x0400000000000000;
     }
     
     return returnedValue;

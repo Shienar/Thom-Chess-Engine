@@ -23,7 +23,7 @@ volatile uint8_t isPonder = 0;
 
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
-const int futility_pruning_depth = 2;
+const int futility_pruning_depth = 8;
 const int nullmove_pruning_depth = 5;
 const int probcut_depth = 8;
 const int probcut_depth_reduction = 4;
@@ -43,8 +43,8 @@ float aspiration_margin_mult_factor = 2.0f;
 int delta_pruning_offset = 52;
 int delta_pruning_nnue_offset = 998;
 
-int futility_margin = 403;
-int futility_margin_improving = 368;
+int futility_margin = 70;
+int futility_depth_margin = 51;
 
 int reverse_futility_margin = 185;
 int reverse_futility_margin_improving = 122;
@@ -159,23 +159,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     tt_entry entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
     if(tt_hit)
     {
-        if(entry.nodeType == NODE_BOUND_EXACT)
-            return entry.evaluation;
-        else if(entry.nodeType == NODE_BOUND_UPPER)
-        {
-            if(entry.evaluation <= alpha)
+        if(entry.nodeType == NODE_BOUND_EXACT ||
+            (entry.nodeType == NODE_BOUND_UPPER && entry.evaluation <= alpha) ||
+            (entry.nodeType == NODE_BOUND_LOWER && entry.evaluation >= beta))
                 return entry.evaluation;
-            beta = _min(beta, entry.evaluation);
-        }
-        else if(entry.nodeType == NODE_BOUND_LOWER)
-        {
-            if(entry.evaluation >= beta)
-                return entry.evaluation;
-            alpha = _max(alpha, entry.evaluation);
-        }
-            
-        if(alpha >= beta)
-            return alpha;
 
         temp.raw = entry.bestMove;
         tt_move = &temp;
@@ -184,8 +171,6 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     else 
     {
         best = evaluate(context, ply);
-        int16_t correction = context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)] / 1024;
-        best += correction;
     
         tt_entry shallowEntry = {
             .depth = 0,
@@ -224,12 +209,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     else if(delta_pruning_nnue_offset + best < alpha)
         return best;
 
-    moveIterator* iter = create_move_iterator(curBoard, GET_CAPTURES_AND_CHECKS, 
-                                                NULL, &context->excludedMove[ply], 
-                                                NULL, tt_move, 
-                                                context->historyTable, context->captureHistoryTable, 
-                                                NULL,
-                                                NULL, NULL);
+    moveIterator* iter = create_move_iterator(context, GET_CAPTURES_AND_CHECKS, ply, NULL, tt_move);
 
     int validMovesVisited = 0;
     move bestMove = {0};
@@ -246,7 +226,6 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
                 continue;
 
-            validMovesVisited++;
 
             int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
@@ -257,6 +236,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
                 isEP = 1;
             }
             
+            validMovesVisited++;
             if(useNNUE)
                 updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
@@ -300,26 +280,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     myPV->length = 0;
     PVar childPV;
-    
-    move* counterMove = NULL;
-    if(ply >= 1 && context->moveStack[ply - 1].raw)
-    {
-        int side = context->boardStack[ply - 1].turn;
-        int from = context->moveStack[ply - 1].startSquare;
-        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
-        int to = context->moveStack[ply - 1].endSquare;
-        counterMove = &context->countermove[side][piece][to];
-    }
-
-    move* followUpMove = NULL;
-    if(ply >= 2 && context->moveStack[ply - 2].raw)
-    {
-        int side = context->boardStack[ply - 2].turn;
-        int from = context->moveStack[ply - 2].startSquare;
-        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
-        int to = context->moveStack[ply - 2].endSquare;
-        followUpMove = &context->followUpMove[side][piece][to];
-    }
 
     move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
     move* tt_move = NULL;
@@ -369,23 +329,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     {
         if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha))
         {
-            if(old_tt_entry.nodeType == NODE_BOUND_EXACT)
-                return old_tt_entry.evaluation;
-            else if(old_tt_entry.nodeType == NODE_BOUND_UPPER)
-            {
-                if(old_tt_entry.evaluation <= alpha)
+            if(old_tt_entry.nodeType == NODE_BOUND_EXACT ||
+                (old_tt_entry.nodeType == NODE_BOUND_UPPER && old_tt_entry.evaluation <= alpha) ||
+                (old_tt_entry.nodeType == NODE_BOUND_LOWER && old_tt_entry.evaluation >= beta))
                     return old_tt_entry.evaluation;
-                beta = _min(beta, old_tt_entry.evaluation);
-            }
-            else if(old_tt_entry.nodeType == NODE_BOUND_LOWER)
-            {
-                if(old_tt_entry.evaluation >= beta)
-                    return old_tt_entry.evaluation;
-                alpha = _max(alpha, old_tt_entry.evaluation);
-            }
-                
-            if(alpha >= beta)
-                return alpha;
         }
         
         temp.raw = old_tt_entry.bestMove; 
@@ -420,7 +367,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!hit) 
     {
-        if(curBoard->in_check) score = -SCORE_WIN;
+        if(curBoard->in_check) 
+            score = -SCORE_WIN;
+        else if(context->excludedMove[ply].raw)
+            score = context->evalHistory[ply];
         else
         {
             score = evaluate(context, ply);
@@ -453,14 +403,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         //Stable Eval Reduction
         if(ply >= 2 && staticScore >= beta && cutNode && depth > 8 && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_margin)
             depth--;
-
-        //Futility pruning
-        if(depth <= futility_pruning_depth)
-        {
-            int boostedVal = context->improving[ply] ? score + futility_margin_improving : score + futility_margin;
-            if(boostedVal <= alpha) 
-                return boostedVal;
-        }
 
         //Reverse Futility Pruning
         if(depth <= reverse_futility_pruning_depth)
@@ -501,12 +443,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(score >= pBeta && pBeta < MIN_MATE_SCORE && (!hit || old_tt_entry.depth < nextDepth))
             {
                 int probCutScore = INT32_MIN;
-                moveIterator* iter = create_move_iterator(curBoard, GET_WINNING_CAPTURES,
-                                                            NULL, &context->excludedMove[ply],
-                                                            pvMove, tt_move, 
-                                                            context->historyTable, context->captureHistoryTable, 
-                                                            context->killerMoves[ply], 
-                                                            counterMove, followUpMove);
+                moveIterator* iter = create_move_iterator(context, GET_WINNING_CAPTURES, ply, pvMove, tt_move);
                 if(iter)
                 {
                     move* currentMove;
@@ -559,12 +496,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(!curBoard->in_check && !context->excludedMove[ply].raw && depth >= tt_reduction_depth && (pvNode || cutNode) && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
         depth--;
 
-    moveIterator* iter = create_move_iterator(curBoard, GET_ALL_MOVES,
-                                                (ply == 0) ? context->searchedMoves : NULL, &context->excludedMove[ply],
-                                                pvMove, tt_move, 
-                                                context->historyTable, context->captureHistoryTable, 
-                                                context->killerMoves[ply], 
-                                                counterMove, followUpMove);
+    moveIterator* iter = create_move_iterator(context, GET_ALL_MOVES, ply, pvMove, tt_move);
     int validMovesVisited = 0;
     int bestScore = -SCORE_WIN;
     if(iter)
@@ -613,26 +545,31 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     next_depth--;
             }
 
+            //Late Move Pruning
+            if(!shouldSkipQuiets)
+            {
+                //Late move pruning
+                if(validMovesVisited > lmpTable[context->improving[ply]][ply])
+                    shouldSkipQuiets = 1;
+
+                //Futility Pruning
+                int lmrDepth = _max(0, depth - lmrTable[depth][validMovesVisited]);
+                if(!curBoard->in_check && lmrDepth <= futility_pruning_depth && staticScore + lmrDepth * futility_depth_margin + futility_margin <= alpha)
+                    shouldSkipQuiets = 1;
+
+            }
+
             if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions)) continue;
             context->moveStack[ply] = *currentMove;
             
             int isQuietMove = (!nextBoard->in_check && !isCapture && !currentMove->promoteTo);
 
-            //Quiet move pruning.
-            if(!shouldSkipQuiets && isQuietMove && ply > 0 && abs(bestScore) < MIN_MATE_SCORE)
-            {
-                //Late move pruning
-                if(!pvNode && validMovesVisited > lmpTable[context->improving[ply]][ply])
-                {
-                    shouldSkipQuiets = 1;
-                    continue;
-                }
-            }
-            if(isQuietMove && shouldSkipQuiets)
+            
+            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE)
                 continue;
 
             //Check extensions
-            if(nextBoard->in_check) 
+            if(nextBoard->in_check)
                 next_depth++;
             
             //Late move reduction
@@ -641,7 +578,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             //SEE reduction
             if(!pvNode && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
-                next_depth--;
+                next_depth-=2;
             
             //History Reduction
             if(!pvNode && isQuietMove && iter->moveScores[iter->visitedCount] < lowHistoryVal)
@@ -650,7 +587,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(useNNUE)
                 updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
-            if(pvNode && (validMovesVisited == 0 || score > alpha)) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
+            if(pvNode && (validMovesVisited == 0 || score > alpha)) 
+                score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             else
             {
                 //Scout
@@ -664,7 +602,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 }
                 
                 //PVS Re-search
-                if(score > alpha && pvNode) score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
+                if(score > alpha && pvNode) 
+                    score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             }
             
             if(score > bestScore)
@@ -703,8 +642,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     if(isQuietMove)
                     {
                         //Killer heuristic
-                        context->killerMoves[ply][1] = context->killerMoves[ply][0];
-                        context->killerMoves[ply][0] = *currentMove;
+                        if(currentMove->raw != context->killerMoves[ply][0].raw)
+                        {
+                            context->killerMoves[ply][1] = context->killerMoves[ply][0];
+                            context->killerMoves[ply][0] = *currentMove;
+                        }
                     
                         //History heuristic
                         int bonus = historyBonusScale * depth + historyBonusOffset;
@@ -712,7 +654,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         int16_t* dest = &context->historyTable[curBoard->turn][PIECE(currentPiece) / 2][currentMove->endSquare];
                         *dest = _min(*dest + bonus, MAX_HISTORY_SCORE);
 
-                        int16_t* straightArr = (int16_t*) context->historyTable;
+                        int16_t* straightArr = (int16_t*) context->historyTable[curBoard->turn];
                         for(int i = 0; i < searchedQuietCount; i++)
                             straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
 
@@ -751,7 +693,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             validMovesVisited++;
 
             if(isQuietMove)
-                searchedQuietIndices[searchedQuietCount++] = (curBoard->turn * 384) + ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
+                searchedQuietIndices[searchedQuietCount++] = ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
             else if(capturedPiece != EMPTY_PIECE)
             {
                 //Capture History Herustic

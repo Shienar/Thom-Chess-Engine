@@ -31,6 +31,7 @@
 
 //A zero'd out move will have all values set to zero.
 #define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
+extern const int pieceValuesSEE[15];
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
@@ -43,12 +44,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 #define MAX_HISTORY_SCORE 16384 //+- max bound
 #define COUNTERMOVE_BONUS 6000 //added to history score
 #define FOLLOWUPMOVE_BONUS 5000 //added to history score
-moveIterator* create_move_iterator(bitboard* board, int capturesOnly, 
-                                        move* requiredMoves, move* excludedMove,
-                                        move* pvMove, move* ttMove, 
-                                        int16_t history[2][6][64], int16_t captureHistory[6][64][6],
-                                        move* killerMoves, 
-                                        move* counterMove, move* followUpMove);
+moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 

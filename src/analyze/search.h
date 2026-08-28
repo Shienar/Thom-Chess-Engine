@@ -29,7 +29,7 @@ extern int delta_pruning_offset;
 extern int delta_pruning_nnue_offset;
 
 extern int futility_margin;
-extern int futility_margin_improving;
+extern int futility_depth_margin;
 
 extern int reverse_futility_margin;
 extern int reverse_futility_margin_improving;

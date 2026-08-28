@@ -96,8 +96,8 @@ int main(int argc, char** argv)
                 printf("option name delta_pruning_nnue_offset type spin default %d min 100 max 1500\n", delta_pruning_nnue_offset);
                 
 
-                printf("option name futility_margin type spin default %d min 150 max 450\n", futility_margin);
-                printf("option name futility_margin_improving type spin default %d min 150 max 450\n", futility_margin_improving);
+                printf("option name futility_margin type spin default %d min 25 max 250\n", futility_margin);
+                printf("option name futility_depth_margin type spin default %d min 25 max 250\n", futility_depth_margin);
 
 
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
@@ -269,6 +269,7 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(reverse_futility_margin)
                     SET_SPA_OPTION_INT(reverse_futility_margin_improving)
                     SET_SPA_OPTION_INT(futility_margin)
+                    SET_SPA_OPTION_INT(futility_depth_margin)
                     SET_SPA_OPTION_INT(probcut_offset)
                     SET_SPA_OPTION_INT(probcut_offset_improving)
                     SET_SPA_OPTION_INT(historyBonusScale)
