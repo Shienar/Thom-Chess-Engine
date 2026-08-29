@@ -1,6 +1,6 @@
 UCI-compliant HCE chess engine created in C.
 All NNUE data was self-generated, starting from HCE-generated data.
-The NNUE requires AVX2 SIMD instructions.
+The NNUE requires compliance with AVX2 SIMD instructions.
 
 ## BUILDING:
 
@@ -128,16 +128,16 @@ A release version of the engine should be compiled with 'make -j'.
 
 ## ELO:
 
-The engine has not been officially released yet and does not have an official rating. The current best-guess elo rating for this engine is at around 2980 CCRL.
+The engine does not have an official rating. The current best-guess elo rating for this engine is at around 3036 CCRL.
 
 ```
 --------------------------------------------------
-Results of Thom vs Stash25 (8+0.08, 1t, 16MB, UHO_Lichess_4852_v1.epd):
-Elo: 44.45 +/- 23.70, nElo: 50.04 +/- 26.35
-LOS: 99.99 %, DrawRatio: 37.13 %, PairsRatio: 1.62
-Games: 668, Wins: 305, Losses: 220, Draws: 143, Points: 376.5 (56.36 %)
-Ptnml(0-2): [38, 42, 124, 57, 73], WL/DD Ratio: 4.64
-LLR: 0.27 (9.1%) (-2.94, 2.94) [0.00, 1.00]
+Results of Thom vs Stash26 (8+0.08, 1t, 16MB, UHO_Lichess_4852_v1.epd):
+Elo: 36.62 +/- 12.76, nElo: 44.05 +/- 15.23
+LOS: 100.00 %, DrawRatio: 36.10 %, PairsRatio: 1.54
+Games: 2000, Wins: 863, Losses: 653, Draws: 484, Points: 1105.0 (55.25 %)
+Ptnml(0-2): [92, 160, 361, 220, 167], WL/DD Ratio: 5.94
+LLR: 0.71 (24.1%) (-2.94, 2.94) [0.00, 1.00]
 --------------------------------------------------
 ```
 
@@ -149,6 +149,7 @@ LLR: 0.27 (9.1%) (-2.94, 2.94) [0.00, 1.00]
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
 - The lichess-big3-resolved.book dataset was used for tuning the HCE.
 - [Weather Factory](https://github.com/jnlt3/weather-factory) was used for SPSA tuning.
+- [Bullet](https://github.com/jw1912/bullet) was used for NNUE training.
 - The open-sourced nature of the chess programming community was very helpful for me to get past various barriers. I'd like to mention the following in particular that were the most impactful:
     - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & syzygy implementation)
     - [Alexandria](https://github.com/PGG106/Alexandria) (For search implementation)

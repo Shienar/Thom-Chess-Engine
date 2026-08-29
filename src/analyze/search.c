@@ -24,7 +24,7 @@ volatile uint8_t isPonder = 0;
 const int min_aspiration_depth = 5;
 const int reverse_futility_pruning_depth = 4;
 const int futility_pruning_depth = 8;
-const int nullmove_pruning_depth = 5;
+const int nullmove_pruning_depth = 3;
 const int probcut_depth = 8;
 const int probcut_depth_reduction = 4;
 const int tt_reduction_depth = 7;
@@ -401,7 +401,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(ply < MAX_PLY - 1)
         context->killerMoves[ply+1][0].raw = context->killerMoves[ply+1][1].raw = 0;
 
-
     if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE)
     {
         //Stable Eval Reduction
@@ -435,7 +434,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             context->moveStack[ply].raw = 0;
             int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, 0, !cutNode);
             if(nullScore >= beta)
-                return beta;
+            {
+                if(nullScore < MIN_MATE_SCORE)
+                    return nullScore;
+                else
+                    return beta;
+            }
         }
 
         //Probcut
@@ -509,6 +513,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
+            int moveScore = iter->moveScores[iter->visitedCount - 1];
             int next_depth = depth - 1;
 
             int currentPiece = findPieceOnSquare(curBoard, currentMove->startSquare);
@@ -568,7 +573,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             
             int isQuietMove = (!nextBoard->in_check && !isCapture && !currentMove->promoteTo);
             
-            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE)
+            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && moveScore != KILLER_1_SCORE && moveScore != KILLER_2_SCORE)
                 continue;
 
             //Check extensions
@@ -580,11 +585,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 next_depth -= lmrTable[depth][validMovesVisited];
 
             //SEE reduction
-            if(!pvNode && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
+            if(!pvNode && moveScore < -CAPTURE_SCORE)
                 next_depth-=2;
             
             //History Reduction
-            if(!pvNode && isQuietMove && iter->moveScores[iter->visitedCount] < lowHistoryVal)
+            if(!pvNode && isQuietMove && moveScore < lowHistoryVal)
                 next_depth--;
 
             if(useNNUE)
