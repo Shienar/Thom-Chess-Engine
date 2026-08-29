@@ -1,0 +1,63 @@
+name: Build and Release C Project
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Compile Code (Windows)
+      if: matrix.os == 'windows-latest'
+      run: mingw32-make TARGET=thom-windows-64-avx2.exe
+
+    - name: Compile Code (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: make TARGET=thom-linux-64-avx2
+
+    - name: Upload Artifact to Workflow
+      uses: actions/upload-artifact@v4
+      with:
+        name: binary-${{ matrix.os }}
+        path: |
+          thom-windows-64-avx2.exe
+          thom-linux-64-avx2
+        if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        merge-multiple: true
+
+    - name: Create Release and Upload Assets
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/thom-windows-64-avx2.exe
+          artifacts/thom-linux-64-avx2

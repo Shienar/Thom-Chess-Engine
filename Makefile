@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -std=c99 -march=native -fopenmp -MMD -MP
+CFLAGS = -Wall -std=c99 -mavx2 -fopenmp -MMD -MP
 
 # Add debug or optimization flags to compiler flags
 ifdef DEBUG
