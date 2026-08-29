@@ -1,4 +1,4 @@
-UCI-compliant HCE chess engine created in C.
+UCI-compliant NNUE chess engine created in C.
 All NNUE data was self-generated, starting from HCE-generated data.
 The NNUE requires compliance with AVX2 SIMD instructions.
 
