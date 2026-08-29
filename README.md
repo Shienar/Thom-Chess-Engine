@@ -1,4 +1,4 @@
-UCI-compliant HCE chess engine created in C.
+UCI-compliant NNUE chess engine created in C.
 All NNUE data was self-generated, starting from HCE-generated data.
 The NNUE requires compliance with AVX2 SIMD instructions.
 
@@ -18,7 +18,7 @@ A release version of the engine should be compiled with 'make -j'.
 
 - Options:
     - Threads, default 1 [1, 64]
-    - Hash, default 4 [1, 4096]
+    - Hash, default 256 [1, 4096]
     - Ponder, default off
     - OwnBook, default off
     - SyzygyPath, default ""
