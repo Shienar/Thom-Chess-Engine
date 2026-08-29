@@ -18,7 +18,7 @@ A release version of the engine should be compiled with 'make -j'.
 
 - Options:
     - Threads, default 1 [1, 64]
-    - Hash, default 4 [1, 4096]
+    - Hash, default 256 [1, 4096]
     - Ponder, default off
     - OwnBook, default off
     - SyzygyPath, default ""
