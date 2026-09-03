@@ -10,9 +10,9 @@ else
 ifdef VERIFY
 $(error VERIFY cannot be compiled without DEBUG)	
 endif
-
 	CFLAGS += -O3
 	CFLAGS += -DNDEBUG
+	CFLAGS += -static -static-libgcc
 endif
 
 # NNUE validation.
