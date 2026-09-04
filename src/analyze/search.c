@@ -131,7 +131,7 @@ int evaluate(searchThreadContext* context, int ply)
     return (useNNUE) ? forwardPropagate(&context->boardStack[ply], &context->accumulatorStack[ply]) : hce_eval(&context->boardStack[ply]);
 }
 
-int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
+int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, int pvNode)
 {
     context->countedNodes++;
     bitboard* curBoard = &context->boardStack[ply];
@@ -150,7 +150,8 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
     bitboard* nextBoard = &context->boardStack[ply + 1];
     move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
 
-    context->seldepth = _max(context->seldepth, ply);
+    if(pvNode)
+        context->seldepth = _max(context->seldepth, ply);
     
     int lowestBound = alpha;
     move* tt_move = NULL;
@@ -242,7 +243,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply)
             if(useNNUE)
                 updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
-            int score = -quiescentSearch(context, -beta, -alpha, ply + 1);
+            int score = -quiescentSearch(context, -beta, -alpha, ply + 1, pvNode);
 
             if(score > best)
             {
@@ -304,7 +305,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         return 0;
     }
 
-    context->seldepth = _max(context->seldepth, ply);
+    if(pvNode)
+        context->seldepth = _max(context->seldepth, ply);
     
     if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
@@ -347,7 +349,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     if(ply >= MAX_PLY - 1)
         return evaluate(context, ply);
     if(depth <= 0)
-        return quiescentSearch(context, alpha, beta, ply);
+        return quiescentSearch(context, alpha, beta, ply, pvNode);
         
     bitboard* nextBoard = &context->boardStack[ply + 1];
     
@@ -418,7 +420,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         //Razoring
         if(score + razoring_a * depth * depth + razoring_b <= alpha)
         {
-            int qScore = quiescentSearch(context, alpha - 1, alpha, ply);
+            int qScore = quiescentSearch(context, alpha - 1, alpha, ply, pvNode);
             if(qScore < alpha)
                 return qScore;
         }
@@ -472,7 +474,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                         if(useNNUE)
                             updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
-                        probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1);
+                        probCutScore = -quiescentSearch(context, -pBeta - 1, -pBeta, ply + 1, pvNode);
                         if(probCutScore >= pBeta)
                             probCutScore = -principalVariationSearch(context, -pBeta - 1, -pBeta, nextDepth, ply + 1, &childPV, 0, !cutNode);
 
@@ -934,7 +936,9 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     int milliseconds = (double) (clock() - mainThread->startTime) / (CLOCKS_PER_SEC / 1000.0);
     milliseconds = _max(milliseconds, 1);
     int NPS = totalNodes / (milliseconds / 1000.0);
-    printf("info depth %d seldepth %d nodes %d nps %d time %d", bestDepth, best->seldepth, totalNodes, NPS, milliseconds);
+    
+    printf("info depth %d seldepth %d score ", bestDepth, best->seldepth);
+    
     int absScore = abs(bestScore);
     assert(absScore <= SCORE_WIN);
     if(absScore >= MIN_MATE_SCORE)
@@ -942,11 +946,11 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
         int mateInPlies = SCORE_WIN - absScore;
         int mateInMoves = (mateInPlies + 1) / 2;
         if(bestScore < 0) mateInMoves = -mateInMoves;
-        printf(" score mate %d", mateInMoves);
+        printf("mate %d ", mateInMoves);
     }
-    else printf(" score cp %d", bestScore);
-    
-    printf(" hashfull %" PRId64, (1000 * mainThread->tt->usedSlots) / mainThread->tt->capacity);
+    else printf("cp %d ", bestScore);
+
+    printf("nodes %d nps %d hashfull %" PRId64 " time %d", totalNodes, NPS, (1000 * best->tt->usedSlots) / best->tt->capacity, milliseconds);
 
     printf(" pv");
     for(int i = 0; i < best->pv.length; i++)
@@ -1044,8 +1048,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         aspiration_window(context, currentDepth);
-
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
         
         if(currentDepth > 10)
         {
@@ -1066,7 +1068,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             int milliseconds = (double) (clock() - context->startTime) / (CLOCKS_PER_SEC / 1000.0);
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
-            printf("info depth %d seldepth %d nodes %d nps %d time %d", currentDepth, context->seldepth, totalNodes, NPS, milliseconds);
+
+           printf("info depth %d seldepth %d score ", currentDepth, context->seldepth);
+    
             int absScore = abs(context->score);
             assert(absScore <= SCORE_WIN);
             if(absScore >= MIN_MATE_SCORE)
@@ -1074,14 +1078,17 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                 int mateInPlies = SCORE_WIN - absScore;
                 int mateInMoves = (mateInPlies + 1) / 2;
                 if(context->score < 0) mateInMoves = -mateInMoves;
-                printf(" score mate %d", mateInMoves);
+                printf("mate %d ", mateInMoves);
             }
-            else printf(" score cp %d", context->score);
-            printf(" hashfull %" PRId64, (1000 * context->tt->usedSlots) / context->tt->capacity);
+            else printf("cp %d ", context->score);
+
+            printf("nodes %d nps %d hashfull %" PRId64 " time %d", totalNodes, NPS, (1000 * context->tt->usedSlots) / context->tt->capacity, milliseconds);
+
             printf(" pv");
             for(int i = 0; i < context->pv.length; i++)
             {
                 move m = context->pv.line[i];
+                if(!IS_VALID_MOVE(m)) break;
                 char startSq[3] = {'\0'};
                 char endSq[3] = {'\0'};
                 getSquareName(m.startSquare, startSq);
@@ -1092,8 +1099,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                 else if(m.promoteTo == BISHOP) printf("b");
                 else if(m.promoteTo == KNIGHT) printf("n");
             }
+
             printf("\n");
             fflush(stdout);
+            
+            if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
         }
         
         if(abs(context->score) > MIN_MATE_SCORE)

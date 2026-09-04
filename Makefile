@@ -12,7 +12,7 @@ $(error VERIFY cannot be compiled without DEBUG)
 endif
 	CFLAGS += -O3
 	CFLAGS += -DNDEBUG
-	CFLAGS += -static -static-libgcc
+	CFLAGS += -static
 endif
 
 # NNUE validation.

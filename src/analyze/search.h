@@ -57,7 +57,7 @@ extern int stable_eval_margin;
 
 void initSearchTables();
 int perft(bitboard* board, int depth, int verbose);
-int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply);
+int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, int pvNode);
 int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int pvNode, int cutNode);
 THREAD_RETURN calculateBestMove(THREAD_PARAM param);
 
