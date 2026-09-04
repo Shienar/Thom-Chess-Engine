@@ -73,7 +73,7 @@ int main(int argc, char** argv)
         {
             if(strcmp(str, "uci") == 0) 
             {
-                printf("id name ChessBot 1.0\n");
+                printf("id name Thom 1.0.2\n");
                 printf("id author Grant Vizaniaris\n");
                 printf("option name Hash type spin default 256 min 1 max 4096\n");
                 printf("option name Threads type spin default 1 min 1 max 64\n");
