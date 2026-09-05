@@ -128,12 +128,14 @@ int perft(bitboard* board, int depth, int verbose)
 
 int evaluate(searchThreadContext* context, int ply)
 {
+    RECORD_SEARCH(context->evaluations++;);
     return (useNNUE) ? forwardPropagate(&context->boardStack[ply], &context->accumulatorStack[ply]) : hce_eval(&context->boardStack[ply]);
 }
 
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, int pvNode)
 {
     context->countedNodes++;
+    RECORD_SEARCH(context->qs_nodes++;);
     bitboard* curBoard = &context->boardStack[ply];
 
     if(*context->abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->hardMaxNodes / threadCount))))
@@ -162,10 +164,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     tt_entry entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
     if(tt_hit)
     {
+        RECORD_SEARCH(context->tt_hits++;);
         if(entry.nodeType == NODE_BOUND_EXACT ||
             (entry.nodeType == NODE_BOUND_UPPER && entry.evaluation <= alpha) ||
             (entry.nodeType == NODE_BOUND_LOWER && entry.evaluation >= beta))
+            {
+                RECORD_SEARCH(context->tt_cutoffs++;);
                 return entry.evaluation;
+            }
 
         temp.raw = entry.bestMove;
         tt_move = &temp;
@@ -173,6 +179,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     }
     else 
     {
+        RECORD_SEARCH(context->tt_misses++;);
         best = evaluate(context, ply);
     
         tt_entry shallowEntry = {
@@ -262,6 +269,8 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     
     if(validMovesVisited > 0)
     {
+        RECORD_SEARCH(context->quiescentSearchedMoves += validMovesVisited; 
+                      context->quiescentSearchedPositions++;);
         tt_entry shallowEntry = {
             .depth = 0,
             .hashCode = curBoard->hashCode,
@@ -282,6 +291,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 {
     assert(context);
     context->countedNodes++;
+    RECORD_SEARCH(context->pvs_nodes++;);
     bitboard* curBoard = &context->boardStack[ply];
 
     myPV->length = 0;
@@ -333,12 +343,16 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     
     if(hit)
     {
+        RECORD_SEARCH(context->tt_hits++;);
         if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha))
         {
             if(old_tt_entry.nodeType == NODE_BOUND_EXACT ||
                 (old_tt_entry.nodeType == NODE_BOUND_UPPER && old_tt_entry.evaluation <= alpha) ||
                 (old_tt_entry.nodeType == NODE_BOUND_LOWER && old_tt_entry.evaluation >= beta))
+                {
+                    RECORD_SEARCH(context->tt_cutoffs++;);
                     return old_tt_entry.evaluation;
+                }
         }
         
         temp.raw = old_tt_entry.bestMove; 
@@ -373,6 +387,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(!hit) 
     {
+        RECORD_SEARCH(context->tt_misses++;);
         if(curBoard->in_check) 
             score = -SCORE_WIN;
         else if(context->excludedMove[ply].raw)
@@ -556,7 +571,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     next_depth--;
             }
 
-            //Late Move Pruning
+            //Quiet Move Pruning
             if(!shouldSkipQuiets)
             {
                 //Late move pruning
@@ -730,6 +745,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
         *oldHist += clamp(weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
     }
+
+    RECORD_SEARCH(context->pvsSearchedMoves += validMovesVisited; 
+                  context->pvsSearchedPositions++;);
 
     return bestScore;
 }
@@ -982,7 +1000,17 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     memset(context->captureHistoryTable, 0, sizeof(context->captureHistoryTable));
     memset(context->countermove, 0, sizeof(context->countermove));
     memset(context->followUpMove, 0, sizeof(context->followUpMove));
-    
+    RECORD_SEARCH(context->pvs_nodes = 0;
+                  context->qs_nodes = 0;
+                  context->tt_hits = 0;
+                  context->tt_cutoffs = 0;
+                  context->tt_misses = 0;
+                  context->quiescentSearchedMoves = 0;
+                  context->quiescentSearchedPositions = 0;
+                  context->pvsSearchedMoves = 0;
+                  context->pvsSearchedPositions = 0;
+                  context->evaluations = 0;);
+
     int maxDepth = context->maxDepth;
     
     move bestMove = (move){0}; 
@@ -1129,6 +1157,18 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         free(helperThreadContext);
     }
 
+    #ifdef SEARCHINFO
+    float total_tt = context->tt_hits + context->tt_misses;
+    printf("Search Statistics:\n");
+    printf("\tQuiescent Nodes: %" PRId64 "\n", context->qs_nodes);
+    printf("\tQS Branching Factor: %f\n", (float) context->quiescentSearchedMoves / context->quiescentSearchedPositions);
+    printf("\tPVS Nodes: %" PRId64 "\n", context->pvs_nodes);
+    printf("\tPVS Branching Factor: %f\n", (float) context->pvsSearchedMoves / context->pvsSearchedPositions);
+    printf("\tTT Hits: %" PRId64 " (%f%%)\n", context->tt_hits, (100.0 * context->tt_hits) / total_tt);
+    printf("\tTT Cutoffs: %" PRId64 " (%f%%)\n", context->tt_cutoffs, (100.0 * context->tt_cutoffs) / total_tt);
+    printf("\tTT Misses: %" PRId64 " (%f%%)\n", context->tt_misses, (100.0 * context->tt_misses) / total_tt);
+    printf("\tEvaluations: %" PRId64 "\n", context->evaluations);
+    #endif
 
     if(!IS_VALID_MOVE(bestMove) && bestMove.startSquare == 0)
     {

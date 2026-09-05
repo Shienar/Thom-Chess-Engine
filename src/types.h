@@ -57,7 +57,7 @@ typedef struct {
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
 #define PIECE_TYPE_COUNT 6
-#define MAX_PLY 40
+#define MAX_PLY 60
 typedef struct bitboard {
     uint64_t hashCode;
     uint64_t pawnHash;
@@ -175,6 +175,23 @@ typedef struct searchThreadContext {
 
     //Correction History
     int16_t pawnCorrHist[2][CORRHIST_SIZE];
+
+    #ifdef SEARCHINFO
+    uint64_t pvs_nodes;
+    uint64_t qs_nodes;
+
+    uint64_t tt_hits;
+    uint64_t tt_cutoffs;
+    uint64_t tt_misses;
+
+    uint64_t quiescentSearchedMoves;
+    uint64_t quiescentSearchedPositions;
+
+    uint64_t pvsSearchedMoves;
+    uint64_t pvsSearchedPositions;
+
+    uint64_t evaluations;
+    #endif
 } searchThreadContext;
 
 #endif

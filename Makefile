@@ -20,6 +20,10 @@ ifdef VERIFY
 	CFLAGS += -DVERIFY
 endif
 
+ifdef SEARCHINFO
+	CFLAGS += -DSEARCHINFO
+endif
+
 # Define SPSA to compile with extra uci options.
 ifdef SPSA
 	CFLAGS += -DSPSA
