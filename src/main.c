@@ -148,7 +148,7 @@ int main(int argc, char** argv)
                         {
                             uint64_t byteSize;
                             sscanf(str, "%" PRIu64 "", &byteSize);
-                            tt_size_entries = (byteSize * 1024 * 1024) / sizeof(tt_entry);
+                            tt_bytes = (byteSize * 1024 * 1024);
                             destroy_hashTable_tt(transpositionTable);
                             transpositionTable = create_hashTable_tt();
                             threadContext->tt = transpositionTable;

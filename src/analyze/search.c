@@ -184,12 +184,10 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     
         tt_entry shallowEntry = {
             .depth = 0,
-            .hashCode = curBoard->hashCode,
             .nodeType = NODE_BOUND_UNKNOWN,
-            .evaluation = best,
-            .age = curBoard->halfMoveCount
+            .evaluation = best
         };
-        transposition_table_set(context->tt, shallowEntry, ply);
+        transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
     }
 
     //Stand Pat
@@ -273,13 +271,11 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
                       context->quiescentSearchedPositions++;);
         tt_entry shallowEntry = {
             .depth = 0,
-            .hashCode = curBoard->hashCode,
             .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ( (best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
             .evaluation = best,
-            .age = curBoard->halfMoveCount,
             .bestMove = bestMove.raw
         };
-        transposition_table_set(context->tt, shallowEntry, ply);
+        transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
     }
     else if(curBoard->in_check)
         return -SCORE_WIN + ply;
@@ -333,8 +329,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     //Transposition table
     tt_entry new_tt_entry = {
         .depth = depth,
-        .hashCode = curBoard->hashCode,
-        .age = curBoard->halfMoveCount
     };
     uint8_t hit;
     tt_entry old_tt_entry = transposition_table_get(curBoard, context->tt, &hit, ply);
@@ -380,7 +374,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             new_tt_entry.nodeType = NODE_BOUND_EXACT;
             new_tt_entry.evaluation = result;
-            transposition_table_set(context->tt, new_tt_entry, ply);
+            transposition_table_set(context->tt, new_tt_entry, curBoard->hashCode, ply);
             return result;
         }
     }
@@ -400,12 +394,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             tt_entry shallowEntry = {
                 .depth = 0,
-                .hashCode = curBoard->hashCode,
                 .nodeType = NODE_BOUND_UNKNOWN,
-                .evaluation = score,
-                .age = curBoard->halfMoveCount
+                .evaluation = score
             };
-            transposition_table_set(context->tt, shallowEntry, ply);
+            transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
         }
     }
 
@@ -499,13 +491,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                             {
                                 tt_entry pcutEntry = {
                                     .depth = nextDepth,
-                                    .hashCode = curBoard->hashCode,
                                     .nodeType = NODE_BOUND_LOWER,
                                     .evaluation = beta,
-                                    .age = curBoard->halfMoveCount,
                                     .bestMove = currentMove->raw
                                 };
-                                transposition_table_set(context->tt, pcutEntry, ply);
+                                transposition_table_set(context->tt, pcutEntry, curBoard->hashCode, ply);
                             }
                             destroy_move_iterator(iter);
                             return probCutScore;
@@ -735,7 +725,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ( (bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
     new_tt_entry.evaluation = bestScore;
     new_tt_entry.bestMove = bestMove.raw;
-    transposition_table_set(context->tt, new_tt_entry, ply);
+    transposition_table_set(context->tt, new_tt_entry, curBoard->hashCode, ply);
 
     //Correction History
     if((bestScore >= beta || new_tt_entry.nodeType == NODE_BOUND_EXACT) && abs(bestScore) < MIN_MATE_SCORE)
@@ -968,7 +958,7 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     }
     else printf("cp %d ", bestScore);
 
-    printf("nodes %d nps %d hashfull %" PRId64 " time %d", totalNodes, NPS, (1000 * best->tt->usedSlots) / best->tt->capacity, milliseconds);
+    printf("nodes %d nps %d hashfull %d time %d", totalNodes, NPS, getHashFull(best->tt), milliseconds);
 
     printf(" pv");
     for(int i = 0; i < best->pv.length; i++)
@@ -1010,6 +1000,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                   context->pvsSearchedMoves = 0;
                   context->pvsSearchedPositions = 0;
                   context->evaluations = 0;);
+
+
+    tt_age(context->tt);
 
     int maxDepth = context->maxDepth;
     
@@ -1073,16 +1066,23 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     if(useNNUE)
         updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
     int lastScore = 0;
+    int consecutiveTimeReductions = 0;
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         aspiration_window(context, currentDepth);
         
         if(currentDepth > 10)
         {
-            if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
+            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15))
+            {
                 context->softEndTime -= 0.1 * (context->softEndTime - clock());
+                consecutiveTimeReductions++;
+            }
             else
+            {
+                consecutiveTimeReductions = 0;
                 context->softEndTime = context->hardEndTime;
+            }
         }
         
         bestMove = context->pv.line[0];
@@ -1110,7 +1110,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             }
             else printf("cp %d ", context->score);
 
-            printf("nodes %d nps %d hashfull %" PRId64 " time %d", totalNodes, NPS, (1000 * context->tt->usedSlots) / context->tt->capacity, milliseconds);
+            printf("nodes %d nps %d hashfull %d time %d", totalNodes, NPS, getHashFull(context->tt), milliseconds);
 
             printf(" pv");
             for(int i = 0; i < context->pv.length; i++)

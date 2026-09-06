@@ -509,9 +509,9 @@ moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnl
             iter->moveScores[i] = context->historyTable[board->turn][currentPiece / 2][iter->moveList[i].endSquare];
 
             if(counterMove && iter->moveList[i].raw == counterMove->raw)
-                iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE);
+                iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE + 2);
             else if(followUpMove && iter->moveList[i].raw == followUpMove->raw)
-                iter->moveScores[i] = _min(iter->moveScores[i] + FOLLOWUPMOVE_BONUS, MAX_HISTORY_SCORE);
+                iter->moveScores[i] = _min(iter->moveScores[i] + FOLLOWUPMOVE_BONUS, MAX_HISTORY_SCORE + 1);
         }
     }
     return iter;

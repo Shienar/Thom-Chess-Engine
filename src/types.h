@@ -44,7 +44,7 @@ typedef struct tt_entry {
 typedef struct hashtable_tt {
     tt_entry* array;
     size_t capacity;
-    size_t usedSlots;
+    uint16_t age;
 } hashtable_tt;
 
 typedef struct {
