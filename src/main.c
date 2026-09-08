@@ -17,7 +17,10 @@
     else if(strcmp(str, #name) == 0) \
     { \
         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
+        { \
             sscanf(str, "%d", &name); \
+            readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext); \
+        } \
         break; \
     }
     
@@ -29,6 +32,7 @@
             int temp; \
             sscanf(str, "%d", &temp); \
             name = temp / 1000.0; \
+            readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext); \
         } \
         break; \
     }
@@ -102,9 +106,6 @@ int main(int argc, char** argv)
 
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
                 printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
-
-                printf("option name probcut_offset type spin default %d min 200 max 600\n", probcut_offset);
-                printf("option name probcut_offset_improving type spin default %d min 200 max 500\n", probcut_offset_improving);
                 
                 printf("option name historyBonusScale type spin default %d min 50 max 600\n", historyBonusScale);
                 printf("option name historyBonusOffset type spin default %d min 50 max 600\n", historyBonusOffset);
@@ -272,8 +273,6 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(reverse_futility_margin_improving)
                     SET_SPA_OPTION_INT(futility_margin)
                     SET_SPA_OPTION_INT(futility_depth_margin)
-                    SET_SPA_OPTION_INT(probcut_offset)
-                    SET_SPA_OPTION_INT(probcut_offset_improving)
                     SET_SPA_OPTION_INT(historyBonusScale)
                     SET_SPA_OPTION_INT(historyBonusOffset)
                     SET_SPA_OPTION_INT(historyPenaltyScale)

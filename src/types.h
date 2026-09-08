@@ -160,7 +160,8 @@ typedef struct searchThreadContext {
     
     //Improving heuristic
     int evalHistory[MAX_PLY];
-    int8_t improving[MAX_PLY];
+    int8_t improving[MAX_PLY]; // 0 or 1
+    int8_t worsening[MAX_PLY]; // >= 0
 
     //Killer heuristic
     move killerMoves[MAX_PLY][2];
@@ -191,6 +192,14 @@ typedef struct searchThreadContext {
     uint64_t pvsSearchedPositions;
 
     uint64_t evaluations;
+
+    uint64_t stable_reductions;
+    uint64_t worsening_reductions;
+    uint64_t tt_reductions;
+    uint64_t rfp_prunes;
+    uint64_t razoring_prunes;
+    uint64_t nmp_prunes;
+
     #endif
 } searchThreadContext;
 

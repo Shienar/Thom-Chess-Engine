@@ -40,9 +40,6 @@ extern int futility_depth_margin;
 extern int reverse_futility_margin;
 extern int reverse_futility_margin_improving;
 
-extern int probcut_offset;
-extern int probcut_offset_improving;
-
 extern int historyBonusScale;
 extern int historyBonusOffset;
 extern int historyPenaltyScale;

@@ -116,8 +116,9 @@ A release version of the engine should be compiled with 'make -j'.
     - Futility Pruning
     - Reverse Futility Pruning
     - Null Move Pruning
-    - Probcut
     - TT Reductions
+    - Stable Eval Reductions
+    - Worsening Reductions
     - Singular Extensions
     - Multicut Pruning
     - Check Extensions
