@@ -18,7 +18,7 @@ void clear_tt(hashtable_tt* tt);
 
 int getHashFull(hashtable_tt* ht);
 void tt_age(hashtable_tt* tt);
-
+void tt_prefetch(hashtable_tt* tt, uint64_t hashCode);
 
 tt_entry transposition_table_get(struct bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply);
 void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode64, int ply);

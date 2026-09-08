@@ -239,6 +239,8 @@ int main(int argc, char** argv)
                                 SyzygyPath[1023] = '\0';
                             }
                             isPathDirty = 1;
+                            if(isReady)
+                                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
                         }
                         break;
                     }

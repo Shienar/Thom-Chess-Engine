@@ -904,25 +904,25 @@ void computeGradient(tuningEntry* entries, evalParameters_fp* gradient,  double 
 void enforceZeroCenter(evalfp_t* table, int size)
 {
     double sum = 0.0;
-    for (int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
         sum += table[i].mg;
 
     double average = sum / size;
-    for (int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
         table[i].mg -= average;
         
     sum = 0.0;
-    for (int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
         sum += table[i].eg;
 
     average = sum / size;
-    for (int i = 0; i < size; i++)
+    for(int i = 0; i < size; i++)
         table[i].eg -= average;
 }
 
 void enforceMonotonicIncreasing(evalfp_t* table,  int size)
 {
-    for (int i = 1; i < size; i++)
+    for(int i = 1; i < size; i++)
     {
         table[i].mg = _max(table[i - 1].mg, table[i].mg);
         table[i].eg = _max(table[i - 1].eg, table[i].eg);
@@ -931,7 +931,7 @@ void enforceMonotonicIncreasing(evalfp_t* table,  int size)
 
 void enforceMonotonicDecreasing(evalfp_t* table,  int size)
 {
-    for (int i = 1; i < size; i++)
+    for(int i = 1; i < size; i++)
     {
         table[i].mg = _min(table[i - 1].mg, table[i].mg);
         table[i].eg = _min(table[i - 1].eg, table[i].eg);

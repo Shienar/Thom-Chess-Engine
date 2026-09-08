@@ -1,4 +1,5 @@
-UCI-compliant NNUE chess engine created in C.
+UCI-compliant NNUE chess engine created in C. Named after Thom Merrilin from The Wheel of Time.
+
 All NNUE data was self-generated, starting from HCE-generated data.
 The NNUE requires compliance with AVX2 SIMD instructions.
 

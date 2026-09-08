@@ -95,7 +95,7 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, in
     assert(board);
     assert(inputAcc);
     assert(outputAcc);
-    assert(IS_VALID_MOVE(lastMove));
+    assert(lastMove.raw);
 
     int piece = (lastMove.promoteTo) ? PAWN | (FLIP_COLOR(board->turn)) : (!isEnPassant) ? findPieceOnSquare(board, lastMove.endSquare) : FLIP_COLOR(capturedPiece);
     

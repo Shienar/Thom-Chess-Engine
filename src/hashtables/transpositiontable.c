@@ -53,6 +53,8 @@ void clear_tt(hashtable_tt* tt)
 
 void tt_age(hashtable_tt* tt) { tt->age++; }
 
+void tt_prefetch(hashtable_tt* tt, uint64_t hashCode) {  __builtin_prefetch(&tt->array[hashCode%tt->capacity]); }
+
 tt_entry transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply)
 {
     assert(tt);

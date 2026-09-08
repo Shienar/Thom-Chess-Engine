@@ -49,6 +49,16 @@ void getSquareName(int square, char* target)
     target[2] = '\0';
 }
 
+void getMoveSquareName(int fromSq, int toSq, char* target)
+{
+    assert(target);
+    assert(fromSq >= 0 && fromSq <= 63);
+    assert(toSq >= 0 && toSq <= 63);
+
+    getSquareName(fromSq, target);
+    getSquareName(toSq, &target[2]);
+}
+
 int getSquareNumber(char* squareName)
 { 
     return ((squareName[0] - 'a') + 8*(squareName[1] - '0' - 1));

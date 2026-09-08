@@ -115,11 +115,9 @@ int perft(bitboard* board, int depth, int verbose)
         nodes += branchNodes;
         if(verbose) 
         {
-            char fromSquare[3] = {'\0'};
-            char toSquare[3] = {'\0'};
-            getSquareName(moveList[index].startSquare, fromSquare);
-            getSquareName(moveList[index].endSquare, toSquare);
-            printf("Move %s%s: nodes %d\n", fromSquare, toSquare, branchNodes);
+            char moveName[5] = {'\0'};
+            getMoveSquareName(moveList[index].startSquare, moveList[index].endSquare, moveName);
+            printf("Move %s: nodes %d\n", moveName, branchNodes);
         }
     }
     
@@ -197,22 +195,16 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     //Delta pruning
     if(!useNNUE)
     {
-        int largestDelta = delta_pruning_offset;
-
         int opposingColor = FLIP_COLOR(curBoard->turn);
-
-        if(curBoard->pieces[QUEEN | opposingColor])
-            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[QUEEN / 2]);
-        else if(curBoard->pieces[ROOK | opposingColor])
-            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[ROOK / 2]);
-        else if(curBoard->pieces[BISHOP | opposingColor])
-            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[BISHOP / 2]);
-        else if(curBoard->pieces[KNIGHT | opposingColor])
-            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[KNIGHT / 2]);
-        else if(curBoard->pieces[PAWN | opposingColor])
-            largestDelta += evaluatePhasedScore(curBoard, hce_params.genericPieceValues[PAWN / 2]);
-        if(largestDelta + best < alpha) 
-            return best;
+        for(int pc = QUEEN; pc >= PAWN; pc-=2)
+        {
+            if(curBoard->pieces[pc | opposingColor])
+            {
+                if(delta_pruning_nnue_offset + evaluatePhasedScore(curBoard, hce_params.genericPieceValues[pc / 2]) + best < alpha)
+                    return best;
+                break;
+            }
+        }
     }
     else if(delta_pruning_nnue_offset + best < alpha)
         return best;
@@ -234,7 +226,6 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
             if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
                 continue;
 
-
             int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
             int isEP = 0;
@@ -245,6 +236,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
             }
             
             validMovesVisited++;
+            tt_prefetch(context->tt, nextBoard->hashCode);
             if(useNNUE)
                 updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
@@ -599,6 +591,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(!pvNode && isQuietMove && moveScore < lowHistoryVal)
                 next_depth--;
 
+            tt_prefetch(context->tt, nextBoard->hashCode);
             if(useNNUE)
                 updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
 
@@ -745,16 +738,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 {
     if(suppressUCIMessages) return;
-    char startSq[3];
-    char endSq[3];
     int startSquare = bestMove.startSquare;
     int endSquare = bestMove.endSquare;
 
-    getSquareName(startSquare, startSq);
-    getSquareName(endSquare, endSq);
+    char moveName[5] = {'\0'};
+    getMoveSquareName(startSquare, endSquare, moveName);
 
-    if(isBookMove) printf("info string Book move played: %s%s\n", startSq, endSq);
-    printf("bestmove %s%s", startSq, endSq);
+    if(isBookMove) printf("info string Book move played: %s\n", moveName);
+    printf("bestmove %s", moveName);
     
     if(bestMove.promoteTo)
     {
@@ -777,15 +768,13 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
         }
     }
 
-    if(enablePonder && IS_VALID_MOVE(ponderMove))
+    if(enablePonder && ponderMove.raw)
     {
         startSquare = ponderMove.startSquare;
         endSquare = ponderMove.endSquare;
 
-        getSquareName(startSquare, startSq);
-        getSquareName(endSquare, endSq);
-
-        printf(" ponder %s%s", startSq, endSq);
+        getMoveSquareName(startSquare, endSquare, moveName);
+        printf(" ponder %s", moveName);
 
         if(ponderMove.promoteTo)
         {
@@ -922,7 +911,7 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
         {
             totalNodes += helperThreads[i].countedNodes;
 
-            if(!IS_VALID_MOVE(helperThreads[i].pv.line[0])) continue;
+            if(!helperThreads[i].pv.line[0].raw) continue;
             int curDepth = helperThreads[i].completedDepth;
             int curScore = helperThreads[i].score;
 
@@ -964,12 +953,10 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
     for(int i = 0; i < best->pv.length; i++)
     {
         move m = best->pv.line[i];
-        if(!IS_VALID_MOVE(m)) break;
-        char startSq[3] = {'\0'};
-        char endSq[3] = {'\0'};
-        getSquareName(m.startSquare, startSq);
-        getSquareName(m.endSquare, endSq);
-        printf(" %s%s", startSq, endSq);
+        if(!m.raw) break;
+        char moveName[5] = {'\0'};
+        getMoveSquareName(m.startSquare, m.endSquare, moveName);
+        printf(" %s", moveName);
         if(m.promoteTo == QUEEN) printf("q");
         else if(m.promoteTo == ROOK) printf("r");
         else if(m.promoteTo == BISHOP) printf("b");
@@ -1019,7 +1006,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     if(!isPonder)
     {
         context->pv.line[0] = getBookMove(board);
-        if(IS_VALID_MOVE(context->pv.line[0])) { printResultingMoves(context->pv.line[0], (move){0}, 1); isCalculating = 0; return 0; }
+        if(context->pv.line[0].raw) { printResultingMoves(context->pv.line[0], (move){0}, 1); isCalculating = 0; return 0; }
         else board->in_book = 0;
     }
 
@@ -1062,6 +1049,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             THREAD_START(helperThreads[i], helperThreadFunction, &helperThreadContext[i]);
         }
     }
+
+    #ifdef SEARCHINFO
+    uint64_t iterationNodes[MAX_PLY] = {0};
+    #endif
     
     if(useNNUE)
         updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
@@ -1116,12 +1107,10 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             for(int i = 0; i < context->pv.length; i++)
             {
                 move m = context->pv.line[i];
-                if(!IS_VALID_MOVE(m)) break;
-                char startSq[3] = {'\0'};
-                char endSq[3] = {'\0'};
-                getSquareName(m.startSquare, startSq);
-                getSquareName(m.endSquare, endSq);
-                printf(" %s%s", startSq, endSq);
+                if(!m.raw) break;
+                char moveName[5] = {'\0'};
+                getMoveSquareName(m.startSquare, m.endSquare, moveName);
+                printf(" %s", moveName);
                 if(m.promoteTo == QUEEN) printf("q");
                 else if(m.promoteTo == ROOK) printf("r");
                 else if(m.promoteTo == BISHOP) printf("b");
@@ -1132,6 +1121,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             fflush(stdout);
             
             if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
+        
+            RECORD_SEARCH(iterationNodes[currentDepth - 1] = (currentDepth > 0) ? context->countedNodes - iterationNodes[currentDepth - 2] : context->countedNodes;);
         }
         
         if(abs(context->score) > MIN_MATE_SCORE)
@@ -1158,19 +1149,37 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     }
 
     #ifdef SEARCHINFO
-    float total_tt = context->tt_hits + context->tt_misses;
-    printf("Search Statistics:\n");
-    printf("\tQuiescent Nodes: %" PRId64 "\n", context->qs_nodes);
-    printf("\tQS Branching Factor: %f\n", (float) context->quiescentSearchedMoves / context->quiescentSearchedPositions);
-    printf("\tPVS Nodes: %" PRId64 "\n", context->pvs_nodes);
-    printf("\tPVS Branching Factor: %f\n", (float) context->pvsSearchedMoves / context->pvsSearchedPositions);
-    printf("\tTT Hits: %" PRId64 " (%f%%)\n", context->tt_hits, (100.0 * context->tt_hits) / total_tt);
-    printf("\tTT Cutoffs: %" PRId64 " (%f%%)\n", context->tt_cutoffs, (100.0 * context->tt_cutoffs) / total_tt);
-    printf("\tTT Misses: %" PRId64 " (%f%%)\n", context->tt_misses, (100.0 * context->tt_misses) / total_tt);
-    printf("\tEvaluations: %" PRId64 "\n", context->evaluations);
+    double ebf = 0.0;
+    int count = 0;
+    for(int d = 1; d <= context->maxDepth; d++) 
+    {
+        if(iterationNodes[d - 1] > 0) 
+        {
+            ebf += (double) iterationNodes[d] / iterationNodes[d - 1];
+            count++;
+        }
+        else
+            break;
+    }
+    ebf /= count;
+    double total_tt = context->tt_hits + context->tt_misses;
+    printf("\n\033[1mSearch Statistics:\033[0m\n");
+    printf("\t%-25s %18.2f\n", "EBF:", ebf);
+    printf("\n");
+    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "PVS Nodes:", context->pvs_nodes, (100.0 * context->pvs_nodes) / context->countedNodes);
+    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "Quiescent Nodes:", context->qs_nodes, (100.0 * context->qs_nodes) / context->countedNodes);
+    printf("\n");
+    printf("\t%-25s %18.2f\n", "PVS Avg Moves Searched:", (double) context->pvsSearchedMoves / context->pvsSearchedPositions);
+    printf("\t%-25s %18.2f\n", "QS Avg Moves Searched:", (double) context->quiescentSearchedMoves / context->quiescentSearchedPositions);
+    printf("\n");
+    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Hits:", context->tt_hits, (100.0 * context->tt_hits) / total_tt);
+    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Cutoffs:", context->tt_cutoffs, (100.0 * context->tt_cutoffs) / total_tt);
+    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Misses:", context->tt_misses, (100.0 * context->tt_misses) / total_tt);
+    printf("\n");
+    printf("\t%-25s %18" PRId64 "\n", "Evaluations:", context->evaluations);
     #endif
 
-    if(!IS_VALID_MOVE(bestMove) && bestMove.startSquare == 0)
+    if(!bestMove.raw)
     {
         char FEN[100] = { '\0' };
         export_fen_from_board(board, FEN);

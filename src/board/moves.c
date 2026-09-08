@@ -304,7 +304,6 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
 
 uint64_t getSlidingAttackers(bitboard* board, int square, int occupied)
 {
-    //Sliding pieces
     uint64_t bishopqueen = board->pieces[WHITE_BISHOP] | board->pieces[BLACK_BISHOP] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
     uint64_t rookqueen = board->pieces[WHITE_ROOK] | board->pieces[BLACK_ROOK] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
 
@@ -343,7 +342,8 @@ int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
     return -1;
 }
 
-const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
+//init_HCE_tables() overwrites these values on isready (exlcuding king/none)
+int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
 int staticExchangeEvaluation(bitboard* board, move m)
 {
     int gain[MAX_PLY];
@@ -408,25 +408,35 @@ moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnl
 {
     moveIterator* iter = calloc(1, sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
-    iter->moveScores = malloc(MAX_MOVES * sizeof(int16_t));
 
     bitboard* board = &context->boardStack[ply];
 
-    if(ply == 0 && IS_VALID_MOVE(context->searchedMoves[0]))
+    iter->count = generateMoveList(iter->moveList, board, capturesOnly);
+
+    //Double check that the searched moves are legal.
+    if(ply == 0 && context->searchedMoves[0].raw)
     {
+        move* correctedMoveList = malloc(MAX_REQUIRED_MOVES * sizeof(move));
+        int insertIndex = 0;
         for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
         {
-            if(IS_VALID_MOVE(context->searchedMoves[i])) 
+            if(context->searchedMoves[i].raw)
             {
-                iter->count++;
-                iter->moveList[i] = context->searchedMoves[i];
+                for(int j = 0; j < iter->count; j++)
+                    if(context->searchedMoves[i].raw == iter->moveList[j].raw)
+                        correctedMoveList[insertIndex++] = context->searchedMoves[i];
             }
             else break;
         }
+
+        iter->count = insertIndex;
+        free(iter->moveList);
+        iter->moveList = correctedMoveList;
     }
-    else iter->count = generateMoveList(iter->moveList, board, capturesOnly);
 
     if(!iter->count) { destroy_move_iterator(iter); return NULL; }
+
+    iter->moveScores = malloc(iter->count * sizeof(int16_t));
 
     move* counterMove = NULL;
     if(ply >= 1 && context->moveStack[ply - 1].raw)
@@ -898,7 +908,7 @@ int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector
     if(board != newBoard)
         memcpy(newBoard, board, sizeof(bitboard));
 
-    if(!IS_VALID_MOVE(m) || movePiece(newBoard, m, repetitions) != 0) 
+    if(!m.raw || movePiece(newBoard, m, repetitions) != 0) 
     {
         DEBUG_ERROR("Failed to move piece from struct.");
         return -1;

@@ -29,15 +29,13 @@
 #define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & (~board_file[0])) | ((epMask >> 9) & (~board_file[7]))) & board->pieces[WHITE_PAWN])
 #define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & (~board_file[7])) | ((epMask << 9) & (~board_file[0]))) & board->pieces[BLACK_PAWN])
 
-//A zero'd out move will have all values set to zero.
-#define IS_VALID_MOVE(m) (m.startSquare != m.endSquare)
-extern const int pieceValuesSEE[15];
-
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
+
+extern int pieceValuesSEE[15];
 
 #define TT_MOVE_SCORE 32000
 #define PV_MOVE_SCORE 31999
-#define CAPTURE_SCORE 17000 //+- min bound(-ish). Max SEE bonus is 1700 for capture-queen promotion. +-256 history bonus added
+#define CAPTURE_SCORE 17000 //+- min bound(-ish). receives see + +-256 from history 
 #define KILLER_1_SCORE 16399
 #define KILLER_2_SCORE 16398
 #define PROMOTION_SCORE 16385
@@ -47,6 +45,7 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
+
 
 
 int isThreatened(bitboard* board, int square, int defendingColor);

@@ -1,4 +1,5 @@
 #include "analyze/hce/hce.h"
+#include "board/moves.h"
 
 /**
  * For simplicity, this represents white's view of the board when
@@ -179,6 +180,11 @@ void init_HCE_tables()
 			EVAL_ADD(pieceBonusTable[piece + 1][square], hce_params.genericPieceValues[piece / 2]);
 		}
 	}
+
+	//pieceValuesSEE
+	for(int piece = 0; piece < KING; piece++)
+		pieceValuesSEE[piece] = (hce_params.genericPieceValues[piece / 2].mg + hce_params.genericPieceValues[piece / 2].eg) / 2;
+
 
 	for(int column = 0; column < 8; column++) 
 	{
