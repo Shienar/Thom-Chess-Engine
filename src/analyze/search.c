@@ -552,7 +552,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             
             //History Reduction
             if(!pvNode && isQuietMove && moveScore < lowHistoryVal)
-                next_depth--;
+            {
+                if(moveScore < 3 * lowHistoryVal)
+                    next_depth-=2;
+                else if(moveScore < lowHistoryVal)
+                    next_depth--;
+            }
 
             tt_prefetch(context->tt, nextBoard->hashCode);
             if(useNNUE)
