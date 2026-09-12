@@ -3,6 +3,7 @@
 *.sh
 *.log
 *.pgn
-*.head
+quantized.bin
+raw.bin
 target/
 tests/

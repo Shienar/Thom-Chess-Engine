@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+extern int kingBuckets[64];
+
 //https://www.chessprogramming.org/Flipping_Mirroring_and_Rotating#Vertical
 #define k1 0x5555555555555555
 #define k2 0x3333333333333333

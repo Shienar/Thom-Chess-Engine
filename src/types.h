@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <time.h>
 
+#define PI 3.141592653589793
 #define clamp(originalValue, minClamp, maxClamp) _min(maxClamp, _max(minClamp, originalValue));
 
 #define singleBitMask(x) (1ull << (x))
@@ -101,7 +102,7 @@ typedef struct PVar {
 #define QB_RSHIFT 6
 
 #define INPUT_BITS (2 * BITS_PER_KING_BUCKET * KING_BUCKETS)
-#define HALF_INPUT_BITS (INPUT_BITS / 2)
+#define INPUT_BITS_PER_SIDE (INPUT_BITS / 2)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 
@@ -112,11 +113,19 @@ typedef struct PVar {
 #define OUTPUT_BUCKETS 8
 
 typedef struct __attribute__((aligned(64))) nnue_weights {
-    int16_t weights1[HALF_INPUT_BITS][ACCUMULATOR_NODES_PER_SIDE];
-    int16_t weights1_bias[ACCUMULATOR_NODES_PER_SIDE];
-    int16_t weights2[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
-    int16_t weights2_bias[OUTPUT_BUCKETS];
+    int16_t accumulator_weights[INPUT_BITS_PER_SIDE][ACCUMULATOR_NODES_PER_SIDE];
+    int16_t accumulator_bias[ACCUMULATOR_NODES_PER_SIDE];
+    int16_t output_weights[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
+    int16_t output_bias[OUTPUT_BUCKETS];
 } nnue_weights;
+
+typedef struct __attribute__((aligned(64))) training_weights {
+    float factorizer_weights[BITS_PER_KING_BUCKET][ACCUMULATOR_NODES_PER_SIDE];
+    float accumulator_weights[INPUT_BITS_PER_SIDE][ACCUMULATOR_NODES_PER_SIDE];
+    float accumulator_bias[ACCUMULATOR_NODES_PER_SIDE];
+    float output_weights[OUTPUT_BUCKETS][ACCUMULATOR_NODES];
+    float output_bias[OUTPUT_BUCKETS];
+} training_weights;
 
 typedef struct accumulator {
     int16_t rawValues[2][ACCUMULATOR_NODES_PER_SIDE];

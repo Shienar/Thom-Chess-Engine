@@ -14,7 +14,7 @@ extern volatile uint8_t isPonder;
 #ifdef SEARCHINFO
 #define RECORD_SEARCH(x) do { x } while(0)
 #else
-#define RECORD_SEARCH(x) ((void)0)
+#define RECORD_SEARCH(x)
 #endif
 
 extern int threadCount;

@@ -274,10 +274,9 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
     generateHashCode(board);
 }
 
-int readPackedBoard(binpackDetails* details, int readerIndex)
+int readPackedBoard(binpackDetails* details)
 {
-    assert(readerIndex < details->numReaders);
-    readerDetails* rDetails = &details->readerInfo[readerIndex];
+    readerDetails* rDetails = details->readerInfo;
 
     if(rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) > details->end_ptr)
         return -1;
@@ -286,7 +285,7 @@ int readPackedBoard(binpackDetails* details, int readerIndex)
     
     if(rDetails->packedBoard->occupancy)
     {
-        if(rDetails->current_ptr + sizeof(*rDetails->packedBoard) > rDetails->end_section)
+        if(rDetails->current_ptr + sizeof(*rDetails->packedBoard) > details->end_ptr)
             return -1;
 
         memcpy((uint8_t*)rDetails->packedBoard + sizeof(rDetails->packedBoard->occupancy), 
@@ -373,18 +372,18 @@ void clearCorruptedGame(const char* fileName)
     fclose(file);
 }
 
-void binpack_open(binpackDetails* details, const char* fileName, int numReaders)
+void binpack_open(binpackDetails* details, const char* fileName, int isReader)
 {
     initViriTables();
 
     //Assume we aren't opening twice on the same variable.
     memset(details, 0, sizeof(binpackDetails));
 
-    details->numReaders = numReaders;
+    details->isReader = isReader;
 
     clearCorruptedGame(fileName);
 
-    if(numReaders <= 0) 
+    if(!isReader) 
     {
         details->binpack = fopen(fileName, "ab+");
         if(!details->binpack) 
@@ -405,26 +404,13 @@ void binpack_open(binpackDetails* details, const char* fileName, int numReaders)
         details->start_ptr = (uint8_t*)details->mmap_file.data;
         details->end_ptr = details->start_ptr + details->mmap_file.size;
 
-        details->headerOffsets = binpack_acquireHeaderIndices(fileName, &details->headerEntries);
+        details->readerInfo = calloc(1, sizeof(readerDetails));
 
-        details->readerInfo = calloc(numReaders, sizeof(readerDetails));
+        details->readerInfo->board = calloc(1, sizeof(bitboard));
+        details->readerInfo->packedBoard = calloc(1, sizeof(Viri_PackedBoard));
+        details->readerInfo->current_ptr = details->start_ptr;
 
-        size_t sectionSize = details->headerEntries / numReaders;
-
-        for(int i = 0; i < numReaders; i++)
-        {
-            details->readerInfo[i].board = calloc(1, sizeof(bitboard));
-            details->readerInfo[i].packedBoard = calloc(1, sizeof(Viri_PackedBoard));
-            details->readerInfo[i].start_section = details->start_ptr + details->headerOffsets[i * sectionSize];
-            details->readerInfo[i].current_ptr = details->readerInfo[i].start_section;
-
-            if(i < numReaders - 1)
-                details->readerInfo[i].end_section = details->start_ptr + details->headerOffsets[(i + 1) * sectionSize - 1];
-            else
-                details->readerInfo[i].end_section = details->end_ptr;
-
-            readPackedBoard(details, i);
-        }
+        readPackedBoard(details);
     }
 
     CREATE_MUTEX(details->lock);
@@ -432,7 +418,7 @@ void binpack_open(binpackDetails* details, const char* fileName, int numReaders)
 
 void binpack_close(binpackDetails* details)
 {
-    if(details->numReaders <= 0 && details->binpack)
+    if(!details->isReader && details->binpack)
     {
         fflush(details->binpack);
         fclose(details->binpack);
@@ -441,13 +427,9 @@ void binpack_close(binpackDetails* details)
     else 
     {
         mmap_close(&details->mmap_file);
-        for(int i = 0; i < details->numReaders; i++)
-        {
-            free(details->readerInfo[i].board);
-            free(details->readerInfo[i].packedBoard);
-        }
+        free(details->readerInfo->board);
+        free(details->readerInfo->packedBoard);
         free(details->readerInfo);
-        free(details->headerOffsets);
     }
 
     DESTROY_MUTEX(details->lock);
@@ -461,10 +443,9 @@ void binpack_close(binpackDetails* details)
     }
 }
 
-int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips)
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips)
 {
-    assert(readerIndex < details->numReaders);
-    readerDetails* rDetails = &details->readerInfo[readerIndex];
+    readerDetails* rDetails = details->readerInfo;
 
     Viri_MoveScorePair pair = {0};
     int skippedUnusable = 0;
@@ -474,12 +455,12 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
     while(1)
     {
         int isCapture = 0;
-        if(rDetails->current_ptr + sizeof(Viri_MoveScorePair) > rDetails->end_section)
+        if(rDetails->current_ptr + sizeof(Viri_MoveScorePair) > details->end_ptr)
         {
             if(loop)
             {
-                rDetails->current_ptr = rDetails->start_section;
-                readPackedBoard(details, readerIndex);
+                rDetails->current_ptr = details->start_ptr;
+                readPackedBoard(details);
             }
             else
                 return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
@@ -493,7 +474,7 @@ int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_S
 
             if(pair.raw == 0)
             {
-                if(readPackedBoard(details, readerIndex))
+                if(readPackedBoard(details))
                     return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
             }
             else
@@ -619,7 +600,7 @@ void binpackPrintInfo(const char* fileName)
     uint64_t recentlyRead = 0;
 
     clock_t readStartTime = clock();
-    while((temp = binpack_next(&details, 0, &b, &s, &r, 0, 0)) != -1)
+    while((temp = binpack_next(&details, &b, &s, &r, 0, 0)) != -1)
     {
         skippedCount += temp;
         usedCount++;

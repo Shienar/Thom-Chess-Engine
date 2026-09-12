@@ -62,27 +62,22 @@ typedef union {
 } Viri_MoveScorePair;
 #pragma pack(pop)
 
-//Each reader gets 1 / N of the binpack to themselves. Used for training, not for binpackinfo.
 typedef struct {
     bitboard* board;
     Viri_PackedBoard* packedBoard;
     uint8_t currentGameWinner;
     
-    uint8_t* start_section;
     uint8_t* current_ptr;
-    uint8_t* end_section;
 } readerDetails;
 
 typedef struct {
-    uint8_t numReaders; // A writer has 0 (or negative) readers.
+    uint8_t isReader;
     readerDetails* readerInfo;
 
     //Reading (Global)
     mmap_handle_t mmap_file;
     uint8_t* start_ptr;
     uint8_t* end_ptr;
-    int64_t* headerOffsets;
-    int headerEntries; //To save space, every 50th entry is saved.
 
     //Writing
     FILE* binpack; 
@@ -108,14 +103,13 @@ extern uint8_t promoteMappingsToViri[10];
 extern uint8_t rookSqToFlag[64];
 
 //Same file pointer for all functions. The assumption is that you will either only read or only write.
-void binpack_open(binpackDetails* details, const char* fileName, int numReaders);
+void binpack_open(binpackDetails* details, const char* fileName, int isReader);
 void binpack_close(binpackDetails* details);
-int binpack_next(binpackDetails* details, int readerIndex, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips);
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips);
 
-int readPackedBoard(binpackDetails* details, int readerIndex);
+int readPackedBoard(binpackDetails* details);
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
 void binpack_writeGame(binpackDetails* details, generatedGameBuffer* buffer);
 
 void binpackPrintInfo(const char* fileName);
-int64_t* binpack_acquireHeaderIndices(const char* fileName, int* headerEntries);
 #endif

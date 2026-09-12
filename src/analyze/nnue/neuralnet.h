@@ -7,8 +7,6 @@
 #include "board/bitboard.h"
 #include "analyze/nnue/accumulator.h"
 
-#define PI 3.141592653589793
-
 #define EVAL_SCALE 400
 #define FLIP_MASK(x) __builtin_bswap64(x)
 
@@ -18,6 +16,7 @@ extern const unsigned char weights_bin_start[];
 extern const unsigned char weights_bin_end[];
 
 extern nnue_weights* weights;
+extern const int OUTPUT_BUCKET_DIVISOR;
 
 void initNNUE();
 

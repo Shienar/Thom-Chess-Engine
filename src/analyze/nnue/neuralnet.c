@@ -76,11 +76,10 @@ const int OUTPUT_BUCKET_DIVISOR = (32 + OUTPUT_BUCKETS - 1) / OUTPUT_BUCKETS;
 int forwardPropagate(bitboard* board, accumulator* acc)
 {
     int bucket = (__builtin_popcountll(board->pieces_all) - 2) / OUTPUT_BUCKET_DIVISOR;
-    
     int output = calculateOutputLayer(acc->rawValues[board->turn], 
                                       acc->rawValues[FLIP_COLOR(board->turn)], 
-                                      weights->weights2[bucket], 
-                                      weights->weights2_bias[bucket]);
+                                      weights->output_weights[bucket], 
+                                      weights->output_bias[bucket]);
 
     return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
 }

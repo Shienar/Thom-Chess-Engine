@@ -14,6 +14,9 @@ A release version of the engine should be compiled with 'make -j'.
 - 'make -j VERIFY=1' will include assertions to double-check the validity of efficient accumulator updates & hash code updates. Requires DEBUG=1.
 - 'make -j SPSA=1' will compile with uci options for SPSA tuning
 
+This repository also contains a trainer for the NNUE. It was designed specifically for my (AMD) hardware & network architecture as a fun side project, and I make no guarantees about its compilability or effectiveness on other GPUs.
+- 'make -j TRAIN=1' will compile the trainer.
+= 'make =j TRAIN=1 KPERFT=1' will allow for performance tracking of the training kernels.
 ## COMMANDS:
 
 ### UCI:
@@ -152,7 +155,7 @@ LLR: 0.71 (24.1%) (-2.94, 2.94) [0.00, 1.00]
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
 - The lichess-big3-resolved.book dataset was used for tuning the HCE.
 - [Weather Factory](https://github.com/jnlt3/weather-factory) was used for SPSA tuning.
-- [Bullet](https://github.com/jw1912/bullet) was used for NNUE training.
+- [Bullet](https://github.com/jw1912/bullet) was used historically for NNUE training. While current NNUEs are from this repository's trainer, being able to easily train working networks was extremely helpful in developing a working quantized forward propagation.
 - The open-sourced nature of the chess programming community was very helpful for me to get past various barriers. I'd like to mention the following in particular that were the most impactful:
     - [Ethereal](https://github.com/AndyGrant/Ethereal) (For search & syzygy implementation)
     - [Alexandria](https://github.com/PGG106/Alexandria) (For search implementation)

@@ -451,6 +451,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, 0, !cutNode);
             if(nullScore >= beta)
             {
+                RECORD_SEARCH(context->nmp_prunes++;);
                 if(nullScore < MIN_MATE_SCORE)
                     return nullScore;
                 else

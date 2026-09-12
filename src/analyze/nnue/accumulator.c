@@ -33,7 +33,7 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingB
 {
     for(int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=16) 
     {
-        __m256i v_output = _mm256_loadu_si256((const __m256i*)&weights->weights1_bias[outputIndex]);
+        __m256i v_output = _mm256_loadu_si256((const __m256i*)&weights->accumulator_bias[outputIndex]);
 
         for(int piece = 0; piece < PIECE_COUNT; piece++)
         {
@@ -43,7 +43,7 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingB
             {
                 int featureIndex =  baseIndex + __builtin_ctzll(pieceMask);
 
-                v_output = _mm256_adds_epi16(v_output, _mm256_loadu_si256((const __m256i*)&weights->weights1[featureIndex][outputIndex]));
+                v_output = _mm256_adds_epi16(v_output, _mm256_loadu_si256((const __m256i*)&weights->accumulator_weights[featureIndex][outputIndex]));
 
                 pieceMask &= (pieceMask - 1);
             }
@@ -59,8 +59,6 @@ void loadInputAccumulator(bitboard* board, accumulator* acc)
     assert(acc);
     
     uint64_t inputs[2 * BITBOARDS_PER_INPUT_SIDE] = {0};
-
-    memset(inputs, 0, 2 * BITBOARDS_PER_INPUT_SIDE * sizeof(uint64_t));
     
     int whiteBucket = kingBuckets[board->kingSquare[WHITE]];
     int blackBucket = kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])];
@@ -177,9 +175,9 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, in
             for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
             {
                 __m256i v_acc  = _mm256_loadu_si256((__m256i const*)&inputAcc->rawValues[side][j]);
-                __m256i v_to   = _mm256_loadu_si256((__m256i const*)&weights->weights1[toIdx][j]);
-                __m256i v_from = _mm256_loadu_si256((__m256i const*)&weights->weights1[fromIdx][j]);
-                __m256i v_cap  = _mm256_loadu_si256((__m256i const*)&weights->weights1[capIdx][j]);
+                __m256i v_to   = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[toIdx][j]);
+                __m256i v_from = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[fromIdx][j]);
+                __m256i v_cap  = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[capIdx][j]);
                 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);
@@ -229,14 +227,14 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, in
             {
                 __m256i v_acc   = _mm256_loadu_si256((__m256i const*)&inputAcc->rawValues[side][j]);
 
-                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->weights1[toIdx][j]);
-                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->weights1[fromIdx][j]);
+                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[toIdx][j]);
+                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[fromIdx][j]);
 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);
 
-                v_to    = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookToIdx][j]);
-                v_from  = _mm256_loadu_si256((__m256i const*)&weights->weights1[castledRookFromIdx][j]);
+                v_to    = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[castledRookToIdx][j]);
+                v_from  = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[castledRookFromIdx][j]);
                 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);
@@ -249,8 +247,8 @@ void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, in
             for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j+=16)
             {
                 __m256i v_acc   = _mm256_loadu_si256((__m256i const*)&inputAcc->rawValues[side][j]);
-                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->weights1[toIdx][j]);
-                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->weights1[fromIdx][j]);
+                __m256i v_to    = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[toIdx][j]);
+                __m256i v_from  = _mm256_loadu_si256((__m256i const*)&weights->accumulator_weights[fromIdx][j]);
                 
                 v_acc = _mm256_adds_epi16(v_acc, v_to);
                 v_acc = _mm256_subs_epi16(v_acc, v_from);
@@ -331,7 +329,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
             char wasAdded = curBoard[piece]&singleBitMask(square) ? 1 : 0;
 
             int16_t* targetAcc = acc->rawValues[color];
-            int16_t* targetWeights = weights->weights1[featureIndex];
+            int16_t* targetWeights = weights->accumulator_weights[featureIndex];
 
             if(wasAdded) 
             {

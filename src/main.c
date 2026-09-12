@@ -8,6 +8,7 @@
 #include "binpack/generate.h"
 #include "analyze/hce/tuner.h"
 #include "analyze/nnue/neuralnet.h"
+#include "train/train.h"
 #include <omp.h>
 #include <string.h>
 
@@ -567,6 +568,35 @@ int main(int argc, char** argv)
                 binpackPrintInfo(str);
                 break;
             }
+            #ifdef TRAIN
+            else if(strcmp(str, "train") == 0)
+            {
+                //Format: "train <epoch count> <binpack file name> <kernels file name>"
+                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                
+                int epochCount;
+                char binpackPath[256] = {'\0'};
+                char kernelPath[256] = {'\0'};
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                    
+                sscanf(str, "%d", &epochCount);
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                sscanf(str, "%s", binpackPath);
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                sscanf(str, "%s", kernelPath);
+
+                train(epochCount, binpackPath, kernelPath);
+                break;
+            }
+            #endif
             else if(strcmp(str, "quit") == 0) 
             {
                 quit = 1;

@@ -7,8 +7,6 @@
 #define ADAM_BETA2 0.999f
 #define ADAM_EPSILON 1e-8f
 
-#define PI 3.141592653589793
-
 typedef struct {
     double mg;
     double eg;
