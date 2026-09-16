@@ -20,7 +20,7 @@ extern uint64_t max_cosine_anneal_timestamp;
 #define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104 // 6,104 * 16,384 = 100,007,936
 
-#define FEN_SKIP_TRAINING 0
+#define FEN_SKIP_TRAINING 3
 
 void initializeTrainingWeights(training_weights* raw_weights);
 void quantizeWeights(training_weights* raw, nnue_weights* quantized);

@@ -247,51 +247,69 @@ extern "C" __global__ void calculate_output_gradient(const float* output_delta,
     }
 }
 
-//Grid Dimensions:  MINIBATCH_SIZE,             1, 1
-//Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
-// This is heavily bottlenecked by atomics, but it is still faster than all the other variants that I've tried.
+//Grid Dimensions:  MINIBATCH_SIZE, 1, 1
+//Block Dimensions: 64,             1, 1
 extern "C" __global__ void calculate_accumulator_gradient(const short* activeInputs, //[MINIBATCH_SIZE][2][32]
                                     const float* accumulator_delta, 
                                     float* factorizer_gradient_sum,
                                     float* accumulator_gradient_sum, 
                                     float* accumulator_bias_gradient_sum)
 {
+    // This is heavily bottlenecked by atomics, but it is still faster than all the other variants that I've tried.
+    // A minibatch can get processed in 11ms. This is 7ms.
+    // With a local size of ACCUMULATOR_NODES_PER_SIDE & less deltas per thread, it executes in 9ms.
     int batchIndex = blockIdx.x;
     int localID = threadIdx.x;
+    int side = localID >= 32;
 
     // Shared storage for the 64 active features of this board position
     __shared__ short sharedFeatures[64];
-    __shared__ float batch_accumulator_deltas[ACCUMULATOR_NODES];
-
-    if(localID < 64) 
-        sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
-    
+    sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
     __syncthreads();
-    int offset = batchIndex * ACCUMULATOR_NODES;
 
-    float delta_A = accumulator_delta[offset + localID];
-    float delta_B = accumulator_delta[offset + ACCUMULATOR_NODES_PER_SIDE + localID];
+    int offset = batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE * side;
+
+    //2x32 threads handling the deltas for 256 nodes per side.
+    //256 / 32 = 8 deltas per thread.
+    float delta_A = accumulator_delta[offset + localID +   0];
+    float delta_B = accumulator_delta[offset + localID +  32];
+    float delta_C = accumulator_delta[offset + localID +  64];
+    float delta_D = accumulator_delta[offset + localID +  96];
+    float delta_E = accumulator_delta[offset + localID + 128];
+    float delta_F = accumulator_delta[offset + localID + 160];
+    float delta_G = accumulator_delta[offset + localID + 192];
+    float delta_H = accumulator_delta[offset + localID + 224];
 
     int f = 0;
     while(f < 32 && sharedFeatures[f] != -1)
     {
-        short featureA = sharedFeatures[f];
-        short featureB = sharedFeatures[32 + f];
+        short featureIndex = sharedFeatures[f + 32 * side];
+        int featureOffset = featureIndex * ACCUMULATOR_NODES_PER_SIDE;
+        int factorizerFeatureOffset = (featureIndex % BITS_PER_KING_BUCKET) * ACCUMULATOR_NODES_PER_SIDE;
 
-        atomicAdd(&accumulator_gradient_sum[featureA * ACCUMULATOR_NODES_PER_SIDE + localID], delta_A);
-        atomicAdd(&accumulator_gradient_sum[featureB * ACCUMULATOR_NODES_PER_SIDE + localID], delta_B);
-        
-        featureA = featureA % BITS_PER_KING_BUCKET;
-        featureB = featureB % BITS_PER_KING_BUCKET;
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +   0], delta_A);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  32], delta_B);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  64], delta_C);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  96], delta_D);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 128], delta_E);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 160], delta_F);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 192], delta_G);
+        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 224], delta_H);
 
-        atomicAdd(&factorizer_gradient_sum[featureA * ACCUMULATOR_NODES_PER_SIDE + localID], delta_A);
-        atomicAdd(&factorizer_gradient_sum[featureB * ACCUMULATOR_NODES_PER_SIDE + localID], delta_B);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +   0], delta_A);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  32], delta_B);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  64], delta_C);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  96], delta_D);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 128], delta_E);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 160], delta_F);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 192], delta_G);
+        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 224], delta_H);
 
         f++;
     }
 
     //Bias
-    atomicAdd(&accumulator_bias_gradient_sum[localID], delta_A + delta_B);
+    atomicAdd(&accumulator_bias_gradient_sum[localID], delta_A + delta_B + delta_C + delta_D + delta_E + delta_F + delta_G + delta_H);
 }
 
 /******* Adam Update *******/

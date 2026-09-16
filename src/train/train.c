@@ -99,13 +99,13 @@ void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* boa
             score = -score;
 
         float relativeResult = 0.5f;
-        if(result == VIRI_DRAW) relativeResult = 0.5f;
-        else if(result == VIRI_WHITE_WIN)
+        if(result == VICTOR_DRAW) relativeResult = 0.5f;
+        else if(result == VICTOR_WHITE)
         {
             if(board->turn == WHITE) relativeResult = 1.0f;
             else relativeResult = 0.0f;
         }
-        else if(result == VIRI_BLACK_WIN)
+        else if(result == VICTOR_BLACK)
         {
             if(board->turn == BLACK) relativeResult = 1.0f;
             else relativeResult = 0.0f;

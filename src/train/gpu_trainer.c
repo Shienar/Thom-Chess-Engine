@@ -443,7 +443,7 @@ void enqueueKernels(int bufferSide)
     ENQUEUE_EVENT(hip_events.startEvents.calcAccum, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculateAccumulator,
                             MINIBATCH_SIZE * 2, 1, 1,
-                            32, 1, 1,
+                            32,                 1, 1,
                             0, hip_context.queue, calculateAccumulatorArgs, NULL);
 
     ENQUEUE_EVENT(hip_events.endEvents.calcAccum, hip_context.queue);
@@ -452,7 +452,7 @@ void enqueueKernels(int bufferSide)
     ENQUEUE_EVENT(hip_events.startEvents.calculateOutput, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculateOutput,
                             MINIBATCH_SIZE, 1, 1,
-                            32, 1, 1,
+                            32,             1, 1,
                             0, hip_context.queue, calculateOutputArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculateOutput, hip_context.queue);
 
@@ -461,7 +461,7 @@ void enqueueKernels(int bufferSide)
     calculateDeltaArgs[7] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.outputBucket_A   : &hip_mem.mem.outputBucket_B;
     ENQUEUE_EVENT(hip_events.startEvents.calculateDelta, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculateDeltas,
-                            MINIBATCH_SIZE, 1, 1,
+                            MINIBATCH_SIZE,             1, 1,
                             ACCUMULATOR_NODES_PER_SIDE, 1, 1,
                             0, hip_context.queue, calculateDeltaArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculateDelta, hip_context.queue);
@@ -474,7 +474,7 @@ void enqueueKernels(int bufferSide)
     ENQUEUE_EVENT(hip_events.startEvents.calculate_output_gradient, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculate_output_gradient,
                             OUTPUT_BUCKETS * ACCUMULATOR_NODES, 1, 1,
-                            32,  1, 1,
+                            32,                                 1, 1,
                             0, hip_context.queue, outputGradientArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculate_output_gradient, hip_context.queue);
 
@@ -483,7 +483,7 @@ void enqueueKernels(int bufferSide)
     ENQUEUE_EVENT(hip_events.startEvents.calculate_accumulator_gradient, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculate_accumulator_gradient,
                             MINIBATCH_SIZE,             1, 1,
-                            ACCUMULATOR_NODES_PER_SIDE, 1, 1,
+                            64,                         1, 1,
                             0, hip_context.queue, accumulatorGradientArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculate_accumulator_gradient, hip_context.queue);
 
