@@ -571,10 +571,12 @@ int main(int argc, char** argv)
             #ifdef TRAIN
             else if(strcmp(str, "train") == 0)
             {
-                //Format: "train <epoch count> <binpack file name> <kernels file name>"
+                //Format: "train <epochs> <min_lr> <max_lr> <binpack file path> <kernel file path>"
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
                 
                 int epochCount;
+                float minimumLR;
+                float maximumLR;
                 char binpackPath[256] = {'\0'};
                 char kernelPath[256] = {'\0'};
 
@@ -582,6 +584,16 @@ int main(int argc, char** argv)
                     break;
                     
                 sscanf(str, "%d", &epochCount);
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                    
+                sscanf(str, "%f", &minimumLR);
+                    
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                sscanf(str, "%f", &maximumLR);
                 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -593,7 +605,7 @@ int main(int argc, char** argv)
 
                 sscanf(str, "%s", kernelPath);
 
-                train(epochCount, binpackPath, kernelPath);
+                train(epochCount, minimumLR, maximumLR, binpackPath, kernelPath);
                 break;
             }
             #endif

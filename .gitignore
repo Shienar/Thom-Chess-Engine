@@ -5,5 +5,7 @@
 *.pgn
 quantized.bin
 raw.bin
+firstMoments.bin
+secondMoments.bin
 target/
 tests/

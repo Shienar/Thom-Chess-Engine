@@ -841,7 +841,11 @@ void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repeti
 
 move getStructFromString(bitboard* board, char* str)
 {
-    //String format: [2 char - startsquare][2 char - endsquare][1 char - promotion (q, n, r, b)]
+    //Special case - null move
+    if(str[0] == '0')
+        return (move){0};
+
+    //String format: [2 char: startsquare][2 char: endsquare][1 char: promotion (q, n, r, b)]
     char start[3] = {'\0'};
     strncpy(start, str, 2);
     char end[3] = {'\0'};

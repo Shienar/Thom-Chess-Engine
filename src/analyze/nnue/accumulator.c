@@ -34,7 +34,6 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingB
     for(int outputIndex = 0; outputIndex < ACCUMULATOR_NODES_PER_SIDE; outputIndex+=16) 
     {
         __m256i v_output = _mm256_loadu_si256((const __m256i*)&weights->accumulator_bias[outputIndex]);
-
         for(int piece = 0; piece < PIECE_COUNT; piece++)
         {
             uint64_t pieceMask = inputNodes[piece];
@@ -42,13 +41,10 @@ void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingB
             while(pieceMask)
             {
                 int featureIndex =  baseIndex + __builtin_ctzll(pieceMask);
-
                 v_output = _mm256_adds_epi16(v_output, _mm256_loadu_si256((const __m256i*)&weights->accumulator_weights[featureIndex][outputIndex]));
-
                 pieceMask &= (pieceMask - 1);
             }
         }
-
         _mm256_storeu_si256((__m256i*)&outputValues[outputIndex], v_output);
     } 
 }
@@ -58,34 +54,28 @@ void loadInputAccumulator(bitboard* board, accumulator* acc)
     assert(board);
     assert(acc);
     
-    uint64_t inputs[2 * BITBOARDS_PER_INPUT_SIDE] = {0};
-    
-    int whiteBucket = kingBuckets[board->kingSquare[WHITE]];
-    int blackBucket = kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])];
-
-    int baseIndex_w = PIECE_COUNT * whiteBucket;
-    int baseIndex_b = BITBOARDS_PER_INPUT_SIDE + PIECE_COUNT * blackBucket;
+    uint64_t inputs[2 * PIECE_COUNT] = {0};
 
     for(int i = 0; i < PIECE_TYPE_COUNT; i++)
     {
         //White's perspective
-        inputs[baseIndex_w + i] = board->pieces[2 * i];
-        inputs[baseIndex_w + PIECE_TYPE_COUNT + i] = board->pieces[2 * i + 1];
+        inputs[i] = board->pieces[2 * i];
+        inputs[PIECE_TYPE_COUNT + i] = board->pieces[2 * i + 1];
 
         //Black's perspective
-        inputs[baseIndex_b + i] = FLIP_MASK(board->pieces[2 * i + 1]);
-        inputs[baseIndex_b + PIECE_TYPE_COUNT + i] = FLIP_MASK(board->pieces[2 * i]);
+        inputs[PIECE_COUNT + i] = FLIP_MASK(board->pieces[2 * i + 1]);
+        inputs[PIECE_COUNT + PIECE_TYPE_COUNT + i] = FLIP_MASK(board->pieces[2 * i]);
     }
     
     if(getColumn(board->kingSquare[WHITE]) > 3)
         for(int p = 0; p < PIECE_COUNT; p++) 
-            inputs[baseIndex_w + p] = mirrorBoard(inputs[baseIndex_w + p]);
+            inputs[p] = mirrorBoard(inputs[p]);
     if(getColumn(board->kingSquare[BLACK]) > 3)
-        for(int p = 0; p < PIECE_COUNT; p++) 
-            inputs[baseIndex_b + p] = mirrorBoard(inputs[baseIndex_b + p]);
+        for(int p = PIECE_COUNT; p < 2 * PIECE_COUNT; p++) 
+            inputs[p] = mirrorBoard(inputs[p]);
 
-    calculateAccumulator(&inputs[baseIndex_w], acc->rawValues[WHITE], BITS_PER_KING_BUCKET * whiteBucket);
-    calculateAccumulator(&inputs[baseIndex_b], acc->rawValues[BLACK], BITS_PER_KING_BUCKET * blackBucket);
+    calculateAccumulator(&inputs[0],            acc->rawValues[WHITE], BITS_PER_KING_BUCKET * kingBuckets[board->kingSquare[WHITE]]);
+    calculateAccumulator(&inputs[PIECE_COUNT],  acc->rawValues[BLACK], BITS_PER_KING_BUCKET * kingBuckets[FLIP_SQUARE(board->kingSquare[BLACK])]);
 }
 
 void updateMoveAccumulator(bitboard* board, move lastMove, int capturedPiece, int isEnPassant, accumulator* inputAcc, accumulator* outputAcc, accumulatorRefreshTable* refreshTable)
@@ -315,10 +305,6 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
     for(int piece = 0; piece < PIECE_COUNT; piece++)
     {
         uint64_t difference = curBoard[piece]^accumBoard[piece];
-
-        //Input node updates
-        int inputNodeIndex = (PIECE_COUNT * kingBuckets[ksq]) + piece;
-        if(ISBLACK(color)) inputNodeIndex+=BITBOARDS_PER_INPUT_SIDE;
 
         while(difference)
         {

@@ -16,7 +16,7 @@ A release version of the engine should be compiled with 'make -j'.
 
 This repository also contains a trainer for the NNUE. It was designed specifically for my (AMD) hardware & network architecture as a fun side project, and I make no guarantees about its compilability or effectiveness on other GPUs.
 - 'make -j TRAIN=1' will compile the trainer.
-= 'make =j TRAIN=1 KPERFT=1' will allow for performance tracking of the training kernels.
+- 'make =j TRAIN=1 KPERFT=1' will allow for performance tracking of the training kernels.
 ## COMMANDS:
 
 ### UCI:
@@ -62,10 +62,15 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - prints eval
 - tune &lt;forcedK (0 for auto)&gt; &lt;epochs&gt; &lt;max_lr&gt; &lt;min_lr&gt; "&lt;inputPath&gt;" "&lt;outputPath&gt;"
     - HCE Tuning.
-- generate "&lt;outputFilePath&gt;"
+- generate &lt;outputFilePath&gt;
     - Viriformat binpack data generation
-- binpackinfo "&lt;binpackFilePath&gt;"
+- binpackinfo &lt;binpackFilePath&gt;
     - Get information about a generated binpack
+- train &lt;epochs&gt; &lt;min_lr&gt; &lt;max_lr&gt; &lt;binpack file path&gt; &lt;kernel file path&gt;
+    - GPU training of the NNUE.
+    - Requires HIP & must be compiled with 'TRAIN=1'
+    - Not intended to be universally compatible or flexible. 
+    - Not included in release binaries.
 
 ## FEATURES:
 

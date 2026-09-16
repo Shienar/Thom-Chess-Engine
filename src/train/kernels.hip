@@ -1,22 +1,19 @@
 #include <hip/hip_runtime.h>
 #include <cstdint>
-#include <cassert>
 
 #define MINIBATCH_SIZE 16384
 #define KING_BUCKETS 10
 #define OUTPUT_BUCKETS 8
 #define BITS_PER_KING_BUCKET 768
-#define INPUT_BITS (2 * KING_BUCKETS * BITS_PER_KING_BUCKET)
-#define INPUT_BITS_PER_SIDE (INPUT_BITS / 2)
+#define INPUT_BITS_PER_SIDE (BITS_PER_KING_BUCKET * KING_BUCKETS)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
-#define VECTOR_ACCUMULATOR_NODES (ACCUMULATOR_NODES / 4)
 #define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 4)
 
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 #define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-3f
+#define ADAM_WEIGHT_DECAY 1e-2f
 
 #define EVAL_SCALE 400.0f
 
@@ -55,7 +52,7 @@ __device__ inline void fake_quantize4(float4* val, float scale) { return; }
 /******* Forward Propagation *******/
 //Grid Dimensions:  MINIBATCH_SIZE * 2,         1, 1
 //Block Dimensions: 32, 1, 1
-// float 4 vectors processed per thread = (ACCUMULATOR_NODES_PER_SIDE / 4) / 32 = 2
+//float 4 vectors processed per thread = (ACCUMULATOR_NODES_PER_SIDE / 4) / 32 = 2
 extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [MINIBATCH_SIZE][2][32]
                                                 const float4* accumulator_weights,
                                                 const float4* factorizer_weights,
@@ -85,8 +82,8 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
     #pragma unroll
     for(int f = 0; f < 32; f++) 
     {
-        //This is executed within a single wavefront so shared local 
-        //group buffer / broadcast is slower than just loading it directly.
+        //This is executed within a single wavefront so a shared local group buffer 
+        //with broadcast is slower than just loading it directly.
         short currentFeature = activeInputs[offset + f];
         if(currentFeature == -1) break;
 
@@ -145,7 +142,7 @@ extern "C" __global__ void calculateOutput(const float* accumulatorOutput,
     int bucketOffset = bucket * ACCUMULATOR_NODES;
 
     #pragma unroll
-    for(int i = localID; i < ACCUMULATOR_NODES; i+= 32)
+    for(int i = localID; i < ACCUMULATOR_NODES; i+=blockDim.x)
         myOutputContribution += screlu(accumulatorOutput[baseIndex + i]) * fake_quantize(output_weights[bucketOffset + i], QB);
 
     __syncthreads();
@@ -157,7 +154,6 @@ extern "C" __global__ void calculateOutput(const float* accumulatorOutput,
     if(localID == 0)
     {
         float finalOutput = myOutputContribution + fake_quantize(output_bias[bucket], QA_QB);
-        
         outputs[batchIndex] = sigmoid(finalOutput);
     }
 }
@@ -197,8 +193,7 @@ extern "C" __global__ void calculateDeltas(const float* outputNodes, const float
     __syncthreads();
 
     //accumulator_delta
-    //512 delta / 256 threads = 2 deltas per
-    for(int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=ACCUMULATOR_NODES_PER_SIDE) 
+    for(int nodeIndex = localID; nodeIndex < ACCUMULATOR_NODES; nodeIndex+=blockDim.x) 
     {
         float sum = shared_output_delta * fake_quantize(output_weights[bucket * ACCUMULATOR_NODES + nodeIndex], QB);
         accumulator_delta[batchIndex * ACCUMULATOR_NODES + nodeIndex] = sum * screlu_derivative(accumulator_outputs[batchIndex * ACCUMULATOR_NODES + nodeIndex]);
@@ -224,7 +219,7 @@ extern "C" __global__ void calculate_output_gradient(const float* output_delta,
     float partialSum = 0.0f;
     float partialBiasSum = 0.0f;
 
-    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex += 32) 
+    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex += blockDim.x) 
     {
         float delta = output_delta[batchIndex];
         int bucket = outputBucket[batchIndex];
@@ -254,6 +249,7 @@ extern "C" __global__ void calculate_output_gradient(const float* output_delta,
 
 //Grid Dimensions:  MINIBATCH_SIZE,             1, 1
 //Block Dimensions: ACCUMULATOR_NODES_PER_SIDE, 1, 1
+// This is heavily bottlenecked by atomics, but it is still faster than all the other variants that I've tried.
 extern "C" __global__ void calculate_accumulator_gradient(const short* activeInputs, //[MINIBATCH_SIZE][2][32]
                                     const float* accumulator_delta, 
                                     float* factorizer_gradient_sum,

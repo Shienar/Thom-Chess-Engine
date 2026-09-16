@@ -55,6 +55,17 @@ void getMoveSquareName(int fromSq, int toSq, char* target)
     assert(fromSq >= 0 && fromSq <= 63);
     assert(toSq >= 0 && toSq <= 63);
 
+    //move 0000
+    if(fromSq == toSq)
+    {
+        target[0] = '0';
+        target[1] = '0';
+        target[2] = '0';
+        target[3] = '0';
+        target[4] = '\0';
+    
+    }
+
     getSquareName(fromSq, target);
     getSquareName(toSq, &target[2]);
 }

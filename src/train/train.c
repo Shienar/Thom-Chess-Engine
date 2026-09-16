@@ -7,7 +7,9 @@
 #include <string.h>
 #include <float.h>
 
-/*** Training Weights ***/
+uint64_t max_cosine_anneal_timestamp = 10 * MINIBATCHES_PER_EPOCH;
+float max_lr = 3e-3f;
+float min_lr = 2.5e-5f;
 
 //Box-Muller Transform
 double sampleNormalDistribution(double mean, double stddev)
@@ -18,15 +20,11 @@ double sampleNormalDistribution(double mean, double stddev)
     return mean + stddev * (sqrt(-2.0 * log(u1)) * cos(2.0 * PI * u2));
 }
 
-training_weights* initializeTrainingWeights()
+void initializeTrainingWeights(training_weights* raw_weights)
 {
-    training_weights* raw_weights = calloc(1, sizeof(training_weights));
+    memset(raw_weights, 0, sizeof(training_weights));
 
     float stddev = sqrtf(2.0 / BITS_PER_KING_BUCKET);
-
-    for(int i = 0; i < BITS_PER_KING_BUCKET; i++)
-        for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-            raw_weights->factorizer_weights[i][j] = clamp(sampleNormalDistribution(0.0, stddev), -1.98f / 2, 1.98f / 2);
 
     for(int i = 0; i < INPUT_BITS_PER_SIDE; i++)
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
@@ -36,14 +34,12 @@ training_weights* initializeTrainingWeights()
     for(int b = 0; b < OUTPUT_BUCKETS; b++)
         for(int i = 0; i < ACCUMULATOR_NODES; i++)
             raw_weights->output_weights[b][i] = clamp(sampleNormalDistribution(0.0, stddev), -1.98f, 1.98f);
-
-    return raw_weights;
 }
 
-void saveRawWeights(training_weights* weights)
+void saveRawWeights(training_weights* weights, const char* path)
 {
     assert(weights);
-    FILE* output = fopen("./import/raw.bin", "wb");
+    FILE* output = fopen(path, "wb");
     fwrite(weights, sizeof(training_weights), 1, output);
     fclose(output);
 }
@@ -65,12 +61,13 @@ void quantizeWeights(training_weights* raw, nnue_weights* quantized)
     }
 }
 
-void saveQuantizedWeights(nnue_weights* weights)
+void saveQuantizedWeights(nnue_weights* weights, const char* path)
 {
-    FILE* output = fopen("./import/quantized.bin", "wb");
+    FILE* output = fopen(path, "wb");
     fwrite(weights, sizeof(nnue_weights), 1, output);
     fclose(output);
 }
+
 
 float sumLoss(float* loss)
 {
@@ -79,9 +76,8 @@ float sumLoss(float* loss)
         tempSum = _mm256_add_ps(tempSum, _mm256_loadu_ps(&loss[i]));
 
     __m128 sum128 = _mm_add_ps(_mm256_castps256_ps128((__m256)tempSum), _mm256_extractf128_ps(tempSum, 1));
-    
-    sum128 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128)); 
-    sum128 = _mm_add_ss(sum128, _mm_shuffle_ps(sum128, sum128, _MM_SHUFFLE(1, 1, 1, 1))); 
+    sum128 = _mm_hadd_ps(sum128, sum128);
+    sum128 = _mm_hadd_ps(sum128, sum128);
     return _mm_cvtss_f32(sum128);
 }
 
@@ -171,8 +167,13 @@ void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* boa
     }
 }
 
-void train(int maxIterations, const char* binpackFileName, const char* kernelFileName)
+void train(int epochs, float min_learningRate, float max_learningRate, const char* binpackFileName, const char* kernelFileName)
 {
+    epochs = _max(epochs, 1);
+    min_lr = min_learningRate;
+    max_lr = max_learningRate;
+    max_cosine_anneal_timestamp = epochs * MINIBATCHES_PER_EPOCH;
+
     short* activeInputs_A = NULL;
     float* expectedOutputs_A = NULL;
     char* outputBuckets_A = NULL;
@@ -182,21 +183,8 @@ void train(int maxIterations, const char* binpackFileName, const char* kernelFil
     char* outputBuckets_B = NULL;
 
     float* loss_buffer = NULL;
-    
-    training_weights* raw_weights;
-    FILE* raw_weights_file;
-    if((raw_weights_file = fopen("./import/raw.bin", "rb")) != NULL)
-    {
-        raw_weights = calloc(1, sizeof(training_weights));
-        fread(raw_weights, sizeof(training_weights), 1, raw_weights_file);
-        fclose(raw_weights_file);
-        raw_weights_file = NULL;
-    }
-    else
-        raw_weights = initializeTrainingWeights();
-    nnue_weights* quantized_weights = calloc(1, sizeof(nnue_weights));
 
-    int cl_errorcode = initHIP(raw_weights, kernelFileName, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
+    int cl_errorcode = initHIP(kernelFileName, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
     if(cl_errorcode != hipSuccess) 
     {
         printf("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
@@ -227,25 +215,20 @@ void train(int maxIterations, const char* binpackFileName, const char* kernelFil
             
             float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
-
+            
             if((minibatchNumber + 1) % 25 == 0) 
-                printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, loss / MINIBATCH_SIZE);
+                printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, 0.5 * loss / MINIBATCH_SIZE);
             inputGroup ^= 1;
         }
         endTime = clock();
 
+        //Loss = 0.5 * MSE
         duration_sec = (double) (endTime - startTime) / CLOCKS_PER_SEC; 
-        totalLoss = totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH);
+        totalLoss = 0.5 * totalLoss/(MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH);
         printf("\33[2K\rEpoch %d Loss = %e (%.1fs at %d pos/sec)\n", ++totalEpochs, totalLoss, duration_sec, (int) ((MINIBATCH_SIZE * MINIBATCHES_PER_EPOCH) / duration_sec));
 
-        getWeights(raw_weights);
-        saveRawWeights(raw_weights);
-        quantizeWeights(raw_weights, quantized_weights);
-        saveQuantizedWeights(quantized_weights);
-    } while(totalEpochs < maxIterations);
-
-    free(raw_weights);
-    free(quantized_weights);
+        saveGPUWeights();
+    } while(totalEpochs < epochs);
 
     freeHIP();
     binpack_close(&trainingBinpack);

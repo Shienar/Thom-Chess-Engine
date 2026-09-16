@@ -1,4 +1,4 @@
-#include "gpu_funcs.h"
+#include "gpu_trainer.h"
 #include <string.h>
 
 hipContext hip_context = {
@@ -15,7 +15,7 @@ hipEvents hip_events = {
     .endEvents = { { NULL } } 
 };
 
-float lr = MAX_LR;
+float lr = 3e-3f;
 uint64_t cosineTimestamp;
 uint64_t timestamp;
 float rho_inf = (2.0 / (1.0 - ADAM_BETA2)) - 1.0;
@@ -52,9 +52,14 @@ short* host_activeInputs_A      = NULL;
 short* host_activeInputs_B      = NULL;
 float* host_expectedOutputs_A   = NULL;
 float* host_expectedOutputs_B   = NULL;
-char* host_outputBuckets_A      = NULL;
-char* host_outputBuckets_B      = NULL;
+char*  host_outputBuckets_A     = NULL;
+char*  host_outputBuckets_B     = NULL;
 float* host_lossbuffer          = NULL;
+
+nnue_weights*     host_quantized_weights = NULL;
+training_weights* host_training_weights  = NULL;
+training_weights* host_first_moments     = NULL;
+training_weights* host_second_moments    = NULL;
 
 void* calculateAccumulatorArgs[5];
 void* calculateOutputArgs[5];
@@ -97,12 +102,11 @@ unsigned char* loadCompiledKernels(size_t* size, const char* fileName)
     return binary;
 }
 
-hipError_t initHIP(training_weights* raw_weights, const char* compiledKernelPath,
+hipError_t initHIP(const char* compiledKernelPath,
                     short** h_active_A, float** h_expected_A, char** h_bucket_A,
                     short** h_active_B, float** h_expected_B, char** h_bucket_B,
                     float** h_lossbuffer)
 {
-
     cosineTimestamp = 0;
     timestamp = 0;
 
@@ -146,6 +150,12 @@ hipError_t initHIP(training_weights* raw_weights, const char* compiledKernelPath
     if(err != hipSuccess) { DEBUG_ERROR("Error creating events."); return 1; }
 
     /** ALLOCATING **/
+    //Existing weights/moments from file.
+    //Their copying is infrequent so I'm just doing calloc.
+    host_quantized_weights = calloc(1, sizeof(nnue_weights));
+    host_training_weights  = calloc(1, sizeof(training_weights));
+    host_first_moments     = calloc(1, sizeof(training_weights));
+    host_second_moments    = calloc(1, sizeof(training_weights));
     //Host pinning (Staging buffers)
     hipHostMalloc((void**)&host_activeInputs_A,     activeInputs_size,      hipHostMallocDefault);
     hipHostMalloc((void**)&host_activeInputs_B,     activeInputs_size,      hipHostMallocDefault);
@@ -207,36 +217,62 @@ hipError_t initHIP(training_weights* raw_weights, const char* compiledKernelPath
     hipMalloc(&hip_mem.mem.v_output_weights,        output_weights_size);
     hipMalloc(&hip_mem.mem.v_output_bias,           output_bias_size);
 
+    //Load weights/moments from file or initialize them.
+    //Calloc leaves moments at zero if not in file.
+    FILE* rawInput = NULL;
+    if((rawInput = fopen("./import/raw.bin", "rb")) != NULL)
+    {
+        fread(host_training_weights, sizeof(training_weights), 1, rawInput);
+        fclose(rawInput);
+        rawInput = NULL;
+
+        FILE* mInput = NULL;
+        FILE* vInput = NULL;
+        //Require both or none of first/second moments.
+        if((mInput = fopen("./import/firstMoments.bin", "rb")) != NULL)
+        {
+            if((vInput = fopen("./import/secondMoments.bin", "rb")) != NULL)
+            {   
+                fread(host_first_moments,  sizeof(training_weights), 1, mInput);
+                fread(host_second_moments, sizeof(training_weights), 1, vInput);
+                fclose(vInput);
+            }
+            fclose(mInput);
+        }
+    }
+    else
+        initializeTrainingWeights(host_training_weights);
+
     /** COPYING **/
     //factorizer_weights
-    hipMemcpyAsync(hip_mem.mem.factorizer_weights_slow, (void*)raw_weights->factorizer_weights,     factorizer_weights_size, hipMemcpyHostToDevice, hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.factorizer_weights_fast, hip_mem.mem.factorizer_weights_slow,        factorizer_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.factorizer_weights_slow, (void*)host_training_weights->factorizer_weights,   factorizer_weights_size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.factorizer_weights_fast, hip_mem.mem.factorizer_weights_slow,                factorizer_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
     //accumulator_weights
-    hipMemcpyAsync(hip_mem.mem.accumulator_weights_slow, (void*)raw_weights->accumulator_weights,   accumulator_weights_size, hipMemcpyHostToDevice, hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.accumulator_weights_fast, hip_mem.mem.accumulator_weights_slow,      accumulator_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.accumulator_weights_slow, (void*)host_training_weights->accumulator_weights,     accumulator_weights_size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.accumulator_weights_fast, hip_mem.mem.accumulator_weights_slow,                  accumulator_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
     //output_weights
-    hipMemcpyAsync(hip_mem.mem.output_weights_slow, (void*)raw_weights->output_weights, output_weights_size, hipMemcpyHostToDevice, hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.output_weights_fast, hip_mem.mem.output_weights_slow,    output_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.output_weights_slow, (void*)host_training_weights->output_weights,   output_weights_size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.output_weights_fast, hip_mem.mem.output_weights_slow,                output_weights_size, hipMemcpyDeviceToDevice, hip_context.queue);
     //accumulator_bias
-    hipMemcpyAsync(hip_mem.mem.accumulator_bias_slow, (void*)raw_weights->accumulator_bias,     accumulator_bias_size, hipMemcpyHostToDevice, hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.accumulator_bias_fast, hip_mem.mem.accumulator_bias_slow,        accumulator_bias_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.accumulator_bias_slow, (void*)host_training_weights->accumulator_bias,       accumulator_bias_size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.accumulator_bias_fast, hip_mem.mem.accumulator_bias_slow,                    accumulator_bias_size, hipMemcpyDeviceToDevice, hip_context.queue);
     //output_bias
-    hipMemcpyAsync(hip_mem.mem.output_bias_slow, (void*)raw_weights->output_bias,   output_bias_size, hipMemcpyHostToDevice, hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.output_bias_fast, hip_mem.mem.output_bias_slow,      output_bias_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.output_bias_slow, (void*)host_training_weights->output_bias,     output_bias_size, hipMemcpyHostToDevice, hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.output_bias_fast, hip_mem.mem.output_bias_slow,                  output_bias_size, hipMemcpyDeviceToDevice, hip_context.queue);
+    //First moments 
+    hipMemcpyAsync(hip_mem.mem.m_factorizer_weights,    (void*)host_first_moments->factorizer_weights,  factorizer_weights_size,    hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.m_accumulator_weights,   (void*)host_first_moments->accumulator_weights, accumulator_weights_size,   hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.m_accumulator_bias,      (void*)host_first_moments->accumulator_bias,    accumulator_bias_size,      hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.m_output_weights,        (void*)host_first_moments->output_weights,      output_weights_size,        hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.m_output_bias,           (void*)host_first_moments->output_bias,         output_bias_size,           hipMemcpyHostToDevice,  hip_context.queue);
+    //Second moments
+    hipMemcpyAsync(hip_mem.mem.v_factorizer_weights,    (void*)host_second_moments->factorizer_weights,     factorizer_weights_size,   hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.v_accumulator_weights,   (void*)host_second_moments->accumulator_weights,    accumulator_weights_size,  hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.v_accumulator_bias,      (void*)host_second_moments->accumulator_bias,       accumulator_bias_size,     hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.v_output_weights,        (void*)host_second_moments->output_weights,         output_weights_size,       hipMemcpyHostToDevice,  hip_context.queue);
+    hipMemcpyAsync(hip_mem.mem.v_output_bias,           (void*)host_second_moments->output_bias,            output_bias_size,          hipMemcpyHostToDevice,  hip_context.queue);
 
     /** ZEROING **/
-    //First moments 
-    hipMemsetAsync(hip_mem.mem.m_factorizer_weights,    0, factorizer_weights_size,     hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.m_accumulator_weights,   0, accumulator_weights_size,    hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.m_accumulator_bias,      0, accumulator_bias_size,       hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.m_output_weights,        0, output_weights_size,         hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.m_output_bias,           0, output_bias_size,            hip_context.queue);
-    //Second moments
-    hipMemsetAsync(hip_mem.mem.v_factorizer_weights,    0, factorizer_weights_size,     hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.v_accumulator_weights,   0, accumulator_weights_size,    hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.v_accumulator_bias,      0, accumulator_bias_size,       hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.v_output_weights,        0, output_weights_size,         hip_context.queue);
-    hipMemsetAsync(hip_mem.mem.v_output_bias,           0, output_bias_size,            hip_context.queue);
     //Gradients
     hipMemsetAsync(hip_mem.mem.factorizer_weights_gradient_sum,     0, factorizer_weights_size,     hip_context.queue);
     hipMemsetAsync(hip_mem.mem.accumulator_weights_gradient_sum,    0, accumulator_weights_size,    hip_context.queue);
@@ -332,7 +368,8 @@ void freeHIP()
     }
 
     if(hip_context.module) { hipModuleUnload(hip_context.module); hip_context.module = NULL; }
-    for(int i = 0; i < KERNEL_COUNT; i++) { hip_context.kernels.arr[i] = NULL; }
+    for(int i = 0; i < KERNEL_COUNT; i++) 
+        hip_context.kernels.arr[i] = NULL;
 
     if(host_activeInputs_A)     hipHostFree(host_activeInputs_A);
     if(host_activeInputs_B)     hipHostFree(host_activeInputs_B);
@@ -341,6 +378,11 @@ void freeHIP()
     if(host_outputBuckets_A)    hipHostFree(host_outputBuckets_A);
     if(host_outputBuckets_B)    hipHostFree(host_outputBuckets_B);
     if(host_lossbuffer)         hipHostFree(host_lossbuffer);
+
+    if(host_quantized_weights)  free(host_quantized_weights);
+    if(host_training_weights)   free(host_training_weights);
+    if(host_first_moments)      free(host_first_moments);
+    if(host_second_moments)     free(host_second_moments);
 
     host_activeInputs_A = NULL;
     host_activeInputs_B = NULL;
@@ -381,8 +423,9 @@ float print_prof(const char* name, hipEvent_t start, hipEvent_t stop)
 void enqueueKernels(int bufferSide)
 {
     //cosine annealing
-    lr = MIN_LR + 0.5 * (MAX_LR - MIN_LR) * (1.0 + cos(PI * (cosineTimestamp++) / MAX_COSINE_ANNEAL_TIMESTAMP));
-    lr = clamp(lr, MIN_LR, MAX_LR);
+    cosineTimestamp = _min(cosineTimestamp + 1, max_cosine_anneal_timestamp);
+    lr = min_lr + 0.5 * (max_lr - min_lr) * (1.0 + cos(PI * (cosineTimestamp) / max_cosine_anneal_timestamp));
+    lr = clamp(lr, min_lr, max_lr);
 
     hipMemcpyAsync( (bufferSide == INPUT_GROUP_A) ? hip_mem.mem.activeInputs_A  : hip_mem.mem.activeInputs_B, 
                     (bufferSide == INPUT_GROUP_A) ? host_activeInputs_A         : host_activeInputs_B, 
@@ -495,7 +538,7 @@ void enqueueKernels(int bufferSide)
         printf("\n--- Profiling ---\n");
         sum_time_ms += print_prof("Calculate Accumulator", hip_events.startEvents.calcAccum, hip_events.endEvents.calcAccum);
         sum_time_ms += print_prof("Calculate Output", hip_events.startEvents.calculateOutput, hip_events.endEvents.calculateOutput);
-        sum_time_ms += print_prof("calculateDeltaagation", hip_events.startEvents.calculateDelta, hip_events.endEvents.calculateDelta);
+        sum_time_ms += print_prof("Calculate Deltas", hip_events.startEvents.calculateDelta, hip_events.endEvents.calculateDelta);
         sum_time_ms += print_prof("Output Gradient", hip_events.startEvents.calculate_output_gradient, hip_events.endEvents.calculate_output_gradient);
         sum_time_ms += print_prof("Accumulator Gradient", hip_events.startEvents.calculate_accumulator_gradient, hip_events.endEvents.calculate_accumulator_gradient);
         sum_time_ms += print_prof("Output Layer & Biases", hip_events.startEvents.denseUpdate, hip_events.endEvents.denseUpdate);
@@ -507,15 +550,32 @@ void enqueueKernels(int bufferSide)
     #endif
 }
 
-void getWeights(training_weights* weights)
+void saveGPUWeights()
 {
-    hipMemcpyDtoHAsync(weights->factorizer_weights, hip_mem.mem.factorizer_weights_slow, factorizer_weights_size, hip_context.queue);
-
-    hipMemcpyDtoHAsync(weights->accumulator_weights, hip_mem.mem.accumulator_weights_slow, accumulator_weights_size, hip_context.queue);
-    hipMemcpyDtoHAsync(weights->output_weights, hip_mem.mem.output_weights_slow, output_weights_size, hip_context.queue);
-    
-    hipMemcpyDtoHAsync(weights->accumulator_bias, hip_mem.mem.accumulator_bias_slow, accumulator_bias_size, hip_context.queue);
-    hipMemcpyDtoHAsync(weights->output_bias, hip_mem.mem.output_bias_slow, output_bias_size, hip_context.queue);
+    //Training Weights
+    hipMemcpyDtoHAsync(host_training_weights->factorizer_weights,   hip_mem.mem.factorizer_weights_slow,    factorizer_weights_size,    hip_context.queue);
+    hipMemcpyDtoHAsync(host_training_weights->accumulator_weights,  hip_mem.mem.accumulator_weights_slow,   accumulator_weights_size,   hip_context.queue);
+    hipMemcpyDtoHAsync(host_training_weights->accumulator_bias,     hip_mem.mem.accumulator_bias_slow,      accumulator_bias_size,      hip_context.queue);
+    hipMemcpyDtoHAsync(host_training_weights->output_weights,       hip_mem.mem.output_weights_slow,        output_weights_size,        hip_context.queue);
+    hipMemcpyDtoHAsync(host_training_weights->output_bias,          hip_mem.mem.output_bias_slow,           output_bias_size,           hip_context.queue);
+    //First Moments
+    hipMemcpyDtoHAsync(host_first_moments->factorizer_weights,   hip_mem.mem.m_factorizer_weights,    factorizer_weights_size,    hip_context.queue);
+    hipMemcpyDtoHAsync(host_first_moments->accumulator_weights,  hip_mem.mem.m_accumulator_weights,   accumulator_weights_size,   hip_context.queue);
+    hipMemcpyDtoHAsync(host_first_moments->accumulator_bias,     hip_mem.mem.m_accumulator_bias,      accumulator_bias_size,      hip_context.queue);
+    hipMemcpyDtoHAsync(host_first_moments->output_weights,       hip_mem.mem.m_output_weights,        output_weights_size,        hip_context.queue);
+    hipMemcpyDtoHAsync(host_first_moments->output_bias,          hip_mem.mem.m_output_bias,           output_bias_size,           hip_context.queue);
+    //Second Moments
+    hipMemcpyDtoHAsync(host_second_moments->factorizer_weights,   hip_mem.mem.v_factorizer_weights,    factorizer_weights_size,    hip_context.queue);
+    hipMemcpyDtoHAsync(host_second_moments->accumulator_weights,  hip_mem.mem.v_accumulator_weights,   accumulator_weights_size,   hip_context.queue);
+    hipMemcpyDtoHAsync(host_second_moments->accumulator_bias,     hip_mem.mem.v_accumulator_bias,      accumulator_bias_size,      hip_context.queue);
+    hipMemcpyDtoHAsync(host_second_moments->output_weights,       hip_mem.mem.v_output_weights,        output_weights_size,        hip_context.queue);
+    hipMemcpyDtoHAsync(host_second_moments->output_bias,          hip_mem.mem.v_output_bias,           output_bias_size,           hip_context.queue);
 
     hipStreamSynchronize(hip_context.queue);
+
+    quantizeWeights(host_training_weights, host_quantized_weights);
+    saveQuantizedWeights(host_quantized_weights, "./import/quantized.bin");
+    saveRawWeights(host_training_weights,   "./import/raw.bin");
+    saveRawWeights(host_first_moments,      "./import/firstMoments.bin");
+    saveRawWeights(host_second_moments,     "./import/secondMoments.bin");
 }

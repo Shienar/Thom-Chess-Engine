@@ -30,7 +30,7 @@ void generate(const char* path)
         contextList[i].hardEndTime = LONG_MAX,
         contextList[i].softEndTime = LONG_MAX,
         contextList[i].maxDepth = MAX_PLY;
-        contextList[i].hardMaxNodes = 100000;
+        contextList[i].hardMaxNodes = 10000;
         contextList[i].softMaxNodes = 10000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
         contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero.
@@ -145,19 +145,19 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         if(isNewGame)
         {
+            newgame:
             load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
 
             //Play some random moves
-            //Early mate is possible, goto newloop is used as a break + continue;
             for(int i = 0; i < 8; i++)
             {
                 move moveList[MAX_MOVES] = {0};
                 int count = generateMoveList(moveList, board, 0);
                 if(!count)
-                    goto newloop;
+                    goto newgame;
                 int index = rng_xorshift32(&seed) % count;
                 if(moveFromStruct(board, board, moveList[index], &context->repetitions))
-                    goto newloop;
+                    goto newgame;
             }
 
             isNewGame = 0;
@@ -174,7 +174,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
         assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
 
         calculateBestMove(param);
-
+        
         move bestMove = context->pv.line[0];
 
         int whiteEval = (ISWHITE(board->turn)) ? context->score : - context->score;
@@ -287,8 +287,6 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             isNewGame = 1;
             continue;
         }
-
-        newloop:
     }
 
     free(writeBuffer);

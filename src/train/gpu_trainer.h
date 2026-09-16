@@ -1,5 +1,5 @@
-#ifndef GPU_FUNCS
-#define GPU_FUNCS
+#ifndef GPU_TRAINER
+#define GPU_TRAINER
 
 #if !defined(__HIP_PLATFORM_AMD__) && !defined(__HIP_PLATFORM_NVIDIA__)
     #define __HIP_PLATFORM_AMD__
@@ -147,7 +147,7 @@ extern hipContext hip_context;
 extern hipKernelArgs hip_args;
 extern hipEvents hip_events;
 
-hipError_t initHIP(training_weights* raw_weights, const char* compiledKernelPath,
+hipError_t initHIP(const char* compiledKernelPath,
                     short** h_active_A, float** h_expected_A, char** h_bucket_A,
                     short** h_active_B, float** h_expected_B, char** h_bucket_B,
                     float** h_lossbuffer);
@@ -163,5 +163,5 @@ void freeHIP();
     }while(0)
 
 void enqueueKernels(int bufferSide);
-void getWeights(training_weights* weights);
+void saveGPUWeights();
 #endif
