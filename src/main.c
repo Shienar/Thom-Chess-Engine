@@ -1,7 +1,7 @@
 #include "board/moves.h"
 #include "board/bitboard.h"
 #include "debug.h"
-#include "hashtables/transpositiontable.h"
+#include "transposition/transpositiontable.h"
 #include "analyze/book.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/search.h"

@@ -46,7 +46,7 @@ endif
 SRCFILES = $(wildcard src/*.c) \
 		   $(wildcard src/analyze/*.c) \
 		   $(wildcard src/board/*.c) \
-		   $(wildcard src/hashtables/*.c) \
+		   $(wildcard src/transposition/*.c) \
 		   $(wildcard src/pyrrhic/tbprobe.c) \
  		   $(wildcard src/binpack/*c) \
 		   $(wildcard src/analyze/hce/*.c) \

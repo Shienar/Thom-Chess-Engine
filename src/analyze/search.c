@@ -154,7 +154,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     if(tt_hit)
     {
         RECORD_SEARCH(context->tt_hits++;);
-        if(entry.nodeType == NODE_BOUND_EXACT ||
+        if(  entry.nodeType == NODE_BOUND_EXACT ||
             (entry.nodeType == NODE_BOUND_UPPER && entry.evaluation <= alpha) ||
             (entry.nodeType == NODE_BOUND_LOWER && entry.evaluation >= beta))
             {
@@ -299,12 +299,14 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     
     if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
+
     //Mate distance pruning for non-root nodes.
     if(ply != 0)
     {
         alpha = _max(alpha, -SCORE_WIN + ply);
-        beta = _min(beta, SCORE_WIN - ply - 1);
-        if(alpha >= beta) return alpha;
+        beta  = _min(beta,   SCORE_WIN - ply - 1);
+        if(alpha >= beta) 
+            return alpha;
     }
 
     int score = 0;
@@ -313,12 +315,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     tt_entry new_tt_entry = {
         .depth = depth,
     };
-    uint8_t hit;
-    tt_entry old_tt_entry = transposition_table_get(curBoard, context->tt, &hit, ply);
-    if(hit && context->excludedMove[ply].raw && old_tt_entry.bestMove == context->excludedMove[ply].raw)
-        hit = 0;
+    uint8_t tt_hit;
+    tt_entry old_tt_entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
+    if(tt_hit && context->excludedMove[ply].raw && old_tt_entry.bestMove == context->excludedMove[ply].raw)
+        tt_hit = 0;
     
-    if(hit)
+    if(tt_hit)
     {
         RECORD_SEARCH(context->tt_hits++;);
         if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha))
@@ -352,7 +354,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             if(result > 0)
                 result -= ply;
-            if(result < 0)
+            else if(result < 0)
                 result += ply;
 
             new_tt_entry.nodeType = NODE_BOUND_EXACT;
@@ -362,7 +364,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
     }
 
-    if(!hit) 
+    if(!tt_hit) 
     {
         RECORD_SEARCH(context->tt_misses++;);
         if(curBoard->in_check) 
@@ -444,7 +446,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             !(ply > 0 && context->moveStack[ply - 1].raw == 0) &&
             (curBoard->pieces_all ^ (curBoard->pieces[WHITE_KING] | curBoard->pieces[BLACK_KING] | curBoard->pieces[WHITE_PAWN] | curBoard->pieces[BLACK_PAWN])))
         {
-            int r = 3 + depth / 6;
+            int r = 3 + depth / 4 + depth / 10;
             applyNullMove(curBoard, nextBoard, &context->repetitions);
             memcpy(&context->accumulatorStack[ply + 1], &context->accumulatorStack[ply], sizeof(accumulator));
             context->moveStack[ply].raw = 0;
@@ -461,7 +463,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     }
     
     //TT reductions
-    if(!curBoard->in_check && !context->excludedMove[ply].raw && depth >= tt_reduction_depth && (!hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
+    if(!curBoard->in_check && !context->excludedMove[ply].raw && depth >= tt_reduction_depth && (!tt_hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
     {
         RECORD_SEARCH(context->tt_reductions++;);
         depth--;
@@ -490,7 +492,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int isCapture = capturedPiece != EMPTY_PIECE;
 
             //Singular Extension
-            if(hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 && 
+            if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 && 
                old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw)
             {
                 int sBeta = old_tt_entry.evaluation - 3 * depth;
@@ -528,7 +530,6 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 int lmrDepth = _max(0, depth - lmrTable[depth][validMovesVisited]);
                 if(!curBoard->in_check && lmrDepth <= futility_pruning_depth && staticScore + lmrDepth * futility_depth_margin + futility_margin <= alpha)
                     shouldSkipQuiets = 1;
-
             }
 
             if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions)) continue;

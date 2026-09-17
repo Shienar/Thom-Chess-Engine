@@ -3,7 +3,7 @@
 #define BITBOARD_H
 
 #include "types.h"
-#include "hashtables/hash.h"
+#include "transposition/hash.h"
 #include "debug.h"
 
 #define WHITE 0

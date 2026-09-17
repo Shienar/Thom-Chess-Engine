@@ -2,7 +2,7 @@
 #define ENGINE
 
 #include "types.h"
-#include "hashtables/transpositiontable.h"
+#include "transposition/transpositiontable.h"
 #include "analyze/syzygy.h"
 #include <time.h>
 

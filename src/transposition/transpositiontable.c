@@ -1,4 +1,4 @@
-#include "hashtables/transpositiontable.h"
+#include "transposition/transpositiontable.h"
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
@@ -36,7 +36,7 @@ int getHashFull(hashtable_tt* tt)
 {
     int hits = 0;
     for(int i = 0; i < 1000; i++)
-        if(tt->array[i].hashCode)
+        if(tt->array[i].hashCode && tt->age - tt->array[i].age < 2)
             hits++;
 
     return hits;

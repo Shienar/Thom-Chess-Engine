@@ -1,7 +1,7 @@
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
-#include "hashtables/hash.h"
+#include "transposition/hash.h"
 #include <string.h>
 #include <math.h>
 
