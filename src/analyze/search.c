@@ -845,6 +845,7 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
         
     int lastScore = context->score;
 
+    int consecutiveTimeReductions = 0;
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
     {
         if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount)) 
@@ -852,12 +853,21 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
         aspiration_window(context, currentDepth);
         
-        if(currentDepth > 10)
+        //Reduce soft time cap on stable searches.
+        //Consider all searches within the first 30% of the search time as naturally unstable.
+        clock_t curTime = clock();
+        if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
         {
-            if(bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15)
-                context->softEndTime -= 0.1 * (context->softEndTime - clock());
+            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+            {
+                context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
+                consecutiveTimeReductions++;
+            }
             else
+            {
+                consecutiveTimeReductions = 0;
                 context->softEndTime = context->hardEndTime;
+            }
         }
         
         bestMove = context->pv.line[0];
@@ -1039,13 +1049,14 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
         
-        //TODO - Try to calculate/find a dynamic min depth for these reductions.
-        //Depth 20 in opening != Depth 20 in endgame.
-        if(currentDepth > 10)
+        //Reduce soft time cap on stable searches.
+        //Consider all searches within the first 30% of the search time as naturally unstable.
+        clock_t curTime = clock();
+        if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
         {
-            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15))
+            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
             {
-                context->softEndTime -= 0.1 * (context->softEndTime - clock());
+                context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
                 consecutiveTimeReductions++;
             }
             else
@@ -1164,13 +1175,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     printf("\t%-25s %18" PRId64 "\n", "Razoring Prunes:", context->razoring_prunes);
     printf("\t%-25s %18" PRId64 "\n", "NMP Prunes:", context->nmp_prunes);
     #endif
-
-    if(!bestMove.raw)
-    {
-        char FEN[100] = { '\0' };
-        export_fen_from_board(board, FEN);
-        DEBUG_ERROR("Engine returned empty move on %s", FEN);
-    }
 
     printResultingMoves(bestMove, ponderMove, 0);
     isCalculating = 0;
