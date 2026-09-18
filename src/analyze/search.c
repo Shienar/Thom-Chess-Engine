@@ -78,7 +78,7 @@ void initSearchTables()
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
         {
             if(moveCount >= count)
-                lmrTable[depth][moveCount] = (int)( lmr_a + log(depth) * log(moveCount) / lmr_b );
+                lmrTable[depth][moveCount] = (int)(lmr_a + log(depth) * log(moveCount) / lmr_b );
         }
     }
 
@@ -118,7 +118,7 @@ int perft(bitboard* board, int depth, int verbose)
 int evaluate(searchThreadContext* context, int ply)
 {
     RECORD_SEARCH(context->evaluations++;);
-    return (useNNUE) ? forwardPropagate(&context->boardStack[ply], &context->accumulatorStack[ply]) : hce_eval(&context->boardStack[ply]);
+    return (useNNUE) ? forwardPropagate(context, ply) : hce_eval(&context->boardStack[ply]);
 }
 
 int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, int pvNode)
@@ -219,18 +219,13 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
 
             int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
-            int isEP = 0;
             if(capturedPiece == EMPTY_PIECE && ISPAWN(piece) && currentMove->endSquare == curBoard->enPassantSquare)
-            {
                 capturedPiece = FLIP_COLOR(piece);
-                isEP = 1;
-            }
             
             validMovesVisited++;
             tt_prefetch(context->tt, nextBoard->hashCode);
-            if(useNNUE)
-                updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
-
+            context->isAccClean[ply + 1] = 0;
+            context->lastCleanPly = _min(context->lastCleanPly, ply);
             int score = -quiescentSearch(context, -beta, -alpha, ply + 1, pvNode);
 
             if(score > best)
@@ -275,6 +270,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     myPV->length = 0;
     PVar childPV;
+
+    depth = _min(depth, MAX_PLY - 1);
 
     move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
     move* tt_move = NULL;
@@ -448,7 +445,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             int r = 3 + depth / 4 + depth / 10;
             applyNullMove(curBoard, nextBoard, &context->repetitions);
-            memcpy(&context->accumulatorStack[ply + 1], &context->accumulatorStack[ply], sizeof(accumulator));
+            
+            context->isAccClean[ply + 1] = 0;
+            context->lastCleanPly = _min(context->lastCleanPly, 0);
+
             context->moveStack[ply].raw = 0;
             int nullScore = -principalVariationSearch(context, -beta, -beta + 1, depth - r, ply + 1, &childPV, 0, !cutNode);
             if(nullScore >= beta)
@@ -483,12 +483,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             int currentPiece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
-            int isEP = 0;
             if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece) && currentMove->endSquare == curBoard->enPassantSquare)
-            {
                 capturedPiece = FLIP_COLOR(currentPiece);
-                isEP = 1;
-            }
+                
             int isCapture = capturedPiece != EMPTY_PIECE;
 
             //Singular Extension
@@ -562,8 +559,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
 
             tt_prefetch(context->tt, nextBoard->hashCode);
-            if(useNNUE)
-                updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[ply], &context->accumulatorStack[ply + 1], context->refreshTable);
+
+            context->isAccClean[ply + 1] = 0;
+            context->lastCleanPly = _min(context->lastCleanPly, ply);
 
             if(pvNode && (validMovesVisited == 0 || score > alpha)) 
                 score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
@@ -780,6 +778,9 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
     //Don't corrupt it.
 
     PVar tempPV = {0};
+    memset(context->isAccClean, 0, sizeof(uint8_t));
+    context->isAccClean[0] = 1;
+    context->lastCleanPly = 0;
     int score;
 
     if(currentDepth < min_aspiration_depth)
@@ -1038,6 +1039,8 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
         
+        //TODO - Try to calculate/find a dynamic min depth for these reductions.
+        //Depth 20 in opening != Depth 20 in endgame.
         if(currentDepth > 10)
         {
             if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 15))

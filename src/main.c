@@ -496,7 +496,7 @@ int main(int argc, char** argv)
                 readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
                 if(useNNUE)
                     updateAccumulatorFromTable(board, &threadContext->accumulatorStack[0], threadContext->refreshTable);
-                printf("%d\n", useNNUE ? forwardPropagate(board, &threadContext->accumulatorStack[0]) : hce_eval(board));
+                printf("%d\n", useNNUE ? forwardPropagate(threadContext, 0) : hce_eval(board));
                 break;
             }
             else if(strcmp(str, "tune") == 0)

@@ -20,6 +20,6 @@ extern const int OUTPUT_BUCKET_DIVISOR;
 
 void initNNUE();
 
-int forwardPropagate(bitboard* board, accumulator* acc);
+int forwardPropagate(searchThreadContext* context, int ply);
 
 #endif

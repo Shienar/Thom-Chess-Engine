@@ -72,9 +72,37 @@ int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t w
     return output >> (QA_RSHIFT + QB_RSHIFT);
 }
 
-const int OUTPUT_BUCKET_DIVISOR = (32 + OUTPUT_BUCKETS - 1) / OUTPUT_BUCKETS;
-int forwardPropagate(bitboard* board, accumulator* acc)
+void lazyAccumulatorUpdate(searchThreadContext* context, int ply)
 {
+    for(int nextPly = context->lastCleanPly + 1; nextPly <= ply; nextPly++)
+    {
+        bitboard* curBoard = &context->boardStack[nextPly - 1];
+        bitboard* nextBoard = &context->boardStack[nextPly];
+        move* currentMove = &context->moveStack[nextPly - 1];
+
+        int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
+        int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
+        int isEP = 0;
+        if(capturedPiece == EMPTY_PIECE && ISPAWN(piece) && currentMove->endSquare == curBoard->enPassantSquare)
+        {
+            capturedPiece = FLIP_COLOR(piece);
+            isEP = 1;
+        }
+
+        updateMoveAccumulator(nextBoard, *currentMove, capturedPiece, isEP, &context->accumulatorStack[nextPly - 1], &context->accumulatorStack[nextPly], context->refreshTable);
+        context->isAccClean[nextPly] = 1;
+        context->lastCleanPly = ply;
+    }
+}
+
+const int OUTPUT_BUCKET_DIVISOR = (32 + OUTPUT_BUCKETS - 1) / OUTPUT_BUCKETS;
+int forwardPropagate(searchThreadContext* context, int ply)
+{
+    bitboard* board = &context->boardStack[ply];
+    accumulator* acc = &context->accumulatorStack[ply];
+
+    lazyAccumulatorUpdate(context, ply);
+
     int bucket = (__builtin_popcountll(board->pieces_all) - 2) / OUTPUT_BUCKET_DIVISOR;
     int output = calculateOutputLayer(acc->rawValues[board->turn], 
                                       acc->rawValues[FLIP_COLOR(board->turn)], 

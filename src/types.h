@@ -163,6 +163,8 @@ typedef struct searchThreadContext {
     move excludedMove[MAX_PLY];
     
     accumulator* accumulatorStack;
+    uint8_t isAccClean[MAX_PLY];
+    uint8_t lastCleanPly;
     accumulatorRefreshTable* refreshTable;
     
     //Improving heuristic
