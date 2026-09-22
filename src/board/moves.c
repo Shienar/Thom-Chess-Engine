@@ -1,6 +1,7 @@
 #include "board/bitboard.h"
 #include "board/moves.h" 
 #include "debug.h"
+#include "analyze/history.h"
 #include <string.h>
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
@@ -438,25 +439,8 @@ moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int
 
     iter->moveScores = malloc(iter->count * sizeof(int16_t));
 
-    move* counterMove = NULL;
-    if(ply >= 1 && context->moveStack[ply - 1].raw)
-    {
-        int side = context->boardStack[ply - 1].turn;
-        int from = context->moveStack[ply - 1].startSquare;
-        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
-        int to = context->moveStack[ply - 1].endSquare;
-        counterMove = &context->countermove[side][piece][to];
-    }
-
-    move* followUpMove = NULL;
-    if(ply >= 2 && context->moveStack[ply - 2].raw)
-    {
-        int side = context->boardStack[ply - 2].turn;
-        int from = context->moveStack[ply - 2].startSquare;
-        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
-        int to = context->moveStack[ply - 2].endSquare;
-        followUpMove = &context->followUpMove[side][piece][to];
-    }
+    move* counterMove = getCounterMove(context, ply);
+    move* followUpMove = getFollowupMove(context, ply);
     
     for(int i = 0; i < iter->count; i++)
     {
@@ -491,7 +475,7 @@ moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int
         else if(isCapture)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
-            int historyBonus = context->captureHistoryTable[currentPiece / 2][iter->moveList[i].endSquare][capturedPiece / 2] / 64;
+            int historyBonus = getCaptureHistoryOffset(context, currentPiece, iter->moveList[i].endSquare, capturedPiece);
             if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue + historyBonus;
             else if(capturesOnly == GET_WINNING_CAPTURES)
             {
@@ -516,7 +500,7 @@ moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int
             iter->moveScores[i] = PROMOTION_SCORE + iter->moveList[i].promoteTo;
         else
         {
-            iter->moveScores[i] = context->historyTable[board->turn][currentPiece / 2][iter->moveList[i].endSquare];
+            iter->moveScores[i] = getHistoryValue(context, board->turn, currentPiece, iter->moveList[i].endSquare);
 
             if(counterMove && iter->moveList[i].raw == counterMove->raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE + 2);
@@ -942,6 +926,34 @@ int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector
         {
             uint64_t xor = temp.pawnHash ^ newBoard->pawnHash;
             printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->pawnHash, temp.pawnHash, xor);
+            for(int i = 780; i >= 0; i--)
+            {
+                if(zobrist_keys[i] == xor) 
+                {
+                    printf("\tXOR = zobrist_keys[%d]\n", i);
+                    break;
+                }
+            }
+            assert(0);
+        }
+        else if(newBoard->nonPawnHash[WHITE] != temp.nonPawnHash[WHITE])
+        {
+            uint64_t xor = temp.nonPawnHash[WHITE] ^ newBoard->nonPawnHash[WHITE];
+            printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->nonPawnHash[WHITE], temp.nonPawnHash[WHITE], xor);
+            for(int i = 780; i >= 0; i--)
+            {
+                if(zobrist_keys[i] == xor) 
+                {
+                    printf("\tXOR = zobrist_keys[%d]\n", i);
+                    break;
+                }
+            }
+            assert(0);
+        }
+        else if(newBoard->nonPawnHash[BLACK] != temp.nonPawnHash[BLACK])
+        {
+            uint64_t xor = temp.nonPawnHash[BLACK] ^ newBoard->nonPawnHash[BLACK];
+            printf("Error! board code 0x%016" PRIx64 " != expected 0x%016" PRIx64 " (XOR = 0x%016" PRIx64 ")\n", board->nonPawnHash[BLACK], temp.nonPawnHash[BLACK], xor);
             for(int i = 780; i >= 0; i--)
             {
                 if(zobrist_keys[i] == xor) 

@@ -62,6 +62,8 @@ typedef struct {
 typedef struct bitboard {
     uint64_t hashCode;
     uint64_t pawnHash;
+    uint64_t nonPawnHash[2];
+
     uint64_t pieces[PIECE_COUNT];
     uint64_t pieces_side[2];
     uint64_t pieces_all;
@@ -183,7 +185,8 @@ typedef struct threadContext {
     move followUpMove[2][6][64];
 
     //Correction History
-    int16_t pawnCorrHist[2][CORRHIST_SIZE];
+    int16_t pawnCorrHist[2][CORRHIST_SIZE]; //[turn]
+    int16_t nonPawnCorrHist[2][2][CORRHIST_SIZE]; //[color][turn]
 
     #ifdef SEARCHINFO
     uint64_t pvs_nodes;

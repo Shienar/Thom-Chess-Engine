@@ -15,6 +15,11 @@ void updateKillerMoves(threadContext* context, move currentMove, int ply)
     }
 }
 
+int getHistoryValue(threadContext* context, int turn, int piece, int to)
+{
+    return context->historyTable[turn][piece][to];
+}
+
 void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth)
 {
     int bonus = historyBonusScale * depth + historyBonusOffset;
@@ -48,6 +53,34 @@ void updateContinuationHistory(threadContext* context, move currentMove, int ply
     }
 }
 
+move* getCounterMove(threadContext* context, int ply)
+{
+    if(ply < 1 || !context->moveStack[ply - 1].raw) return NULL;
+
+    int side = context->boardStack[ply - 1].turn;
+    int from = context->moveStack[ply - 1].startSquare;
+    int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
+    int to = context->moveStack[ply - 1].endSquare;
+    return &context->countermove[side][piece][to];
+}
+
+move* getFollowupMove(threadContext* context, int ply)
+{
+    if(ply < 2 || !context->moveStack[ply - 2].raw) return NULL;
+
+    int side = context->boardStack[ply - 2].turn;
+    int from = context->moveStack[ply - 2].startSquare;
+    int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
+    int to = context->moveStack[ply - 2].endSquare;
+    return &context->followUpMove[side][piece][to];
+}
+
+
+int getCaptureHistoryOffset(threadContext* context, int piece, int to, int capturedPiece)
+{
+    return context->captureHistoryTable[piece / 2][to][capturedPiece / 2] / CAPTURE_HISTORY_SCALE;
+}
+
 void applyCaptureHistoryBonus(int16_t* dest, int depth)
 {
     *dest = _min(*dest + (historyBonusScale * depth + historyBonusOffset), MAX_HISTORY_SCORE);
@@ -65,6 +98,10 @@ void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int s
 
 int getCorrectionHistoryOffset(threadContext* context, bitboard* board)
 {
-    int correction = context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
+    int correction = 0;
+    correction += 50 * context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
+    correction += 25 * context->pawnCorrHist[board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
+    correction += 25 * context->pawnCorrHist[board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
+    correction /= 100;
     return correction / CORRHIST_GRAIN;
 }

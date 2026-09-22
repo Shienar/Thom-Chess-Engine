@@ -276,6 +276,8 @@ void generateHashCode(bitboard* board)
 
     board->hashCode = 0;
     board->pawnHash = 0;
+    board->nonPawnHash[WHITE] = 0;
+    board->nonPawnHash[BLACK] = 0;
 
     int piece;
     uint64_t mask = board->pieces_all;
@@ -291,6 +293,13 @@ void generateHashCode(bitboard* board)
 
             if(ISPAWN(piece))
                 board->pawnHash^=zobrist_piece_keys[piece][square];
+            else
+            {
+                if(ISWHITE(piece))
+                    board->nonPawnHash[WHITE]^=zobrist_piece_keys[piece][square];
+                else
+                    board->nonPawnHash[BLACK]^=zobrist_piece_keys[piece][square];
+            }
         }
 
         mask&=(mask - 1);

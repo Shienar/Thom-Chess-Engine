@@ -660,6 +660,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     {
         updateCorrectionHistory(&context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)], 
                                     depth, bestScore, staticScore);
+        updateCorrectionHistory(&context->nonPawnCorrHist[WHITE][curBoard->turn][curBoard->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)], 
+                                    depth, bestScore, staticScore);
+        updateCorrectionHistory(&context->nonPawnCorrHist[BLACK][curBoard->turn][curBoard->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)], 
+                                    depth, bestScore, staticScore);
     }
 
     RECORD_SEARCH(context->pvsSearchedMoves += validMovesVisited;
