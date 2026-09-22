@@ -18,7 +18,7 @@ void generate(const char* path)
         disableDebugMessages();
 
     suppressUCIMessages = 1;
-    searchThreadContext* contextList = calloc(concurrency, sizeof(searchThreadContext));
+    threadContext* contextList = calloc(concurrency, sizeof(threadContext));
 
     THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
     binpack_open(&details, path, 0);
@@ -117,7 +117,7 @@ uint32_t rng_xorshift32(uint32_t* seed)
  */
 THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 {
-    searchThreadContext* context = (searchThreadContext*) param;
+    threadContext* context = (threadContext*) param;
     bitboard* board = &context->boardStack[0];
 
     int isNewGame = 1;

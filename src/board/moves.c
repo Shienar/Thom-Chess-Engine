@@ -404,7 +404,7 @@ int staticExchangeEvaluation(bitboard* board, move m)
 }
 
 //Only used when move ordering matters (not perft)
-moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove)
+moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove)
 {
     moveIterator* iter = calloc(1, sizeof(moveIterator));
     iter->moveList = malloc(MAX_MOVES * sizeof(move));
@@ -637,27 +637,20 @@ uint64_t kingMoves(bitboard* board, int square, int color)
     {
         returnedValue&=(~board->pieces_side[WHITE]);
 
-        if(board->canKingsideCastle_w && !board->in_check && !(board->pieces_all&0x60) && 
-                                                        !isThreatened(board, square, color) && 
-                                                        !isThreatened(board, square+1, color)) returnedValue|=0x40;
-
-        if(board->canQueensideCastle_w && !board->in_check && !(board->pieces_all&0xE) && 
-                                                        !isThreatened(board, square, color) && 
-                                                        !isThreatened(board, square-1, color)) returnedValue|=0x4;
+        if(board->canKingsideCastle_w && !board->in_check && !(board->pieces_all&0x60)) 
+            returnedValue|=0x40;
+        if(board->canQueensideCastle_w && !board->in_check && !(board->pieces_all&0xE)) 
+            returnedValue|=0x4;
         
     }
     else
     {
         returnedValue&=(~board->pieces_side[BLACK]);
 
-        //Black kingside
-        if(board->canKingsideCastle_b && !board->in_check && !(board->pieces_all&0x6000000000000000) && 
-                                                            !isThreatened(board, square, color) &&
-                                                            !isThreatened(board, square+1, color)) returnedValue|=0x4000000000000000;
-
-        if(board->canQueensideCastle_b && !board->in_check && !(board->pieces_all&0x0E00000000000000) &&
-                                                            !isThreatened(board, square, color) &&
-                                                            !isThreatened(board, square-1, color)) returnedValue|=0x0400000000000000;
+        if(board->canKingsideCastle_b && !board->in_check && !(board->pieces_all&0x6000000000000000)) 
+            returnedValue|=0x4000000000000000;
+        if(board->canQueensideCastle_b && !board->in_check && !(board->pieces_all&0x0E00000000000000)) 
+            returnedValue|=0x0400000000000000;
     }
     
     return returnedValue;
@@ -747,6 +740,11 @@ int movePiece(bitboard *board, move compactMove, repetitionVector* repetitions)
             board_move_piece(board, compactMove.startSquare, compactMove.endSquare);
             break;
         case KING:
+            //Attempting to castle through a threatened sqare.
+            if((compactMove.endSquare - compactMove.startSquare ==  2 && isThreatened(board, compactMove.startSquare + 1, board->turn)) || //Kingside
+               (compactMove.endSquare - compactMove.startSquare == -2 && isThreatened(board, compactMove.startSquare - 1, board->turn)))   //Queenside
+                    return -1;
+
             if(ISBLACK(piece)) 
             {
                 board->kingSquare[BLACK] = compactMove.endSquare;

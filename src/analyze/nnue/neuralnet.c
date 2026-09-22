@@ -72,7 +72,7 @@ int calculateOutputLayer(int16_t* inputValuesA, int16_t* inputValuesB, int16_t w
     return output >> (QA_RSHIFT + QB_RSHIFT);
 }
 
-void lazyAccumulatorUpdate(searchThreadContext* context, int ply)
+void lazyAccumulatorUpdate(threadContext* context, int ply)
 {
     for(int nextPly = context->lastCleanPly + 1; nextPly <= ply; nextPly++)
     {
@@ -96,7 +96,7 @@ void lazyAccumulatorUpdate(searchThreadContext* context, int ply)
 }
 
 const int OUTPUT_BUCKET_DIVISOR = (32 + OUTPUT_BUCKETS - 1) / OUTPUT_BUCKETS;
-int forwardPropagate(searchThreadContext* context, int ply)
+int forwardPropagate(threadContext* context, int ply)
 {
     bitboard* board = &context->boardStack[ply];
     accumulator* acc = &context->accumulatorStack[ply];

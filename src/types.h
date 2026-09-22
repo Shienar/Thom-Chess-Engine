@@ -144,8 +144,7 @@ typedef struct accumulatorRefreshTable {
 
 #define MAX_REQUIRED_MOVES 32
 #define CORRHIST_SIZE 16384
-#define MAX_CORRHIST_VAL 16384
-typedef struct searchThreadContext {
+typedef struct threadContext {
     //UCI Thread settings or info
     int maxDepth, seldepth, completedDepth, deepeningSkip;
     int hardMaxNodes, softMaxNodes, countedNodes;
@@ -210,6 +209,6 @@ typedef struct searchThreadContext {
     uint64_t nmp_prunes;
 
     #endif
-} searchThreadContext;
+} threadContext;
 
 #endif

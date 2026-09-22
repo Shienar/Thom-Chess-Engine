@@ -348,7 +348,8 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
     else board->turn = BLACK;
 
     //Check
-    if(isThreatened(board, board->kingSquare[board->turn], board->turn)) board->in_check = 1;
+    if(isThreatened(board, board->kingSquare[board->turn], board->turn)) 
+        board->in_check = 1;
 
     //50 move rule
     board->halfmoveClock = halfMoveClock;

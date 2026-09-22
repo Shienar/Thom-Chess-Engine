@@ -20,7 +20,7 @@
         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
         { \
             sscanf(str, "%d", &name); \
-            readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext); \
+            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
         } \
         break; \
     }
@@ -33,14 +33,14 @@
             int temp; \
             sscanf(str, "%d", &temp); \
             name = temp / 1000.0; \
-            readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext); \
+            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
         } \
         break; \
     }
 
 #endif
 
-void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadContext* context);
+void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* context);
 
 int main(int argc, char** argv)
 {
@@ -60,12 +60,12 @@ int main(int argc, char** argv)
 
     char debugLogPath[1024] = {'\0'};
 
-    searchThreadContext* threadContext = calloc(1, sizeof(searchThreadContext));
-    bitboard* board = &threadContext->boardStack[0];
-    threadContext->maxDepth = MAX_PLY;
-    threadContext->hardMaxNodes = INT32_MAX;
-    threadContext->softMaxNodes = INT32_MAX;
-    threadContext->abortFlag = &abortFlag;
+    threadContext* context = calloc(1, sizeof(threadContext));
+    bitboard* board = &context->boardStack[0];
+    context->maxDepth = MAX_PLY;
+    context->hardMaxNodes = INT32_MAX;
+    context->softMaxNodes = INT32_MAX;
+    context->abortFlag = &abortFlag;
 
     THREADTYPE calculateThread = THREAD_INIT;
 
@@ -131,7 +131,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ucinewgame") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 if(isCalculating)
                 {
                     abortFlag = 1;
@@ -153,7 +153,7 @@ int main(int argc, char** argv)
                             tt_bytes = (byteSize * 1024 * 1024);
                             destroy_hashTable_tt(transpositionTable);
                             transpositionTable = create_hashTable_tt();
-                            threadContext->tt = transpositionTable;
+                            context->tt = transpositionTable;
                         }
                         break;
                     }
@@ -198,7 +198,7 @@ int main(int argc, char** argv)
                             if(strcmp(str, "true") == 0) { useNNUE = 1; }
                             else { useNNUE = 0; }
                         }
-                        readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                        readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                         break;
                     }
                     else if(strcmp(str, "Clear") == 0)
@@ -242,7 +242,7 @@ int main(int argc, char** argv)
                             }
                             isPathDirty = 1;
                             if(isReady)
-                                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                         }
                         break;
                     }
@@ -294,7 +294,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "isready") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 printf("readyok\n");
                 fflush(stdout);
             }
@@ -309,7 +309,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "position") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 if(isCalculating)
                 {
                     abortFlag = 1;
@@ -335,18 +335,26 @@ int main(int argc, char** argv)
                             if(i < 5) FEN[insertIndex++] = ' ';
                         }
                         if(!str) break; //Invalid FEN
-                        load_fen_string_to_board(board, FEN, &threadContext->repetitions);
+                        load_fen_string_to_board(board, FEN, &context->repetitions);
                     }
                     else if(strcmp(str, "startpos") == 0)
-                        load_fen_string_to_board(board, STARTPOS_FEN, &threadContext->repetitions);
+                        load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
 
                     if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
                     {
                         move m;
+                        bitboard tempBoard = *board;
                         while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
                             m = getStructFromString(board, str);
-                            moveFromStruct(board, board, m, &threadContext->repetitions);
+                            if(moveFromStruct(board, board, m, &context->repetitions))
+                            {
+                                //Recover from illegal move
+                                memcpy(board, &tempBoard, sizeof(bitboard));
+                                break;
+                            }
+
+                            memcpy(&tempBoard, board, sizeof(bitboard));
                         }
                     }
                 }
@@ -361,16 +369,16 @@ int main(int argc, char** argv)
                     THREAD_WAIT(calculateThread);
                 }
                 isCalculating = 1;
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
 
                 int timeLeft = INT32_MAX;
                 int increment = 0;
                 int fixedMoveTime = 0;
                 int isInfinite = 0;
                 isPonder = 0;
-                threadContext->hardMaxNodes = INT32_MAX;
-                threadContext->softMaxNodes = INT32_MAX;
-                memset(threadContext->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move));
+                context->hardMaxNodes = INT32_MAX;
+                context->softMaxNodes = INT32_MAX;
+                memset(context->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move));
 
                 short searchedMoveCount = 0;
                 while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
@@ -388,37 +396,37 @@ int main(int argc, char** argv)
                     else if(strcmp(str, "binc") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         sscanf(str, "%d", &increment);
                     else if(strcmp(str, "depth") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &threadContext->maxDepth);
+                        sscanf(str, "%d", &context->maxDepth);
                     else if(strcmp(str, "nodes") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &threadContext->hardMaxNodes);
+                        sscanf(str, "%d", &context->hardMaxNodes);
                     else if(strcmp(str, "movetime") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         sscanf(str, "%d", &fixedMoveTime);
                     else if(strcmp(str, "searchmoves") == 0) //Assume this is the final command in list.
                         while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < MAX_REQUIRED_MOVES) 
-                            threadContext->searchedMoves[searchedMoveCount++] = getStructFromString(board, str);
+                            context->searchedMoves[searchedMoveCount++] = getStructFromString(board, str);
                 }
 
-                threadContext->maxDepth = clamp(threadContext->maxDepth, 1, MAX_PLY);
+                context->maxDepth = clamp(context->maxDepth, 1, MAX_PLY);
 
                 //Finished parsing command modifers, setup & launch thread.
-                threadContext->startTime = clock();
+                context->startTime = clock();
                 if(fixedMoveTime)
-                    threadContext->softEndTime = threadContext->hardEndTime = threadContext->startTime + (fixedMoveTime * CLOCKS_PER_SEC) / 1000;
+                    context->softEndTime = context->hardEndTime = context->startTime + (fixedMoveTime * CLOCKS_PER_SEC) / 1000;
                 else if(isInfinite)
                 {
-                    threadContext->softEndTime = threadContext->hardEndTime = INT_MAX;
-                    threadContext->maxDepth = MAX_PLY;
+                    context->softEndTime = context->hardEndTime = INT_MAX;
+                    context->maxDepth = MAX_PLY;
                 }
                 else
                 {
                     int uciOverhead = _min(25, timeLeft / 2);
                     clock_t softEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
                     clock_t hardEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
-                    threadContext->softEndTime = (threadContext->startTime + (softEndTime * CLOCKS_PER_SEC) / 1000);
-                    threadContext->hardEndTime = (threadContext->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
+                    context->softEndTime = (context->startTime + (softEndTime * CLOCKS_PER_SEC) / 1000);
+                    context->hardEndTime = (context->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
                 }
 
-                THREAD_START(calculateThread, calculateBestMove, threadContext);
+                THREAD_START(calculateThread, calculateBestMove, context);
                 break;
             }
             else if(strcmp(str, "ponderhit") == 0)
@@ -431,7 +439,7 @@ int main(int argc, char** argv)
                 else
                 {
                     isPonder = 0;
-                    THREAD_START(calculateThread, calculateBestMove, threadContext);
+                    THREAD_START(calculateThread, calculateBestMove, context);
                 }
             }
             else if(strcmp(str, "stop") == 0)
@@ -448,7 +456,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perft") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
 
                 //Not a part of UCI.
                 //Format: "perft <depth>"
@@ -457,18 +465,18 @@ int main(int argc, char** argv)
                     int pdepth;
                     sscanf(str, "%d", &pdepth);
                     clock_t startTime = clock();
-                    int result = perft(board, pdepth, 0);
+                    uint64_t result = perft(board, pdepth, 0);
                     clock_t duration = clock() - startTime;
                     double seconds = ((double) duration / CLOCKS_PER_SEC);
                     double NPS = result / seconds;
-                    printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-        
+                    printf("Searched through %" PRId64 " nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
+                    fflush(stdout);
                 }
                 break;
             }
             else if(strcmp(str, "perftv") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
 
                 //verbose perft
                 //Not a part of UCI.
@@ -493,17 +501,17 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "eval") == 0)
             {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 if(useNNUE)
-                    updateAccumulatorFromTable(board, &threadContext->accumulatorStack[0], threadContext->refreshTable);
-                printf("%d\n", useNNUE ? forwardPropagate(threadContext, 0) : hce_eval(board));
+                    updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
+                printf("%d\n", useNNUE ? forwardPropagate(context, 0) : hce_eval(board));
                 break;
             }
             else if(strcmp(str, "tune") == 0)
             {
                 //Format: 'tune <double forcedK (0 for auto)> <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
 
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 
                 char inputPath[256] = {'\0'};
                 char outputPath[256] = {'\0'};
@@ -549,7 +557,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "generate") == 0)
             {
                 //Format: 'generate "<outputFilePath>"'
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -560,7 +568,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "binpackinfo") == 0)
             {
                 //Format: 'binpackinfo "<binpackFilePath>"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 
                 if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
                     break;
@@ -572,7 +580,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "train") == 0)
             {
                 //Format: "train <epochs> <min_lr> <max_lr> <binpack file path> <kernel file path>"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, threadContext);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
                 
                 int epochCount;
                 float minimumLR;
@@ -619,18 +627,18 @@ int main(int argc, char** argv)
         }
     }
 
-    if(threadContext->accumulatorStack)
-        free(threadContext->accumulatorStack);
-    if(threadContext->refreshTable)
-        free(threadContext->refreshTable);
-    if(threadContext) 
-        free(threadContext);
+    if(context->accumulatorStack)
+        free(context->accumulatorStack);
+    if(context->refreshTable)
+        free(context->refreshTable);
+    if(context) 
+        free(context);
     destroy_hashTable_tt(transpositionTable);
     tb_free();
     disableDebugMessages();  //closes file if open.
 }
 
-void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, searchThreadContext* context)
+void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* context)
 {
     if(*isReady) return;
 

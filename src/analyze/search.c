@@ -6,6 +6,7 @@
 #include "analyze/syzygy.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/nnue/neuralnet.h"
+#include "analyze/hce/hce.h"
 #include <string.h>
 #include <math.h>
 
@@ -48,11 +49,6 @@ int futility_depth_margin = 51;
 int reverse_futility_margin = 185;
 int reverse_futility_margin_improving = 122;
 
-int historyBonusScale = 290;
-int historyBonusOffset = 137;
-int historyPenaltyScale = 392;
-int historyPenaltyOffset = 131;
-
 int lowHistoryVal = -123;
 
 int stable_eval_margin = 15;
@@ -75,11 +71,10 @@ void initSearchTables()
     for(int depth = lmr_depth; depth < MAX_PLY; depth++)
     {
         int count = 2.0f + 0.5f * depth * depth;
+
         for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
-        {
             if(moveCount >= count)
-                lmrTable[depth][moveCount] = (int)(lmr_a + log(depth) * log(moveCount) / lmr_b );
-        }
+                lmrTable[depth][moveCount] = (int)(lmr_a + log(depth) * log(moveCount) / lmr_b);
     }
 
     for(int depth = 0; depth < MAX_PLY; depth++)
@@ -90,44 +85,54 @@ void initSearchTables()
 }
 
 //Draws get ignored. Naturally stops depth at checkmate/stalemate positions.
-int perft(bitboard* board, int depth, int verbose)
+uint64_t perft(bitboard* board, int depth, int verbose)
 {
-    if(!depth) return 1;
-    int nodes = 0;
+    if(!depth)
+        return 1;
+    uint64_t nodes = 0;
 
     move moveList[MAX_MOVES];
     int count = generateMoveList(moveList, board, 0);
     bitboard newBoard;
     for(int index = 0; index < count; index++)
     {
-        if(moveFromStruct(board, &newBoard, moveList[index], NULL)) continue;
-        
-        int branchNodes = perft(&newBoard, depth - 1, 0);
+        if(moveFromStruct(board, &newBoard, moveList[index], NULL))
+            continue;
+
+        uint64_t branchNodes = perft(&newBoard, depth - 1, 0);
         nodes += branchNodes;
-        if(verbose) 
+        if(verbose)
         {
             char moveName[5] = {'\0'};
             getMoveSquareName(moveList[index].startSquare, moveList[index].endSquare, moveName);
-            printf("Move %s: nodes %d\n", moveName, branchNodes);
+            printf("Move %s: nodes %" PRId64 "\n", moveName, branchNodes);
         }
     }
-    
+
     return nodes;
 }
 
-int evaluate(searchThreadContext* context, int ply)
+int evaluate(threadContext* context, int ply)
 {
     RECORD_SEARCH(context->evaluations++;);
     return (useNNUE) ? forwardPropagate(context, ply) : hce_eval(&context->boardStack[ply]);
 }
 
-int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, int pvNode)
+int shouldAbortSearch(threadContext* context, int ply)
+{
+    return* context->abortFlag ||
+           (ply > 0 && !isPonder &&
+            (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) ||
+             context->countedNodes >= (context->hardMaxNodes / threadCount)));
+}
+
+int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pvNode)
 {
     context->countedNodes++;
     RECORD_SEARCH(context->qs_nodes++;);
     bitboard* curBoard = &context->boardStack[ply];
 
-    if(*context->abortFlag || (!isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->hardMaxNodes / threadCount))))
+    if(shouldAbortSearch(context, ply))
     {
         *context->abortFlag = 1;
         return 0;
@@ -137,13 +142,13 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
         return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1)
         return evaluate(context, ply);
-        
+
     bitboard* nextBoard = &context->boardStack[ply + 1];
     move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
-    
+
     int lowestBound = alpha;
     move* tt_move = NULL;
     move temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.
@@ -166,11 +171,12 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
         tt_move = &temp;
         best = clamp(entry.evaluation, alpha, beta);
     }
-    else 
+    else
     {
         RECORD_SEARCH(context->tt_misses++;);
         best = evaluate(context, ply);
-    
+        best += getCorrectionHistoryOffset(context, curBoard);
+
         tt_entry shallowEntry = {
             .depth = 0,
             .nodeType = NODE_BOUND_UNKNOWN,
@@ -187,7 +193,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     if(!useNNUE)
     {
         int opposingColor = FLIP_COLOR(curBoard->turn);
-        for(int pc = QUEEN; pc >= PAWN; pc-=2)
+        for(int pc = QUEEN; pc >= PAWN; pc -= 2)
         {
             if(curBoard->pieces[pc | opposingColor])
             {
@@ -209,19 +215,19 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
         move* currentMove;
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions)) 
+            if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions))
                 continue;
             context->moveStack[ply] = *currentMove;
 
             //SEE pruning
-            if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -CAPTURE_SCORE)
+            if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -MAX_HISTORY_SCORE)
                 continue;
 
             int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
             if(capturedPiece == EMPTY_PIECE && ISPAWN(piece) && currentMove->endSquare == curBoard->enPassantSquare)
                 capturedPiece = FLIP_COLOR(piece);
-            
+
             validMovesVisited++;
             tt_prefetch(context->tt, nextBoard->hashCode);
             context->isAccClean[ply + 1] = 0;
@@ -233,7 +239,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
                 best = score;
                 bestMove = *currentMove;
 
-                if(score > alpha) 
+                if(score > alpha)
                     alpha = score;
 
                 if(alpha >= beta)
@@ -242,14 +248,14 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
         }
         destroy_move_iterator(iter);
     }
-    
+
     if(validMovesVisited > 0)
     {
-        RECORD_SEARCH(context->quiescentSearchedMoves += validMovesVisited; 
+        RECORD_SEARCH(context->quiescentSearchedMoves += validMovesVisited;
                       context->quiescentSearchedPositions++;);
         tt_entry shallowEntry = {
             .depth = 0,
-            .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ( (best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
+            .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ((best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
             .evaluation = best,
             .bestMove = bestMove.raw
         };
@@ -261,7 +267,7 @@ int quiescentSearch(searchThreadContext* context, int alpha, int beta, int ply, 
     return best;
 }
 
-int principalVariationSearch(searchThreadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int pvNode, int cutNode)
+int principalVariationSearch(threadContext* context, int alpha, int beta, int depth, int ply, PVar *myPV, int pvNode, int cutNode)
 {
     assert(context);
     context->countedNodes++;
@@ -282,10 +288,10 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int searchedQuietIndices[MAX_MOVES] = {0};
     int searchedQuietCount = 0;
     int shouldSkipQuiets = 0;
-    
+
     int lowestBound = alpha;
 
-    if(*context->abortFlag || (ply >= 1 && !isPonder && (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) || context->countedNodes >= (context->hardMaxNodes / threadCount))))
+    if(shouldAbortSearch(context, ply))
     {
         *context->abortFlag = 1;
         return 0;
@@ -293,7 +299,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
-    
+
     if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
 
@@ -302,7 +308,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     {
         alpha = _max(alpha, -SCORE_WIN + ply);
         beta  = _min(beta,   SCORE_WIN - ply - 1);
-        if(alpha >= beta) 
+        if(alpha >= beta)
             return alpha;
     }
 
@@ -316,7 +322,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     tt_entry old_tt_entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
     if(tt_hit && context->excludedMove[ply].raw && old_tt_entry.bestMove == context->excludedMove[ply].raw)
         tt_hit = 0;
-    
+
     if(tt_hit)
     {
         RECORD_SEARCH(context->tt_hits++;);
@@ -330,8 +336,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     return old_tt_entry.evaluation;
                 }
         }
-        
-        temp.raw = old_tt_entry.bestMove; 
+
+        temp.raw = old_tt_entry.bestMove;
         tt_move = &temp;
         score = old_tt_entry.evaluation;
     }
@@ -340,9 +346,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         return evaluate(context, ply);
     if(depth <= 0)
         return quiescentSearch(context, alpha, beta, ply, pvNode);
-        
+
     bitboard* nextBoard = &context->boardStack[ply + 1];
-    
+
     //Syzygy
     if(!pvNode && depth >= syzygyProbeDepth)
     {
@@ -361,18 +367,17 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         }
     }
 
-    if(!tt_hit) 
+    if(!tt_hit)
     {
         RECORD_SEARCH(context->tt_misses++;);
-        if(curBoard->in_check) 
+        if(curBoard->in_check)
             score = -SCORE_WIN;
         else if(context->excludedMove[ply].raw)
             score = context->evalHistory[ply];
         else
         {
             score = evaluate(context, ply);
-            int16_t correction = context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)] / 1024;
-            score += correction;
+            score += getCorrectionHistoryOffset(context, curBoard);
 
             tt_entry shallowEntry = {
                 .depth = 0,
@@ -387,9 +392,9 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     int staticScore = score;
     context->evalHistory[ply] = staticScore;
 
-    if(curBoard->in_check) 
+    if(curBoard->in_check)
         context->improving[ply] = 0;
-    else 
+    else
         context->improving[ply] = (ply >= 2) ? (score >= context->evalHistory[ply - 2]) : 1;
 
     if(context->improving[ply] || ply < 2)
@@ -398,7 +403,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         context->worsening[ply] = context->worsening[ply - 2] + 1;
 
     if(ply < MAX_PLY - 1)
-        context->killerMoves[ply+1][0].raw = context->killerMoves[ply+1][1].raw = 0;
+        context->killerMoves[ply + 1][0].raw = context->killerMoves[ply + 1][1].raw = 0;
 
     if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE)
     {
@@ -445,7 +450,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         {
             int r = 3 + depth / 4 + depth / 10;
             applyNullMove(curBoard, nextBoard, &context->repetitions);
-            
+
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, 0);
 
@@ -461,7 +466,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             }
         }
     }
-    
+
     //TT reductions
     if(!curBoard->in_check && !context->excludedMove[ply].raw && depth >= tt_reduction_depth && (!tt_hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
     {
@@ -485,12 +490,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
             if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece) && currentMove->endSquare == curBoard->enPassantSquare)
                 capturedPiece = FLIP_COLOR(currentPiece);
-                
+
             int isCapture = capturedPiece != EMPTY_PIECE;
 
             //Singular Extension
-            if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 && 
-               old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw)
+            if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 &&
+                old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw)
             {
                 int sBeta = old_tt_entry.evaluation - 3 * depth;
                 int sDepth = depth / 2 + 1;
@@ -531,29 +536,29 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
 
             if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions)) continue;
             context->moveStack[ply] = *currentMove;
-            
-            int isQuietMove = (!nextBoard->in_check && !isCapture && !currentMove->promoteTo);
-            
+
+            int isQuietMove = !nextBoard->in_check && !isCapture && !currentMove->promoteTo;
+
             if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && moveScore != KILLER_1_SCORE && moveScore != KILLER_2_SCORE)
                 continue;
 
             //Check extensions
             if(!pvNode && nextBoard->in_check)
                 next_depth++;
-            
+
             //Late move reduction
-            if(!pvNode && isQuietMove && !context->improving[ply]) 
+            if(!pvNode && isQuietMove && !context->improving[ply])
                 next_depth -= lmrTable[depth][validMovesVisited];
 
             //SEE reduction
-            if(!pvNode && moveScore < -CAPTURE_SCORE)
-                next_depth-=2;
-            
+            if(!pvNode && moveScore < -MAX_HISTORY_SCORE)
+                next_depth -= 2;
+
             //History Reduction
             if(!pvNode && isQuietMove && moveScore < lowHistoryVal)
             {
                 if(moveScore < 3 * lowHistoryVal)
-                    next_depth-=2;
+                    next_depth -= 2;
                 else if(moveScore < lowHistoryVal)
                     next_depth--;
             }
@@ -563,7 +568,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
 
-            if(pvNode && (validMovesVisited == 0 || score > alpha)) 
+            if(pvNode && (validMovesVisited == 0 || score > alpha))
                 score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             else
             {
@@ -576,12 +581,12 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                     next_depth = depth - 1;
                     score = -principalVariationSearch(context, -alpha - 1, -alpha, next_depth, ply + 1, &childPV, 0, !cutNode);
                 }
-                
+
                 //PVS Re-search
-                if(score > alpha && pvNode) 
+                if(score > alpha && pvNode)
                     score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             }
-            
+
             validMovesVisited++;
             if(score > bestScore)
             {
@@ -591,7 +596,7 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 if(score > alpha)
                 {
                     alpha = score;
-                    
+
                     //Save PV
                     if(pvNode)
                     {
@@ -607,49 +612,16 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
                 {
                     if(isQuietMove)
                     {
-                        //Killer heuristic
-                        if(currentMove->raw != context->killerMoves[ply][0].raw)
-                        {
-                            context->killerMoves[ply][1] = context->killerMoves[ply][0];
-                            context->killerMoves[ply][0] = *currentMove;
-                        }
-                    
-                        //History heuristic
-                        int bonus = historyBonusScale * depth + historyBonusOffset;
-                        int penalty = historyPenaltyScale * depth + historyPenaltyOffset;
-                        int16_t* dest = &context->historyTable[curBoard->turn][PIECE(currentPiece) / 2][currentMove->endSquare];
-                        *dest = _min(*dest + bonus, MAX_HISTORY_SCORE);
+                        updateKillerMoves(context, *currentMove, ply);
 
-                        int16_t* straightArr = (int16_t*) context->historyTable[curBoard->turn];
-                        for(int i = 0; i < searchedQuietCount; i++)
-                            straightArr[searchedQuietIndices[i]] = _max(straightArr[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
+                        updateHistoryValues((int16_t *)context->historyTable[curBoard->turn],
+                                            ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare,
+                                            searchedQuietIndices, searchedQuietCount, depth);
 
-                        //Countermove heuristic
-                        if(ply >= 1)
-                        {
-                            int side = context->boardStack[ply - 1].turn;
-                            int from = context->moveStack[ply - 1].startSquare;
-                            int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
-                            int to = context->moveStack[ply - 1].endSquare;
-                            context->countermove[side][piece][to] = *currentMove;
-                        }
-                        
-                        //Follow-up Move heuristic
-                        if(ply >= 2)
-                        {
-                            int side = context->boardStack[ply - 2].turn;
-                            int from = context->moveStack[ply - 2].startSquare;
-                            int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
-                            int to = context->moveStack[ply - 2].endSquare;
-                            context->followUpMove[side][piece][to] = *currentMove;
-                        }
+                        updateContinuationHistory(context, *currentMove, ply);
                     }
                     else if(capturedPiece != EMPTY_PIECE)
-                    {
-                        //Capture History Herustic
-                        context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] += historyBonusScale * depth + historyBonusOffset;
-                        context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] = _min(context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], MAX_HISTORY_SCORE);
-                    }
+                        applyCaptureHistoryBonus(&context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], depth);
 
                     break;
                 }
@@ -658,16 +630,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
             if(isQuietMove)
                 searchedQuietIndices[searchedQuietCount++] = ((PIECE(currentPiece) / 2) * 64) + currentMove->endSquare;
             else if(capturedPiece != EMPTY_PIECE)
-            {
-                //Capture History Herustic
-                context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] -= historyPenaltyScale * depth + historyPenaltyOffset;
-                context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2] = _max(context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], -MAX_HISTORY_SCORE);
-            }
+                applyCaptureHistoryPenalty(&context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], depth);
         }
         destroy_move_iterator(iter);
-        
     }
-    
+
     if(!iter || validMovesVisited == 0)
     {
         //We know its not a (stale-)mate position if an excluded move exists at this ply.
@@ -682,8 +649,8 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
         else
             return 0;
     }
-    
-    new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ( (bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
+
+    new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ((bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
     new_tt_entry.evaluation = bestScore;
     new_tt_entry.bestMove = bestMove.raw;
     transposition_table_set(context->tt, new_tt_entry, curBoard->hashCode, ply);
@@ -691,13 +658,11 @@ int principalVariationSearch(searchThreadContext* context, int alpha, int beta, 
     //Correction History
     if((bestScore >= beta || new_tt_entry.nodeType == NODE_BOUND_EXACT) && abs(bestScore) < MIN_MATE_SCORE)
     {
-        int16_t error = clamp(1024 * (bestScore - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
-        int16_t weight = _min(depth * depth + 2, 256);
-        int16_t* oldHist = &context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)];
-        *oldHist += clamp(weight * (error - *oldHist) / 1024, -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+        updateCorrectionHistory(&context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)], 
+                                    depth, bestScore, staticScore);
     }
 
-    RECORD_SEARCH(context->pvsSearchedMoves += validMovesVisited; 
+    RECORD_SEARCH(context->pvsSearchedMoves += validMovesVisited;
                   context->pvsSearchedPositions++;);
 
     return bestScore;
@@ -714,7 +679,7 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 
     if(isBookMove) printf("info string Book move played: %s\n", moveName);
     printf("bestmove %s", moveName);
-    
+
     if(bestMove.promoteTo)
     {
         switch(bestMove.promoteTo)
@@ -764,14 +729,13 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
                     break;
             }
         }
-        
     }
 
     printf("\n");
     fflush(stdout);
 }
 
-void aspiration_window(searchThreadContext* context, int currentDepth)
+void aspiration_window(threadContext* context, int currentDepth)
 {
     //context->pv is used to save last stable pv line.
     //It is used for reporting and testing pv moves.
@@ -802,14 +766,14 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             {
                 beta = (alpha + beta) / 2;
 
-                aspiration_margin*=aspiration_margin_mult_factor;
+                aspiration_margin *= aspiration_margin_mult_factor;
                 alpha = score - aspiration_margin;
             }
             else if(score >= beta)
             {
                 alpha = (alpha + beta) / 2;
 
-                aspiration_margin*=aspiration_margin_mult_factor;
+                aspiration_margin *= aspiration_margin_mult_factor;
                 beta = score + aspiration_margin;
             }
             else
@@ -822,7 +786,7 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
             }
         }
     }
-    
+
     if(*context->abortFlag == 0)
     {
         context->score = score;
@@ -833,32 +797,32 @@ void aspiration_window(searchThreadContext* context, int currentDepth)
 
 THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 {
-    searchThreadContext* context = (searchThreadContext*)param;
+    threadContext* context = (threadContext* )param;
     context->seldepth = 0;
     context->completedDepth = 0;
 
     bitboard* board = &context->boardStack[0];
     move bestMove = context->pv.line[0];
-    
+
     if(useNNUE)
         updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
-        
+
     int lastScore = context->score;
 
     int consecutiveTimeReductions = 0;
-    for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth+=context->deepeningSkip)
+    for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth += context->deepeningSkip)
     {
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount)) 
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount))
             break;
 
         aspiration_window(context, currentDepth);
-        
+
         //Reduce soft time cap on stable searches.
         //Consider all searches within the first 30% of the search time as naturally unstable.
         clock_t curTime = clock();
         if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
         {
-            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+            if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
             {
                 context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
                 consecutiveTimeReductions++;
@@ -869,20 +833,20 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
                 context->softEndTime = context->hardEndTime;
             }
         }
-        
+
         bestMove = context->pv.line[0];
         lastScore = context->score;
-        
+
         if(abs(context->score) > MIN_MATE_SCORE)
-            context->softEndTime -= 0.5 * (context->softEndTime - clock());
+            context->softEndTime -= 0.5 * (context->softEndTime - context->startTime);
     }
 
     return 0;
 }
 
-void findBestThread(searchThreadContext* mainThread, searchThreadContext* helperThreads, move* bestMove, move* ponderMove)
+void findBestThread(threadContext* mainThread, threadContext* helperThreads, move* bestMove, move* ponderMove)
 {
-    searchThreadContext* best = mainThread;
+    threadContext* best = mainThread;
     int bestDepth = best->completedDepth;
     int bestScore = best->score;
     int totalNodes = mainThread->countedNodes;
@@ -896,37 +860,38 @@ void findBestThread(searchThreadContext* mainThread, searchThreadContext* helper
             int curDepth = helperThreads[i].completedDepth;
             int curScore = helperThreads[i].score;
 
-            if(curDepth >= bestDepth || curScore > MIN_MATE_SCORE) 
+            if(curDepth >= bestDepth || curScore > MIN_MATE_SCORE)
             {
                 best = &helperThreads[i];
                 bestDepth = best->completedDepth;
                 bestScore = best->score;
             }
-
         }
     }
-    
+
     *bestMove = best->pv.line[0];
     *ponderMove = best->pv.line[1]; //Invalid & isPonder checks come later.
 
     if(suppressUCIMessages) return;
 
-    int milliseconds = (double) (clock() - mainThread->startTime) / (CLOCKS_PER_SEC / 1000.0);
+    int milliseconds = (double)(clock() - mainThread->startTime) / (CLOCKS_PER_SEC / 1000.0);
     milliseconds = _max(milliseconds, 1);
     int NPS = totalNodes / (milliseconds / 1000.0);
-    
+
     printf("info depth %d seldepth %d score ", bestDepth, best->seldepth);
-    
+
     int absScore = abs(bestScore);
     assert(absScore <= SCORE_WIN);
     if(absScore >= MIN_MATE_SCORE)
     {
         int mateInPlies = SCORE_WIN - absScore;
         int mateInMoves = (mateInPlies + 1) / 2;
-        if(bestScore < 0) mateInMoves = -mateInMoves;
+        if(bestScore < 0)
+            mateInMoves = -mateInMoves;
         printf("mate %d ", mateInMoves);
     }
-    else printf("cp %d ", bestScore);
+    else
+        printf("cp %d ", bestScore);
 
     printf("nodes %d nps %d hashfull %d time %d", totalNodes, NPS, getHashFull(best->tt), milliseconds);
 
@@ -952,7 +917,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 {
     srand(time(NULL));
 
-    searchThreadContext* context = (searchThreadContext*)param;
+    threadContext* context = (threadContext* )param;
     *context->abortFlag = 0;
     memset(context->historyTable, 0, sizeof(context->historyTable));
     memset(context->captureHistoryTable, 0, sizeof(context->captureHistoryTable));
@@ -975,12 +940,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                   context->razoring_prunes = 0;
                   context->nmp_prunes = 0;);
 
-
     tt_age(context->tt);
 
     int maxDepth = context->maxDepth;
-    
-    move bestMove = (move){0}; 
+
+    move bestMove = (move){0};
     move ponderMove = (move){0};
     int helperThreadCount = threadCount - 1;
 
@@ -1001,14 +965,14 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     filterSyzygyMoves(board, context->searchedMoves);
 
     THREADTYPE *helperThreads = NULL;
-    searchThreadContext* helperThreadContext = NULL;
+    threadContext* helperThreadContext = NULL;
 
     if(helperThreadCount > 0)
     {
         helperThreads = calloc(helperThreadCount, sizeof(THREADTYPE));
-        helperThreadContext = calloc(helperThreadCount, sizeof(searchThreadContext));
+        helperThreadContext = calloc(helperThreadCount, sizeof(threadContext));
 
-        for(int i = 0; i < helperThreadCount; i++) 
+        for(int i = 0; i < helperThreadCount; i++)
         {
             helperThreadContext[i].abortFlag = context->abortFlag;
 
@@ -1029,18 +993,18 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             if(useNNUE)
             {
                 helperThreadContext[i].accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
-                helperThreadContext[i].refreshTable = calloc(1, sizeof(accumulatorRefreshTable));;
+                helperThreadContext[i].refreshTable = calloc(1, sizeof(accumulatorRefreshTable));
             }
 
-            memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16*sizeof(move));
+            memcpy(helperThreadContext[i].searchedMoves, context->searchedMoves, 16 * sizeof(move));
             THREAD_START(helperThreads[i], helperThreadFunction, &helperThreadContext[i]);
         }
     }
 
-    #ifdef SEARCHINFO
+#ifdef SEARCHINFO
     uint64_t iterationNodes[MAX_PLY] = {0};
-    #endif
-    
+#endif
+
     if(useNNUE)
         updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
     int lastScore = 0;
@@ -1048,13 +1012,13 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
         aspiration_window(context, currentDepth);
-        
+
         //Reduce soft time cap on stable searches.
         //Consider all searches within the first 30% of the search time as naturally unstable.
         clock_t curTime = clock();
         if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
         {
-            if(consecutiveTimeReductions < 5 && (bestMove .raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+            if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
             {
                 context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
                 consecutiveTimeReductions++;
@@ -1065,11 +1029,11 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                 context->softEndTime = context->hardEndTime;
             }
         }
-        
+
         bestMove = context->pv.line[0];
         ponderMove = context->pv.line[1];
         lastScore = context->score;
-        
+
         if(!suppressUCIMessages)
         {
             int totalNodes = context->countedNodes;
@@ -1078,7 +1042,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             milliseconds = _max(milliseconds, 1);
             int NPS = totalNodes / (milliseconds / 1000.0);
 
-           printf("info depth %d seldepth %d score ", currentDepth, context->seldepth);
+            printf("info depth %d seldepth %d score ", currentDepth, context->seldepth);
     
             int absScore = abs(context->score);
             assert(absScore <= SCORE_WIN);
@@ -1109,20 +1073,21 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
             printf("\n");
             fflush(stdout);
-            
-            if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount))) break;
-        
-            RECORD_SEARCH(iterationNodes[currentDepth - 1] = (currentDepth > 0) ? context->countedNodes - iterationNodes[currentDepth - 2] : context->countedNodes;);
+
+            if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount)))
+                break;
+
+            RECORD_SEARCH(iterationNodes[currentDepth - 1] = (currentDepth > 0) ? context->countedNodes - iterationNodes[currentDepth - 1] : context->countedNodes;);
         }
-        
+
         if(abs(context->score) > MIN_MATE_SCORE)
-            context->softEndTime -= 0.5 * (context->softEndTime - clock());
+            context->softEndTime -= 0.5 * (context->softEndTime - context->startTime);
     }
 
     if(helperThreadCount > 0)
-    {   
+    {
         *context->abortFlag = 1;
-        for(int i = 0; i < helperThreadCount; i++) 
+        for(int i = 0; i < helperThreadCount; i++)
         {
             THREAD_WAIT(helperThreads[i]);
             free(helperThreadContext[i].repetitions.hashCodes);
@@ -1133,17 +1098,17 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             }
         }
         findBestThread(context, helperThreadContext, &bestMove, &ponderMove);
-        
+
         free(helperThreads);
         free(helperThreadContext);
     }
 
-    #ifdef SEARCHINFO
+#ifdef SEARCHINFO
     double ebf = 0.0;
     int count = 0;
-    for(int d = 1; d <= context->maxDepth; d++) 
+    for(int d = 1; d <= context->maxDepth; d++)
     {
-        if(iterationNodes[d - 1] > 0) 
+        if(iterationNodes[d - 1] > 0)
         {
             ebf += (double) iterationNodes[d] / iterationNodes[d - 1];
             count++;
@@ -1174,7 +1139,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     printf("\t%-25s %18" PRId64 "\n", "RFP Prunes:", context->rfp_prunes);
     printf("\t%-25s %18" PRId64 "\n", "Razoring Prunes:", context->razoring_prunes);
     printf("\t%-25s %18" PRId64 "\n", "NMP Prunes:", context->nmp_prunes);
-    #endif
+#endif
 
     printResultingMoves(bestMove, ponderMove, 0);
     isCalculating = 0;

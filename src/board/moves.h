@@ -42,7 +42,7 @@ extern int pieceValuesSEE[15];
 #define MAX_HISTORY_SCORE 16384 //+- max bound
 #define COUNTERMOVE_BONUS 6000 //added to history score
 #define FOLLOWUPMOVE_BONUS 5000 //added to history score
-moveIterator* create_move_iterator(searchThreadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove);
+moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
 void destroy_move_iterator(moveIterator* iter);
 

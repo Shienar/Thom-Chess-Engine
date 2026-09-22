@@ -20,6 +20,6 @@ extern const int OUTPUT_BUCKET_DIVISOR;
 
 void initNNUE();
 
-int forwardPropagate(searchThreadContext* context, int ply);
+int forwardPropagate(threadContext* context, int ply);
 
 #endif
