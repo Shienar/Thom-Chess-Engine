@@ -197,7 +197,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
         {
             if(curBoard->pieces[pc | opposingColor])
             {
-                if(delta_pruning_nnue_offset + evaluatePhasedScore(curBoard, hce_params.genericPieceValues[pc / 2]) + best < alpha)
+                if(delta_pruning_offset + evaluatePhasedScore(curBoard, hce_params.genericPieceValues[pc / 2]) + best < alpha)
                     return best;
                 break;
             }
@@ -326,9 +326,11 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     if(tt_hit)
     {
         RECORD_SEARCH(context->tt_hits++;);
-        if(old_tt_entry.depth >= depth && (!pvNode || depth == 0) && (cutNode || old_tt_entry.evaluation <= alpha))
+        if(old_tt_entry.depth >= depth &&
+            (!pvNode || depth == 0) && 
+            (cutNode || old_tt_entry.evaluation <= alpha))
         {
-            if(old_tt_entry.nodeType == NODE_BOUND_EXACT ||
+            if(  old_tt_entry.nodeType == NODE_BOUND_EXACT ||
                 (old_tt_entry.nodeType == NODE_BOUND_UPPER && old_tt_entry.evaluation <= alpha) ||
                 (old_tt_entry.nodeType == NODE_BOUND_LOWER && old_tt_entry.evaluation >= beta))
                 {
@@ -415,7 +417,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         }
 
         //Worsening Reduction
-        if(context->worsening[ply] > 3)
+        if(score <= alpha && cutNode && context->worsening[ply] > 2)
         {
             RECORD_SEARCH(context->worsening_reductions++;);
             depth--;
@@ -444,9 +446,11 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         }
 
         //Null move pruning
-        if(score >= beta && depth >= nullmove_pruning_depth && cutNode &&
-            !(ply > 0 && context->moveStack[ply - 1].raw == 0) &&
-            (curBoard->pieces_all ^ (curBoard->pieces[WHITE_KING] | curBoard->pieces[BLACK_KING] | curBoard->pieces[WHITE_PAWN] | curBoard->pieces[BLACK_PAWN])))
+        if(score >= beta && 
+           depth >= nullmove_pruning_depth && 
+           cutNode &&
+           !(ply > 0 && context->moveStack[ply - 1].raw == 0) &&
+           (curBoard->pieces_all ^ (curBoard->pieces[WHITE_KING] | curBoard->pieces[BLACK_KING] | curBoard->pieces[WHITE_PAWN] | curBoard->pieces[BLACK_PAWN])))
         {
             int r = 3 + depth / 4 + depth / 10;
             applyNullMove(curBoard, nextBoard, &context->repetitions);
@@ -468,7 +472,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     }
 
     //TT reductions
-    if(!curBoard->in_check && !context->excludedMove[ply].raw && depth >= tt_reduction_depth && (!tt_hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
+    if(!curBoard->in_check && 
+        !context->excludedMove[ply].raw && 
+        depth >= tt_reduction_depth &&
+        (!tt_hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
     {
         RECORD_SEARCH(context->tt_reductions++;);
         depth--;
@@ -746,7 +753,7 @@ void aspiration_window(threadContext* context, int currentDepth)
     //Don't corrupt it.
 
     PVar tempPV = {0};
-    memset(context->isAccClean, 0, sizeof(uint8_t));
+    memset(context->isAccClean, 0, MAX_PLY * sizeof(uint8_t));
     context->isAccClean[0] = 1;
     context->lastCleanPly = 0;
     int score;
@@ -762,7 +769,7 @@ void aspiration_window(threadContext* context, int currentDepth)
         int aspiration_margin = initial_aspiration_margin;
         int alpha = context->score - aspiration_margin;
         int beta = context->score + aspiration_margin;
-        while(1)
+        while(*context->abortFlag == 0)
         {
             score = principalVariationSearch(context, alpha, beta, currentDepth, 0, &tempPV, 1, 0);
 
@@ -816,13 +823,8 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     int consecutiveTimeReductions = 0;
     for(int currentDepth = 1; currentDepth <= context->maxDepth; currentDepth += context->deepeningSkip)
     {
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount))
-            break;
-
         aspiration_window(context, currentDepth);
 
-        //Reduce soft time cap on stable searches.
-        //Consider all searches within the first 30% of the search time as naturally unstable.
         clock_t curTime = clock();
         if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
         {
@@ -843,6 +845,9 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
 
         if(abs(context->score) > MIN_MATE_SCORE)
             context->softEndTime -= 0.5 * (context->softEndTime - context->startTime);
+            
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount))
+            break;
     }
 
     return 0;
@@ -1005,9 +1010,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         }
     }
 
-#ifdef SEARCHINFO
     uint64_t iterationNodes[MAX_PLY] = {0};
-#endif
 
     if(useNNUE)
         updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
@@ -1024,7 +1027,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         {
             if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
             {
-                context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
+                context->softEndTime -= 0.1 * (context->softEndTime - curTime);
                 consecutiveTimeReductions++;
             }
             else
@@ -1077,15 +1080,20 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
             printf("\n");
             fflush(stdout);
-
-            if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount)))
-                break;
-
-            RECORD_SEARCH(iterationNodes[currentDepth - 1] = (currentDepth > 0) ? context->countedNodes - iterationNodes[currentDepth - 1] : context->countedNodes;);
         }
 
+        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount)))
+            break;
+
+        // Assume that the next depth will take more nodes than the current depth.
+        // If countedNodes + countedNodes_thisDepth > hardMaxNodes, we should be able to avoid having to waste time on a partial search of the next depth.
+        // This is done as a speedup for data generation.
+        iterationNodes[currentDepth - 1] = (currentDepth > 0) ? context->countedNodes - iterationNodes[currentDepth - 1] : context->countedNodes;
+        if(context->countedNodes + iterationNodes[currentDepth -1] > context->hardMaxNodes / threadCount)
+            break;
+
         if(abs(context->score) > MIN_MATE_SCORE)
-            context->softEndTime -= 0.5 * (context->softEndTime - context->startTime);
+            context->softEndTime -= 0.5 * (context->softEndTime - curTime);
     }
 
     if(helperThreadCount > 0)

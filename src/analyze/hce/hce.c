@@ -181,11 +181,6 @@ void init_HCE_tables()
 		}
 	}
 
-	//pieceValuesSEE
-	for(int piece = 0; piece < KING; piece++)
-		pieceValuesSEE[piece] = (hce_params.genericPieceValues[piece / 2].mg + hce_params.genericPieceValues[piece / 2].eg) / 2;
-
-
 	for(int column = 0; column < 8; column++) 
 	{
         for(int column_offset = -1; column_offset <= 1; column_offset++) 

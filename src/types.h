@@ -58,7 +58,7 @@ typedef struct {
 //a8 = 56, h8 = 63
 #define PIECE_COUNT 12
 #define PIECE_TYPE_COUNT 6
-#define MAX_PLY 60
+#define MAX_PLY 40 //TODO - Increasing to 60 results in a loss of 40 elo, need to investigate more later. (Capping extensions?)
 typedef struct bitboard {
     uint64_t hashCode;
     uint64_t pawnHash;

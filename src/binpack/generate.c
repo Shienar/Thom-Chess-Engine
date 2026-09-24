@@ -29,9 +29,9 @@ void generate(const char* path)
         contextList[i].startTime = 0,
         contextList[i].hardEndTime = LONG_MAX,
         contextList[i].softEndTime = LONG_MAX,
-        contextList[i].maxDepth = MAX_PLY;
-        contextList[i].hardMaxNodes = 10000;
-        contextList[i].softMaxNodes = 10000;
+        contextList[i].maxDepth = 9;
+        contextList[i].hardMaxNodes = 5000;
+        contextList[i].softMaxNodes = 5000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
         contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero.
 
@@ -157,7 +157,19 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                     goto newgame;
                 int index = rng_xorshift32(&seed) % count;
                 if(moveFromStruct(board, board, moveList[index], &context->repetitions))
-                    goto newgame;
+                {
+                    int foundLegal = 0;
+                    for(int j = (index + 1) % count; j != index; j = (j + 1) % count)
+                    {
+                        if(!moveFromStruct(board, board, moveList[j], &context->repetitions))
+                        {
+                            foundLegal = 1;
+                            break;
+                        }
+                    }
+                    if(!foundLegal)
+                        goto newgame;
+                }
             }
 
             isNewGame = 0;
@@ -168,16 +180,18 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
             boardToPackedBoard(board, packedBoard);
             packedBoard->result = UINT8_MAX;
+            clear_tt(context->tt);
             continue;
         }
 
         assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
 
         calculateBestMove(param);
-        
+        printf("%d|%d\t", context->completedDepth, context->countedNodes);
+
         move bestMove = context->pv.line[0];
 
-        int whiteEval = (ISWHITE(board->turn)) ? context->score : - context->score;
+        int whiteEval = (ISWHITE(board->turn)) ? context->score : -context->score;
 
         if(movesThisGame == 0 && abs(whiteEval) > 300)
         {
@@ -201,6 +215,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 
         if(packedBoard->result < UINT8_MAX)
         {
+            adjudication:
+
             writeBuffer->movesThisGame[curGameIndex] = movesThisGame;
             curGameIndex++; 
             if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
@@ -248,6 +264,20 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             do
             {
                 calculateBestMove(param);
+                int whiteEval = (ISWHITE(board->turn)) ? context->score : -context->score;
+
+                consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
+                consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
+                consecutiveDrawScores = (whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+
+                if(consecutiveHighScores > 5 || whiteEval > MIN_MATE_SCORE) packedBoard->result = VIRI_WHITE_WIN;
+                else if(consecutiveLowScores > 5 || whiteEval < -MIN_MATE_SCORE) packedBoard->result = VIRI_BLACK_WIN;
+                else if(consecutiveDrawScores > 5) packedBoard->result = VIRI_DRAW;
+                
+                if(packedBoard->result < UINT8_MAX)
+                    goto adjudication;
+        
+
             } while(!moveFromStruct(board, board, context->pv.line[0], &context->repetitions));
             goto gameover;
         }
