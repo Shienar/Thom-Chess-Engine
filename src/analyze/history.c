@@ -17,7 +17,7 @@ void updateKillerMoves(threadContext* context, move currentMove, int ply)
 
 int getHistoryValue(threadContext* context, int turn, int piece, int to)
 {
-    return context->historyTable[turn][piece][to];
+    return context->historyTable[turn][piece / 2][to];
 }
 
 void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth)
@@ -100,8 +100,8 @@ int getCorrectionHistoryOffset(threadContext* context, bitboard* board)
 {
     int correction = 0;
     correction += 50 * context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
-    correction += 25 * context->pawnCorrHist[board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
-    correction += 25 * context->pawnCorrHist[board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
+    correction += 25 * context->nonPawnCorrHist[WHITE][board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
+    correction += 25 * context->nonPawnCorrHist[BLACK][board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
     correction /= 100;
     return correction / CORRHIST_GRAIN;
 }

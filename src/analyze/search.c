@@ -410,7 +410,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE)
     {
         //Stable Eval Reduction
-        if(ply >= 2 && staticScore >= beta && depth > stable_reduction_depth && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_margin)
+        if(ply >= 2 && staticScore >= beta && cutNode && depth > stable_reduction_depth && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_margin)
         {
             RECORD_SEARCH(context->stable_reductions++;);
             depth--;
