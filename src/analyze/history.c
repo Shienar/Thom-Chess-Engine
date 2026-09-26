@@ -99,9 +99,8 @@ void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int s
 int getCorrectionHistoryOffset(threadContext* context, bitboard* board)
 {
     int correction = 0;
-    correction += 50 * context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
-    correction += 25 * context->nonPawnCorrHist[WHITE][board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
-    correction += 25 * context->nonPawnCorrHist[BLACK][board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
-    correction /= 100;
+    correction += context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
+    correction += context->nonPawnCorrHist[WHITE][board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
+    correction += context->nonPawnCorrHist[BLACK][board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
     return correction / CORRHIST_GRAIN;
 }
