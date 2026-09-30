@@ -407,7 +407,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     if(ply < MAX_PLY - 1)
         context->killerMoves[ply + 1][0].raw = context->killerMoves[ply + 1][1].raw = 0;
 
-    if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE)
+    if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE && !context->excludedMove[ply].raw)
     {
         //Stable Eval Reduction
         if(ply >= 2 && staticScore >= beta && cutNode && depth > stable_reduction_depth && abs(context->evalHistory[ply - 2] - staticScore) < stable_eval_margin)
@@ -502,7 +502,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
             //Singular Extension
             if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 &&
-                old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw)
+                old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw && ply > 0)
             {
                 int sBeta = old_tt_entry.evaluation - 3 * depth;
                 int sDepth = depth / 2 + 1;

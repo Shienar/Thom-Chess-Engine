@@ -187,7 +187,6 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
         assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
 
         calculateBestMove(param);
-        printf("%d|%d\t", context->completedDepth, context->countedNodes);
 
         move bestMove = context->pv.line[0];
 
