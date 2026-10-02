@@ -525,7 +525,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                     return singularScore;
                 //Negative Extension
                 else if(cutNode || old_tt_entry.evaluation >= beta)
-                    next_depth--;
+                    next_depth-=2;
             }
 
             //Quiet Move Pruning
