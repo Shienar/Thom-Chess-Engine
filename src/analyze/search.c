@@ -46,8 +46,8 @@ int delta_pruning_nnue_offset = 998;
 int futility_margin = 70;
 int futility_depth_margin = 51;
 
-int reverse_futility_margin = 185;
-int reverse_futility_margin_improving = 122;
+int reverse_futility_margin = 153;
+int reverse_futility_margin_improving = 87;
 
 int lowHistoryVal = -123;
 
