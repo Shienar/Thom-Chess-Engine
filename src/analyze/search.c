@@ -825,28 +825,33 @@ THREAD_RETURN helperThreadFunction(THREAD_PARAM param)
     {
         aspiration_window(context, currentDepth);
 
-        clock_t curTime = clock();
-        if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
+        clock_t curTime = 0;
+        //Non-data generation check
+        if(context->startTime)
         {
-            if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+            curTime = clock();
+            if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
             {
-                context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
-                consecutiveTimeReductions++;
-            }
-            else
-            {
-                consecutiveTimeReductions = 0;
-                context->softEndTime = context->hardEndTime;
+                if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+                {
+                    context->softEndTime -= 0.1 * (context->softEndTime - context->startTime);
+                    consecutiveTimeReductions++;
+                }
+                else
+                {
+                    consecutiveTimeReductions = 0;
+                    context->softEndTime = context->hardEndTime;
+                }
             }
         }
 
         bestMove = context->pv.line[0];
         lastScore = context->score;
 
-        if(abs(context->score) > MIN_MATE_SCORE)
+        if(context->startTime && abs(context->score) > MIN_MATE_SCORE)
             context->softEndTime -= 0.5 * (context->softEndTime - context->startTime);
             
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes > context->softMaxNodes / threadCount))
+        if(!isPonder && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= context->softMaxNodes / threadCount))
             break;
     }
 
@@ -1022,18 +1027,22 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 
         //Reduce soft time cap on stable searches.
         //Consider all searches within the first 30% of the search time as naturally unstable.
-        clock_t curTime = clock();
-        if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
+        clock_t curTime = 0;
+        if(context->startTime)
         {
-            if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+            curTime = clock();
+            if(context->hardEndTime - curTime > 0.3 * (context->hardEndTime - context->startTime))
             {
-                context->softEndTime -= 0.1 * (context->softEndTime - curTime);
-                consecutiveTimeReductions++;
-            }
-            else
-            {
-                consecutiveTimeReductions = 0;
-                context->softEndTime = context->hardEndTime;
+                if(consecutiveTimeReductions < 5 && (bestMove.raw == context->pv.line[0].raw || abs(context->score - lastScore) < 5))
+                {
+                    context->softEndTime -= 0.1 * (context->softEndTime - curTime);
+                    consecutiveTimeReductions++;
+                }
+                else
+                {
+                    consecutiveTimeReductions = 0;
+                    context->softEndTime = context->hardEndTime;
+                }
             }
         }
 
@@ -1082,7 +1091,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             fflush(stdout);
         }
 
-        if(!isPonder && currentDepth > 1 && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= (context->softMaxNodes / threadCount)))
+        if(!isPonder && (*context->abortFlag || clock() > context->softEndTime || context->countedNodes >= context->softMaxNodes / threadCount))
             break;
 
         // Assume that the next depth will take more nodes than the current depth.
@@ -1092,7 +1101,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         if(context->countedNodes + iterationNodes[currentDepth -1] > context->hardMaxNodes / threadCount)
             break;
 
-        if(abs(context->score) > MIN_MATE_SCORE)
+        if(context->startTime && abs(context->score) > MIN_MATE_SCORE)
             context->softEndTime -= 0.5 * (context->softEndTime - curTime);
     }
 

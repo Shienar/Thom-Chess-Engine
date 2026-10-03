@@ -33,7 +33,7 @@ void generate(const char* path)
         contextList[i].hardMaxNodes = 5000;
         contextList[i].softMaxNodes = 5000;
         contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
-        contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero.
+        contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero by worker thread.
 
         if(useNNUE)
         {
