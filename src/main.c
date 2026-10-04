@@ -576,6 +576,17 @@ int main(int argc, char** argv)
                 binpackPrintInfo(str);
                 break;
             }
+            else if(strcmp(str, "cleanbinpack") == 0)
+            {
+                //Format: 'cleanbinpack "<cleanbinpack>"
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
+                
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+
+                binpackClean(str);
+                break;
+            }
             #ifdef TRAIN
             else if(strcmp(str, "train") == 0)
             {

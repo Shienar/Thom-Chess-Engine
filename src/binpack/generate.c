@@ -220,7 +220,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             curGameIndex++; 
             if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
             {
-                binpack_writeGame(&details, writeBuffer);
+                binpack_write(&details, writeBuffer);
                 curGameIndex = 0;
             }
             isNewGame = 1;
@@ -310,7 +310,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             curGameIndex++;
             if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
             {
-                binpack_writeGame(&details, writeBuffer);
+                binpack_write(&details, writeBuffer);
                 curGameIndex = 0;
             }
             isNewGame = 1;

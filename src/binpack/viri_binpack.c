@@ -277,6 +277,7 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 int readPackedBoard(binpackDetails* details)
 {
     readerDetails* rDetails = details->readerInfo;
+    rDetails->gameStartPtr = rDetails->current_ptr;
 
     if(rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) > details->end_ptr)
         return -1;
@@ -324,6 +325,8 @@ int readPackedBoard(binpackDetails* details)
 
     packedBoardToBoard(rDetails->board, rDetails->packedBoard);
 
+    rDetails->gameIndex++;
+    rDetails->positionIndex++;
     return 0;
 }
 
@@ -443,7 +446,7 @@ void binpack_close(binpackDetails* details)
     }
 }
 
-int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips)
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int isCleaner, int minimumFENSkips)
 {
     readerDetails* rDetails = details->readerInfo;
 
@@ -460,6 +463,8 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
             if(loop)
             {
                 rDetails->current_ptr = details->start_ptr;
+                rDetails->positionIndex = 0;
+                rDetails->gameIndex = 0;
                 readPackedBoard(details);
             }
             else
@@ -509,28 +514,40 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                 
                 if(movePiece(rDetails->board, m, NULL))
                 {
-                    board_print(rDetails->board, 1);
-                    printf("Move error detected within binpack:\n");
-                    printf("\tOffset: 0x%" PRIx64 "\n", rDetails->current_ptr - details->start_ptr);
-                    printf("\tMove: %d->%d | Type=%d | Promote=%d", pair.move.startSquare, pair.move.endSquare, pair.move.moveType, pair.move.promotePiece);
-                    exit(1);
+                    if(!isCleaner)
+                    {
+                        board_print(rDetails->board, 1);
+                        printf("Move error detected within binpack:\n");
+                        printf("Position #%" PRId64 " | Game #%" PRId64 "\n", rDetails->positionIndex, rDetails->gameIndex);
+                        printf("\tOffset: 0x%" PRIx64 "\n", rDetails->current_ptr - details->start_ptr);
+                        printf("\tMove: %d->%d | Type=%d | Promote=%d", pair.move.startSquare, pair.move.endSquare, pair.move.moveType, pair.move.promotePiece);
+                        exit(1);
+                    }
+                    else
+                        return -2;
                 }
+                rDetails->positionIndex++;
             }
         }
 
-        if(!isCapture &&
-            abs(pair.whiteScore) <= 2000 && 
-            pair.move.moveType == 0 &&
-            !rDetails->board->in_check &&
-            rDetails->board->halfMoveCount >= 16)
-            {
-                if(skippedUsable >= minimumFENSkips)
-                    break;
+        if(!isCleaner)
+        {
+            if(!isCapture &&
+                abs(pair.whiteScore) <= 2000 && 
+                pair.move.moveType == 0 &&
+                !rDetails->board->in_check &&
+                rDetails->board->halfMoveCount >= 16)
+                {
+                    if(skippedUsable >= minimumFENSkips)
+                        break;
+                    else
+                        skippedUsable++;
+                }
                 else
-                    skippedUsable++;
-            }
-            else
-                skippedUnusable++;
+                    skippedUnusable++;
+        }
+        else
+            break;
     }
 
     *result = rDetails->currentGameWinner;
@@ -539,7 +556,7 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
     return skippedUnusable + skippedUsable;
 }
 
-void binpack_writeGame(binpackDetails* details, generatedGameBuffer* buffer)
+void binpack_write(binpackDetails* details, generatedGameBuffer* buffer)
 {
     for(int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
     {
@@ -600,7 +617,7 @@ void binpackPrintInfo(const char* fileName)
     uint64_t recentlyRead = 0;
 
     clock_t readStartTime = clock();
-    while((temp = binpack_next(&details, &b, &s, &r, 0, 0)) != -1)
+    while((temp = binpack_next(&details, &b, &s, &r, 0, 0, 0)) != -1)
     {
         skippedCount += temp;
         usedCount++;
@@ -612,32 +629,103 @@ void binpackPrintInfo(const char* fileName)
         {
             recentlyRead -= 10000000;
 
-            uint64_t totalCount = usedCount + skippedCount;
             printf("\033[4A");
             printf("\033[2K\rBinpack statistics:\n");
-            printf("\033[2K\r\tTotal: %" PRIu64" \n", totalCount);
-            printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
-            printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
+            printf("\033[2K\r\tTotal: %" PRIu64" \n", details.readerInfo->positionIndex);
+            printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / details.readerInfo->positionIndex);
+            printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / details.readerInfo->positionIndex);
             fflush(stdout);
         }
     }
     clock_t readEndTime = clock();
     double duration = (readEndTime - readStartTime) /  (double) CLOCKS_PER_SEC;
-    uint64_t totalCount = usedCount + skippedCount;
-    double positionsPerSecond = totalCount / duration;
+    double positionsPerSecond = details.readerInfo->positionIndex / duration;
 
     uint64_t byteLength = details.mmap_file.size;
-    float bytesPerPosition = (float) byteLength / totalCount;
+    float bytesPerPosition = (float) byteLength / details.readerInfo->positionIndex;
 
     printf("\033[4A");
     printf("\033[2K\rBinpack statistics:\n");
-    printf("\033[2K\r\tTotal: %" PRIu64" \n", totalCount);
-    printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / totalCount);
-    printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / totalCount);
+    printf("\033[2K\r\tTotal: %" PRIu64" \n", details.readerInfo->positionIndex);
+    printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / details.readerInfo->positionIndex);
+    printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / details.readerInfo->positionIndex);
     printf("\033[2K\r\tDuration: %.3f seconds\n", duration);
     printf("\033[2K\r\tPositions per second: %.4f\n", positionsPerSecond);
     printf("\033[2K\r\tByte Size: %" PRIu64" \n", (uint64_t)byteLength);
     printf("\033[2K\r\tBytes per Position: %.4f\n", bytesPerPosition);
 
     binpack_close(&details);
+}
+
+//The binpack contains hundreds of millions of positions from many games.
+//A couple of games were written wrong and can throw errors. 
+//We must clean them out while preserving as many games as possible.
+//
+// Example Reduction: 34,621,051 positions -> 34,620,903 positions (0.000427485%)
+void binpackClean(const char* fileName)
+{
+    binpackDetails details =  {0};
+    binpack_open(&details, fileName, 1);
+    readerDetails* rDetails = details.readerInfo;
+
+    uint8_t* lastPrintPtr = details.start_ptr;
+    uint8_t* invalidGamePtr = NULL;
+    int temp;
+    bitboard b;
+    Viri_Score s;
+    uint8_t r;
+
+    const char* extension = strrchr(fileName, '.');
+    assert(extension);
+    int newLength = strlen(fileName) + 4 + 1; // "_new", '\0'
+    char* newFileName = malloc(newLength);
+
+    size_t len = extension - fileName;
+    strncpy(newFileName, fileName, len);
+    strncpy((char*) newFileName + len, "_new", 5);
+    strncpy((char*) newFileName + len + 4, extension, newLength - len - 4);
+    newFileName[newLength - 1] = '\0';
+
+    FILE* output = fopen(newFileName, "ab+");
+
+    uint64_t lastPrintPositions = rDetails->positionIndex;
+
+    printf("Started cleaning binpack - %s\n", fileName);
+    while((temp = binpack_next(&details, &b, &s, &r, 0, 1, 0)) != -1)
+    {
+        if(temp == -2)
+            invalidGamePtr = rDetails->gameStartPtr;
+        else if(invalidGamePtr && rDetails->gameStartPtr != lastPrintPtr)
+        {
+            lastPrintPtr = rDetails->gameStartPtr;
+            invalidGamePtr = NULL;
+        }
+
+        size_t bufferSize = rDetails->gameStartPtr - lastPrintPtr;
+
+        if((bufferSize && invalidGamePtr) || 
+            bufferSize >= 8096 - (sizeof(Viri_PackedBoard) + MAX_POSITIONS_PER_GAME * sizeof(Viri_MoveScorePair)))
+        {
+            fwrite(lastPrintPtr, bufferSize, 1, output);
+            lastPrintPtr = rDetails->gameStartPtr;
+
+            if((rDetails->positionIndex - lastPrintPositions) > 10000000)
+            {
+                lastPrintPositions += 10000000;
+                printf("\r%" PRId64 " positions Processed", rDetails->positionIndex);
+            }
+        }
+
+    }
+
+    size_t bufferSize = rDetails->gameStartPtr - lastPrintPtr;
+    fwrite(lastPrintPtr, bufferSize, 1, output);
+    lastPrintPtr = rDetails->gameStartPtr;
+
+    printf("\r%" PRId64 " positions Processed\n", rDetails->positionIndex);
+
+    printf("Finished cleaning binpack - %s\n", fileName);
+    fclose(output);
+    binpack_close(&details);
+    free(newFileName);
 }

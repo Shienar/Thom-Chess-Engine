@@ -4,6 +4,7 @@
 #include "analyze/search.h"
 #include "train/train.h"
 #include "binpack/viri_binpack.h"
+#include "train/gpu_trainer.h"
 #include <string.h>
 #include <float.h>
 
@@ -92,7 +93,7 @@ void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* boa
     {
         Viri_Score score;
         uint8_t result;
-        binpack_next(details, board, &score, &result, 1, FEN_SKIP_TRAINING);
+        binpack_next(details, board, &score, &result, 1, 0, FEN_SKIP_TRAINING);
 
         //Convert from white-relative
         if(ISBLACK(board->turn))

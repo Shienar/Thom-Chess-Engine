@@ -68,6 +68,10 @@ typedef struct {
     uint8_t currentGameWinner;
     
     uint8_t* current_ptr;
+    uint8_t* gameStartPtr;
+
+    uint64_t positionIndex;
+    uint64_t gameIndex;
 } readerDetails;
 
 typedef struct {
@@ -105,11 +109,12 @@ extern uint8_t rookSqToFlag[64];
 //Same file pointer for all functions. The assumption is that you will either only read or only write.
 void binpack_open(binpackDetails* details, const char* fileName, int isReader);
 void binpack_close(binpackDetails* details);
-int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int minimumFENSkips);
+int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int smartFENSkip, int minimumFENSkips);
 
 int readPackedBoard(binpackDetails* details);
 void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
-void binpack_writeGame(binpackDetails* details, generatedGameBuffer* buffer);
+void binpack_write(binpackDetails* details, generatedGameBuffer* buffer);
 
 void binpackPrintInfo(const char* fileName);
+void binpackClean(const char* fileName);
 #endif

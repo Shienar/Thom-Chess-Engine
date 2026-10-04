@@ -66,6 +66,8 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - Viriformat binpack data generation
 - binpackinfo &lt;binpackFilePath&gt;
     - Get information about a generated binpack
+- cleanbinpack &lt;binpackFilePath&gt;
+    - Iterates through the "filename.extension" viriformat binpack and creates a "filename_new.extension" binpack copy. If any games within the original contained a move that caused an error during iteration, they will be omitted from the copy. This is not meant as a substitution for solid write methods, and a 0.000427485% erroneous position rate is probably caused by the process unexpectedly getting force-closed or interrupted in the middle of a write.
 - train &lt;epochs&gt; &lt;min_lr&gt; &lt;max_lr&gt; &lt;binpack file path&gt; &lt;kernel file path&gt;
     - GPU training of the NNUE.
     - Requires HIP & must be compiled with 'TRAIN=1'

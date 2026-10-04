@@ -2,7 +2,6 @@
 #define NEURALNET_TRAIN
 
 #include "analyze/nnue/neuralnet.h"
-#include "train/gpu_trainer.h"
 
 #define LOOKAHEAD_RANGE 10
 
