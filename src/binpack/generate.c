@@ -119,6 +119,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
 {
     threadContext* context = (threadContext*) param;
     bitboard* board = &context->boardStack[0];
+    bitboard tempBoard;
 
     int isNewGame = 1;
 
@@ -156,12 +157,12 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                 if(!count)
                     goto newgame;
                 int index = rng_xorshift32(&seed) % count;
-                if(moveFromStruct(board, board, moveList[index], &context->repetitions))
+                if(moveFromStruct(board, &tempBoard, moveList[index], &context->repetitions))
                 {
                     int foundLegal = 0;
                     for(int j = (index + 1) % count; j != index; j = (j + 1) % count)
                     {
-                        if(!moveFromStruct(board, board, moveList[j], &context->repetitions))
+                        if(!moveFromStruct(board, &tempBoard, moveList[j], &context->repetitions))
                         {
                             foundLegal = 1;
                             break;
@@ -170,6 +171,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                     if(!foundLegal)
                         goto newgame;
                 }
+                memcpy(board, &tempBoard, sizeof(bitboard));
             }
 
             isNewGame = 0;
