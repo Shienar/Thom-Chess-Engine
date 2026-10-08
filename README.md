@@ -3,7 +3,8 @@ UCI-compliant NNUE chess engine created in C. Named after Thom Merrilin from The
 All NNUE data was self-generated, starting from HCE-generated data.
 The NNUE requires compliance with AVX2 SIMD instructions.
 
-## BUILDING:
+<details>
+<summary><h2>BUILDING</h2></summary>
 
 A release version of the engine should be compiled with 'make -j'.
 - 'make -j' will compile everything.
@@ -17,9 +18,13 @@ A release version of the engine should be compiled with 'make -j'.
 This repository also contains a trainer for the NNUE. It was designed specifically for my (AMD) hardware & network architecture as a fun side project, and I make no guarantees about its compilability or effectiveness on other GPUs.
 - 'make -j TRAIN=1' will compile the trainer.
 - 'make =j TRAIN=1 KPERFT=1' will allow for performance tracking of the training kernels.
-## COMMANDS:
+</details>
 
-### UCI:
+<details>
+<summary><h2>COMMANDS</h2></summary>
+
+<details> 
+<summary><h3>UCI</h3></summary>
 
 - Options:
     - Threads, default 1 [1, 64]
@@ -47,8 +52,11 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - ponderhit
 - stop
 - quit
+</details>
 
-### Non-UCI:
+<details> 
+<summary><h3>Non-UCI</h3></summary>
+
 - Options:
     - LogFilePath, default ""
         - Save any debug error messages to a file at this path.
@@ -73,10 +81,15 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - Requires HIP & must be compiled with 'TRAIN=1'
     - Not intended to be universally compatible or flexible. 
     - Not included in release binaries.
+</details>
+</details>
 
-## FEATURES:
+<details>
+<summary><h2>FEATURES</h2></summary>
 
-### NNUE:
+<details>
+<summary><h3>NNUE</h3></summary>
+    
 - 2 x (768 -> 256) -> 1
     - 10 King Input Buckets
         - Horizontal Mirroring
@@ -84,8 +97,11 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - Lizard SCReLU
 - Accumulator Refresh Tables
 - Accumulator Stack
+</details>
 
-### HCE:
+<details>
+<summary><h3>HCE</h3></summary>
+    
 - Raw Piece Values
 - Piece/Square Tables
 - Mobility
@@ -106,8 +122,11 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - Open File near King
 - King Safety Table
 - Tempo
+</details>
 
-### Search:
+<details>
+<summary><h3>Search</h3></summary>
+    
 - Iterative Deepening
 - Transposition Table
 - Syzygy
@@ -138,21 +157,8 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - Quiescent Search
     - Delta Pruning
     - SEE Pruning
-
-## ELO:
-
-The engine does not have an official rating. The current best-guess elo rating for this engine is at around 3036 CCRL.
-
-```
---------------------------------------------------
-Results of Thom vs Stash26 (8+0.08, 1t, 16MB, UHO_Lichess_4852_v1.epd):
-Elo: 36.62 +/- 12.76, nElo: 44.05 +/- 15.23
-LOS: 100.00 %, DrawRatio: 36.10 %, PairsRatio: 1.54
-Games: 2000, Wins: 863, Losses: 653, Draws: 484, Points: 1105.0 (55.25 %)
-Ptnml(0-2): [92, 160, 361, 220, 167], WL/DD Ratio: 5.94
-LLR: 0.71 (24.1%) (-2.94, 2.94) [0.00, 1.00]
---------------------------------------------------
-```
+</details>
+</details>
 
 ## ACKNOWLEDGEMENTS:
 
