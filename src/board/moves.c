@@ -557,6 +557,11 @@ void destroy_move_iterator(moveIterator* iter)
 
 int isThreatened(bitboard* board, int square, int defendingColor)
 {
+    //Silently fail (instead of segfault) on corrupted binpack games.
+    //Negligable impact on perft
+    if(square < 0 || square > 63)
+        return 0;
+
     int attackingColor = FLIP_COLOR(defendingColor);
 
     if(pawnAttacks[defendingColor][square] & board->pieces[PAWN | attackingColor])

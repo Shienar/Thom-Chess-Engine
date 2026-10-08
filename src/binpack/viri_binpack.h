@@ -31,6 +31,12 @@ typedef int16_t Viri_Score;
 #define VIRI_PROMOTETO_ROOK 2
 #define VIRI_PROMOTETO_QUEEN 3
 
+#define BOARD_SAVED 0
+#define NO_BOARD_END_OF_FILE -1
+#define NO_BOARD_CORRUPTED -2
+
+#define CORRUPTED_POSITION -2
+
 #pragma pack(push, 1)
 typedef struct {
     uint64_t occupancy;

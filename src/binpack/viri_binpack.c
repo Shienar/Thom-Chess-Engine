@@ -200,7 +200,7 @@ void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard)
     packedBoard->whiteScore = littleEndian16(packedBoard->whiteScore);
 }
 
-void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
+int packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 {
     memset(board, 0, sizeof(bitboard));
     memset(&board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
@@ -264,14 +264,16 @@ void packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
         offset++;
         mask &= (mask - 1);
     }
-    
-    //IsThreatened can attempt to index out of bounds and segfault on invalid king squares.
-    assert(board->kingSquare[WHITE] != 64);
-    assert(board->kingSquare[BLACK] != 64);
 
-    if(isThreatened(board, board->kingSquare[board->turn], board->turn)) board->in_check = 1;
+    //IsThreatened will segfault on the invalid square without this.
+    if(board->kingSquare[WHITE] == 64 || board->kingSquare[BLACK] == 64)
+        return NO_BOARD_CORRUPTED;
+
+    if(isThreatened(board, board->kingSquare[board->turn], board->turn)) 
+        board->in_check = 1;
 
     generateHashCode(board);
+    return BOARD_SAVED;
 }
 
 int readPackedBoard(binpackDetails* details)
@@ -280,14 +282,14 @@ int readPackedBoard(binpackDetails* details)
     rDetails->gameStartPtr = rDetails->current_ptr;
 
     if(rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy) > details->end_ptr)
-        return -1;
+        return NO_BOARD_END_OF_FILE;
         
     memcpy(&rDetails->packedBoard->occupancy, rDetails->current_ptr, sizeof(rDetails->packedBoard->occupancy));
     
     if(rDetails->packedBoard->occupancy)
     {
         if(rDetails->current_ptr + sizeof(*rDetails->packedBoard) > details->end_ptr)
-            return -1;
+            return NO_BOARD_END_OF_FILE;
 
         memcpy((uint8_t*)rDetails->packedBoard + sizeof(rDetails->packedBoard->occupancy), 
                rDetails->current_ptr + sizeof(rDetails->packedBoard->occupancy), 
@@ -308,7 +310,7 @@ int readPackedBoard(binpackDetails* details)
 
         uint64_t total_extension_bytes = sizeof(rDetails->packedBoard->occupancy) + 4 + payload_length;
         
-        if(rDetails->current_ptr + total_extension_bytes + sizeof(Viri_PackedBoard) > details->end_ptr) return -1;
+        if(rDetails->current_ptr + total_extension_bytes + sizeof(Viri_PackedBoard) > details->end_ptr) return NO_BOARD_END_OF_FILE;
 
         rDetails->current_ptr += total_extension_bytes;
         memcpy(rDetails->packedBoard, rDetails->current_ptr, sizeof(Viri_PackedBoard));
@@ -323,11 +325,9 @@ int readPackedBoard(binpackDetails* details)
     else if(rDetails->packedBoard->result == VIRI_BLACK_WIN) rDetails->currentGameWinner = VICTOR_BLACK;
     else rDetails->currentGameWinner = VICTOR_DRAW;
 
-    packedBoardToBoard(rDetails->board, rDetails->packedBoard);
-
     rDetails->gameIndex++;
     rDetails->positionIndex++;
-    return 0;
+    return packedBoardToBoard(rDetails->board, rDetails->packedBoard);
 }
 
 //Truncate the newly opened file if it doesn't end in four zero bytes.
@@ -465,10 +465,11 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                 rDetails->current_ptr = details->start_ptr;
                 rDetails->positionIndex = 0;
                 rDetails->gameIndex = 0;
-                readPackedBoard(details);
+                if(readPackedBoard(details) == NO_BOARD_CORRUPTED)
+                    continue;
             }
             else
-                return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
+                return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : NO_BOARD_END_OF_FILE;
         }
         else
         {
@@ -479,8 +480,11 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
 
             if(pair.raw == 0)
             {
-                if(readPackedBoard(details))
-                    return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : -1;
+                int result = readPackedBoard(details);
+                if(result == NO_BOARD_END_OF_FILE)
+                    return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : NO_BOARD_END_OF_FILE;
+                else if(result == NO_BOARD_CORRUPTED)
+                    continue;
             }
             else
             {
@@ -524,7 +528,7 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                         exit(1);
                     }
                     else
-                        return -2;
+                        return CORRUPTED_POSITION;
                 }
                 rDetails->positionIndex++;
             }
@@ -617,7 +621,7 @@ void binpackPrintInfo(const char* fileName)
     uint64_t recentlyRead = 0;
 
     clock_t readStartTime = clock();
-    while((temp = binpack_next(&details, &b, &s, &r, 0, 0, 0)) != -1)
+    while((temp = binpack_next(&details, &b, &s, &r, 0, 0, 0)) != NO_BOARD_END_OF_FILE)
     {
         skippedCount += temp;
         usedCount++;
@@ -691,9 +695,9 @@ void binpackClean(const char* fileName)
     uint64_t lastPrintPositions = rDetails->positionIndex;
 
     printf("Started cleaning binpack - %s\n", fileName);
-    while((temp = binpack_next(&details, &b, &s, &r, 0, 1, 0)) != -1)
+    while((temp = binpack_next(&details, &b, &s, &r, 0, 1, 0)) != NO_BOARD_END_OF_FILE)
     {
-        if(temp == -2)
+        if(temp == CORRUPTED_POSITION)
             invalidGamePtr = rDetails->gameStartPtr;
         else if(invalidGamePtr && rDetails->gameStartPtr != lastPrintPtr)
         {
