@@ -22,12 +22,12 @@ int getHistoryValue(threadContext* context, int turn, int piece, int to)
 
 void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth)
 {
-    int bonus = historyBonusScale * depth + historyBonusOffset;
-    int penalty = historyPenaltyScale * depth + historyPenaltyOffset;
+    int bonus = clamp(historyBonusScale * depth + historyBonusOffset, -MAX_HISTORY_SCORE, MAX_HISTORY_SCORE);
+    int penalty = -clamp(historyPenaltyScale * depth + historyPenaltyOffset, -MAX_HISTORY_SCORE, MAX_HISTORY_SCORE);
 
-    historyTable[boostedIndex] = _min(historyTable[boostedIndex] + bonus, MAX_HISTORY_SCORE);
+    historyTable[boostedIndex] += bonus - historyTable[boostedIndex] * abs(bonus) / MAX_HISTORY_SCORE;
     for(int i = 0; i < searchedQuietCount; i++)
-        historyTable[searchedQuietIndices[i]] = _max(historyTable[searchedQuietIndices[i]] - penalty, -MAX_HISTORY_SCORE);
+        historyTable[searchedQuietIndices[i]] += penalty - historyTable[searchedQuietIndices[i]] * abs(penalty) / MAX_HISTORY_SCORE;
 }
 
 void updateContinuationHistory(threadContext* context, move currentMove, int ply)
