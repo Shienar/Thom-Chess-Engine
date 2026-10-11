@@ -22,10 +22,32 @@ typedef union move {
 } move;
 
 typedef struct moveIterator {
-    move* moveList;
-    int16_t* moveScores;
+    move moveList[MAX_MOVES];
+    int16_t moveScores[MAX_MOVES];
     uint8_t count;
-    uint8_t visitedCount;
+    
+    int16_t selectedIndex;
+    uint8_t quietIndex;
+    uint8_t badCaptureIndex;
+    uint8_t badCaptureCount;
+
+    uint8_t visitedGood;
+    uint8_t visitedQuiet;
+    uint8_t visitedBad;
+
+    struct bitboard* board;
+
+    uint8_t stage;
+    uint8_t type; 
+
+    move excludedMove;
+    move ttMove;
+    move killer1Move;
+    move killer2Move;
+    move counterMove;
+    move followUpMove;
+
+    struct threadContext* context;
 } moveIterator;
 
 typedef struct tt_entry {

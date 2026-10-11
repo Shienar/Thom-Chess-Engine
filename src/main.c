@@ -456,22 +456,36 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "perft") == 0)
             {
+                //Format: "perft <depth> [--verbose | -v] [--iterator | -iter]"
                 readyUp(&isPathDirty, &isReady, SyzygyPath, context);
 
-                //Not a part of UCI.
-                //Format: "perft <depth>"
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+                int pdepth = 1;
+                int verbose = 0;
+                int useIterator = 0;
+
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                sscanf(str, "%d", &pdepth);
+
+                while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                 {
-                    int pdepth;
-                    sscanf(str, "%d", &pdepth);
-                    clock_t startTime = clock();
-                    uint64_t result = perft(board, pdepth, 0);
-                    clock_t duration = clock() - startTime;
-                    double seconds = ((double) duration / CLOCKS_PER_SEC);
-                    double NPS = result / seconds;
-                    printf("Searched through %" PRId64 " nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-                    fflush(stdout);
+                    if(strcmp(str, "--verbose") == 0 || strcmp(str, "-v") == 0)
+                        verbose = 1;
+                    else if(strcmp(str, "--iterator") == 0 || strcmp(str, "-iter") == 0)
+                        useIterator = 1;
                 }
+
+                clock_t startTime = clock();
+                uint64_t result;
+                if(!useIterator) 
+                    result = perft(board, pdepth, verbose);
+                else
+                    result = iterator_perft(context, pdepth, 0, verbose);
+                clock_t duration = clock() - startTime;
+                double seconds = ((double) duration / CLOCKS_PER_SEC);
+                double NPS = result / seconds;
+                printf("Searched through %" PRId64 " nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
+                fflush(stdout);
                 break;
             }
             else if(strcmp(str, "perftv") == 0)
@@ -481,17 +495,17 @@ int main(int argc, char** argv)
                 //verbose perft
                 //Not a part of UCI.
                 //Format: "perft <depth>"
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    int pdepth;
-                    sscanf(str, "%d", &pdepth);
-                    clock_t startTime = clock();
-                    int result = perft(board, pdepth, 1);
-                    clock_t duration = clock() - startTime;
-                    double seconds = ((double) duration / CLOCKS_PER_SEC);
-                    double NPS = result / seconds;
-                    printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-                }
+                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+                    break;
+                    
+                int pdepth;
+                sscanf(str, "%d", &pdepth);
+                clock_t startTime = clock();
+                int result = perft(board, pdepth, 1);
+                clock_t duration = clock() - startTime;
+                double seconds = ((double) duration / CLOCKS_PER_SEC);
+                double NPS = result / seconds;
+                printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
                 break;
             }
             else if(strcmp(str, "print") == 0)

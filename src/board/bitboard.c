@@ -63,7 +63,7 @@ void getMoveSquareName(int fromSq, int toSq, char* target)
         target[2] = '0';
         target[3] = '0';
         target[4] = '\0';
-    
+        return;
     }
 
     getSquareName(fromSq, target);

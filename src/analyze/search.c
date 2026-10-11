@@ -112,6 +112,35 @@ uint64_t perft(bitboard* board, int depth, int verbose)
     return nodes;
 }
 
+uint64_t iterator_perft(threadContext* context, int depth, int ply, int verbose)
+{
+    if(!depth)
+        return 1;
+    uint64_t nodes = 0;
+
+    bitboard* board = &context->boardStack[ply];
+    bitboard* newBoard = &context->boardStack[ply + 1];
+    moveIterator* iter = create_move_iterator(context, GET_ALL_MOVES, ply, NULL);
+
+    move* currentMove;
+    while((currentMove = iterate_next_move(iter)) != NULL)
+    {
+        if(moveFromStruct(board, newBoard, *currentMove, NULL))
+            continue;
+
+        uint64_t branchNodes = iterator_perft(context, depth - 1, ply + 1, 0);
+        nodes += branchNodes;
+        if(verbose)
+        {
+            char moveName[5] = {'\0'};
+            getMoveSquareName(currentMove->startSquare, currentMove->endSquare, moveName);
+            printf("Move %s: nodes %" PRId64 "\n", moveName, branchNodes);
+        }
+    }
+
+    return nodes;
+}
+
 int evaluate(threadContext* context, int ply)
 {
     RECORD_SEARCH(context->evaluations++;);
@@ -144,7 +173,6 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
         return evaluate(context, ply);
 
     bitboard* nextBoard = &context->boardStack[ply + 1];
-    move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
 
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
@@ -206,7 +234,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
     else if(delta_pruning_nnue_offset + best < alpha)
         return best;
 
-    moveIterator* iter = create_move_iterator(context, curBoard->in_check ? GET_ALL_MOVES : GET_CAPTURES_AND_CHECKS, ply, pvMove, tt_move);
+    moveIterator* iter = create_move_iterator(context, curBoard->in_check ? GET_ALL_MOVES : GET_NOISY_MOVES, ply, tt_move);
 
     int validMovesVisited = 0;
     move bestMove = {0};
@@ -220,7 +248,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
             context->moveStack[ply] = *currentMove;
 
             //SEE pruning
-            if(!nextBoard->in_check && iter->moveScores[iter->visitedCount - 1] < -MAX_HISTORY_SCORE)
+            if(!nextBoard->in_check && iter->moveScores[iter->selectedIndex] < -MAX_HISTORY_SCORE)
                 continue;
 
             int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
@@ -246,7 +274,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
                     break;
             }
         }
-        destroy_move_iterator(iter);
+        free(iter);
     }
 
     if(validMovesVisited > 0)
@@ -279,7 +307,6 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
     depth = _min(depth, MAX_PLY - 1);
 
-    move* pvMove = (curBoard->hashCode == context->pv.hashCodes[ply]) ? &context->pv.line[ply] : NULL;
     move* tt_move = NULL;
     move temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.
 
@@ -481,7 +508,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         depth--;
     }
 
-    moveIterator* iter = create_move_iterator(context, GET_ALL_MOVES, ply, pvMove, tt_move);
+    moveIterator* iter = create_move_iterator(context, GET_ALL_MOVES, ply, tt_move);
     int validMovesVisited = 0;
     int bestScore = -SCORE_WIN;
     if(iter)
@@ -490,7 +517,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
         while((currentMove = iterate_next_move(iter)) != NULL)
         {
-            int moveScore = iter->moveScores[iter->visitedCount - 1];
+            if(currentMove->raw == context->excludedMove[ply].raw)
+                continue;
+
+            int moveScore = iter->moveScores[iter->selectedIndex];
             int next_depth = depth - 1;
 
             int currentPiece = findPieceOnSquare(curBoard, currentMove->startSquare);
@@ -546,7 +576,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
             int isQuietMove = !nextBoard->in_check && !isCapture && !currentMove->promoteTo;
 
-            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && moveScore != KILLER_1_SCORE && moveScore != KILLER_2_SCORE)
+            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && currentMove->raw != iter->killer1Move.raw && currentMove->raw != iter->killer2Move.raw)
                 continue;
 
             //Check extensions
@@ -639,7 +669,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             else if(capturedPiece != EMPTY_PIECE)
                 applyCaptureHistoryPenalty(&context->captureHistoryTable[currentPiece / 2][currentMove->endSquare][capturedPiece / 2], depth);
         }
-        destroy_move_iterator(iter);
+        free(iter);
     }
 
     if(!iter || validMovesVisited == 0)

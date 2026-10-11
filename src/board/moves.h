@@ -5,9 +5,19 @@
 #include "board/magic.h"
 
 #define GET_ALL_MOVES 0
-#define GET_CAPTURES_AND_CHECKS 1 //Direct checks only. Discovered checks would be too expensive to compute.
-#define GET_CAPTURES 2
-#define GET_WINNING_CAPTURES 3
+#define GET_NOISY_MOVES 1 //Captures + Direct Checks + Promotions
+#define GET_QUIET_MOVES 2
+
+#define ITER_STAGE_TT 0
+#define ITER_STAGE_GET_NOISY 1
+#define ITER_STAGE_GOOD_NOISY 2
+#define ITER_STAGE_KILLER_1 3
+#define ITER_STAGE_KILLER_2 4
+#define ITER_STAGE_GET_QUIETS 5
+#define ITER_STAGE_QUIETS 6
+#define ITER_STAGE_BAD_NOISY 7
+#define ITER_STAGE_DONE 8
+#define ITER_STAGE_REQUIRED 9
 
 #define THREAT_TYPE_NONE 0
 #define THREAT_TYPE_PAWN 1
@@ -34,19 +44,13 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 extern int pieceValuesSEE[15];
 
 #define TT_MOVE_SCORE 32000
-#define PV_MOVE_SCORE 31999
-#define CAPTURE_SCORE 17000 //+- min bound(-ish). receives see + +-256 from history 
-#define KILLER_1_SCORE 16399
-#define KILLER_2_SCORE 16398
-#define PROMOTION_SCORE 16385
+#define CAPTURE_SCORE 17000 //+- min bound(-ish). receives see + +-256 from history. Promotions are treated as captures
 #define MAX_HISTORY_SCORE 16384 //+- max bound
-#define COUNTERMOVE_BONUS 6000 //added to history score
-#define FOLLOWUPMOVE_BONUS 5000 //added to history score
-moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove);
+#define COUNTERMOVE_BONUS 3000 //added to history score
+#define FOLLOWUPMOVE_BONUS 2000 //added to history score
+#define EXCLUDED_SCORE INT16_MIN
+moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
-void destroy_move_iterator(moveIterator* iter);
-
-
 
 int isThreatened(bitboard* board, int square, int defendingColor);
 

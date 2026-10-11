@@ -75,7 +75,6 @@ move* getFollowupMove(threadContext* context, int ply)
     return &context->followUpMove[side][piece][to];
 }
 
-
 int getCaptureHistoryOffset(threadContext* context, int piece, int to, int capturedPiece)
 {
     return context->captureHistoryTable[piece / 2][to][capturedPiece / 2] / CAPTURE_HISTORY_SCALE;

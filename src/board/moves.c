@@ -4,7 +4,7 @@
 #include "analyze/history.h"
 #include <string.h>
 
-int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
+int generateMoveList(move* movesList, bitboard* board, int genType)
 {
     int size = 0;
     
@@ -32,10 +32,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     if(ISWHITE(piece))
     {
         mask = WHITE_PAWN_DOUBLEPUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+        if(genType == GET_NOISY_MOVES)
             mask &= kingThreats_Pawn;
-        else if(capturesOnly > GET_CAPTURES_AND_CHECKS)
-            mask = 0;
+        else if(genType == GET_QUIET_MOVES)
+            mask &= ~kingThreats_Pawn;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -44,10 +44,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
         }
 
         mask = WHITE_PAWN_PUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
-            mask &= kingThreats_Pawn;
-        else if(capturesOnly >= GET_CAPTURES) 
-            mask = 0;
+        if(genType == GET_NOISY_MOVES)
+            mask &= (kingThreats_Pawn | board_rank[7]);
+        else if(genType == GET_QUIET_MOVES)
+            mask &= ~(kingThreats_Pawn | board_rank[7]);
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -66,65 +66,66 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
             mask&=(mask - 1);
         }
 
-        
-        mask = WHITE_PAWN_LEFTATTACKS(board);
-        while(mask)
+        if(genType != GET_QUIET_MOVES)
         {
-            int endSquare = __builtin_ctzll(mask);
-            int startSquare = endSquare - 7;
-
-            if(endSquare >= 56)
-            {
-                //Promotion
-                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
-                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
-                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-            }
-            else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-            
-            mask&=(mask - 1);
-        }
-
-        mask = WHITE_PAWN_RIGHTATTACKS(board);
-        while(mask)
-        {
-            int endSquare = __builtin_ctzll(mask);
-            int startSquare = endSquare - 9;
-
-            if(endSquare >= 56)
-            {
-                //Promotion
-                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
-                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
-                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-            }
-            else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-            
-            mask&=(mask - 1);
-        }
-
-        
-        if(board->enPassantSquare != NO_EP_SQUARE)
-        {
-            mask = EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
+            mask = WHITE_PAWN_LEFTATTACKS(board);
             while(mask)
             {
-                int startSquare = __builtin_ctzll(mask);
-                createCompactMove(&movesList[size++], startSquare, board->enPassantSquare, 0);
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare - 7;
+
+                if(endSquare >= 56)
+                {
+                    //Promotion
+                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+                }
+                else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+                
                 mask&=(mask - 1);
             }
-        }
 
+            mask = WHITE_PAWN_RIGHTATTACKS(board);
+            while(mask)
+            {
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare - 9;
+
+                if(endSquare >= 56)
+                {
+                    //Promotion
+                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+                }
+                else createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+                
+                mask&=(mask - 1);
+            }
+
+            
+            if(board->enPassantSquare != NO_EP_SQUARE)
+            {
+                mask = EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
+                while(mask)
+                {
+                    int startSquare = __builtin_ctzll(mask);
+                    createCompactMove(&movesList[size++], startSquare, board->enPassantSquare, 0);
+                    mask&=(mask - 1);
+                }
+            }
+        }
     }
     else
     {
         mask = BLACK_PAWN_DOUBLEPUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+        if(genType == GET_NOISY_MOVES)
             mask &= kingThreats_Pawn;
-        else if(capturesOnly >= GET_CAPTURES) 
-            mask = 0;
+        else if(genType == GET_QUIET_MOVES)
+            mask &= ~kingThreats_Pawn;
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -134,10 +135,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
         }
 
         mask = BLACK_PAWN_PUSH_MASK(board);
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS)
-            mask &= kingThreats_Pawn;
-        else if(capturesOnly >= GET_CAPTURES) 
-            mask = 0;
+        if(genType == GET_NOISY_MOVES)
+            mask &= (kingThreats_Pawn | board_rank[0]);
+        else if(genType == GET_QUIET_MOVES)
+            mask &= ~(kingThreats_Pawn | board_rank[0]);
         while(mask)
         {
             int endSquare = __builtin_ctzll(mask);
@@ -156,61 +157,63 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
             mask&=(mask - 1);
         }
         
-
-        mask = BLACK_PAWN_LEFTATTACKS(board);
-        while(mask)
+        if(genType != GET_QUIET_MOVES)
         {
-            int endSquare = __builtin_ctzll(mask);
-            int startSquare = endSquare + 7;
-
-            if(endSquare <= 7)
-            {
-                //Promotion
-                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
-                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
-                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-            }
-            else
-            {
-                createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-            }
-            
-            mask&=(mask - 1);
-        }
-
-        mask = BLACK_PAWN_RIGHTATTACKS(board);
-        while(mask)
-        {
-            int endSquare = __builtin_ctzll(mask);
-            int startSquare = endSquare + 9;
-
-            if(endSquare <= 7)
-            {
-                //Promotion
-                createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
-                createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
-                createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
-                createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
-            }
-            else
-            {
-                createCompactMove(&movesList[size++], startSquare, endSquare, 0);
-            }
-            
-            mask&=(mask - 1);
-        }
-
-        
-        if(board->enPassantSquare != NO_EP_SQUARE)
-        {
-            uint64_t epMask = singleBitMask(board->enPassantSquare);
-            mask = EN_PASSANT_ATTACKERS_BLACK(epMask, board);
+            mask = BLACK_PAWN_LEFTATTACKS(board);
             while(mask)
             {
-                int startSquare = __builtin_ctzll(mask);
-                createCompactMove(&movesList[size++], startSquare, board->enPassantSquare, 0);
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare + 7;
+
+                if(endSquare <= 7)
+                {
+                    //Promotion
+                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+                }
+                else
+                {
+                    createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+                }
+                
                 mask&=(mask - 1);
+            }
+
+            mask = BLACK_PAWN_RIGHTATTACKS(board);
+            while(mask)
+            {
+                int endSquare = __builtin_ctzll(mask);
+                int startSquare = endSquare + 9;
+
+                if(endSquare <= 7)
+                {
+                    //Promotion
+                    createCompactMove(&movesList[size++], startSquare, endSquare, KNIGHT);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, BISHOP);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, ROOK);
+                    createCompactMove(&movesList[size++], startSquare, endSquare, QUEEN);
+                }
+                else
+                {
+                    createCompactMove(&movesList[size++], startSquare, endSquare, 0);
+                }
+                
+                mask&=(mask - 1);
+            }
+
+            
+            if(board->enPassantSquare != NO_EP_SQUARE)
+            {
+                uint64_t epMask = singleBitMask(board->enPassantSquare);
+                mask = EN_PASSANT_ATTACKERS_BLACK(epMask, board);
+                while(mask)
+                {
+                    int startSquare = __builtin_ctzll(mask);
+                    createCompactMove(&movesList[size++], startSquare, board->enPassantSquare, 0);
+                    mask&=(mask - 1);
+                }
             }
         }
     }
@@ -219,10 +222,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(knights);
         uint64_t mask = knightMoves(allies, startSquare);
-        if(capturesOnly >= GET_CAPTURES) 
-            mask &= enemies;
-        else if(capturesOnly == GET_CAPTURES_AND_CHECKS)
+        if(genType == GET_NOISY_MOVES) 
             mask &= (enemies | kingThreats_Knight);
+        else if(genType == GET_QUIET_MOVES)
+            mask &= ~(enemies | kingThreats_Knight);
         
         while(mask) 
         {
@@ -237,10 +240,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(bishop);
         uint64_t moveMask = bishopMoves(allies, enemies, startSquare);
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+        if(genType == GET_NOISY_MOVES) 
             moveMask &= (enemies | kingThreats_Bishop);
-        else if(capturesOnly >= GET_CAPTURES)
-            moveMask &= enemies;
+        else if(genType == GET_QUIET_MOVES)
+            moveMask &= ~(enemies | kingThreats_Bishop);
 
         while(moveMask) 
         {
@@ -255,10 +258,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(rook);
         uint64_t moveMask = rookMoves(allies, enemies, startSquare); 
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+        if(genType == GET_NOISY_MOVES) 
             moveMask &= (enemies | kingThreats_Rook);
-        else if(capturesOnly >= GET_CAPTURES)
-            moveMask &= enemies;
+        else if(genType == GET_QUIET_MOVES)
+            moveMask &= ~(enemies | kingThreats_Rook);
 
         while(moveMask) 
         {
@@ -273,10 +276,10 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(queen);
         uint64_t moveMask = queenMoves(allies, enemies, startSquare); 
-        if(capturesOnly == GET_CAPTURES_AND_CHECKS) 
+        if(genType == GET_NOISY_MOVES) 
             moveMask &= (enemies | kingThreats_Queen);
-        else if(capturesOnly >= GET_CAPTURES)
-            moveMask &= enemies;
+        else if(genType == GET_QUIET_MOVES)
+            moveMask &= ~(enemies | kingThreats_Queen);
 
         while(moveMask) 
         {
@@ -291,7 +294,11 @@ int generateMoveList(move* movesList, bitboard* board, int capturesOnly)
     {
         int startSquare = __builtin_ctzll(king);
         uint64_t moveMask = kingMoves(board, startSquare, board->turn);
-        if(capturesOnly) moveMask &= enemies;
+        if(genType == GET_NOISY_MOVES) 
+            moveMask &= enemies;
+        else if(genType == GET_QUIET_MOVES)
+            moveMask &= ~enemies;
+
         while(moveMask) 
         {
             int endSquare = __builtin_ctzll(moveMask);
@@ -403,45 +410,11 @@ int staticExchangeEvaluation(bitboard* board, move m)
     return gain[0];
 }
 
-//Only used when move ordering matters (not perft)
-moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* pvMove, move* ttMove)
+void scoreMoves(moveIterator* iter, int startIndex, int count)
 {
-    moveIterator* iter = calloc(1, sizeof(moveIterator));
-    iter->moveList = malloc(MAX_MOVES * sizeof(move));
-
-    bitboard* board = &context->boardStack[ply];
-
-    iter->count = generateMoveList(iter->moveList, board, capturesOnly);
-
-    //Double check that the searched moves are legal.
-    if(ply == 0 && context->searchedMoves[0].raw)
-    {
-        move* correctedMoveList = malloc(MAX_REQUIRED_MOVES * sizeof(move));
-        int insertIndex = 0;
-        for(int i = 0; i < MAX_REQUIRED_MOVES; i++)
-        {
-            if(context->searchedMoves[i].raw)
-            {
-                for(int j = 0; j < iter->count; j++)
-                    if(context->searchedMoves[i].raw == iter->moveList[j].raw)
-                        correctedMoveList[insertIndex++] = context->searchedMoves[i];
-            }
-            else break;
-        }
-
-        iter->count = insertIndex;
-        free(iter->moveList);
-        iter->moveList = correctedMoveList;
-    }
-
-    if(!iter->count) { destroy_move_iterator(iter); return NULL; }
-
-    iter->moveScores = malloc(iter->count * sizeof(int16_t));
-
-    move* counterMove = getCounterMove(context, ply);
-    move* followUpMove = getFollowupMove(context, ply);
-    
-    for(int i = 0; i < iter->count; i++)
+    bitboard* board = iter->board;
+    threadContext* context = iter->context;
+    for(int i = startIndex; i < startIndex + iter->count; i++)
     {
         int currentPiece = findPieceOnSquare(board, iter->moveList[i].startSquare);
         int capturedPiece = findPieceOnSquare(board, iter->moveList[i].endSquare);
@@ -453,106 +426,315 @@ moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int
         }
         int isCapture = capturedPiece != EMPTY_PIECE || isEP;
 
-        if(context->excludedMove[ply].raw && iter->moveList[i].raw == context->excludedMove[ply].raw)
-        {
-            //We're moving this move to the front of the list and setting its score to INT16_MIN, effectively skipping it.
-            if(i > iter->visitedCount)
-            {
-                iter->moveScores[i] = iter->moveScores[iter->visitedCount];
-                iter->moveScores[iter->visitedCount] = INT16_MIN;
-
-                move temp = iter->moveList[iter->visitedCount];
-                iter->moveList[iter->visitedCount] = iter->moveList[i];
-                iter->moveList[i] = temp;
-            }
-            iter->visitedCount++;
-        }
-        else if(ttMove && iter->moveList[i].raw == ttMove->raw)
+        if(iter->moveList[i].raw == iter->excludedMove.raw)
+            iter->moveScores[i] = EXCLUDED_SCORE;
+        else if(iter->moveList[i].raw == iter->ttMove.raw)
             iter->moveScores[i] = TT_MOVE_SCORE;
-        else if(pvMove && iter->moveList[i].raw == pvMove->raw)
-            iter->moveScores[i] = PV_MOVE_SCORE;
-        else if(isCapture)
+        else if(isCapture || iter->moveList[i].promoteTo)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
             int historyBonus = getCaptureHistoryOffset(context, currentPiece, iter->moveList[i].endSquare, capturedPiece);
-            if(seeValue >= 0) iter->moveScores[i] = CAPTURE_SCORE + seeValue + historyBonus;
-            else if(capturesOnly == GET_WINNING_CAPTURES)
-            {
-                if(i > iter->visitedCount)
-                {
-                    iter->moveScores[i] = iter->moveScores[iter->visitedCount];
-                    iter->moveScores[iter->visitedCount] = INT16_MIN;
-
-                    move temp = iter->moveList[iter->visitedCount];
-                    iter->moveList[iter->visitedCount] = iter->moveList[i];
-                    iter->moveList[i] = temp;
-                }
-                iter->visitedCount++;
-            } 
-            else iter->moveScores[i] = -CAPTURE_SCORE + seeValue + historyBonus;
+            iter->moveScores[i] += ((seeValue >= 0) ? CAPTURE_SCORE : -CAPTURE_SCORE) + seeValue + historyBonus;
         }
-        else if(iter->moveList[i].raw == context->killerMoves[ply][0].raw)
-            iter->moveScores[i] = KILLER_1_SCORE;
-        else if(iter->moveList[i].raw == context->killerMoves[ply][1].raw)
-            iter->moveScores[i] = KILLER_2_SCORE;
-        else if(iter->moveList[i].promoteTo)
-            iter->moveScores[i] = PROMOTION_SCORE + iter->moveList[i].promoteTo;
+        else if(iter->moveList[i].raw == iter->killer1Move.raw || iter->moveList[i].raw == iter->killer2Move.raw)
+            iter->moveScores[i] = INT16_MIN;
         else
         {
             iter->moveScores[i] = getHistoryValue(context, board->turn, currentPiece, iter->moveList[i].endSquare);
 
-            if(counterMove && iter->moveList[i].raw == counterMove->raw)
+            if(iter->counterMove.raw && iter->moveList[i].raw == iter->counterMove.raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + COUNTERMOVE_BONUS, MAX_HISTORY_SCORE + 2);
-            else if(followUpMove && iter->moveList[i].raw == followUpMove->raw)
+            else if(iter->followUpMove.raw && iter->moveList[i].raw == iter->followUpMove.raw)
                 iter->moveScores[i] = _min(iter->moveScores[i] + FOLLOWUPMOVE_BONUS, MAX_HISTORY_SCORE + 1);
         }
     }
-    return iter;
 }
 
-//A step of selection sort that returns the next move.
-move* iterate_next_move(moveIterator* iter)
+int16_t selectNextBestMove(moveIterator* iter, uint8_t startIndex, uint8_t* searchedCount, uint8_t maxCount)
 {
-    if(iter->visitedCount >= iter->count) return NULL;
+    if(*searchedCount >= maxCount) 
+        return -1;
 
     int bestIndex = -1;
     int maxScoreRemaining = INT16_MIN;
 
-    //Select highest remaining move from those not chosen yet.
-    for(int j = iter->visitedCount; j < iter->count; j++) 
+    uint8_t shouldSkipMove;
+    move* temp;
+    do
     {
-        if(iter->moveScores[j] > maxScoreRemaining) 
+        shouldSkipMove = 0;
+        bestIndex = -1;
+        maxScoreRemaining = INT16_MIN;
+
+        //Select highest remaining move from those not chosen yet.
+        for(uint8_t j = startIndex + *searchedCount; j < maxCount; j++) 
         {
-            bestIndex = j;
-            maxScoreRemaining = iter->moveScores[j];
+            if(iter->moveScores[j] > maxScoreRemaining) 
+            {
+                bestIndex = j;
+                maxScoreRemaining = iter->moveScores[j];
+            }
         }
-    }
 
-    if(bestIndex == -1) return NULL;
+        if(bestIndex == -1)
+            return -1;
 
-    //Move it to the front of the list where it can be skipped over in subsequent iterations.
-    if(bestIndex > iter->visitedCount)
-    {
-        int tempScore = iter->moveScores[bestIndex];
-        iter->moveScores[bestIndex] = iter->moveScores[iter->visitedCount];
-        iter->moveScores[iter->visitedCount] = tempScore;
+        //Move it to the front of the list where it can be skipped over in subsequent iterations.
+        if(bestIndex > startIndex + *searchedCount)
+        {
+            int16_t tempScore = iter->moveScores[bestIndex];
+            iter->moveScores[bestIndex] = iter->moveScores[startIndex + *searchedCount];
+            iter->moveScores[startIndex + *searchedCount] = tempScore;
 
-        move temp = iter->moveList[iter->visitedCount];
-        iter->moveList[iter->visitedCount] = iter->moveList[bestIndex];
-        iter->moveList[bestIndex] = temp;
-    }
+            move temp = iter->moveList[startIndex + *searchedCount];
+            iter->moveList[startIndex + *searchedCount] = iter->moveList[bestIndex];
+            iter->moveList[bestIndex] = temp;
+        }
+
+        temp = &iter->moveList[startIndex + *searchedCount];
+        if(temp->raw == iter->excludedMove.raw ||
+            temp->raw == iter->ttMove.raw ||
+            temp->raw == iter->killer1Move.raw ||
+            temp->raw == iter->killer2Move.raw )
+        {
+            (*searchedCount)++;
+            shouldSkipMove = 1;
+        }
+    }while(shouldSkipMove);
     
-    return &iter->moveList[iter->visitedCount++];
+    (*searchedCount)++;
+    return startIndex + *searchedCount - 1;
 }
 
-void destroy_move_iterator(moveIterator* iter)
+moveIterator* create_move_iterator(threadContext* context, int genType, int ply, move* ttMove)
 {
-    if(iter)
+    moveIterator* iter = calloc(1, sizeof(moveIterator));
+    iter->type = genType;
+    iter->stage = 0;
+    iter->board = &context->boardStack[ply];
+    iter->context = context;
+
+    if(ply == 0 && context->searchedMoves[0].raw)
     {
-        if(iter->moveList) free(iter->moveList);
-        if(iter->moveScores) free(iter->moveScores);
-        free(iter);
+        memcpy(iter->moveList, context->searchedMoves, MAX_REQUIRED_MOVES * sizeof(move));
+        while(context->searchedMoves[iter->count].raw)
+            iter->count++;
+        scoreMoves(iter, 0, iter->count);
     }
+    else
+    {
+        iter->ttMove.raw = ttMove ? ttMove->raw : 0;
+
+        iter->killer1Move = context->killerMoves[ply][0];
+        iter->killer2Move = context->killerMoves[ply][1];
+
+        move* counterMove  = getCounterMove(context, ply);
+        move* followUpMove = getFollowupMove(context, ply);
+        iter->counterMove.raw  = counterMove  ? counterMove->raw  : 0;
+        iter->followUpMove.raw = followUpMove ? followUpMove->raw : 0;
+
+        iter->excludedMove.raw = context->excludedMove[ply].raw;
+    }
+    return iter;
+}
+
+int isMoveUsable(bitboard* board, move m)
+{
+    uint64_t allies = board->pieces_side[board->turn];
+    uint64_t enemies = board->pieces_side[FLIP_COLOR(board->turn)];
+
+    uint8_t piece = findPieceOnSquare(board, m.startSquare);
+    if(piece == EMPTY_PIECE || COLOR(piece) != board->turn)
+        return 0;
+
+    uint64_t destMask = singleBitMask(m.endSquare);
+
+    switch(PIECE(piece))
+    {
+        case PAWN:
+            //Captures (Including en passant)
+            if((destMask & pawnAttacks[COLOR(piece)][m.startSquare]))
+            {
+                if(m.endSquare == board->enPassantSquare)
+                    return 1;
+                
+                int capturedPiece = findPieceOnSquare(board, m.endSquare);
+                if(capturedPiece == EMPTY_PIECE || COLOR(capturedPiece) == COLOR(piece))
+                    return 0;
+                else
+                    return 1;
+            }
+
+            //Can't use the original global board push mask generations, else moves tt moves like a2->c4 might
+            //get interpreted as valid pawn moves.
+            if(ISWHITE(piece))
+            {
+                //Single pushes
+                uint64_t singlePushMask = (singleBitMask(m.startSquare) << 8)&(~board->pieces_all);
+                if(destMask & singlePushMask)
+                    return 1;
+
+                //Double pushes
+                if(getRow(m.startSquare) == 1 && (destMask & ((singlePushMask << 8)&(~board->pieces_all)) ))
+                    return 1;
+
+                return 0;
+            }
+            else
+            {
+                //Single pushes
+                uint64_t singlePushMask = (singleBitMask(m.startSquare) >> 8)&(~board->pieces_all);
+                if(destMask & singlePushMask)
+                    return 1;
+
+                //Double pushes
+                if(getRow(m.startSquare) == 6 && (destMask & ((singlePushMask >> 8)&(~board->pieces_all)) ))
+                    return 1;
+
+                return 0;
+            }
+            break;
+        case KNIGHT:
+            return (knightMoves(allies, m.startSquare) & destMask) != 0;
+        case BISHOP:
+            return (bishopMoves(allies, enemies, m.startSquare) & destMask) != 0;
+        case ROOK:
+            return (rookMoves(allies, enemies, m.startSquare) & destMask) != 0;
+        case QUEEN:
+            return (queenMoves(allies, enemies, m.startSquare) & destMask) != 0;
+        case KING:
+            return (kingMoves(board, m.startSquare, board->turn) & destMask) != 0;
+        default:
+            __builtin_unreachable();
+            break;
+    }
+
+    return 0;
+}
+
+move* iterate_next_move(moveIterator* iter)
+{
+    move* returnedMove = NULL;
+    
+    switch(iter->stage)
+    {
+        case ITER_STAGE_TT:
+            if(iter->type == GET_QUIET_MOVES)
+                iter->stage = ITER_STAGE_KILLER_1;
+            else
+                iter->stage = ITER_STAGE_GET_NOISY;
+                
+            if(iter->ttMove.raw && isMoveUsable(iter->board, iter->ttMove))
+            {
+                int currentPiece = findPieceOnSquare(iter->board, iter->ttMove.startSquare);
+                int capturedPiece = findPieceOnSquare(iter->board, iter->ttMove.endSquare);
+                int isEP = 0;
+                if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece) && iter->ttMove.endSquare == iter->board->enPassantSquare)
+                {
+                    capturedPiece = FLIP_COLOR(currentPiece);
+                    isEP = 1;
+                }
+                int isCapture = capturedPiece != EMPTY_PIECE || isEP;
+
+                if(iter->type == GET_ALL_MOVES || (iter->type == GET_NOISY_MOVES && isCapture) || (iter->type == GET_QUIET_MOVES && !isCapture))
+                {
+                    returnedMove = &iter->ttMove;
+                    break;
+                }
+            }
+            else if(iter->type == GET_QUIET_MOVES)
+                goto quiet_start;
+        case ITER_STAGE_GET_NOISY:
+            iter->count = generateMoveList(iter->moveList, iter->board, GET_NOISY_MOVES);
+            scoreMoves(iter, 0, iter->count);
+
+            iter->stage = ITER_STAGE_GOOD_NOISY;
+        case ITER_STAGE_GOOD_NOISY:
+            iter->selectedIndex = selectNextBestMove(iter, 0, &iter->visitedGood, iter->count);
+            if(iter->selectedIndex != -1)
+            {
+                if(iter->moveScores[iter->selectedIndex] >= 0)
+                {
+                    returnedMove = &iter->moveList[iter->selectedIndex];
+                    break;
+                }
+                else
+                {
+                    iter->badCaptureIndex = iter->selectedIndex;
+                    iter->badCaptureCount = iter->count;
+                }
+            }
+
+            if(iter->type == GET_NOISY_MOVES)
+            {
+                iter->stage = ITER_STAGE_BAD_NOISY;
+                goto bad_noisy;
+            }
+            else
+                iter->stage = ITER_STAGE_KILLER_1;
+
+        case ITER_STAGE_KILLER_1:
+            quiet_start:
+            iter->stage = ITER_STAGE_KILLER_2;
+            if(iter->killer1Move.raw && iter->killer1Move.raw != iter->ttMove.raw && isMoveUsable(iter->board, iter->killer1Move))
+            {
+                returnedMove = &iter->killer1Move;
+                break;
+            }
+        case ITER_STAGE_KILLER_2:
+            iter->stage = ITER_STAGE_GET_QUIETS;
+            if(iter->killer2Move.raw && iter->killer2Move.raw != iter->ttMove.raw && isMoveUsable(iter->board, iter->killer2Move))
+            {
+                returnedMove = &iter->killer2Move;
+                break;
+            }
+        case ITER_STAGE_GET_QUIETS:
+            iter->quietIndex = iter->count;
+            uint8_t quietCount = generateMoveList(&iter->moveList[iter->quietIndex], iter->board, GET_QUIET_MOVES);
+            iter->count += quietCount;
+            scoreMoves(iter, iter->quietIndex, quietCount);
+
+            iter->stage = ITER_STAGE_QUIETS;
+        case ITER_STAGE_QUIETS:
+            iter->selectedIndex = selectNextBestMove(iter, iter->quietIndex, &iter->visitedQuiet, iter->count);
+            if(iter->selectedIndex != -1)
+            {
+                returnedMove = &iter->moveList[iter->selectedIndex];
+                break;
+            }
+            if(iter->type == GET_QUIET_MOVES)
+            {
+                iter->stage = ITER_STAGE_DONE;
+                break;
+            }
+            else
+                iter->stage = ITER_STAGE_BAD_NOISY;
+        case ITER_STAGE_BAD_NOISY:
+            bad_noisy:
+            iter->selectedIndex = selectNextBestMove(iter, iter->badCaptureIndex, &iter->visitedBad, iter->badCaptureCount);
+            if(iter->selectedIndex != -1)
+            {
+                returnedMove = &iter->moveList[iter->selectedIndex];
+                break;
+            }
+            else
+                iter->stage = ITER_STAGE_DONE;
+        case ITER_STAGE_DONE:
+            break;
+        case ITER_STAGE_REQUIRED:
+            iter->selectedIndex = selectNextBestMove(iter, 0, &iter->visitedGood, iter->count);
+            if(iter->selectedIndex != -1)
+            {
+                returnedMove = &iter->moveList[iter->selectedIndex];
+                break;
+            }
+            else
+                iter->stage = ITER_STAGE_DONE;
+        default:
+            __builtin_unreachable(); 
+            break;
+    }
+    return returnedMove;
 }
 
 int isThreatened(bitboard* board, int square, int defendingColor)

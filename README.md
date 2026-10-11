@@ -61,9 +61,9 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - LogFilePath, default ""
         - Save any debug error messages to a file at this path.
     - UseNNUE, default true
-- perft &lt;depth&gt;
-- perftv &lt;depth&gt;
-    - verbose perft, shows positions per first move.
+- "perft &lt;depth&gt; [--verbose | -v] [--iterator | -iter]"
+    - verbose perft shows positions per first move.
+    - The iterator will perform staged move generation & perform the overhead of assigning scores for each move. It is used to measure perft accuracy instead of being a way to test speed.
 - print
     - prints board
 - eval
