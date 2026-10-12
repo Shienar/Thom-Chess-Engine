@@ -251,11 +251,6 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
             if(!nextBoard->in_check && iter->moveScores[iter->selectedIndex] < -MAX_HISTORY_SCORE)
                 continue;
 
-            int piece = findPieceOnSquare(curBoard, currentMove->startSquare);
-            int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
-            if(capturedPiece == EMPTY_PIECE && ISPAWN(piece) && currentMove->endSquare == curBoard->enPassantSquare)
-                capturedPiece = FLIP_COLOR(piece);
-
             validMovesVisited++;
             tt_prefetch(context->tt, nextBoard->hashCode);
             context->isAccClean[ply + 1] = 0;
@@ -431,8 +426,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     else
         context->worsening[ply] = context->worsening[ply - 2] + 1;
 
-    if(ply < MAX_PLY - 1)
-        context->killerMoves[ply + 1][0].raw = context->killerMoves[ply + 1][1].raw = 0;
+    context->killerMoves[ply + 1][0].raw = context->killerMoves[ply + 1][1].raw = 0;
 
     if(!pvNode && !curBoard->in_check && abs(score) < MIN_MATE_SCORE && !context->excludedMove[ply].raw)
     {
@@ -525,10 +519,16 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
             int currentPiece = findPieceOnSquare(curBoard, currentMove->startSquare);
             int capturedPiece = findPieceOnSquare(curBoard, currentMove->endSquare);
-            if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece) && currentMove->endSquare == curBoard->enPassantSquare)
-                capturedPiece = FLIP_COLOR(currentPiece);
-
-            int isCapture = capturedPiece != EMPTY_PIECE;
+            if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece))
+            {
+                //En passant
+                if(currentMove->endSquare == curBoard->enPassantSquare)
+                    capturedPiece = FLIP_COLOR(currentPiece);
+                //Treat non-capture promotions as pawn captures.
+                //This gives them a capture history to go along with their SEE move ordering.
+                else if(currentMove->promoteTo)
+                    capturedPiece = currentPiece;
+            }
 
             //Singular Extension
             if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 &&
@@ -574,10 +574,11 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             if(moveFromStruct(curBoard, nextBoard, *currentMove, &context->repetitions)) continue;
             context->moveStack[ply] = *currentMove;
 
-            int isQuietMove = !nextBoard->in_check && !isCapture && !currentMove->promoteTo;
+            int isQuietMove = !nextBoard->in_check && capturedPiece == EMPTY_PIECE;
 
             if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && currentMove->raw != iter->killer1Move.raw && currentMove->raw != iter->killer2Move.raw)
                 continue;
+            tt_prefetch(context->tt, nextBoard->hashCode);
 
             //Check extensions
             if(!pvNode && nextBoard->in_check)
@@ -600,7 +601,6 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                     next_depth--;
             }
 
-            tt_prefetch(context->tt, nextBoard->hashCode);
 
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
