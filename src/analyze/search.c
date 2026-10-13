@@ -27,7 +27,7 @@ const int stable_reduction_depth = 5;
 const int reverse_futility_pruning_depth = 4;
 const int futility_pruning_depth = 8;
 const int nullmove_pruning_depth = 3;
-const int tt_reduction_depth = 7;
+const int tt_reduction_depth = 4;
 const int tt_reduction_min_depth_offset = 3;
 const int lmr_depth = 4;
 const int singular_extension_depth = 7;
@@ -409,6 +409,13 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 .evaluation = score
             };
             transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
+
+            //TT Reductions
+            if(depth > tt_reduction_depth)
+            {
+                RECORD_SEARCH(context->tt_reductions++;);
+                depth--;
+            }
         }
     }
 
@@ -490,16 +497,6 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                     return beta;
             }
         }
-    }
-
-    //TT reductions
-    if(!curBoard->in_check && 
-        !context->excludedMove[ply].raw && 
-        depth >= tt_reduction_depth &&
-        (!tt_hit || old_tt_entry.depth + tt_reduction_min_depth_offset < depth))
-    {
-        RECORD_SEARCH(context->tt_reductions++;);
-        depth--;
     }
 
     moveIterator* iter = create_move_iterator(context, GET_ALL_MOVES, ply, tt_move);
@@ -600,7 +597,6 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 else if(moveScore < lowHistoryVal)
                     next_depth--;
             }
-
 
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
