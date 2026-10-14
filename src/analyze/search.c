@@ -353,6 +353,29 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 (old_tt_entry.nodeType == NODE_BOUND_UPPER && old_tt_entry.evaluation <= alpha) ||
                 (old_tt_entry.nodeType == NODE_BOUND_LOWER && old_tt_entry.evaluation >= beta))
                 {
+                    move m = (move)old_tt_entry.bestMove;
+                    if(m.raw)
+                    {
+                        int currentPiece = findPieceOnSquare(curBoard, m.startSquare);
+                        int capturedPiece = findPieceOnSquare(curBoard, m.endSquare);
+                        if(capturedPiece == EMPTY_PIECE && ISPAWN(currentPiece))
+                        {
+                            if(m.endSquare == curBoard->enPassantSquare)
+                                capturedPiece = FLIP_COLOR(currentPiece);
+                            else if(m.promoteTo)
+                                capturedPiece = currentPiece;
+                        }
+                        //Direct checks are noisy, but they are a bit expensive to check here. 
+                        if(!capturedPiece)
+                        {
+                            updateKillerMoves(context, m, ply);
+                            updateHistoryValues((int16_t *)context->historyTable[curBoard->turn],
+                                                ((PIECE(currentPiece) / 2) * 64) + m.endSquare,
+                                                NULL, 0, depth);
+                            updateContinuationHistory(context, m, ply);
+                        }
+                    }
+
                     RECORD_SEARCH(context->tt_cutoffs++;);
                     return old_tt_entry.evaluation;
                 }
@@ -473,6 +496,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         {
             int r = 3 + depth / 4 + depth / 10;
             applyNullMove(curBoard, nextBoard, &context->repetitions);
+            tt_prefetch(context->tt, nextBoard->hashCode);
 
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, 0);
@@ -564,8 +588,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
             int isQuietMove = !nextBoard->in_check && capturedPiece == EMPTY_PIECE;
 
-            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE && currentMove->raw != iter->killer1Move.raw && currentMove->raw != iter->killer2Move.raw)
-                continue;
+            if(isQuietMove && shouldSkipQuiets && !pvNode && abs(bestScore) < MIN_MATE_SCORE &&
+                currentMove->raw != iter->killer1Move.raw && 
+                currentMove->raw != iter->killer2Move.raw)
+                    continue;
             tt_prefetch(context->tt, nextBoard->hashCode);
 
             //Check extensions
