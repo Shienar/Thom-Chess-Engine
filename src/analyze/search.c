@@ -25,11 +25,9 @@ volatile uint8_t isPonder = 0;
 const int min_aspiration_depth = 5;
 const int stable_reduction_depth = 5;
 const int reverse_futility_pruning_depth = 4;
-const int futility_pruning_depth = 8;
+const int futility_pruning_depth = 5;
 const int nullmove_pruning_depth = 3;
 const int tt_reduction_depth = 4;
-const int tt_reduction_min_depth_offset = 3;
-const int lmr_depth = 4;
 const int singular_extension_depth = 7;
 
 //ax^2 + b
@@ -68,11 +66,10 @@ int lmpTable[2][MAX_PLY] = {0};
 
 void initSearchTables()
 {
-    for(int depth = lmr_depth; depth < MAX_PLY; depth++)
+    for(int depth = 4; depth < MAX_PLY; depth++)
     {
         int count = 2.0f + 0.5f * depth * depth;
-
-        for(int moveCount = 0; moveCount < MAX_MOVES; moveCount++)
+        for(int moveCount = 1; moveCount < MAX_MOVES; moveCount++)
             if(moveCount >= count)
                 lmrTable[depth][moveCount] = (int)(lmr_a + log(depth) * log(moveCount) / lmr_b);
     }
@@ -365,14 +362,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         tt_move = &temp;
         score = old_tt_entry.evaluation;
     }
-
-    if(ply >= MAX_PLY - 1)
-        return evaluate(context, ply);
+    
     if(depth <= 0)
         return quiescentSearch(context, alpha, beta, ply, pvNode);
-
-    bitboard* nextBoard = &context->boardStack[ply + 1];
-
+        
     //Syzygy
     if(!pvNode && depth >= syzygyProbeDepth)
     {
@@ -419,19 +412,17 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         }
     }
 
+    if(ply >= MAX_PLY - 1)
+        return score;
+
+    bitboard* nextBoard = &context->boardStack[ply + 1];
+
+
     //Improving/Worsening
     int staticScore = score;
     context->evalHistory[ply] = staticScore;
-
-    if(curBoard->in_check)
-        context->improving[ply] = 0;
-    else
-        context->improving[ply] = (ply >= 2) ? (score >= context->evalHistory[ply - 2]) : 1;
-
-    if(context->improving[ply] || ply < 2)
-        context->worsening[ply] = 0;
-    else
-        context->worsening[ply] = context->worsening[ply - 2] + 1;
+    context->improving[ply] = !curBoard->in_check && (ply < 2 || score >= context->evalHistory[ply - 2]);
+    context->worsening[ply] = (context->improving[ply] || ply < 2) ? curBoard->in_check : context->worsening[ply - 2] + 1;  
 
     context->killerMoves[ply + 1][0].raw = context->killerMoves[ply + 1][1].raw = 0;
 

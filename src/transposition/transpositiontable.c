@@ -105,7 +105,7 @@ void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode
     if(existingEntry.hashCode)
     {
         //Don't overwrite existing with unknown nodes
-        if(entry.nodeType == NODE_BOUND_UNKNOWN)
+        if(entry.nodeType == NODE_BOUND_UNKNOWN && existingEntry.age - tt->age < 5)
             return;
         
         //Replacement rules for same position.
