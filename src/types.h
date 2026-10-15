@@ -50,27 +50,34 @@ typedef struct moveIterator {
     struct threadContext* context;
 } moveIterator;
 
+#define MAX_TT_AGE 127
+#define TT_AGE_MASK 0x7F
 typedef struct tt_entry {
-    uint64_t hashCode;
     union {
         uint64_t data;
         struct {
-            uint16_t age;
-            uint16_t bestMove;
-            int16_t evaluation;
-            uint8_t depth;
-            uint8_t nodeType;
+            uint16_t    hashMSB;
+            int16_t     evaluation;
+            move        bestMove;
+            uint16_t    age         : 7;
+            uint16_t    depth       : 6; // Max Ply == 60 <= 2 ^ 6 - 1 == 63
+            uint16_t    nodeType    : 3;
         };
     };
 } tt_entry;
 
+#define TT_ENTRIES_PER_BUCKET 4
+typedef struct __attribute__((aligned(32))) tt_bucket  {
+    tt_entry entries[TT_ENTRIES_PER_BUCKET];
+} tt_bucket;
+
 typedef struct hashtable_tt {
-    tt_entry* array;
+    tt_bucket* array;
     size_t capacity;
-    uint16_t age;
+    uint16_t age : 7;
 } hashtable_tt;
 
-typedef struct {
+typedef struct repetitionVector {
     uint64_t* hashCodes;
     int capacity;
 } repetitionVector;

@@ -201,9 +201,9 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             continue;
         }
 
-        if(whiteEval > MIN_MATE_SCORE)
+        if(whiteEval >= MIN_MATE_SCORE)
             packedBoard->result = VIRI_WHITE_WIN;
-        else if(whiteEval < -MIN_MATE_SCORE)
+        else if(whiteEval <= -MIN_MATE_SCORE)
             packedBoard->result = VIRI_BLACK_WIN;
 
         consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
@@ -271,8 +271,8 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
                 consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
                 consecutiveDrawScores = (whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
 
-                if(consecutiveHighScores > 5 || whiteEval > MIN_MATE_SCORE) packedBoard->result = VIRI_WHITE_WIN;
-                else if(consecutiveLowScores > 5 || whiteEval < -MIN_MATE_SCORE) packedBoard->result = VIRI_BLACK_WIN;
+                if(consecutiveHighScores > 5 || whiteEval >= MIN_MATE_SCORE) packedBoard->result = VIRI_WHITE_WIN;
+                else if(consecutiveLowScores > 5 || whiteEval <= -MIN_MATE_SCORE) packedBoard->result = VIRI_BLACK_WIN;
                 else if(consecutiveDrawScores > 5) packedBoard->result = VIRI_DRAW;
                 
                 if(packedBoard->result < UINT8_MAX)

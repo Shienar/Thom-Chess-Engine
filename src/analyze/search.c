@@ -192,7 +192,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
                 return entry.evaluation;
             }
 
-        temp.raw = entry.bestMove;
+        temp = entry.bestMove;
         tt_move = &temp;
         best = clamp(entry.evaluation, alpha, beta);
     }
@@ -277,7 +277,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
             .depth = 0,
             .nodeType = (best >= beta) ? NODE_BOUND_LOWER : ((best > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER),
             .evaluation = best,
-            .bestMove = bestMove.raw
+            .bestMove = bestMove
         };
         transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
     }
@@ -339,7 +339,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     };
     uint8_t tt_hit;
     tt_entry old_tt_entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
-    if(tt_hit && context->excludedMove[ply].raw && old_tt_entry.bestMove == context->excludedMove[ply].raw)
+    if(tt_hit && context->excludedMove[ply].raw && old_tt_entry.bestMove.raw == context->excludedMove[ply].raw)
         tt_hit = 0;
 
     if(tt_hit)
@@ -381,7 +381,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 }
         }
 
-        temp.raw = old_tt_entry.bestMove;
+        temp = old_tt_entry.bestMove;
         tt_move = &temp;
         score = old_tt_entry.evaluation;
     }
@@ -702,7 +702,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
     new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ((bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);
     new_tt_entry.evaluation = bestScore;
-    new_tt_entry.bestMove = bestMove.raw;
+    new_tt_entry.bestMove = bestMove;
     transposition_table_set(context->tt, new_tt_entry, curBoard->hashCode, ply);
 
     //Correction History
@@ -917,7 +917,7 @@ void findBestThread(threadContext* mainThread, threadContext* helperThreads, mov
             int curDepth = helperThreads[i].completedDepth;
             int curScore = helperThreads[i].score;
 
-            if(curDepth >= bestDepth || curScore > MIN_MATE_SCORE)
+            if(curDepth >= bestDepth || curScore >= MIN_MATE_SCORE)
             {
                 best = &helperThreads[i];
                 bestDepth = best->completedDepth;
@@ -1144,7 +1144,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
         if(context->countedNodes + iterationNodes[currentDepth -1] > context->hardMaxNodes / threadCount)
             break;
 
-        if(context->startTime && abs(context->score) > MIN_MATE_SCORE)
+        if(context->startTime && abs(context->score) >= MIN_MATE_SCORE)
             context->softEndTime -= 0.5 * (context->softEndTime - curTime);
     }
 

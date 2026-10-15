@@ -7,7 +7,7 @@
 #define ADAM_BETA2 0.999f
 #define ADAM_EPSILON 1e-8f
 
-typedef struct {
+typedef struct evalfp_t {
     double mg;
     double eg;
 } evalfp_t;
@@ -35,7 +35,7 @@ typedef struct tuningEntry {
     int activeTupleCount;
 } tuningEntry;
 
-typedef union {
+typedef union evalParameters_fp {
     struct {
         evalfp_t genericPieceValues[PIECE_TYPE_COUNT];
         evalfp_t rawPieceTables[PIECE_TYPE_COUNT][64];

@@ -38,7 +38,7 @@ typedef int16_t Viri_Score;
 #define CORRUPTED_POSITION -2
 
 #pragma pack(push, 1)
-typedef struct {
+typedef struct Viri_PackedBoard {
     uint64_t occupancy;
     uint8_t pieces[16];
     uint8_t ep : 7;
@@ -49,7 +49,7 @@ typedef struct {
     uint8_t result;
     uint8_t padding;
 } Viri_PackedBoard;
-typedef union {
+typedef union Viri_Move {
     uint16_t raw;
     struct {
         uint16_t startSquare : 6;
@@ -59,7 +59,7 @@ typedef union {
     };
 } Viri_Move;
 
-typedef union {
+typedef union Viri_MoveScorePair {
     uint32_t raw;
     struct {
         Viri_Move move;
@@ -68,7 +68,7 @@ typedef union {
 } Viri_MoveScorePair;
 #pragma pack(pop)
 
-typedef struct {
+typedef struct readerDetails {
     bitboard* board;
     Viri_PackedBoard* packedBoard;
     uint8_t currentGameWinner;
@@ -80,7 +80,7 @@ typedef struct {
     uint64_t gameIndex;
 } readerDetails;
 
-typedef struct {
+typedef struct binpackDetails {
     uint8_t isReader;
     readerDetails* readerInfo;
 
@@ -100,7 +100,7 @@ typedef struct {
 //Avoids some thread contention for writes after each individual game.
 #define MAX_POSITIONS_PER_GAME 100
 #define VIRI_WRITEBUFFER_SIZE 32
-typedef struct {
+typedef struct generatedGameBuffer {
     Viri_PackedBoard packedBoards[VIRI_WRITEBUFFER_SIZE];
     Viri_MoveScorePair pairLists[VIRI_WRITEBUFFER_SIZE][MAX_POSITIONS_PER_GAME];
     int movesThisGame[VIRI_WRITEBUFFER_SIZE];

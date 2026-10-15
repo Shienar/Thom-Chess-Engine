@@ -7,15 +7,17 @@
 hashtable_tt* transpositionTable = NULL;
 uint64_t tt_bytes = 1024 * 1024 * 256;
 
+const uint64_t indexMask = singleBitMask(48) - 1;
+
 hashtable_tt* create_hashTable_tt()
 {
     hashtable_tt* newTable = calloc(1, sizeof(hashtable_tt));
     if(!newTable) 
         return NULL;
 
-    newTable->capacity = tt_bytes / sizeof(tt_entry);
+    newTable->capacity = tt_bytes / sizeof(tt_bucket);
 
-    newTable->array = calloc(newTable->capacity, sizeof(tt_entry));
+    newTable->array = calloc(newTable->capacity, sizeof(tt_bucket));
     if(!newTable->array)
     {
         free(newTable);
@@ -32,21 +34,28 @@ void destroy_hashTable_tt(hashtable_tt* tt)
     free(tt);
 }
 
+//How much older is age1 compared to age2, assuming that age1 is older.
+uint8_t getAgeDifference(uint8_t age1, uint8_t age2)
+{
+    return (age1 - age2) & TT_AGE_MASK;
+}
+
 int getHashFull(hashtable_tt* tt)
 {
     int hits = 0;
-    for(int i = 0; i < 1000; i++)
-        if(tt->array[i].hashCode && tt->age - tt->array[i].age < 2)
-            hits++;
+    for(int b = 0; b < 1000; b++)
+        for(int i = 0; i < TT_ENTRIES_PER_BUCKET; i++)
+            if(tt->array[b].entries[i].data && tt->age == tt->array[b].entries[i].age)
+                hits++;
 
-    return hits;
+    return hits / TT_ENTRIES_PER_BUCKET;
 }
 
 void clear_tt(hashtable_tt* tt)
 {
     if(tt && tt->array) 
     {
-        memset(tt->array, 0, tt->capacity * sizeof(tt_entry));
+        memset(tt->array, 0, tt->capacity * sizeof(tt_bucket));
         tt->age = 0;
     }
 }
@@ -60,30 +69,25 @@ tt_entry transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit
     assert(tt);
     assert(board);
 
-    uint64_t hashCode = board->hashCode;
-    size_t index = hashCode%tt->capacity;
+    uint64_t hashMSB = board->hashCode >> 48;
+    size_t index = (board->hashCode&indexMask)%tt->capacity;
 
-    tt_entry existingEntry = tt->array[index];
+    tt_entry* bucket_entries = tt->array[index].entries;
 
-    if((existingEntry.hashCode ^ existingEntry.data) == hashCode)
+    for(int i = 0; i < TT_ENTRIES_PER_BUCKET && bucket_entries[i].data; i++)
     {
-        *hit = 1;
-        existingEntry.age = tt->age;
-        existingEntry.hashCode = existingEntry.data ^ hashCode;
-        tt->array[index] = existingEntry;
+        if(bucket_entries[i].hashMSB == hashMSB)
+        {
+            *hit = 1;
+            tt->array[index].entries[i].age = tt->age;
 
-        tt_entry hitEntry = {
-            .hashCode = hashCode,
-            .data = existingEntry.data
-        };
+            if(bucket_entries[i].evaluation >= MIN_MATE_SCORE) bucket_entries[i].evaluation -= ply;
+            else if(bucket_entries[i].evaluation <= -MIN_MATE_SCORE) bucket_entries[i].evaluation += ply;
 
-        if(hitEntry.evaluation > MIN_MATE_SCORE) hitEntry.evaluation -= ply;
-        else if(hitEntry.evaluation < -MIN_MATE_SCORE) hitEntry.evaluation += ply;
-
-        return hitEntry;
+            return bucket_entries[i];
+        }
     }
     
-
     *hit = 0;
     return (tt_entry){0};
 }
@@ -91,42 +95,52 @@ tt_entry transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit
 void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode64, int ply)
 {
     assert(tt);
+
     entry.age = tt->age;
-    
-    entry.hashCode = hashCode64;
+    entry.hashMSB = hashCode64 >> 48;
 
-    size_t index = entry.hashCode%tt->capacity;
+    size_t index = (hashCode64&indexMask)%tt->capacity;
 
-    tt_entry existingEntry = {
-        .data = tt->array[index].data,
-        .hashCode = tt->array[index].hashCode
-    };
+    tt_entry* bucket_entries = tt->array[index].entries;
+    tt_entry* existingEntry = bucket_entries;
 
-    if(existingEntry.hashCode)
+    for(int i = 0; i < TT_ENTRIES_PER_BUCKET; i++)
     {
-        //Don't overwrite existing with unknown nodes
-        if(entry.nodeType == NODE_BOUND_UNKNOWN && existingEntry.age - tt->age < 5)
-            return;
-        
-        //Replacement rules for same position.
-        if(entry.hashCode == (existingEntry.hashCode ^ existingEntry.data))
+        //Empty bucket or matching hash code
+        if(!bucket_entries[i].data || bucket_entries[i].hashMSB == entry.hashMSB)
         {
-            if(existingEntry.depth >= entry.depth + 2)
+            existingEntry = &bucket_entries[i];
+            break;
+        }
+        //Existing entry for different position
+        else if(bucket_entries[i].depth - getAgeDifference(tt->age, bucket_entries[i].age) + 2 * (bucket_entries[i].nodeType == NODE_BOUND_EXACT) < 
+                existingEntry->depth - getAgeDifference(tt->age, existingEntry->age) + 2 * (existingEntry->nodeType == NODE_BOUND_EXACT))
+                    existingEntry = &bucket_entries[i];
+    }
+
+    if(existingEntry->data)
+    {
+        //Don't overwrite existing with unknown nodes, unless they are from an older search
+        if(entry.nodeType == NODE_BOUND_UNKNOWN)
+            return;
+
+        //Same position replacement rules
+        if(entry.hashMSB == existingEntry->hashMSB)
+        {
+            if(existingEntry->depth > entry.depth + 2)
             {
-                if(!existingEntry.bestMove)
-                    tt->array[index].bestMove = entry.bestMove;
+                if(!existingEntry->bestMove.raw)
+                    existingEntry->bestMove = entry.bestMove;
                 return;
             }
             
-            if(!entry.bestMove)
-                entry.bestMove = existingEntry.bestMove;
+            if(!entry.bestMove.raw)
+                entry.bestMove = existingEntry->bestMove;
         }
     }
 
-    if(entry.evaluation > MIN_MATE_SCORE) entry.evaluation += ply; 
-    else if(entry.evaluation < -MIN_MATE_SCORE) entry.evaluation -= ply;
 
-    //XOR used in place of checksum for lockless multithreaded access.
-    tt->array[index].hashCode = entry.data ^ entry.hashCode;
-    tt->array[index].data = entry.data;
+    if(entry.evaluation >= MIN_MATE_SCORE) entry.evaluation += ply; 
+    else if(entry.evaluation <= -MIN_MATE_SCORE) entry.evaluation -= ply;
+    existingEntry->data = entry.data;
 }

@@ -38,7 +38,7 @@
     #define UNLOCK_MUTEX(mutex) LeaveCriticalSection(&mutex)
     #define DESTROY_MUTEX(mutex) DeleteCriticalSection(&mutex)
 
-    typedef struct {
+    typedef struct mmap_handle_t {
         HANDLE file_handle;
         HANDLE mapping_handle;
         void* data;
@@ -81,7 +81,7 @@
     #define UNLOCK_MUTEX(mutex) pthread_mutex_unlock(&mutex)
     #define DESTROY_MUTEX(mutex) pthread_mutex_destroy(&mutex)
 
-    typedef struct {
+    typedef struct mmap_handle_t {
         int fd;
         void* data;
         size_t size;

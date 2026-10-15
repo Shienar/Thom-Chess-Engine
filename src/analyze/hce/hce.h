@@ -18,7 +18,7 @@
 #define ROOK_ATTACK_WEIGHT 3
 #define QUEEN_ATTACK_WEIGHT 5
 
-typedef struct {
+typedef struct eval_t {
     int32_t mg;
     int32_t eg;
 } eval_t;
@@ -43,14 +43,14 @@ typedef struct {
         (dest).eg -= (val).eg; \
     } while(0)
 
-typedef struct {
+typedef struct evalContext {
     uint64_t kingZone[2];
     int32_t attackWeight[2];
 } evalContext;
 
 //Externally visible for tuning.
 //Everything is a bonus and everything gets added. Some bonuses happen to be negative.
-typedef union {
+typedef union evalParameters {
     struct {
         eval_t genericPieceValues[PIECE_TYPE_COUNT];
         eval_t rawPieceTables[PIECE_TYPE_COUNT][64];

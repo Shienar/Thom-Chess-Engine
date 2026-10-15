@@ -25,7 +25,7 @@
 #define KERNEL_COUNT 8
 #define MEM_COUNT 36
 #define EVENT_TRACKED_KERNELS (KERNEL_COUNT - 1)
-typedef struct {
+typedef struct hipContext {
     int deviceID;
     hipStream_t queue;
     hipModule_t module;
@@ -46,7 +46,7 @@ typedef struct {
     } kernels;
 } hipContext;
 
-typedef struct {
+typedef struct hipKernelArgs {
     union
     {
         struct
@@ -113,7 +113,7 @@ typedef struct {
 
 } hipKernelArgs;
 
-typedef struct {
+typedef struct hipEvents {
     hipEvent_t readLoss;
 
     union {
