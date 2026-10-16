@@ -1,5 +1,4 @@
-#ifndef GPU_TRAINER
-#define GPU_TRAINER
+#pragma once
 
 #if !defined(__HIP_PLATFORM_AMD__) && !defined(__HIP_PLATFORM_NVIDIA__)
     #define __HIP_PLATFORM_AMD__
@@ -164,4 +163,3 @@ void freeHIP();
 
 void enqueueKernels(int bufferSide);
 void saveGPUWeights();
-#endif

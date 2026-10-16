@@ -1,6 +1,4 @@
-#ifndef ENGINESTRUCTS
-#define ENGINESTRUCTS
-
+#pragma once
 #include "compatibility.h"
 #include <stdint.h>
 #include <limits.h>
@@ -98,7 +96,7 @@ typedef struct bitboard {
     uint64_t pieces_all;
 
     uint16_t halfMoveCount;
-    uint16_t lastChangeIndex;
+    uint16_t pliesFromNull;
 
     uint8_t pieceArr[64];
     uint8_t kingSquare[2];
@@ -242,5 +240,3 @@ typedef struct threadContext {
 
     #endif
 } threadContext;
-
-#endif

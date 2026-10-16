@@ -952,16 +952,15 @@ int movePiece(bitboard *board, move compactMove, repetitionVector* repetitions)
 
     //50 move rule counting
     if(ISPAWN(piece) || capturedPiece != EMPTY_PIECE)
-    {
         board->halfmoveClock = 0;
-        board->lastChangeIndex = board->halfMoveCount;
-    }
-    else board->halfmoveClock++;
+    else 
+    board->halfmoveClock++;
     board->halfMoveCount++;
 
     board->turn ^= 1;
     board->hashCode ^= zobrist_keys[780];
     board->in_check = isThreatened(board, board->kingSquare[board->turn], board->turn) ? 1 : 0;
+    board->pliesFromNull++;
     
     //3-fold
     if(repetitions)
@@ -969,6 +968,8 @@ int movePiece(bitboard *board, move compactMove, repetitionVector* repetitions)
         if(!repetitions->hashCodes)
         {
             repetitions->capacity = 16;
+            while(repetitions->capacity <= board->halfMoveCount)
+                repetitions->capacity *= 2;
             repetitions->hashCodes = calloc(repetitions->capacity, sizeof(uint64_t));
         }
 
@@ -991,6 +992,8 @@ void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repeti
     assert(newBoard);
     memcpy(newBoard, board, sizeof(bitboard));
 
+    board->pliesFromNull = 0;
+
     newBoard->turn = board->turn ^ 1;
     newBoard->hashCode = board->hashCode ^ zobrist_keys[780];
     newBoard->halfMoveCount++;
@@ -1004,6 +1007,7 @@ void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repeti
         repetitions->hashCodes = realloc(repetitions->hashCodes, repetitions->capacity * sizeof(uint64_t));
     }
     repetitions->hashCodes[board->halfMoveCount] = board->hashCode;
+
 
 }
 

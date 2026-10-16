@@ -1,5 +1,4 @@
-#ifndef HANDCRAFTED_EVAL
-#define HANDCRAFTED_EVAL
+#pragma once
 
 #include "board/moves.h"
 #include "board/bitboard.h"
@@ -100,5 +99,3 @@ extern int attackWeight[8];
 void init_HCE_tables();
 int evaluatePhasedScore(bitboard* board, eval_t eval);
 int hce_eval(bitboard* board);
-
-#endif

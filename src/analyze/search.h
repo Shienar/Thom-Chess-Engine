@@ -1,10 +1,10 @@
-#ifndef SEARCH
-#define SEARCH
+#pragma once
 
 #include "types.h"
 #include "transposition/transpositiontable.h"
-#include "analyze/syzygy.h"
+#include "analyze/cuckoo.h"
 #include "analyze/history.h"
+#include "analyze/syzygy.h"
 #include <time.h>
 
 extern uint8_t abortFlag;
@@ -57,5 +57,3 @@ uint64_t iterator_perft(threadContext* context, int depth, int ply, int verbose)
 int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pvNode);
 int principalVariationSearch(threadContext* context, int alpha, int beta, int depth, int ply, PVar* myPV, int pvNode, int cutNode);
 THREAD_RETURN calculateBestMove(THREAD_PARAM param);
-
-#endif

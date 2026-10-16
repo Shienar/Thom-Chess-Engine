@@ -1,5 +1,4 @@
-#ifndef BINPACK
-#define BINPACK
+#pragma once
 
 #include "types.h"
 #include "debug.h"
@@ -123,4 +122,3 @@ void binpack_write(binpackDetails* details, generatedGameBuffer* buffer);
 
 void binpackPrintInfo(const char* fileName);
 void binpackClean(const char* fileName);
-#endif

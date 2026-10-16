@@ -1,6 +1,4 @@
-#ifndef MOVES
-#define MOVES
-
+#pragma once
 #include "types.h"
 #include "board/magic.h"
 
@@ -69,5 +67,3 @@ int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector
 move getStructFromString(bitboard* board, char* str);
 
 void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repetitions);
-
-#endif

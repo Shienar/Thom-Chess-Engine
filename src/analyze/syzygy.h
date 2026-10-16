@@ -1,5 +1,4 @@
-#ifndef SYZYGY
-#define SYZYGY
+#pragma once
 
 #include "types.h"
 #include "board/bitboard.h"
@@ -7,5 +6,3 @@
 
 int getSyzygyResult(bitboard* board);
 void filterSyzygyMoves(bitboard* board, move* requiredMoves);
-
-#endif

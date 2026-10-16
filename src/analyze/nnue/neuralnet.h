@@ -1,5 +1,4 @@
-#ifndef NEURALNETWORK
-#define NEURALNETWORK
+#pragma once
 
 #include <math.h>
 #include <stdint.h>
@@ -21,5 +20,3 @@ extern const int OUTPUT_BUCKET_DIVISOR;
 void initNNUE();
 
 int forwardPropagate(threadContext* context, int ply);
-
-#endif

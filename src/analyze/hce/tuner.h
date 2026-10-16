@@ -1,5 +1,4 @@
-#ifndef TEXEL_TUNER
-#define TEXEL_TUNER
+#pragma once
 
 #include "analyze/hce/hce.h"
 
@@ -80,5 +79,3 @@ typedef union evalParameters_fp {
 //https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf
 //  - much faster algorithm, used here.
 void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t epochs, double max_lr, double min_lr);
-
-#endif

@@ -1,6 +1,4 @@
-#ifndef BITBOARD_H
-
-#define BITBOARD_H
+#pragma once
 
 #include "types.h"
 #include "transposition/hash.h"
@@ -238,4 +236,3 @@ static inline void createCompactMove(move* m, int startSquare, int endSquare, in
 }
 
 int countRepetitions(bitboard* board, repetitionVector* repetitions);
-#endif

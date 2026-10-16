@@ -1,6 +1,4 @@
-#ifndef HASHTABLE
-#define HASHTABLE
-
+#pragma once
 #include "types.h"
 #include <stdint.h>
 
@@ -16,5 +14,3 @@ void initZobristPieceKeys();
 
 uint64_t getEnPassantHash(bitboard* board);
 void generateHashCode(bitboard* board);
-
-#endif

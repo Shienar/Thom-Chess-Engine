@@ -85,9 +85,10 @@ int popLSB(uint64_t *bitboard)
 int countRepetitions(bitboard* board, repetitionVector* repetitions)
 {
     int index = board->halfMoveCount;
+    int minIndex = index - board->halfmoveClock;
     int count = 1;
     uint64_t checkedVal = repetitions->hashCodes[index];
-    for(index = index - 4; index >= board->lastChangeIndex; index -= 2)
+    for(index = index - 4; index >= minIndex; index -= 2)
     {
         if(checkedVal == repetitions->hashCodes[index])
         {
@@ -359,7 +360,6 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
     else board->enPassantSquare = NO_EP_SQUARE;
 
     generateHashCode(board);
-    board->lastChangeIndex = board->halfMoveCount;
 
      //3-fold
     if(repetitions)
@@ -368,14 +368,10 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
             free(repetitions->hashCodes);
 
         repetitions->capacity = 16;
-        repetitions->hashCodes = calloc(repetitions->capacity, sizeof(uint64_t));
-
         while(repetitions->capacity <= board->halfMoveCount)
-        {
             repetitions->capacity *= 2;
-            repetitions->hashCodes = realloc(repetitions->hashCodes, repetitions->capacity * sizeof(uint64_t));
-        }
         
+        repetitions->hashCodes = calloc(repetitions->capacity, sizeof(uint64_t));
         repetitions->hashCodes[board->halfMoveCount] = board->hashCode;
     }
 }

@@ -1,5 +1,4 @@
-#ifndef BOOK
-#define BOOK
+#pragma once
 
 #include "types.h"
 
@@ -21,5 +20,3 @@ extern polyglot_book_entry *entries;
 
 void loadBook();
 move getBookMove(bitboard* board);
-
-#endif

@@ -1,6 +1,4 @@
-#ifndef TRANSPOSITIONTABLE
-#define TRANSPOSITIONTABLE
-
+#pragma once
 #include "transposition/hash.h"
 
 extern uint64_t tt_bytes;
@@ -22,6 +20,3 @@ void tt_prefetch(hashtable_tt* tt, uint64_t hashCode);
 
 tt_entry transposition_table_get(struct bitboard* board, hashtable_tt* tt, uint8_t* hit, int ply);
 void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode64, int ply);
-
-
-#endif

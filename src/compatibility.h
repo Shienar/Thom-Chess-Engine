@@ -1,5 +1,4 @@
-#ifndef COMPATIBILITY
-#define COMPATIBILITY
+#pragma once
 
 #include <inttypes.h>
 
@@ -104,6 +103,4 @@
     #define bigEndian16(x) (x)
     #define bigEndian32(x) (x)
     #define bigEndian64(x) (x)
-#endif
-
 #endif

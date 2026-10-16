@@ -164,6 +164,12 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
         return 0;
     }
 
+    if(alpha < 0 && isUpcomingRepetition(curBoard, context->repetitions, ply))
+    {
+        alpha = 0;
+        if(alpha >= beta)
+            return alpha;
+    }
     if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
     if(ply >= MAX_PLY - 1)
@@ -319,6 +325,12 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     if(pvNode)
         context->seldepth = _max(context->seldepth, ply);
 
+    if(alpha < 0 && isUpcomingRepetition(curBoard, context->repetitions, ply))
+    {
+        alpha = 0;
+        if(alpha >= beta)
+            return alpha;
+    }
     if(isDraw(curBoard, &context->repetitions) == VICTOR_DRAW)
         return (ply & 3) - 1;
 

@@ -668,7 +668,8 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* co
     if(*isReady) return;
 
     *isReady = 1;
-    if(zobrist_piece_keys[0][0] == 0) initZobristPieceKeys();
+    if(zobrist_piece_keys[0][0] == 0) 
+        initZobristPieceKeys();
     
     initSearchTables();
 
@@ -676,10 +677,12 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* co
     if(pawnAttacks[0][0] == 0) initPawnAttacks();
     if(knightAttacks[0] == 0) initKnightMoveTable();
     if(kingAttacks[0] == 0) initKingMoveTable();
+    
+    initCuckooMoveTable();
 
     init_HCE_tables();
 
-    if(!transpositionTable) 
+    if(!transpositionTable)
     {
         transpositionTable = create_hashTable_tt();
         context->tt = transpositionTable;

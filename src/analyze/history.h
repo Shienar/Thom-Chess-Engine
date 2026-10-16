@@ -1,5 +1,4 @@
-#ifndef EVAL_HISTORY
-#define EVAL_HISTORY
+#pragma once
 
 #include "types.h"
 
@@ -27,6 +26,3 @@ void applyCaptureHistoryPenalty(int16_t* dest, int depth);
 
 void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int staticScore);
 int  getCorrectionHistoryOffset(threadContext* context, bitboard* board);
-
-
-#endif

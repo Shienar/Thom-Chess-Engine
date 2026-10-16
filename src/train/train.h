@@ -1,6 +1,4 @@
-#ifndef NEURALNET_TRAIN
-#define NEURALNET_TRAIN
-
+#pragma once
 #include "analyze/nnue/neuralnet.h"
 
 #define LOOKAHEAD_RANGE 10
@@ -39,5 +37,3 @@ void saveQuantizedWeights(nnue_weights* weights, const char* path);
  *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
  */
 void train(int epochs, float min_learningRate, float max_learningRate, const char* binpackFileName, const char* kernelFileName);
-
-#endif

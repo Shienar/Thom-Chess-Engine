@@ -1,6 +1,4 @@
-#ifndef MAGICBOARDS
-#define MAGICBOARDS
-
+#pragma once
 #include "board/bitboard.h"
 
 extern magic bishopMagics[64];
@@ -17,5 +15,3 @@ extern uint64_t kingAttacks[64];
 void initPawnAttacks();
 void initKnightMoveTable();
 void initKingMoveTable();
-
-#endif
