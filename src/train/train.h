@@ -10,8 +10,7 @@ extern uint64_t max_cosine_anneal_timestamp;
 #define ADAM_BETA1 0.9f
 #define ADAM_BETA2 0.999f
 
-//expectedScore = LAMBDA * sigmoid(cp / EVAL_SCALE) + (1 - LAMBDA) * relativeResult;
-#define LAMBDA 0.9f
+#define WDL_BLEND(lambda, cp, relativeResult) (lambda * SIGMOID((float) cp / EVAL_SCALE) + (1 - lambda) * relativeResult)
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 #define MINIBATCH_SIZE 16384

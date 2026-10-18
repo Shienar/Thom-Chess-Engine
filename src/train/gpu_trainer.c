@@ -65,7 +65,8 @@ void* calculateAccumulatorArgs[5];
 void* calculateOutputArgs[5];
 void* calculateDeltaArgs[8];
 void* outputGradientArgs[5];
-void* accumulatorGradientArgs[5];
+void* accumulatorGradientArgs[4];
+void* accumulatorBiasGradientArgs[2];
 void* inputAdamArgs[12];
 void* denseAdamArgs[16];
 
@@ -134,6 +135,7 @@ hipError_t initHIP(const char* compiledKernelPath,
     err = hipModuleGetFunction(&hip_context.kernels.calculateOutput, hip_context.module, "calculateOutput");
     err = hipModuleGetFunction(&hip_context.kernels.calculateDeltas, hip_context.module, "calculateDeltas"); 
     err = hipModuleGetFunction(&hip_context.kernels.calculate_output_gradient, hip_context.module, "calculate_output_gradient");
+    err = hipModuleGetFunction(&hip_context.kernels.calculate_accumulator_bias_gradient, hip_context.module, "calculate_accumulator_bias_gradient");
     err = hipModuleGetFunction(&hip_context.kernels.calculate_accumulator_gradient, hip_context.module, "calculate_accumulator_gradient");
     err = hipModuleGetFunction(&hip_context.kernels.adamw, hip_context.module, "adamW");
     err = hipModuleGetFunction(&hip_context.kernels.inputadamw, hip_context.module, "inputAdamW");
@@ -314,7 +316,9 @@ hipError_t initHIP(const char* compiledKernelPath,
     accumulatorGradientArgs[1] = &hip_mem.mem.accumulator_delta;
     accumulatorGradientArgs[2] = &hip_mem.mem.factorizer_weights_gradient_sum;
     accumulatorGradientArgs[3] = &hip_mem.mem.accumulator_weights_gradient_sum;
-    accumulatorGradientArgs[4] = &hip_mem.mem.accumulator_bias_gradient_sum;
+
+    accumulatorBiasGradientArgs[0] = &hip_mem.mem.accumulator_delta;
+    accumulatorBiasGradientArgs[1] = &hip_mem.mem.accumulator_bias_gradient_sum;
 
     inputAdamArgs[0]  = &hip_mem.mem.accumulator_weights_fast;
     inputAdamArgs[1]  = &hip_mem.mem.accumulator_weights_gradient_sum;
@@ -410,12 +414,12 @@ float print_prof(const char* name, hipEvent_t start, hipEvent_t stop)
     hipError_t err = hipEventElapsedTime(&execute_ms, start, stop);
     if(err == hipSuccess) 
     {
-        printf("%-24s | %0.4f ms\n", name, execute_ms);
+        printf("%-30s | %0.4f ms\n", name, execute_ms);
         return execute_ms;
     }
     else
     {
-        printf("%-24s | Profiling Error\n", name);
+        printf("%-30s | Profiling Error\n", name);
         return 0.0f;
     }
 }
@@ -477,13 +481,19 @@ void enqueueKernels(int bufferSide)
                             32,                                 1, 1,
                             0, hip_context.queue, outputGradientArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculate_output_gradient, hip_context.queue);
-
     
+    ENQUEUE_EVENT(hip_events.startEvents.calculate_accumulator_bias_gradient, hip_context.queue);
+    hipModuleLaunchKernel(hip_context.kernels.calculate_accumulator_bias_gradient,
+                            ACCUMULATOR_NODES_PER_SIDE,     1, 1,
+                            32,                             1, 1,
+                            0, hip_context.queue, accumulatorBiasGradientArgs, NULL);
+    ENQUEUE_EVENT(hip_events.endEvents.calculate_accumulator_bias_gradient, hip_context.queue);
+
     accumulatorGradientArgs[0] = (bufferSide == INPUT_GROUP_A) ? &hip_mem.mem.activeInputs_A: &hip_mem.mem.activeInputs_B;
     ENQUEUE_EVENT(hip_events.startEvents.calculate_accumulator_gradient, hip_context.queue);
     hipModuleLaunchKernel(hip_context.kernels.calculate_accumulator_gradient,
-                            MINIBATCH_SIZE,             1, 1,
-                            64,                         1, 1,
+                            MINIBATCH_SIZE, 1, 1,
+                            64,            1, 1,
                             0, hip_context.queue, accumulatorGradientArgs, NULL);
     ENQUEUE_EVENT(hip_events.endEvents.calculate_accumulator_gradient, hip_context.queue);
 
@@ -540,12 +550,12 @@ void enqueueKernels(int bufferSide)
         sum_time_ms += print_prof("Calculate Output", hip_events.startEvents.calculateOutput, hip_events.endEvents.calculateOutput);
         sum_time_ms += print_prof("Calculate Deltas", hip_events.startEvents.calculateDelta, hip_events.endEvents.calculateDelta);
         sum_time_ms += print_prof("Output Gradient", hip_events.startEvents.calculate_output_gradient, hip_events.endEvents.calculate_output_gradient);
+        sum_time_ms += print_prof("Accumulator Bias Gradient", hip_events.startEvents.calculate_accumulator_bias_gradient, hip_events.endEvents.calculate_accumulator_bias_gradient);
         sum_time_ms += print_prof("Accumulator Gradient", hip_events.startEvents.calculate_accumulator_gradient, hip_events.endEvents.calculate_accumulator_gradient);
         sum_time_ms += print_prof("Output Layer & Biases", hip_events.startEvents.denseUpdate, hip_events.endEvents.denseUpdate);
         sum_time_ms += print_prof("Input Layer", hip_events.startEvents.inputUpdate, hip_events.endEvents.inputUpdate);
-        printf("%-24s | %0.4f ms\n", "Sum", sum_time_ms);
-        printf("%-24s | %0.4f ms\n", "Total", total_time_ms);
-
+        printf("%-30s | %0.4f ms\n", "Sum", sum_time_ms);
+        printf("%-30s | %0.4f ms\n", "Total", total_time_ms);
         printf("-----------------\n");    
     #endif
 }

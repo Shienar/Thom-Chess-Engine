@@ -21,7 +21,7 @@
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
-#define KERNEL_COUNT 8
+#define KERNEL_COUNT 9
 #define MEM_COUNT 36
 #define EVENT_TRACKED_KERNELS (KERNEL_COUNT - 1)
 typedef struct hipContext {
@@ -37,6 +37,7 @@ typedef struct hipContext {
             hipFunction_t calculateDeltas;
             hipFunction_t calculate_output_gradient;
             hipFunction_t calculate_accumulator_gradient;
+            hipFunction_t calculate_accumulator_bias_gradient;
             hipFunction_t adamw;
             hipFunction_t inputadamw;
             hipFunction_t lookahead;
@@ -121,6 +122,7 @@ typedef struct hipEvents {
             hipEvent_t calculateOutput;
             hipEvent_t calculateDelta;
             hipEvent_t calculate_accumulator_gradient;
+            hipEvent_t calculate_accumulator_bias_gradient;
             hipEvent_t calculate_output_gradient;
             hipEvent_t denseUpdate;
             hipEvent_t inputUpdate;
@@ -134,6 +136,7 @@ typedef struct hipEvents {
             hipEvent_t calculateOutput;
             hipEvent_t calculateDelta;
             hipEvent_t calculate_accumulator_gradient;
+            hipEvent_t calculate_accumulator_bias_gradient;
             hipEvent_t calculate_output_gradient;
             hipEvent_t denseUpdate;
             hipEvent_t inputUpdate;

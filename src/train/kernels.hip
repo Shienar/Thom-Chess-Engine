@@ -50,6 +50,21 @@ __device__ inline void fake_quantize4(float4* val, float scale) { return; }
 #endif
 
 /******* Forward Propagation *******/
+
+#define MULT_ADD_WEIGHT_SUM_VECTOR(sum, weight, vectorIndex) \
+        float4 weight; \
+        float4 weight##_acc = accumulator_weights[baseIndex + vectorIndex]; \
+        float4 weight##_fact = factorizer_weights[baseIndex_factorizer + vectorIndex]; \
+        weight.w = weight##_acc.w + weight##_fact.w; \
+        weight.x = weight##_acc.x + weight##_fact.x; \
+        weight.y = weight##_acc.y + weight##_fact.y; \
+        weight.z = weight##_acc.z + weight##_fact.z; \
+        fake_quantize4(&weight, QA); \
+        sum.w += weight.w; \
+        sum.x += weight.x; \
+        sum.y += weight.y; \
+        sum.z += weight.z
+
 //Grid Dimensions:  MINIBATCH_SIZE * 2,         1, 1
 //Block Dimensions: 32, 1, 1
 //float 4 vectors processed per thread = (ACCUMULATOR_NODES_PER_SIDE / 4) / 32 = 2
@@ -90,35 +105,8 @@ extern "C" __global__ void calculateAccumulator(const short* activeInputs, // [M
         baseIndex = currentFeature * VECTOR_ACCUMULATOR_NODES_PER_SIDE;
         baseIndex_factorizer = (currentFeature % BITS_PER_KING_BUCKET) * VECTOR_ACCUMULATOR_NODES_PER_SIDE;
 
-        float4 w1;
-        float4 w1_acc = accumulator_weights[baseIndex + vector1Index];
-        float4 w1_fact = factorizer_weights[baseIndex_factorizer + vector1Index];
-        
-        w1.w = w1_acc.w + w1_fact.w;
-        w1.x = w1_acc.x + w1_fact.x;
-        w1.y = w1_acc.y + w1_fact.y;
-        w1.z = w1_acc.z + w1_fact.z;
-        fake_quantize4(&w1, QA);
-        
-        float4 w2;
-        float4 w2_acc  = accumulator_weights[baseIndex + vector2Index];
-        float4 w2_fact = factorizer_weights[baseIndex_factorizer + vector2Index];
-
-        w2.w = w2_acc.w + w2_fact.w;
-        w2.x = w2_acc.x + w2_fact.x;
-        w2.y = w2_acc.y + w2_fact.y;
-        w2.z = w2_acc.z + w2_fact.z;
-        fake_quantize4(&w2, QA);
-
-        sum1.w += w1.w;
-        sum1.x += w1.x;
-        sum1.y += w1.y;
-        sum1.z += w1.z;
-
-        sum2.w += w2.w;
-        sum2.x += w2.x;
-        sum2.y += w2.y;
-        sum2.z += w2.z;
+        MULT_ADD_WEIGHT_SUM_VECTOR(sum1, w1, vector1Index);
+        MULT_ADD_WEIGHT_SUM_VECTOR(sum2, w2, vector2Index);
     }
 
     baseIndex = groupID * VECTOR_ACCUMULATOR_NODES_PER_SIDE;
@@ -170,8 +158,8 @@ extern "C" __global__ void calculateDeltas(const float* outputNodes, const float
                             float* loss, 
                             char* outputBucket)
 {
-    int batchIndex = blockIdx.x; //0-16383
-    int localID = threadIdx.x; //0-255
+    int batchIndex = blockIdx.x;
+    int localID = threadIdx.x;
 
     int bucket = outputBucket[batchIndex];
 
@@ -247,38 +235,47 @@ extern "C" __global__ void calculate_output_gradient(const float* output_delta,
     }
 }
 
+//Grid Dimensions:  ACCUMULATOR_NODES_PER_SIDE, 1, 1
+//Block Dimensions: 32,                         1, 1
+extern "C" __global__ void calculator_accumulator_bias_gradient(const float* accumulator_delta, float* accumulator_bias_gradient_sum)
+{
+    int nodeIndex = blockIdx.x;
+    int localID = threadIdx.x;
+
+    float sum = 0;
+    for(int batchIndex = localID; batchIndex < MINIBATCH_SIZE; batchIndex+=blockDim.x)
+    {
+        sum += accumulator_delta[batchIndex * ACCUMULATOR_NODES + nodeIndex];
+        sum += accumulator_delta[batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE + nodeIndex];
+    }
+    accumulator_bias_gradient_sum[nodeIndex] = sum;
+}
+
 //Grid Dimensions:  MINIBATCH_SIZE, 1, 1
 //Block Dimensions: 64,             1, 1
 extern "C" __global__ void calculate_accumulator_gradient(const short* activeInputs, //[MINIBATCH_SIZE][2][32]
                                     const float* accumulator_delta, 
                                     float* factorizer_gradient_sum,
-                                    float* accumulator_gradient_sum, 
-                                    float* accumulator_bias_gradient_sum)
+                                    float* accumulator_gradient_sum)
 {
     // This is heavily bottlenecked by atomics, but it is still faster than all the other variants that I've tried.
     // A minibatch can get processed in 11ms. This is 7ms.
     // With a local size of ACCUMULATOR_NODES_PER_SIDE & less deltas per thread, it executes in 9ms.
     int batchIndex = blockIdx.x;
     int localID = threadIdx.x;
+    int sideID = localID & 31;
     int side = localID >= 32;
 
-    // Shared storage for the 64 active features of this board position
     __shared__ short sharedFeatures[64];
     sharedFeatures[localID] = activeInputs[batchIndex * 64 + localID];
     __syncthreads();
 
     int offset = batchIndex * ACCUMULATOR_NODES + ACCUMULATOR_NODES_PER_SIDE * side;
 
-    //2x32 threads handling the deltas for 256 nodes per side.
-    //256 / 32 = 8 deltas per thread.
-    float delta_A = accumulator_delta[offset + localID +   0];
-    float delta_B = accumulator_delta[offset + localID +  32];
-    float delta_C = accumulator_delta[offset + localID +  64];
-    float delta_D = accumulator_delta[offset + localID +  96];
-    float delta_E = accumulator_delta[offset + localID + 128];
-    float delta_F = accumulator_delta[offset + localID + 160];
-    float delta_G = accumulator_delta[offset + localID + 192];
-    float delta_H = accumulator_delta[offset + localID + 224];
+    //32 threads per side handling the deltas for 256 nodes per side.
+    float nodeDeltas[8] = {0};
+    for(int i = 0; i < 8; i++)
+        nodeDeltas[i] = accumulator_delta[offset + sideID + 32 * i];
 
     int f = 0;
     while(f < 32 && sharedFeatures[f] != -1)
@@ -287,29 +284,14 @@ extern "C" __global__ void calculate_accumulator_gradient(const short* activeInp
         int featureOffset = featureIndex * ACCUMULATOR_NODES_PER_SIDE;
         int factorizerFeatureOffset = (featureIndex % BITS_PER_KING_BUCKET) * ACCUMULATOR_NODES_PER_SIDE;
 
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +   0], delta_A);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  32], delta_B);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  64], delta_C);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID +  96], delta_D);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 128], delta_E);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 160], delta_F);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 192], delta_G);
-        atomicAdd(&accumulator_gradient_sum[featureOffset + localID + 224], delta_H);
-
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +   0], delta_A);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  32], delta_B);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  64], delta_C);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID +  96], delta_D);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 128], delta_E);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 160], delta_F);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 192], delta_G);
-        atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + localID + 224], delta_H);
+        for(int i = 0; i < 8; i++)
+        {
+            atomicAdd(&accumulator_gradient_sum[featureOffset + sideID + 32 * i], nodeDeltas[i]);
+            atomicAdd(&factorizer_gradient_sum[factorizerFeatureOffset + sideID + 32 * i], nodeDeltas[i]);
+        }
 
         f++;
     }
-
-    //Bias
-    atomicAdd(&accumulator_bias_gradient_sum[localID], delta_A + delta_B + delta_C + delta_D + delta_E + delta_F + delta_G + delta_H);
 }
 
 /******* Adam Update *******/

@@ -12,6 +12,10 @@ uint64_t max_cosine_anneal_timestamp = 10 * MINIBATCHES_PER_EPOCH;
 float max_lr = 3e-3f;
 float min_lr = 2.5e-5f;
 
+const float max_lambda = 0.9f;
+const float min_lambda = 0.75f;
+float lambda = max_lambda;
+
 //Box-Muller Transform
 double sampleNormalDistribution(double mean, double stddev)
 {
@@ -112,7 +116,7 @@ void prepareMinibatchData(binpackDetails* details, int inputGroup, bitboard* boa
             else relativeResult = 0.0f;
         }
         
-        expectedOutputs[entryNumber] = LAMBDA * (SIGMOID((float) score / EVAL_SCALE)) + (1.0f - LAMBDA) * relativeResult;
+        expectedOutputs[entryNumber] = WDL_BLEND(lambda, score, relativeResult);
 
         uint64_t inputs[2 * PIECE_COUNT] = {0};
 
@@ -195,6 +199,8 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
     binpackDetails trainingBinpack;
     binpack_open(&trainingBinpack, binpackFileName, 1);
     
+    int finalLambdaEpoch = epochs / 5;
+
     int totalEpochs = 0;
     float totalLoss = 0.0; //accumulated value per iteration
     clock_t startTime, endTime;
@@ -203,6 +209,9 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
     bitboard board;
     do{
         totalLoss = 0.0;
+        lambda = (epochs <= finalLambdaEpoch) ?
+                    ((finalLambdaEpoch - totalEpochs) * max_lambda + totalEpochs * min_lambda) / finalLambdaEpoch :
+                    min_lambda;
 
         startTime = clock();
         for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
