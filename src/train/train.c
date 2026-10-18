@@ -12,6 +12,7 @@ uint64_t max_cosine_anneal_timestamp = 10 * MINIBATCHES_PER_EPOCH;
 float max_lr = 3e-3f;
 float min_lr = 2.5e-5f;
 
+const int lambdaWarmupPhase = 5;
 const float max_lambda = 0.9f;
 const float min_lambda = 0.75f;
 float lambda = max_lambda;
@@ -199,7 +200,7 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
     binpackDetails trainingBinpack;
     binpack_open(&trainingBinpack, binpackFileName, 1);
     
-    int finalLambdaEpoch = epochs / 5;
+    int lambdaWarmupPhase = 5;
 
     int totalEpochs = 0;
     float totalLoss = 0.0; //accumulated value per iteration
@@ -209,8 +210,8 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
     bitboard board;
     do{
         totalLoss = 0.0;
-        lambda = (epochs <= finalLambdaEpoch) ?
-                    ((finalLambdaEpoch - totalEpochs) * max_lambda + totalEpochs * min_lambda) / finalLambdaEpoch :
+        lambda = (totalEpochs <= lambdaWarmupPhase) ?
+                    ((lambdaWarmupPhase - totalEpochs) * max_lambda + totalEpochs * min_lambda) / lambdaWarmupPhase :
                     min_lambda;
 
         startTime = clock();
