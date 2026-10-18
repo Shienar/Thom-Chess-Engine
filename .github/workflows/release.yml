@@ -33,8 +33,8 @@ jobs:
       with:
         name: binary-${{ matrix.os }}
         path: |
-          thom-windows-64-avx2.exe
-          thom-linux-64-avx2
+          thom-windows-avx2.exe
+          thom-linux-avx2
         if-no-files-found: error
 
   release:
