@@ -2,7 +2,7 @@
 
 #include "types.h"
 
-#define CAPTURE_HISTORY_SCALE 64
+#define CAPTURE_HISTORY_SCALE 256
 #define MAX_CORRHIST_VAL 256
 #define CORRHIST_GRAIN 32
 

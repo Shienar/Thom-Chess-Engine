@@ -434,7 +434,7 @@ void scoreMoves(moveIterator* iter, int startIndex, int count)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
             int historyBonus = getCaptureHistoryOffset(context, currentPiece, iter->moveList[i].endSquare, capturedPiece);
-            iter->moveScores[i] += ((seeValue >= 0) ? CAPTURE_SCORE : -CAPTURE_SCORE) + seeValue + historyBonus;
+            iter->moveScores[i] = ((seeValue >= 0) ? CAPTURE_SCORE : -CAPTURE_SCORE) + seeValue + historyBonus;
         }
         else if(iter->moveList[i].raw == iter->killer1Move.raw || iter->moveList[i].raw == iter->killer2Move.raw)
             iter->moveScores[i] = INT16_MIN;

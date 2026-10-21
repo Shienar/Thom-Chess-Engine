@@ -34,9 +34,8 @@ const int singular_extension_depth = 7;
 int razoring_a = 122;
 int razoring_b = 63;
 
-int initial_aspiration_margin = 38;
-int maximum_aspiration_margin = 150;
-float aspiration_margin_mult_factor = 2.0f;
+int initial_aspiration_margin = 10;
+float aspiration_margin_mult_factor = 1.5f;
 
 int delta_pruning_offset = 52;
 int delta_pruning_nnue_offset = 998;
@@ -831,25 +830,17 @@ void aspiration_window(threadContext* context, int currentDepth)
             if(score <= alpha)
             {
                 beta = (alpha + beta) / 2;
-
-                aspiration_margin *= aspiration_margin_mult_factor;
                 alpha = score - aspiration_margin;
             }
             else if(score >= beta)
             {
                 alpha = (alpha + beta) / 2;
-
-                aspiration_margin *= aspiration_margin_mult_factor;
                 beta = score + aspiration_margin;
             }
             else
                 break;
-
-            if(aspiration_margin > maximum_aspiration_margin)
-            {
-                alpha = -SCORE_WIN;
-                beta = SCORE_WIN;
-            }
+            
+            aspiration_margin *= aspiration_margin_mult_factor;
         }
     }
 
