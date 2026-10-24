@@ -97,6 +97,7 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - Lizard SCReLU
 - Accumulator Refresh Tables
 - Accumulator Stack
+- Lazy Accumulator Updates
 </details>
 
 <details>

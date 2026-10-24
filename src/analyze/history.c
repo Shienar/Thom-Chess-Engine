@@ -1,10 +1,15 @@
 #include "analyze/history.h"
 #include "board/moves.h"
 
-int historyBonusScale = 290;
-int historyBonusOffset = 137;
-int historyPenaltyScale = 392;
-int historyPenaltyOffset = 131;
+int historyBonusScale = 300;
+int historyBonusOffset = 125;
+int historyPenaltyScale = 400;
+int historyPenaltyOffset = 150;
+
+int captureHistoryBonusScale = 350;
+int captureHistoryBonusOffset = 50;
+int captureHistoryPenaltyScale = 450;
+int captureHistoryPenaltyOffset = 175;
 
 void updateKillerMoves(threadContext* context, move currentMove, int ply)
 {
@@ -82,12 +87,12 @@ int getCaptureHistoryOffset(threadContext* context, int piece, int to, int captu
 
 void applyCaptureHistoryBonus(int16_t* dest, int depth)
 {
-    *dest = _min(*dest + (historyBonusScale * depth + historyBonusOffset), MAX_HISTORY_SCORE);
+    *dest = _min(*dest + (captureHistoryBonusScale * depth + captureHistoryBonusOffset), MAX_HISTORY_SCORE);
 }
 
 void applyCaptureHistoryPenalty(int16_t* dest, int depth)
 {
-    *dest = _min(*dest - (historyPenaltyScale * depth + historyPenaltyOffset), -MAX_HISTORY_SCORE);
+    *dest = _min(*dest - (captureHistoryPenaltyScale * depth + captureHistoryPenaltyOffset), -MAX_HISTORY_SCORE);
 }
 
 void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int staticScore)

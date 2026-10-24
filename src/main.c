@@ -108,12 +108,17 @@ int main(int argc, char** argv)
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
                 printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
                 
-                printf("option name historyBonusScale type spin default %d min 50 max 600\n", historyBonusScale);
-                printf("option name historyBonusOffset type spin default %d min 50 max 600\n", historyBonusOffset);
-                printf("option name historyPenaltyScale type spin default %d min 50 max 600\n", historyPenaltyScale);
-                printf("option name historyPenaltyOffset type spin default %d min 50 max 600\n", historyPenaltyOffset);
+                printf("option name historyBonusScale type spin default %d min 1 max 600\n", historyBonusScale);
+                printf("option name historyBonusOffset type spin default %d min 1 max 600\n", historyBonusOffset);
+                printf("option name historyPenaltyScale type spin default %d min 1 max 600\n", historyPenaltyScale);
+                printf("option name historyPenaltyOffset type spin default %d min 1 max 600\n", historyPenaltyOffset);
+
+                printf("option name captureHistoryBonusScale type spin default %d min 1 max 600\n", captureHistoryBonusScale);
+                printf("option name captureHistoryBonusOffset type spin default %d min 1 max 600\n", captureHistoryBonusOffset);
+                printf("option name captureHistoryPenaltyScale type spin default %d min 1 max 600\n", captureHistoryPenaltyScale);
+                printf("option name captureHistoryPenaltyOffset type spin default %d min 1 max 600\n", captureHistoryPenaltyOffset);
                 
-                printf("option name lowHistoryVal type spin default %d min -500 max 0\n", lowHistoryVal);
+                printf("option name lowHistoryVal type spin default %d min -2500 max 0\n", lowHistoryVal);
 
                 printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
                 printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));

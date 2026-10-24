@@ -600,6 +600,31 @@ void binpack_write(binpackDetails* details, generatedGameBuffer* buffer)
     memset(buffer, 0, sizeof(generatedGameBuffer));
 }
 
+//Returns an input buffer to make "%s" printing simpler on memory management.
+char* commaDelimitNumber(char buffer[32], uint64_t value)
+{
+    char temp[32] = {'\0'};
+    snprintf(temp, 32, "%" PRIu64, value);
+    uint8_t digitCount = strlen(temp);
+    uint8_t commaCount = (digitCount - 1) / 3;
+
+    uint8_t writeIndex = digitCount + commaCount;
+    buffer[writeIndex--] = '\0';
+
+    uint8_t digitIndex = 0;
+    for(int i = digitCount - 1; i >= 0; i--)
+    {
+        buffer[writeIndex--] = temp[i];
+        if(++digitIndex == 3 && i > 0)
+        {
+            buffer[writeIndex--] = ',';
+            digitIndex = 0;
+        }
+    }
+
+    return buffer;
+}
+
 void binpackPrintInfo(const char* fileName)
 {
     binpackDetails details =  {0};
@@ -612,10 +637,13 @@ void binpackPrintInfo(const char* fileName)
     Viri_Score s;
     uint8_t r;
 
+    char buf[32];
+
     printf("Binpack statistics:\n");
-    printf("\tUsable: %" PRIu64" \n", usedCount);
-    printf("\tSkipped: %" PRIu64" \n", skippedCount);
-    printf("\tTotal: %" PRIu64" \n", usedCount + skippedCount);
+    printf("\tTotal Games: %s\n", commaDelimitNumber(buf, details.readerInfo->gameIndex));
+    printf("\tTotal Positions: %s\n", commaDelimitNumber(buf, details.readerInfo->positionIndex));
+    printf("\tUsable Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, usedCount), (100.0 * usedCount) / details.readerInfo->positionIndex);
+    printf("\tSkipped Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, skippedCount), (100.0 * skippedCount) / details.readerInfo->positionIndex);
     fflush(stdout);
 
     uint64_t recentlyRead = 0;
@@ -633,11 +661,12 @@ void binpackPrintInfo(const char* fileName)
         {
             recentlyRead -= 10000000;
 
-            printf("\033[4A");
+            printf("\033[5A");
             printf("\033[2K\rBinpack statistics:\n");
-            printf("\033[2K\r\tTotal: %" PRIu64" \n", details.readerInfo->positionIndex);
-            printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / details.readerInfo->positionIndex);
-            printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / details.readerInfo->positionIndex);
+            printf("\033[2K\r\tTotal Games: %s\n", commaDelimitNumber(buf, details.readerInfo->gameIndex));
+            printf("\033[2K\r\tTotal Positions: %s\n", commaDelimitNumber(buf, details.readerInfo->positionIndex));
+            printf("\033[2K\r\tUsable Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, usedCount), (100.0 * usedCount) / details.readerInfo->positionIndex);
+            printf("\033[2K\r\tSkipped Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, skippedCount), (100.0 * skippedCount) / details.readerInfo->positionIndex);
             fflush(stdout);
         }
     }
@@ -648,14 +677,15 @@ void binpackPrintInfo(const char* fileName)
     uint64_t byteLength = details.mmap_file.size;
     float bytesPerPosition = (float) byteLength / details.readerInfo->positionIndex;
 
-    printf("\033[4A");
+    printf("\033[5A");
     printf("\033[2K\rBinpack statistics:\n");
-    printf("\033[2K\r\tTotal: %" PRIu64" \n", details.readerInfo->positionIndex);
-    printf("\033[2K\r\tUsable: %" PRIu64"  (%.1f%%)\n", usedCount, (100.0 * usedCount) / details.readerInfo->positionIndex);
-    printf("\033[2K\r\tSkipped: %" PRIu64"  (%.1f%%)\n", skippedCount, (100.0 * skippedCount) / details.readerInfo->positionIndex);
+    printf("\033[2K\r\tTotal Games: %s\n", commaDelimitNumber(buf, details.readerInfo->gameIndex));
+    printf("\033[2K\r\tTotal Positions: %s\n", commaDelimitNumber(buf, details.readerInfo->positionIndex));
+    printf("\033[2K\r\tUsable Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, usedCount), (100.0 * usedCount) / details.readerInfo->positionIndex);
+    printf("\033[2K\r\tSkipped Positions: %s (%.1f%%)\n", commaDelimitNumber(buf, skippedCount), (100.0 * skippedCount) / details.readerInfo->positionIndex);
     printf("\033[2K\r\tDuration: %.3f seconds\n", duration);
-    printf("\033[2K\r\tPositions per second: %.4f\n", positionsPerSecond);
-    printf("\033[2K\r\tByte Size: %" PRIu64" \n", (uint64_t)byteLength);
+    printf("\033[2K\r\tPositions per second: %s\n", commaDelimitNumber(buf, (uint64_t) positionsPerSecond));
+    printf("\033[2K\r\tByte Size: %s\n", commaDelimitNumber(buf, byteLength));
     printf("\033[2K\r\tBytes per Position: %.4f\n", bytesPerPosition);
 
     binpack_close(&details);
@@ -694,6 +724,7 @@ void binpackClean(const char* fileName)
 
     uint64_t lastPrintPositions = rDetails->positionIndex;
 
+    char buf[32];
     printf("Started cleaning binpack - %s\n", fileName);
     while((temp = binpack_next(&details, &b, &s, &r, 0, 1, 0)) != NO_BOARD_END_OF_FILE)
     {
@@ -716,7 +747,7 @@ void binpackClean(const char* fileName)
             if((rDetails->positionIndex - lastPrintPositions) > 10000000)
             {
                 lastPrintPositions += 10000000;
-                printf("\r%" PRId64 " positions Processed", rDetails->positionIndex);
+                printf("\r%s positions Processed", commaDelimitNumber(buf, rDetails->positionIndex));
             }
         }
 
@@ -726,8 +757,7 @@ void binpackClean(const char* fileName)
     fwrite(lastPrintPtr, bufferSize, 1, output);
     lastPrintPtr = rDetails->gameStartPtr;
 
-    printf("\r%" PRId64 " positions Processed\n", rDetails->positionIndex);
-
+    printf("\r%s positions Processed\n", commaDelimitNumber(buf, rDetails->positionIndex));
     printf("Finished cleaning binpack - %s\n", fileName);
     fclose(output);
     binpack_close(&details);

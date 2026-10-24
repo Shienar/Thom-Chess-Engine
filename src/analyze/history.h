@@ -11,6 +11,11 @@ extern int historyBonusOffset;
 extern int historyPenaltyScale;
 extern int historyPenaltyOffset;
 
+extern int captureHistoryBonusScale;
+extern int captureHistoryBonusOffset;
+extern int captureHistoryPenaltyScale;
+extern int captureHistoryPenaltyOffset;
+
 void updateKillerMoves(threadContext* context, move currentMove, int ply);
 
 int  getHistoryValue(threadContext* context, int turn, int piece, int to);
