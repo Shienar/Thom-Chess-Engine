@@ -46,8 +46,6 @@ int futility_depth_margin = 51;
 int reverse_futility_margin = 153;
 int reverse_futility_margin_improving = 87;
 
-int lowHistoryVal = -123;
-
 int stable_eval_margin = 15;
 
 //a * log(depth) * log(moveCount) / b
@@ -250,7 +248,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
             context->moveStack[ply] = *currentMove;
 
             //SEE pruning
-            if(!nextBoard->in_check && iter->moveScores[iter->selectedIndex] < -MAX_HISTORY_SCORE)
+            if(!nextBoard->in_check && iter->moveScores[iter->selectedIndex] < 0)
                 continue;
 
             validMovesVisited++;
@@ -613,18 +611,9 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             if(!pvNode && isQuietMove && !context->improving[ply])
                 next_depth -= lmrTable[depth][validMovesVisited];
 
-            //SEE reduction
-            if(!pvNode && moveScore < -MAX_HISTORY_SCORE)
+            //SEE reduction, Low history reduction
+            if(!pvNode && moveScore < 0)
                 next_depth -= 2;
-
-            //History Reduction
-            if(!pvNode && isQuietMove && moveScore < lowHistoryVal)
-            {
-                if(moveScore < 3 * lowHistoryVal)
-                    next_depth -= 2;
-                else if(moveScore < lowHistoryVal)
-                    next_depth--;
-            }
 
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
