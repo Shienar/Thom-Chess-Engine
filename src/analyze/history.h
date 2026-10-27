@@ -2,6 +2,7 @@
 
 #include "types.h"
 
+#define MAX_HISTORY_SCORE 16384
 #define CAPTURE_HISTORY_SCALE 256
 #define MAX_CORRHIST_VAL 256
 #define CORRHIST_GRAIN 32
@@ -21,9 +22,9 @@ void updateKillerMoves(threadContext* context, move currentMove, int ply);
 int  getHistoryValue(threadContext* context, int turn, int piece, int to);
 void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth);
 
-void  updateContinuationHistory(threadContext* context, move currentMove, int ply);
-move* getCounterMove(threadContext* context, int ply);
-move* getFollowupMove(threadContext* context, int ply);
+void updateContinuationHistory(threadContext* context, move currentMove, int ply);
+move getCounterMove(threadContext* context, int ply);
+move getFollowupMove(threadContext* context, int ply);
 
 int  getCaptureHistoryOffset(threadContext* context, int piece, int to, int capturedPiece);
 void applyCaptureHistoryBonus(int16_t* dest, int depth);

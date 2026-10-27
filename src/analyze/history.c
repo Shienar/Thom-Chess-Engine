@@ -45,39 +45,39 @@ void updateContinuationHistory(threadContext* context, move currentMove, int ply
         int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
         int to = context->moveStack[ply - 1].endSquare;
         context->countermove[side][piece][to] = currentMove;
-    }
     
-    //Follow-up Move heuristic
-    if(ply >= 2)
-    {
-        int side = context->boardStack[ply - 2].turn;
-        int from = context->moveStack[ply - 2].startSquare;
-        int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
-        int to = context->moveStack[ply - 2].endSquare;
-        context->followUpMove[side][piece][to] = currentMove;
+        //Follow-up Move heuristic
+        if(ply >= 2)
+        {
+            int side = context->boardStack[ply - 2].turn;
+            int from = context->moveStack[ply - 2].startSquare;
+            int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
+            int to = context->moveStack[ply - 2].endSquare;
+            context->followUpMove[side][piece][to] = currentMove;
+        }
     }
 }
 
-move* getCounterMove(threadContext* context, int ply)
+move getCounterMove(threadContext* context, int ply)
 {
-    if(ply < 1 || !context->moveStack[ply - 1].raw) return NULL;
+    if(ply < 1 || !context->moveStack[ply - 1].raw) return (move){0};
 
     int side = context->boardStack[ply - 1].turn;
     int from = context->moveStack[ply - 1].startSquare;
     int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 1]), from)) / 2;
     int to = context->moveStack[ply - 1].endSquare;
-    return &context->countermove[side][piece][to];
+    return context->countermove[side][piece][to];
 }
 
-move* getFollowupMove(threadContext* context, int ply)
+move getFollowupMove(threadContext* context, int ply)
 {
-    if(ply < 2 || !context->moveStack[ply - 2].raw) return NULL;
+    if(ply < 2 || !context->moveStack[ply - 2].raw) return (move){0};
 
     int side = context->boardStack[ply - 2].turn;
     int from = context->moveStack[ply - 2].startSquare;
     int piece = PIECE(findPieceOnSquare((&context->boardStack[ply - 2]), from)) / 2;
     int to = context->moveStack[ply - 2].endSquare;
-    return &context->followUpMove[side][piece][to];
+    return context->followUpMove[side][piece][to];
 }
 
 int getCaptureHistoryOffset(threadContext* context, int piece, int to, int capturedPiece)
@@ -92,7 +92,7 @@ void applyCaptureHistoryBonus(int16_t* dest, int depth)
 
 void applyCaptureHistoryPenalty(int16_t* dest, int depth)
 {
-    *dest = _min(*dest - (captureHistoryPenaltyScale * depth + captureHistoryPenaltyOffset), -MAX_HISTORY_SCORE);
+    *dest = _max(*dest - (captureHistoryPenaltyScale * depth + captureHistoryPenaltyOffset), -MAX_HISTORY_SCORE);
 }
 
 void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int staticScore)

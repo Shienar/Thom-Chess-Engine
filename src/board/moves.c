@@ -426,18 +426,17 @@ void scoreMoves(moveIterator* iter, int startIndex, int count)
         }
         int isCapture = capturedPiece != EMPTY_PIECE || isEP;
 
-        if(iter->moveList[i].raw == iter->excludedMove.raw)
-            iter->moveScores[i] = EXCLUDED_SCORE;
-        else if(iter->moveList[i].raw == iter->ttMove.raw)
-            iter->moveScores[i] = TT_MOVE_SCORE;
+        if(iter->moveList[i].raw == iter->excludedMove.raw || 
+            iter->moveList[i].raw == iter->ttMove.raw || 
+            iter->moveList[i].raw == iter->killer1Move.raw || 
+            iter->moveList[i].raw == iter->killer2Move.raw)
+                iter->moveScores[i] = INT16_MIN;
         else if(isCapture || iter->moveList[i].promoteTo)
         {
             int seeValue = staticExchangeEvaluation(board, iter->moveList[i]);
             int historyBonus = getCaptureHistoryOffset(context, currentPiece, iter->moveList[i].endSquare, capturedPiece);
-            iter->moveScores[i] = ((seeValue >= 0) ? CAPTURE_SCORE : -CAPTURE_SCORE) + seeValue + historyBonus;
+            iter->moveScores[i] = ((seeValue >= 0) ? 10000 : -10000) + seeValue + historyBonus;
         }
-        else if(iter->moveList[i].raw == iter->killer1Move.raw || iter->moveList[i].raw == iter->killer2Move.raw)
-            iter->moveScores[i] = INT16_MIN;
         else
         {
             iter->moveScores[i] = getHistoryValue(context, board->turn, currentPiece, iter->moveList[i].endSquare);
@@ -458,49 +457,34 @@ int16_t selectNextBestMove(moveIterator* iter, uint8_t startIndex, uint8_t* sear
     int bestIndex = -1;
     int maxScoreRemaining = INT16_MIN;
 
-    uint8_t shouldSkipMove;
-    move* temp;
-    do
+    bestIndex = -1;
+    maxScoreRemaining = INT16_MIN;
+
+    //Select highest remaining move from those not chosen yet.
+    for(uint8_t j = startIndex + *searchedCount; j < maxCount; j++) 
     {
-        shouldSkipMove = 0;
-        bestIndex = -1;
-        maxScoreRemaining = INT16_MIN;
-
-        //Select highest remaining move from those not chosen yet.
-        for(uint8_t j = startIndex + *searchedCount; j < maxCount; j++) 
+        if(iter->moveScores[j] > maxScoreRemaining) 
         {
-            if(iter->moveScores[j] > maxScoreRemaining) 
-            {
-                bestIndex = j;
-                maxScoreRemaining = iter->moveScores[j];
-            }
+            bestIndex = j;
+            maxScoreRemaining = iter->moveScores[j];
         }
+    }
 
-        if(bestIndex == -1)
-            return -1;
+    if(bestIndex == -1)
+        return -1;
 
-        //Move it to the front of the list where it can be skipped over in subsequent iterations.
-        if(bestIndex > startIndex + *searchedCount)
-        {
-            int16_t tempScore = iter->moveScores[bestIndex];
-            iter->moveScores[bestIndex] = iter->moveScores[startIndex + *searchedCount];
-            iter->moveScores[startIndex + *searchedCount] = tempScore;
+    //Move it to the front of the list where it can be skipped over in subsequent iterations.
+    if(bestIndex > startIndex + *searchedCount)
+    {
+        int16_t tempScore = iter->moveScores[bestIndex];
+        iter->moveScores[bestIndex] = iter->moveScores[startIndex + *searchedCount];
+        iter->moveScores[startIndex + *searchedCount] = tempScore;
 
-            move temp = iter->moveList[startIndex + *searchedCount];
-            iter->moveList[startIndex + *searchedCount] = iter->moveList[bestIndex];
-            iter->moveList[bestIndex] = temp;
-        }
+        move temp = iter->moveList[startIndex + *searchedCount];
+        iter->moveList[startIndex + *searchedCount] = iter->moveList[bestIndex];
+        iter->moveList[bestIndex] = temp;
+    }
 
-        temp = &iter->moveList[startIndex + *searchedCount];
-        if(temp->raw == iter->excludedMove.raw ||
-            temp->raw == iter->ttMove.raw ||
-            temp->raw == iter->killer1Move.raw ||
-            temp->raw == iter->killer2Move.raw )
-        {
-            (*searchedCount)++;
-            shouldSkipMove = 1;
-        }
-    }while(shouldSkipMove);
     
     (*searchedCount)++;
     return startIndex + *searchedCount - 1;
@@ -528,10 +512,8 @@ moveIterator* create_move_iterator(threadContext* context, int genType, int ply,
         iter->killer1Move = context->killerMoves[ply][0];
         iter->killer2Move = context->killerMoves[ply][1];
 
-        move* counterMove  = getCounterMove(context, ply);
-        move* followUpMove = getFollowupMove(context, ply);
-        iter->counterMove.raw  = counterMove  ? counterMove->raw  : 0;
-        iter->followUpMove.raw = followUpMove ? followUpMove->raw : 0;
+        iter->counterMove  = getCounterMove(context, ply);
+        iter->followUpMove = getFollowupMove(context, ply);
 
         iter->excludedMove.raw = context->excludedMove[ply].raw;
     }

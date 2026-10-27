@@ -40,13 +40,8 @@
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
 extern int pieceValuesSEE[15];
-
-#define TT_MOVE_SCORE 32000
-#define CAPTURE_SCORE 17000 //+- min bound(-ish), receives SEE + history. Promotions are treated as captures
-#define MAX_HISTORY_SCORE 16384 //+- max bound
-#define COUNTERMOVE_BONUS 3000 //added to history score
-#define FOLLOWUPMOVE_BONUS 2000 //added to history score
-#define EXCLUDED_SCORE INT16_MIN
+#define COUNTERMOVE_BONUS 3000
+#define FOLLOWUPMOVE_BONUS 2000
 moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
 
