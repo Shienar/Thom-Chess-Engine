@@ -143,6 +143,8 @@ int main(int argc, char** argv)
                     THREAD_WAIT(calculateThread);
                 }
                 clear_tt(transpositionTable);
+                memset(context->pawnCorrHist, 0, sizeof(context->pawnCorrHist));
+                memset(context->nonPawnCorrHist, 0, sizeof(context->nonPawnCorrHist));
                 break;
             }
             else if(strcmp(str, "setoption") == 0) 

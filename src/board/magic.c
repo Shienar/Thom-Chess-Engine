@@ -160,34 +160,6 @@ uint64_t naiveRook(int square, uint64_t occupancy, int useOccupancy)
     return potentialMoves;
 }
 
-uint64_t createOccupancy(int index, uint64_t potentialMoveMask)
-{
-    /**
-     * potentialMoveMask has N set bits
-     * there are 2^N indexes, one for each combination of occupancies.
-     * 
-     * Need to create a unique occupancy for each index.
-     * 
-     * If we only look at the set bits in potentialMoveMask, you
-     * can create 2^N numbers using those N set bits.
-     */
-
-    uint64_t occupancy = 0;
-    int count = __builtin_popcountll(potentialMoveMask);
-
-    for(int i = 0; i < count; i++)
-    {
-        int sq = __builtin_ctzll(potentialMoveMask);
-
-        potentialMoveMask &= (potentialMoveMask - 1);
-
-        if(index & (1 << i))
-            occupancy|= singleBitMask(sq);
-    }
-
-    return occupancy;
-}
-
 void initMagics()
 {
     uint64_t* startIndex_rook = &rookTable[0];
@@ -201,14 +173,14 @@ void initMagics()
         int setBits_rook = __builtin_popcountll(rookMask);
         int setBits_bishop = __builtin_popcountll(bishopMask);
 
-        int occ_rook = 1 << setBits_rook;
-        int occ_bishop = 1 << setBits_bishop;
-
         magic* rookMagic = &rookMagics[square];
         magic* bishopMagic = &bishopMagics[square];
 
         rookMagic->attacks = startIndex_rook;
         bishopMagic->attacks = startIndex_bishop;
+
+        startIndex_rook += 1 << setBits_rook;
+        startIndex_bishop += 1 << setBits_bishop;
 
         rookMagic->mask = rookMask;
         bishopMagic->mask = bishopMask;
@@ -219,31 +191,24 @@ void initMagics()
         rookMagic->shiftOffset = 64 - setBits_rook;
         bishopMagic->shiftOffset = 64 - setBits_bishop;
 
-        for(int i = 0; i < occ_rook; i++)
+        //Iterate over submasks of each occupancy
+        uint64_t occ = rookMask;
+        while(occ)
         {
-            uint64_t occ = createOccupancy(i, rookMagic->mask);
-            uint64_t attacks = naiveRook(square, occ, 1);
             int magicIndex = (occ * rookMagic->magic) >> rookMagic->shiftOffset;
-
-            //collision
-            assert(!rookMagic->attacks[magicIndex]);
-
-            rookMagic->attacks[magicIndex] = attacks;
+            rookMagic->attacks[magicIndex] = naiveRook(square, occ, 1);
+            occ = (occ - 1) & rookMask;
         }
-        startIndex_rook += occ_rook;
+        rookMagic->attacks[0] = naiveRook(square, occ, 1); //Zero-occupancy case
         
-        for(int i = 0; i < occ_bishop; i++)
+        occ = bishopMask;
+        while(occ)
         {
-            uint64_t occ = createOccupancy(i, bishopMagic->mask);
-            uint64_t attacks = naiveBishop(square, occ, 1);
             int magicIndex = (occ * bishopMagic->magic) >> bishopMagic->shiftOffset;
-
-            //collision
-            assert(!bishopMagic->attacks[magicIndex]);
-
-            bishopMagic->attacks[magicIndex] = attacks;
+            bishopMagic->attacks[magicIndex] = naiveBishop(square, occ, 1);
+            occ = (occ - 1) & bishopMask;
         }
-        startIndex_bishop += occ_bishop;
+        bishopMagic->attacks[0] = naiveBishop(square, occ, 1); //Zero-occupancy case
     }
 }
 

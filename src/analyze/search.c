@@ -97,9 +97,7 @@ uint64_t perft(bitboard* board, int depth, int verbose)
         nodes += branchNodes;
         if(verbose)
         {
-            char moveName[5] = {'\0'};
-            getMoveSquareName(moveList[index].startSquare, moveList[index].endSquare, moveName);
-            printf("Move %s: nodes %" PRId64 "\n", moveName, branchNodes);
+            printf("Move %s: nodes %" PRId64 "\n", getMoveSquareName(moveList[index]), branchNodes);
         }
     }
 
@@ -125,11 +123,7 @@ uint64_t iterator_perft(threadContext* context, int depth, int ply, int verbose)
         uint64_t branchNodes = iterator_perft(context, depth - 1, ply + 1, 0);
         nodes += branchNodes;
         if(verbose)
-        {
-            char moveName[5] = {'\0'};
-            getMoveSquareName(currentMove->startSquare, currentMove->endSquare, moveName);
-            printf("Move %s: nodes %" PRId64 "\n", moveName, branchNodes);
-        }
+            printf("Move %s: nodes %" PRId64 "\n", getMoveSquareName(*currentMove), branchNodes);
     }
 
     return nodes;
@@ -144,7 +138,7 @@ int evaluate(threadContext* context, int ply)
 int shouldAbortSearch(threadContext* context, int ply)
 {
     return* context->abortFlag ||
-           (ply > 0 && !isPonder &&
+           (context->completedDepth && ply > 0 && !isPonder &&
             (((context->countedNodes & 1023) == 0 && clock() > context->hardEndTime) ||
              context->countedNodes >= (context->hardMaxNodes / threadCount)));
 }
@@ -161,7 +155,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
         return 0;
     }
 
-    if(alpha < 0 && isUpcomingRepetition(curBoard, context->repetitions, ply))
+    if(ply > 0 && alpha < 0 && isUpcomingRepetition(curBoard, context->repetitions, ply))
     {
         alpha = 0;
         if(alpha >= beta)
@@ -725,14 +719,9 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 {
     if(suppressUCIMessages) return;
-    int startSquare = bestMove.startSquare;
-    int endSquare = bestMove.endSquare;
 
-    char moveName[5] = {'\0'};
-    getMoveSquareName(startSquare, endSquare, moveName);
-
-    if(isBookMove) printf("info string Book move played: %s\n", moveName);
-    printf("bestmove %s", moveName);
+    if(isBookMove) printf("info string Book move played: %s\n", getMoveSquareName(bestMove));
+    printf("bestmove %s", getMoveSquareName(bestMove));
 
     if(bestMove.promoteTo)
     {
@@ -757,11 +746,7 @@ void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 
     if(enablePonder && ponderMove.raw)
     {
-        startSquare = ponderMove.startSquare;
-        endSquare = ponderMove.endSquare;
-
-        getMoveSquareName(startSquare, endSquare, moveName);
-        printf(" ponder %s", moveName);
+        printf(" ponder %s", getMoveSquareName(ponderMove));
 
         if(ponderMove.promoteTo)
         {
@@ -949,9 +934,7 @@ void findBestThread(threadContext* mainThread, threadContext* helperThreads, mov
     {
         move m = best->pv.line[i];
         if(!m.raw) break;
-        char moveName[5] = {'\0'};
-        getMoveSquareName(m.startSquare, m.endSquare, moveName);
-        printf(" %s", moveName);
+        printf(" %s", getMoveSquareName(m));
         if(m.promoteTo == QUEEN) printf("q");
         else if(m.promoteTo == ROOK) printf("r");
         else if(m.promoteTo == BISHOP) printf("b");
@@ -1039,6 +1022,9 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             helperThreadContext[i].deepeningSkip = 1 + (i%3);
             helperThreadContext[i].tt = context->tt;
 
+            memcpy(helperThreadContext[i].pawnCorrHist, context->pawnCorrHist, sizeof(context->pawnCorrHist));
+            memcpy(helperThreadContext[i].nonPawnCorrHist, context->nonPawnCorrHist, sizeof(context->nonPawnCorrHist));
+
             if(useNNUE)
             {
                 helperThreadContext[i].accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
@@ -1058,6 +1044,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     int consecutiveTimeReductions = 0;
     for(int currentDepth = 1; currentDepth <= maxDepth; currentDepth++)
     {
+        context->seldepth = 0;
         aspiration_window(context, currentDepth);
 
         //Reduce soft time cap on stable searches.
@@ -1113,9 +1100,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             {
                 move m = context->pv.line[i];
                 if(!m.raw) break;
-                char moveName[5] = {'\0'};
-                getMoveSquareName(m.startSquare, m.endSquare, moveName);
-                printf(" %s", moveName);
+                printf(" %s", getMoveSquareName(m));
                 if(m.promoteTo == QUEEN) printf("q");
                 else if(m.promoteTo == ROOK) printf("r");
                 else if(m.promoteTo == BISHOP) printf("b");

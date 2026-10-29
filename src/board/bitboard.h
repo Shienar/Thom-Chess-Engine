@@ -89,7 +89,7 @@ extern uint64_t bordering_files[COLUMN_COUNT];
 #define getRow(square) (square/8)
 
 void getSquareName(int square, char* target);
-void getMoveSquareName(int fromSq, int toSq, char* target);
+char* getMoveSquareName(move m);
 int getSquareNumber(char* squareName);
 #define findPieceOnSquare(board, square) (board->pieceArr[square])
 

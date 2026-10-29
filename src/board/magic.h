@@ -1,6 +1,9 @@
 #pragma once
 #include "board/bitboard.h"
 
+//Fancy magic bitboards
+//Hashed Index = relevantOccupancy * squareMagic >> squareShiftOffset
+//squareShiftOffset = 64 - popcount(relevantOccupancy)
 extern magic bishopMagics[64];
 extern magic rookMagics[64];
 extern uint64_t rookTable[102400];

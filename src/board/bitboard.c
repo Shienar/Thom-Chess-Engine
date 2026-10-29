@@ -49,25 +49,20 @@ void getSquareName(int square, char* target)
     target[2] = '\0';
 }
 
-void getMoveSquareName(int fromSq, int toSq, char* target)
+char moveName[5] = {'\0'};
+char* nullMoveName = "0000";
+//Intended to be called as an argument for printf("%s", ...). Can only be safely called once per printf statement.
+char* getMoveSquareName(move m)
 {
-    assert(target);
-    assert(fromSq >= 0 && fromSq <= 63);
-    assert(toSq >= 0 && toSq <= 63);
 
     //move 0000
-    if(fromSq == toSq)
-    {
-        target[0] = '0';
-        target[1] = '0';
-        target[2] = '0';
-        target[3] = '0';
-        target[4] = '\0';
-        return;
-    }
+    if(m.startSquare == m.endSquare)
+        return nullMoveName;
 
-    getSquareName(fromSq, target);
-    getSquareName(toSq, &target[2]);
+    getSquareName(m.startSquare, moveName);
+    getSquareName(m.endSquare, &moveName[2]);
+
+    return moveName;
 }
 
 int getSquareNumber(char* squareName)
