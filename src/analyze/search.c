@@ -41,10 +41,10 @@ int delta_pruning_offset = 52;
 int delta_pruning_nnue_offset = 998;
 
 int futility_margin = 70;
-int futility_depth_margin = 51;
+int futility_depth_margin = 50;
 
-int reverse_futility_margin = 153;
-int reverse_futility_margin_improving = 87;
+int reverse_futility_margin = 70;
+int reverse_futility_margin_improving = 50;
 
 int stable_eval_margin = 15;
 
@@ -96,9 +96,7 @@ uint64_t perft(bitboard* board, int depth, int verbose)
         uint64_t branchNodes = perft(&newBoard, depth - 1, 0);
         nodes += branchNodes;
         if(verbose)
-        {
             printf("Move %s: nodes %" PRId64 "\n", getMoveSquareName(moveList[index]), branchNodes);
-        }
     }
 
     return nodes;
