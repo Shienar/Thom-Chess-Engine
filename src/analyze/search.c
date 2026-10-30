@@ -37,16 +37,13 @@ int razoring_b = 63;
 int initial_aspiration_margin = 10;
 float aspiration_margin_mult_factor = 1.5f;
 
-int delta_pruning_offset = 52;
-int delta_pruning_nnue_offset = 998;
-
 int futility_margin = 70;
 int futility_depth_margin = 50;
 
 int reverse_futility_margin = 70;
 int reverse_futility_margin_improving = 50;
 
-int stable_eval_margin = 15;
+int stable_eval_margin = 10;
 
 //a * log(depth) * log(moveCount) / b
 float lmr_a = 0.649f;
@@ -208,23 +205,6 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
     //Stand Pat
     alpha = _max(alpha, best);
     if(alpha >= beta) return best;
-
-    //Delta pruning
-    if(!useNNUE)
-    {
-        int opposingColor = FLIP_COLOR(curBoard->turn);
-        for(int pc = QUEEN; pc >= PAWN; pc -= 2)
-        {
-            if(curBoard->pieces[pc | opposingColor])
-            {
-                if(delta_pruning_offset + evaluatePhasedScore(curBoard, hce_params.genericPieceValues[pc / 2]) + best < alpha)
-                    return best;
-                break;
-            }
-        }
-    }
-    else if(delta_pruning_nnue_offset + best < alpha)
-        return best;
 
     moveIterator* iter = create_move_iterator(context, curBoard->in_check ? GET_ALL_MOVES : GET_NOISY_MOVES, ply, tt_move);
 

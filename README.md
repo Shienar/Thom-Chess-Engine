@@ -156,7 +156,6 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - Late Move Reductions
     - SEE Pruning
 - Quiescent Search
-    - Delta Pruning
     - SEE Pruning
 </details>
 </details>

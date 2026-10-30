@@ -97,10 +97,6 @@ int main(int argc, char** argv)
                 printf("option name razoring_a type spin default %d min 25 max 250\n", razoring_a);
                 printf("option name razoring_b type spin default %d min 25 max 250\n", razoring_b);
 
-                printf("option name delta_pruning_offset type spin default %d min 10 max 200\n", delta_pruning_offset);
-                printf("option name delta_pruning_nnue_offset type spin default %d min 100 max 1500\n", delta_pruning_nnue_offset);
-                
-
                 printf("option name futility_margin type spin default %d min 25 max 250\n", futility_margin);
                 printf("option name futility_depth_margin type spin default %d min 25 max 250\n", futility_depth_margin);
 
@@ -287,8 +283,6 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(historyPenaltyOffset)
                     SET_SPA_OPTION_INT(lowHistoryVal)
                     SET_SPA_OPTION_INT(stable_eval_margin)
-                    SET_SPA_OPTION_INT(delta_pruning_offset)
-                    SET_SPA_OPTION_INT(delta_pruning_nnue_offset)
                     SET_SPA_OPTION_FLOAT(lmr_a)
                     SET_SPA_OPTION_FLOAT(lmr_b)
                     SET_SPA_OPTION_FLOAT(lmp_a)

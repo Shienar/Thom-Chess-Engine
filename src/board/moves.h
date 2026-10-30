@@ -39,7 +39,7 @@
 
 int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
 
-extern int pieceValuesSEE[15];
+extern const int pieceValuesSEE[15];
 #define COUNTERMOVE_BONUS 3000
 #define FOLLOWUPMOVE_BONUS 2000
 moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* ttMove);

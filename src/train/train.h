@@ -13,8 +13,9 @@ extern uint64_t max_cosine_anneal_timestamp;
 #define WDL_BLEND(lambda, cp, relativeResult) (lambda * SIGMOID((float) cp / EVAL_SCALE) + (1 - lambda) * relativeResult)
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
+// 6,104 * 16,384 = 100,007,936
 #define MINIBATCH_SIZE 16384
-#define MINIBATCHES_PER_EPOCH 6104 // 6,104 * 16,384 = 100,007,936
+#define MINIBATCHES_PER_EPOCH 6104
 
 #define FEN_SKIP_TRAINING 3
 

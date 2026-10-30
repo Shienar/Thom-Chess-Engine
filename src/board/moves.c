@@ -350,7 +350,7 @@ int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
     return -1;
 }
 
-int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
+const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
 int staticExchangeEvaluation(bitboard* board, move m)
 {
     int gain[MAX_PLY];

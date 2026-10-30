@@ -30,9 +30,6 @@ extern float aspiration_margin_mult_factor;
 extern int razoring_a;
 extern int razoring_b;
 
-extern int delta_pruning_offset;
-extern int delta_pruning_nnue_offset;
-
 extern int futility_margin;
 extern int futility_depth_margin;
 

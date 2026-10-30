@@ -237,6 +237,5 @@ typedef struct threadContext {
     uint64_t rfp_prunes;
     uint64_t razoring_prunes;
     uint64_t nmp_prunes;
-
     #endif
 } threadContext;
