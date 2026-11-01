@@ -186,7 +186,7 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
 
         temp = entry.bestMove;
         tt_move = &temp;
-        best = clamp(entry.evaluation, alpha, beta);
+        best = entry.evaluation;
     }
     else
     {
@@ -678,7 +678,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     transposition_table_set(context->tt, new_tt_entry, curBoard->hashCode, ply);
 
     //Correction History
-    if((bestScore >= beta || new_tt_entry.nodeType == NODE_BOUND_EXACT) && abs(bestScore) < MIN_MATE_SCORE)
+    if((bestScore >= beta || new_tt_entry.nodeType == NODE_BOUND_EXACT) && abs(bestScore) < MIN_MATE_SCORE && !context->excludedMove[ply].raw)
     {
         updateCorrectionHistory(&context->pawnCorrHist[curBoard->turn][curBoard->pawnHash & (CORRHIST_SIZE - 1)], 
                                     depth, bestScore, staticScore);

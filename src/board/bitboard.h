@@ -119,12 +119,7 @@ static inline void board_clear_square(bitboard* board, int square)
     if(ISPAWN(pieceType))
         board->pawnHash ^= zobrist_piece_keys[pieceType][square];
     else
-    {
-        if(ISWHITE(pieceType))
-            board->nonPawnHash[WHITE]^=zobrist_piece_keys[pieceType][square];
-        else
-            board->nonPawnHash[BLACK]^=zobrist_piece_keys[pieceType][square];
-    }
+        board->nonPawnHash[COLOR(pieceType)] ^= zobrist_piece_keys[pieceType][square];
 }
 
 //Assumes the target square is empty.
@@ -139,15 +134,11 @@ static inline void board_set(bitboard* board, int square, int piece)
     board->pieces_all |= singleBitMask(square);
     board->pieceArr[square] = piece;
     board->hashCode ^= zobrist_piece_keys[piece][square];
+
     if(ISPAWN(piece))
         board->pawnHash ^= zobrist_piece_keys[piece][square];
     else
-    {
-        if(ISWHITE(piece))
-            board->nonPawnHash[WHITE]^=zobrist_piece_keys[piece][square];
-        else
-            board->nonPawnHash[BLACK]^=zobrist_piece_keys[piece][square];
-    }
+        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][square];
 }
 
 //Allows for capture.
@@ -161,12 +152,7 @@ static inline void board_move_piece(bitboard* board, int from, int to)
     if(ISPAWN(piece))
         board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     else
-    {
-        if(ISWHITE(piece))
-            board->nonPawnHash[WHITE] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-        else
-            board->nonPawnHash[BLACK] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    }
+        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
     uint64_t mask = singleBitMask(from) | singleBitMask(to);
     board->pieces[piece] ^= mask;
@@ -181,12 +167,8 @@ static inline void board_move_piece(bitboard* board, int from, int to)
         if(ISPAWN(targetPiece))
             board->pawnHash ^= zobrist_piece_keys[targetPiece][to];
         else
-        {
-            if(ISWHITE(targetPiece))
-                board->nonPawnHash[WHITE]^=zobrist_piece_keys[targetPiece][to];
-            else
-                board->nonPawnHash[BLACK]^=zobrist_piece_keys[targetPiece][to];
-        }
+            board->nonPawnHash[COLOR(targetPiece)]^=zobrist_piece_keys[targetPiece][to];
+
         board->pieces_side[COLOR(targetPiece)] &= ~singleBitMask(to);
         board->pieces[targetPiece] &= ~singleBitMask(to);
     }   
@@ -205,12 +187,7 @@ static inline void board_move_piece_quietly(bitboard* board, int from, int to)
     if(ISPAWN(piece))
         board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     else
-    {
-        if(ISWHITE(piece))
-            board->nonPawnHash[WHITE] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-        else
-            board->nonPawnHash[BLACK] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    }
+        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
     
     uint64_t mask = singleBitMask(from) | singleBitMask(to);
