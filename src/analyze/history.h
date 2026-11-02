@@ -3,9 +3,9 @@
 #include "types.h"
 
 #define MAX_HISTORY_SCORE 16384
-#define CAPTURE_HISTORY_SCALE 256
+#define CAPTURE_HISTORY_SCALE 128
 #define MAX_CORRHIST_VAL 256
-#define CORRHIST_GRAIN 32
+#define CORRHIST_SCALE 32
 
 extern int historyBonusScale;
 extern int historyBonusOffset;

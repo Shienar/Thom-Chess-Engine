@@ -106,5 +106,5 @@ int getCorrectionHistoryOffset(threadContext* context, bitboard* board)
     correction += context->pawnCorrHist[board->turn][board->pawnHash & (CORRHIST_SIZE - 1)];
     correction += context->nonPawnCorrHist[WHITE][board->turn][board->nonPawnHash[WHITE] & (CORRHIST_SIZE - 1)];
     correction += context->nonPawnCorrHist[BLACK][board->turn][board->nonPawnHash[BLACK] & (CORRHIST_SIZE - 1)];
-    return correction / CORRHIST_GRAIN;
+    return correction / CORRHIST_SCALE;
 }
