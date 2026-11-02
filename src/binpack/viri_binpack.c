@@ -496,7 +496,7 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                 };
                 
                 if(pair.move.moveType == VIRI_MOVE_TYPE_PROMOTIONS)
-                    m.promoteTo = promoteMappingsToViri[pair.move.promotePiece];
+                    m.promoteTo = promoteMappingsFromViri[pair.move.promotePiece];
 
                 int toPc = findPieceOnSquare(rDetails->board, m.endSquare);
                 int fromPc = findPieceOnSquare(rDetails->board, m.startSquare);

@@ -4,6 +4,27 @@
 #include "analyze/history.h"
 #include <string.h>
 
+// All "" end up pointing to the same address. 
+//[0] amd [PIECE] indexes are the only ones that expect usage.
+char* promoteSymbols[16] = {
+    [0] = "",
+    [1] = "",
+    [KNIGHT] = "n",
+    [3] = "",
+    [BISHOP] = "b",
+    [5] = "",
+    [ROOK]   = "r",
+    [7] = "",
+    [QUEEN]  = "q",
+    [9] = "",
+    [10] = "",
+    [11] = "",
+    [12] = "",
+    [13] = "",
+    [14] = "",
+    [15] = "",
+};
+
 int generateMoveList(move* movesList, bitboard* board, int genType)
 {
     int size = 0;

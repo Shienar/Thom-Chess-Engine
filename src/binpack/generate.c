@@ -153,7 +153,7 @@ THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
             for(int i = 0; i < 8; i++)
             {
                 move moveList[MAX_MOVES] = {0};
-                int count = generateMoveList(moveList, board, 0);
+                int count = generateMoveList(moveList, board, GET_ALL_MOVES);
                 if(!count)
                     goto newgame;
                 int index = rng_xorshift32(&seed) % count;

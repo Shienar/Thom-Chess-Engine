@@ -43,7 +43,7 @@ move getBookMove(bitboard* board)
              *  9,10,11             from row
              *  12,13,14            promotion piece
              * 
-             * Promotion: 1 less than my enums.
+             * Promotion:
              *  - 1 = Knight
              *  - 2 = Bishop
              *  - 3 = Rook
@@ -53,7 +53,7 @@ move getBookMove(bitboard* board)
             
             int endSquare = (moveBits&0x7) + 8*((moveBits&0x38)>>3);
             int startSquare = ((moveBits&0x1C0)>>6) + 8*((moveBits&0xE00)>>9);
-            int promoteTo = ((moveBits&0x7000)>>12) + 1;
+            int promoteTo = ((moveBits&0x7000)>>12) / 2; 
             
             move* tempMove = &potentialMoves[moveCount];
             //moveWeights[moveCount] = bigEndian16(entry->weight);

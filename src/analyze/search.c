@@ -83,7 +83,7 @@ uint64_t perft(bitboard* board, int depth, int verbose)
     uint64_t nodes = 0;
 
     move moveList[MAX_MOVES];
-    int count = generateMoveList(moveList, board, 0);
+    int count = generateMoveList(moveList, board, GET_ALL_MOVES);
     bitboard newBoard;
     for(int index = 0; index < count; index++)
     {
@@ -552,7 +552,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             }
 
             //Quiet Move Pruning
-            if(!shouldSkipQuiets)
+            if(!shouldSkipQuiets && !curBoard->in_check)
             {
                 //Late move pruning
                 if(validMovesVisited > lmpTable[context->improving[ply]][ply])
@@ -560,7 +560,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
                 //Futility Pruning
                 int lmrDepth = _max(0, depth - lmrTable[depth][validMovesVisited]);
-                if(!curBoard->in_check && lmrDepth <= futility_pruning_depth && staticScore + lmrDepth * futility_depth_margin + futility_margin <= alpha)
+                if(lmrDepth <= futility_pruning_depth && staticScore + lmrDepth * futility_depth_margin + futility_margin <= alpha)
                     shouldSkipQuiets = 1;
             }
 
@@ -696,57 +696,16 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
 void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
 {
-    if(suppressUCIMessages) return;
+    if(suppressUCIMessages) 
+        return;
 
-    if(isBookMove) printf("info string Book move played: %s\n", getMoveSquareName(bestMove));
-    printf("bestmove %s", getMoveSquareName(bestMove));
-
-    if(bestMove.promoteTo)
-    {
-        switch(bestMove.promoteTo)
-        {
-            case QUEEN:
-                printf("q");
-                break;
-            case KNIGHT:
-                printf("n");
-                break;
-            case ROOK:
-                printf("r");
-                break;
-            case BISHOP:
-                printf("b");
-                break;
-            default:
-                break;
-        }
-    }
+    if(isBookMove) 
+        printf("info string Book move played: %s%s\n", getMoveSquareName(bestMove), promoteSymbols[bestMove.promoteTo]);
+    
+    printf("bestmove %s%s", getMoveSquareName(bestMove), promoteSymbols[bestMove.promoteTo]);
 
     if(enablePonder && ponderMove.raw)
-    {
-        printf(" ponder %s", getMoveSquareName(ponderMove));
-
-        if(ponderMove.promoteTo)
-        {
-            switch(ponderMove.promoteTo)
-            {
-                case QUEEN:
-                    printf("q");
-                    break;
-                case KNIGHT:
-                    printf("n");
-                    break;
-                case ROOK:
-                    printf("r");
-                    break;
-                case BISHOP:
-                    printf("b");
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
+        printf(" ponder %s%s", getMoveSquareName(ponderMove), promoteSymbols[ponderMove.promoteTo]);
 
     printf("\n");
     fflush(stdout);
@@ -912,11 +871,7 @@ void findBestThread(threadContext* mainThread, threadContext* helperThreads, mov
     {
         move m = best->pv.line[i];
         if(!m.raw) break;
-        printf(" %s", getMoveSquareName(m));
-        if(m.promoteTo == QUEEN) printf("q");
-        else if(m.promoteTo == ROOK) printf("r");
-        else if(m.promoteTo == BISHOP) printf("b");
-        else if(m.promoteTo == KNIGHT) printf("n");
+        printf(" %s%s", getMoveSquareName(m), promoteSymbols[m.promoteTo]);
     }
 
     printf("\n");
@@ -1078,11 +1033,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
             {
                 move m = context->pv.line[i];
                 if(!m.raw) break;
-                printf(" %s", getMoveSquareName(m));
-                if(m.promoteTo == QUEEN) printf("q");
-                else if(m.promoteTo == ROOK) printf("r");
-                else if(m.promoteTo == BISHOP) printf("b");
-                else if(m.promoteTo == KNIGHT) printf("n");
+                printf(" %s%s", getMoveSquareName(m), promoteSymbols[m.promoteTo]);
             }
 
             printf("\n");

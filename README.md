@@ -133,7 +133,9 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 - Syzygy
 - Aspiration Windows
 - LazySMP
-- Principal Variation Search
+- Search
+    - Principal Variation Search
+    - Quiescent Search
     - Mate Distance Pruning
     - Improving Heuristic
     - Killer Move Heuristic
@@ -154,8 +156,6 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - Check Extensions
     - Late Move Pruning
     - Late Move Reductions
-    - SEE Pruning
-- Quiescent Search
     - SEE Pruning
 </details>
 </details>
