@@ -12,7 +12,7 @@
 
 int threadCount = 1;
 int enablePonder = 0;
-int isCalculating = 0;
+int isSearching = 0;
 int suppressUCIMessages = 0;
 
 //Global flag. Each context's abort flag will 
@@ -922,7 +922,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     if(!isPonder)
     {
         context->pv.line[0] = getBookMove(board);
-        if(context->pv.line[0].raw) { printResultingMoves(context->pv.line[0], (move){0}, 1); isCalculating = 0; return 0; }
+        if(context->pv.line[0].raw) { printResultingMoves(context->pv.line[0], (move){0}, 1); isSearching = 0; return 0; }
         else board->in_book = 0;
     }
 
@@ -1112,7 +1112,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
 #endif
 
     printResultingMoves(bestMove, ponderMove, 0);
-    isCalculating = 0;
+    isSearching = 0;
 
     memset(context->searchedMoves, 0, sizeof(context->searchedMoves));
 

@@ -91,7 +91,6 @@ int main(int argc, char** argv)
                 printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe syzygy at non-root if at least n depth remaining in search.
                 #ifdef SPSA
                 printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
-                printf("option name maximum_aspiration_margin type spin default %d min 50 max 200\n", maximum_aspiration_margin);
                 printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
 
                 printf("option name razoring_a type spin default %d min 25 max 250\n", razoring_a);
@@ -104,6 +103,9 @@ int main(int argc, char** argv)
                 printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
                 printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
                 
+                //History values most closely affect branching factor and nodecount. Intead of SPSA tuning them with
+                //weather factory, I modify them with a scipy.minimize() script to minimize nodecount at a fixed depth 
+                //across a perft suite, then verify the results with a SPRT, which is a much faster tuning method.
                 printf("option name historyBonusScale type spin default %d min 1 max 600\n", historyBonusScale);
                 printf("option name historyBonusOffset type spin default %d min 1 max 600\n", historyBonusOffset);
                 printf("option name historyPenaltyScale type spin default %d min 1 max 600\n", historyPenaltyScale);
@@ -113,8 +115,6 @@ int main(int argc, char** argv)
                 printf("option name captureHistoryBonusOffset type spin default %d min 1 max 600\n", captureHistoryBonusOffset);
                 printf("option name captureHistoryPenaltyScale type spin default %d min 1 max 600\n", captureHistoryPenaltyScale);
                 printf("option name captureHistoryPenaltyOffset type spin default %d min 1 max 600\n", captureHistoryPenaltyOffset);
-                
-                printf("option name lowHistoryVal type spin default %d min -2500 max 0\n", lowHistoryVal);
 
                 printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
                 printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));
@@ -133,7 +133,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "ucinewgame") == 0)
             {
                 readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                if(isCalculating)
+                if(isSearching)
                 {
                     abortFlag = 1;
                     THREAD_WAIT(calculateThread);
@@ -164,7 +164,7 @@ int main(int argc, char** argv)
                     {
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
-                            if(isCalculating)
+                            if(isSearching)
                             {
                                 DEBUG_ERROR("Cannot change thread count while calculating.");
                                 break;
@@ -269,7 +269,6 @@ int main(int argc, char** argv)
                     }
                     #ifdef SPSA
                     SET_SPA_OPTION_INT(initial_aspiration_margin)
-                    SET_SPA_OPTION_INT(maximum_aspiration_margin)
                     SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
                     SET_SPA_OPTION_INT(razoring_a)
                     SET_SPA_OPTION_INT(razoring_b)
@@ -281,7 +280,10 @@ int main(int argc, char** argv)
                     SET_SPA_OPTION_INT(historyBonusOffset)
                     SET_SPA_OPTION_INT(historyPenaltyScale)
                     SET_SPA_OPTION_INT(historyPenaltyOffset)
-                    SET_SPA_OPTION_INT(lowHistoryVal)
+                    SET_SPA_OPTION_INT(captureHistoryBonusScale)
+                    SET_SPA_OPTION_INT(captureHistoryBonusOffset)
+                    SET_SPA_OPTION_INT(captureHistoryPenaltyScale)
+                    SET_SPA_OPTION_INT(captureHistoryPenaltyOffset)
                     SET_SPA_OPTION_INT(stable_eval_margin)
                     SET_SPA_OPTION_FLOAT(lmr_a)
                     SET_SPA_OPTION_FLOAT(lmr_b)
@@ -311,7 +313,7 @@ int main(int argc, char** argv)
             else if(strcmp(str, "position") == 0)
             {
                 readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                if(isCalculating)
+                if(isSearching)
                 {
                     abortFlag = 1;
                     THREAD_WAIT(calculateThread);
@@ -363,13 +365,13 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "go") == 0)
             {
-                if(isCalculating) 
+                if(isSearching) 
                 {
                     DEBUG_INFO("Aborting search in progress.");
                     abortFlag = 1;
                     THREAD_WAIT(calculateThread);
                 }
-                isCalculating = 1;
+                isSearching = 1;
                 readyUp(&isPathDirty, &isReady, SyzygyPath, context);
 
                 int timeLeft = INT32_MAX;
@@ -432,7 +434,7 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "ponderhit") == 0)
             {
-                if(isCalculating)
+                if(isSearching)
                 {
                     isPonder = 0;
                     THREAD_WAIT(calculateThread);
@@ -446,11 +448,10 @@ int main(int argc, char** argv)
             else if(strcmp(str, "stop") == 0)
             {
                 //Reap the thread, which will print out its results as it terminates.
-                if(isCalculating)
+                if(isSearching)
                 {
                     isPonder = 0;
                     abortFlag = 1;
-                    isCalculating = 0;
                     THREAD_WAIT(calculateThread);
                 }
                 
@@ -646,6 +647,12 @@ int main(int argc, char** argv)
             else if(strcmp(str, "quit") == 0) 
             {
                 quit = 1;
+                if(isSearching)
+                {
+                    isPonder = 0;
+                    abortFlag = 1;
+                    THREAD_WAIT(calculateThread);
+                }
                 break;
             }
 

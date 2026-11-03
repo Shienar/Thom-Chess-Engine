@@ -1,15 +1,15 @@
 #include "analyze/history.h"
 #include "board/moves.h"
 
-int historyBonusScale = 300;
-int historyBonusOffset = 125;
-int historyPenaltyScale = 400;
-int historyPenaltyOffset = 150;
+int historyBonusScale = 266;
+int historyBonusOffset = 181;
+int historyPenaltyScale = 431;
+int historyPenaltyOffset = 194;
 
-int captureHistoryBonusScale = 350;
-int captureHistoryBonusOffset = 50;
-int captureHistoryPenaltyScale = 450;
-int captureHistoryPenaltyOffset = 175;
+int captureHistoryBonusScale = 346;
+int captureHistoryBonusOffset = 121;
+int captureHistoryPenaltyScale = 456;
+int captureHistoryPenaltyOffset = 169;
 
 void updateKillerMoves(threadContext* context, move currentMove, int ply)
 {

@@ -18,13 +18,12 @@ extern volatile uint8_t isPonder;
 
 extern int threadCount;
 extern int enablePonder;
-extern int isCalculating;
+extern int isSearching;
 extern int suppressUCIMessages;
 #define MIN_THREADS 1
 #define MAX_THREADS 64
 
 extern int initial_aspiration_margin;
-extern int maximum_aspiration_margin;
 extern float aspiration_margin_mult_factor;
 
 extern int razoring_a;
@@ -35,8 +34,6 @@ extern int futility_depth_margin;
 
 extern int reverse_futility_margin;
 extern int reverse_futility_margin_improving;
-
-extern int lowHistoryVal;
 
 extern float lmr_a;
 extern float lmr_b;
