@@ -5,9 +5,7 @@
 *.json
 
 *.vf
-
-*.pgn
-*.epd
+UHO_Lichess_4852_v1.epd
 
 quantized.bin
 raw.bin
@@ -15,4 +13,4 @@ firstMoments.bin
 secondMoments.bin
 
 target/
-scripts/
+__pycache__/
