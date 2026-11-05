@@ -3,7 +3,7 @@
 #include "types.h"
 
 #define MAX_HISTORY_SCORE 16384
-#define CAPTURE_HISTORY_SCALE 128
+#define CAPTURE_HISTORY_SCALE 4 //This is mainly use to avoid int16 limits at this point. It used to significantly reduce the impact of history values vs SEE ordering.
 #define MAX_CORRHIST_VAL 256
 #define CORRHIST_SCALE 32
 

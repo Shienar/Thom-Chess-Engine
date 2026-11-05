@@ -331,51 +331,9 @@ int generateMoveList(move* movesList, bitboard* board, int genType)
     return size;
 }
 
-uint64_t getSlidingAttackers(bitboard* board, int square, int occupied)
-{
-    uint64_t bishopqueen = board->pieces[WHITE_BISHOP] | board->pieces[BLACK_BISHOP] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
-    uint64_t rookqueen = board->pieces[WHITE_ROOK] | board->pieces[BLACK_ROOK] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
-
-    return (bishopMoves(0, occupied, square) & bishopqueen) |
-           (rookMoves(0, occupied, square) & rookqueen);
-}
-uint64_t getAttackers(bitboard* board, int square, int occupied)
-{
-    uint64_t attackers = 0;
-
-    //Pawns.
-    attackers |= (pawnAttacks[WHITE][square] & board->pieces[BLACK_PAWN]);
-    attackers |= (pawnAttacks[BLACK][square] & board->pieces[WHITE_PAWN]);
-
-    //Knights
-    attackers |= (knightMoves(0, square) & (board->pieces[WHITE_KNIGHT] | board->pieces[BLACK_KNIGHT]));
-
-    //Kings
-    attackers |= kingAttacks[square] & (board->pieces[WHITE_KING] | board->pieces[BLACK_KING]);
-
-    return attackers | getSlidingAttackers(board, square, occupied);
-}
-
-int findLVA(bitboard* board, uint64_t attackers, int side, int* pieceType)
-{
-    assert(pieceType);
-    for(int pc = side; pc <= BLACK_KING; pc+=2)
-    {
-        uint64_t attackingPiecesOfType = attackers & board->pieces[pc];
-        if(attackingPiecesOfType)
-        {
-            *pieceType = pc;
-            return __builtin_ctzll(attackingPiecesOfType);
-        }
-    }
-    return -1;
-}
-
 const int pieceValuesSEE[15] = {100, 100, 300, 300, 300, 300, 500, 500, 900, 900, 1e6, 1e6, 0, 0, 0};
 int staticExchangeEvaluation(bitboard* board, move m)
 {
-    int gain[MAX_PLY];
-    int ply = 0;
 
     int piece = findPieceOnSquare(board, m.startSquare);
     int capturedPiece = findPieceOnSquare(board, m.endSquare);
@@ -383,52 +341,65 @@ int staticExchangeEvaluation(bitboard* board, move m)
         capturedPiece = FLIP_COLOR(piece);
 
     int side = COLOR(piece);
-    int promoteTo = m.promoteTo;
 
     //Handle the initial capture
-    gain[0] = pieceValuesSEE[capturedPiece];
-    if(promoteTo)
-        gain[0] += pieceValuesSEE[promoteTo] - pieceValuesSEE[PAWN];
+    int gain = pieceValuesSEE[capturedPiece];
+    if(m.promoteTo)
+    {
+        piece = m.promoteTo;
+        gain += pieceValuesSEE[m.promoteTo] - pieceValuesSEE[PAWN];
+    }
 
-    uint64_t removedMask = singleBitMask(m.startSquare);
+    uint64_t occupied = board->pieces_all & ~singleBitMask(m.startSquare);
+    uint64_t attackers = (pawnAttacks[WHITE][m.endSquare] & board->pieces[BLACK_PAWN]) |
+                         (pawnAttacks[BLACK][m.endSquare] & board->pieces[WHITE_PAWN]) |
+                         (knightMoves(0, m.endSquare) & (board->pieces[WHITE_KNIGHT] | board->pieces[BLACK_KNIGHT])) |
+                         (kingAttacks[m.endSquare] & (board->pieces[WHITE_KING] | board->pieces[BLACK_KING]));
 
-    uint64_t occupied = board->pieces_all & ~removedMask;
-    uint64_t attackers = getAttackers(board, m.endSquare, occupied) & (~removedMask);
-
+    uint64_t bishopqueen = board->pieces[WHITE_BISHOP] | board->pieces[BLACK_BISHOP] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
+    uint64_t rookqueen = board->pieces[WHITE_ROOK] | board->pieces[BLACK_ROOK] | board->pieces[WHITE_QUEEN] | board->pieces[BLACK_QUEEN];
+    attackers |= (bishopMoves(0, occupied, m.endSquare) & bishopqueen) | (rookMoves(0, occupied, m.endSquare) & rookqueen);
+    attackers &= occupied;
+    
     side = FLIP_COLOR(side);
 
-    int attackerSquare;
+    int attackerSquare = 0;
     int attackerPiece;
     capturedPiece = piece;
-
-    while(ply < MAX_PLY - 1)
+    
+    while(1)
     {
-        attackerSquare = findLVA(board, attackers, side, &attackerPiece);
-        if(attackerSquare == -1) break;
+        //side-relative gain
+        gain = -gain;
 
-        ply++;
-        gain[ply] = pieceValuesSEE[capturedPiece] - gain[ply - 1];
+        //side runs out of attackers
+        if(!(board->pieces_side[side] & attackers))
+            return side == board->turn ? gain : -gain;
+
+        for(int pc = side; pc < PIECE_COUNT; pc+=2)
+        {
+            uint64_t attackingPiecesOfType = attackers & board->pieces[pc];
+            if(attackingPiecesOfType)
+            {
+                attackerPiece = pc;
+                attackerSquare = __builtin_ctzll(attackingPiecesOfType);
+                break;
+            }
+        }
+
+        gain += pieceValuesSEE[capturedPiece];
         capturedPiece = attackerPiece;
 
-        if(gain[ply] < 0)
-            break;
+        //side fails to find a capture that maintains a positive SEE.
+        if(gain < 0)
+            return (side == board->turn) ? gain : -gain;
 
-        removedMask |= singleBitMask(attackerSquare);
-        occupied &= ~removedMask;
-        attackers &= ~removedMask;
-        if(ISPAWN(attackerPiece) || ISBISHOP(attackerPiece) || ISROOK(attackerPiece) || ISQUEEN(attackerPiece)) 
-            attackers |= (getSlidingAttackers(board, m.endSquare, occupied) & (~removedMask));
+        occupied &= ~singleBitMask(attackerSquare);
+        attackers |= (bishopMoves(0, occupied, m.endSquare) & bishopqueen) | (rookMoves(0, occupied, m.endSquare) & rookqueen);
+        attackers &= occupied;
         
         side = FLIP_COLOR(side);
     }
-
-    while(ply > 0)
-    {
-        if(-gain[ply] < gain[ply - 1])
-            gain[ply - 1] = -gain[ply];
-        ply--;
-    }
-    return gain[0];
 }
 
 void scoreMoves(moveIterator* iter, int startIndex, int count)
