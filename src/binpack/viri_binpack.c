@@ -204,7 +204,6 @@ int packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 {
     memset(board, 0, sizeof(bitboard));
     memset(&board->pieceArr, EMPTY_PIECE, 64 * sizeof(uint8_t));
-    board->in_book = 1;
 
     packedBoard->occupancy = littleEndian64(packedBoard->occupancy);
     packedBoard->fullMoveCounter = littleEndian16(packedBoard->fullMoveCounter);
@@ -598,31 +597,6 @@ void binpack_write(binpackDetails* details, generatedGameBuffer* buffer)
     UNLOCK_MUTEX(details->lock);
 
     memset(buffer, 0, sizeof(generatedGameBuffer));
-}
-
-//Returns an input buffer to make "%s" printing simpler on memory management.
-char* commaDelimitNumber(char buffer[32], uint64_t value)
-{
-    char temp[32] = {'\0'};
-    snprintf(temp, 32, "%" PRIu64, value);
-    uint8_t digitCount = strlen(temp);
-    uint8_t commaCount = (digitCount - 1) / 3;
-
-    uint8_t writeIndex = digitCount + commaCount;
-    buffer[writeIndex--] = '\0';
-
-    uint8_t digitIndex = 0;
-    for(int i = digitCount - 1; i >= 0; i--)
-    {
-        buffer[writeIndex--] = temp[i];
-        if(++digitIndex == 3 && i > 0)
-        {
-            buffer[writeIndex--] = ',';
-            digitIndex = 0;
-        }
-    }
-
-    return buffer;
 }
 
 void binpackPrintInfo(const char* fileName)

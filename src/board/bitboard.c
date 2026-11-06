@@ -337,8 +337,6 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
         }
     }
 
-    board->in_book = 1;
-
     //Turn
     if(activeColor == 'w') board->turn = WHITE;
     else board->turn = BLACK;

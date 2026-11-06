@@ -2,7 +2,6 @@
 #include "board/bitboard.h"
 #include "debug.h"
 #include "transposition/transpositiontable.h"
-#include "analyze/book.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/search.h"
 #include "binpack/generate.h"
@@ -20,6 +19,17 @@
         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
         { \
             sscanf(str, "%d", &name); \
+            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
+        } \
+        break; \
+    }
+
+#define SET_SPA_OPTION_LONGLONG(name) \
+    else if(strcmp(str, #name) == 0) \
+    { \
+        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
+        { \
+            sscanf(str, "%lld", &name); \
             readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
         } \
         break; \
@@ -83,7 +93,6 @@ int main(int argc, char** argv)
                 printf("option name Hash type spin default 256 min 1 max 4096\n");
                 printf("option name Threads type spin default 1 min 1 max 64\n");
                 printf("option name Ponder type check default false\n");
-                printf("option name OwnBook type check default false\n");
                 printf("option name UseNNUE type check default true\n");
                 printf("option name LogFilePath type string default <empty>\n");
                 printf("option name SyzygyPath type string default <empty>\n");
@@ -182,15 +191,6 @@ int main(int argc, char** argv)
                         {
                             if(strcmp(str, "true") == 0) { enablePonder = 1; }
                             else { enablePonder = 0; }
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "OwnBook") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(strcmp(str, "true") == 0) { useBook = 1; }
-                            else { useBook = 0; }
                         }
                         break;
                     }
@@ -490,26 +490,6 @@ int main(int argc, char** argv)
                 fflush(stdout);
                 break;
             }
-            else if(strcmp(str, "perftv") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-
-                //verbose perft
-                //Not a part of UCI.
-                //Format: "perft <depth>"
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                    
-                int pdepth;
-                sscanf(str, "%d", &pdepth);
-                clock_t startTime = clock();
-                int result = perft(board, pdepth, 1);
-                clock_t duration = clock() - startTime;
-                double seconds = ((double) duration / CLOCKS_PER_SEC);
-                double NPS = result / seconds;
-                printf("Searched through %d nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-                break;
-            }
             else if(strcmp(str, "print") == 0)
             {
                 board_print(board, 1);
@@ -695,8 +675,6 @@ void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* co
         transpositionTable = create_hashTable_tt();
         context->tt = transpositionTable;
     }
-
-    loadBook();
 
     initNNUE();
     if(useNNUE)

@@ -103,7 +103,7 @@ $(TARGET): $(OBJFILES)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.s import/weights.bin import/komodo.bin | directories
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.s import/weights.bin | directories
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 directories:

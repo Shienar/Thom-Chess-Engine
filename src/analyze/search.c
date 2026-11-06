@@ -2,7 +2,6 @@
 #include "board/moves.h"
 #include "board/bitboard.h"
 #include "debug.h"
-#include "analyze/book.h"
 #include "analyze/syzygy.h"
 #include "pyrrhic/tbprobe.h"
 #include "analyze/nnue/neuralnet.h"
@@ -390,7 +389,8 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
     if(!tt_hit)
     {
-        RECORD_SEARCH(context->tt_misses++;);
+        if(!(context->excludedMove[ply].raw && old_tt_entry.bestMove.raw == context->excludedMove[ply].raw))
+            RECORD_SEARCH(context->tt_misses++;);
         if(curBoard->in_check)
             score = -SCORE_WIN;
         else if(context->excludedMove[ply].raw)
@@ -527,6 +527,8 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             if(tt_hit && depth >= singular_extension_depth && currentMove->raw == tt_move->raw && old_tt_entry.depth >= depth - 3 &&
                 old_tt_entry.nodeType != NODE_BOUND_UPPER && !context->excludedMove[ply].raw && ply > 0)
             {
+                RECORD_SEARCH(context->singularSearches++;);
+
                 int sBeta = old_tt_entry.evaluation - 3 * depth;
                 int sDepth = depth / 2 + 1;
 
@@ -537,18 +539,35 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 if(singularScore < sBeta)
                 {
                     if(singularScore + 25 * depth < sBeta)
+                    {
+                        RECORD_SEARCH(context->tripleExtensions++;);
                         next_depth += 3;
+                    }
                     else if(singularScore + 10 * depth < sBeta)
+                    {
+                        RECORD_SEARCH(context->doubleExtensions++;);
                         next_depth += 2;
+                    }
                     else
+                    {
+                        RECORD_SEARCH(context->singleExtensions++;);
                         next_depth++;
+                    }
                 }
                 //Multicut pruning, but we just take the strong singular and assume that there's going to be more.
                 else if(singularScore >= beta && abs(singularScore) < MIN_MATE_SCORE)
+                {
+                    RECORD_SEARCH(context->multicutPrunes++;);
                     return singularScore;
+                }
                 //Negative Extension
                 else if(cutNode || old_tt_entry.evaluation >= beta)
+                {
+                    RECORD_SEARCH(context->negativeExtensions++;);
                     next_depth-=2;
+                }
+                else
+                    RECORD_SEARCH(context->failedExtensions++;);
             }
 
             //Quiet Move Pruning
@@ -694,14 +713,11 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     return bestScore;
 }
 
-void printResultingMoves(move bestMove, move ponderMove, int isBookMove)
+void printResultingMoves(move bestMove, move ponderMove)
 {
     if(suppressUCIMessages) 
         return;
 
-    if(isBookMove) 
-        printf("info string Book move played: %s%s\n", getMoveSquareName(bestMove), promoteSymbols[bestMove.promoteTo]);
-    
     printf("bestmove %s%s", getMoveSquareName(bestMove), promoteSymbols[bestMove.promoteTo]);
 
     if(enablePonder && ponderMove.raw)
@@ -897,6 +913,13 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
                   context->quiescentSearchedPositions = 0;
                   context->pvsSearchedMoves = 0;
                   context->pvsSearchedPositions = 0;
+                  context->singularSearches = 0;
+                  context->tripleExtensions = 0;
+                  context->doubleExtensions = 0;
+                  context->singleExtensions = 0;
+                  context->multicutPrunes = 0;
+                  context->negativeExtensions = 0;
+                  context->failedExtensions = 0;
                   context->evaluations = 0;
                   context->stable_reductions = 0;
                   context->worsening_reductions = 0;
@@ -917,14 +940,6 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     context->countedNodes = 0;
     context->seldepth = 0;
     context->completedDepth = 0;
-
-    //Book moves
-    if(!isPonder)
-    {
-        context->pv.line[0] = getBookMove(board);
-        if(context->pv.line[0].raw) { printResultingMoves(context->pv.line[0], (move){0}, 1); isSearching = 0; return 0; }
-        else board->in_book = 0;
-    }
 
     //Syzygy move recommendations
     filterSyzygyMoves(board, context->searchedMoves);
@@ -1088,30 +1103,45 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     }
     ebf /= count;
     double total_tt = context->tt_hits + context->tt_misses;
+    char buf[32];
     printf("\n\033[1mSearch Statistics:\033[0m\n");
     printf("\t%-25s %18.2f\n", "EBF:", ebf);
     printf("\n");
-    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "PVS Nodes:", context->pvs_nodes, (100.0 * context->pvs_nodes) / context->countedNodes);
-    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "Quiescent Nodes:", context->qs_nodes, (100.0 * context->qs_nodes) / context->countedNodes);
+    printf("\t%-25s %10s (%05.2f%%)\n", "PVS Nodes:", commaDelimitNumber(buf, context->pvs_nodes), (100.0 * context->pvs_nodes) / context->countedNodes);
+    printf("\t%-25s %10s (%05.2f%%)\n", "Quiescent Nodes:", commaDelimitNumber(buf, context->qs_nodes), (100.0 * context->qs_nodes) / context->countedNodes);
+    printf("\n");
+    printf("\t%-25s %10s\n", "Total Nodes:", commaDelimitNumber(buf, context->countedNodes));
     printf("\n");
     printf("\t%-25s %18.2f\n", "PVS Avg Moves Searched:", (double) context->pvsSearchedMoves / context->pvsSearchedPositions);
     printf("\t%-25s %18.2f\n", "QS Avg Moves Searched:", (double) context->quiescentSearchedMoves / context->quiescentSearchedPositions);
     printf("\n");
-    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Hits:", context->tt_hits, (100.0 * context->tt_hits) / total_tt);
-    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Cutoffs:", context->tt_cutoffs, (100.0 * context->tt_cutoffs) / total_tt);
-    printf("\t%-25s %10" PRId64 " (%05.2f%%)\n", "TT Misses:", context->tt_misses, (100.0 * context->tt_misses) / total_tt);
+    printf("\t%-25s %10s (%05.2f%%)\n", "TT Hits:", commaDelimitNumber(buf, context->tt_hits), (100.0 * context->tt_hits) / total_tt);
+    printf("\t%-25s %10s (%05.2f%%)\n", "TT Misses:", commaDelimitNumber(buf, context->tt_misses), (100.0 * context->tt_misses) / total_tt);
+    printf("\t%-25s %10s (%05.2f%%)\n", "TT Cutoffs:", commaDelimitNumber(buf, context->tt_cutoffs), (100.0 * context->tt_cutoffs) / total_tt);
+    printf("\t%-25s %10s\n", "TT Collisions:", commaDelimitNumber(buf, context->tt->collisions));
+    printf("\t%-25s %10s\n", "Shallow TT Collisions:", commaDelimitNumber(buf, context->tt->shallow_collisions));
+    printf("\t%-25s %10s\n", "TT Overwrites:", commaDelimitNumber(buf, context->tt->overwrites));
+    printf("\t%-25s %10s\n", "TT Fills:", commaDelimitNumber(buf, context->tt->fills));
     printf("\n");
-    printf("\t%-25s %18" PRId64 "\n", "Evaluations:", context->evaluations);
+    printf("\t%-25s %18s\n", "Singular Searches:", commaDelimitNumber(buf, context->singularSearches));
+    printf("\t%-25s %18s (%05.2f%%)\n", "Single Extensions:", commaDelimitNumber(buf, context->singleExtensions), (100.0 * context->singleExtensions) / context->singularSearches);
+    printf("\t%-25s %18s (%05.2f%%)\n", "Double Extensions:", commaDelimitNumber(buf, context->doubleExtensions), (100.0 * context->doubleExtensions) / context->singularSearches);
+    printf("\t%-25s %18s (%05.2f%%)\n", "Triple Extensions:", commaDelimitNumber(buf, context->tripleExtensions), (100.0 * context->tripleExtensions) / context->singularSearches);
+    printf("\t%-25s %18s (%05.2f%%)\n", "Multicut Prunes:", commaDelimitNumber(buf, context->multicutPrunes), (100.0 * context->multicutPrunes) / context->singularSearches);
+    printf("\t%-25s %18s (%05.2f%%)\n", "Negative Extensions:", commaDelimitNumber(buf, context->negativeExtensions), (100.0 * context->negativeExtensions) / context->singularSearches);
+    printf("\t%-25s %18s (%05.2f%%)\n", "Failed Singulars:", commaDelimitNumber(buf, context->failedExtensions), (100.0 * context->failedExtensions) / context->singularSearches);
     printf("\n");
-    printf("\t%-25s %18" PRId64 "\n", "Stable Reductions:", context->stable_reductions);
-    printf("\t%-25s %18" PRId64 "\n", "Worsening Reductions:", context->worsening_reductions);
-    printf("\t%-25s %18" PRId64 "\n", "TT Reductions:", context->tt_reductions);
-    printf("\t%-25s %18" PRId64 "\n", "RFP Prunes:", context->rfp_prunes);
-    printf("\t%-25s %18" PRId64 "\n", "Razoring Prunes:", context->razoring_prunes);
-    printf("\t%-25s %18" PRId64 "\n", "NMP Prunes:", context->nmp_prunes);
+    printf("\t%-25s %18s\n", "Evaluations:", commaDelimitNumber(buf, context->evaluations));
+    printf("\n");
+    printf("\t%-25s %18s\n", "Stable Reductions:", commaDelimitNumber(buf, context->stable_reductions));
+    printf("\t%-25s %18s\n", "Worsening Reductions:", commaDelimitNumber(buf, context->worsening_reductions));
+    printf("\t%-25s %18s\n", "TT Reductions:", commaDelimitNumber(buf, context->tt_reductions));
+    printf("\t%-25s %18s\n", "RFP Prunes:", commaDelimitNumber(buf, context->rfp_prunes));
+    printf("\t%-25s %18s\n", "Razoring Prunes:", commaDelimitNumber(buf, context->razoring_prunes));
+    printf("\t%-25s %18s\n", "NMP Prunes:", commaDelimitNumber(buf, context->nmp_prunes));
 #endif
 
-    printResultingMoves(bestMove, ponderMove, 0);
+    printResultingMoves(bestMove, ponderMove);
     isSearching = 0;
 
     memset(context->searchedMoves, 0, sizeof(context->searchedMoves));

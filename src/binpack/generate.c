@@ -1,5 +1,4 @@
 #include "binpack/generate.h"
-#include "analyze/book.h"
 #include "analyze/search.h"
 #include "board/bitboard.h"
 #include "analyze/nnue/neuralnet.h"

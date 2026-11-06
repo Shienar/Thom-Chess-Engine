@@ -14,6 +14,8 @@ extern char debugLogFile[1024];
 void enableDebugMessages();
 void disableDebugMessages();
 
+char* commaDelimitNumber(char buffer[32], uint64_t value);
+
 void dbg_msg(const char* fileName, int lineNumber, const char* type, const char* str, ...);
 
 #define DEBUG_ERROR(x, ...) dbg_msg(__FILE__, __LINE__, "ERROR", x, ##__VA_ARGS__)

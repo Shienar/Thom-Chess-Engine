@@ -57,6 +57,13 @@ void clear_tt(hashtable_tt* tt)
     {
         memset(tt->array, 0, tt->capacity * sizeof(tt_bucket));
         tt->age = 0;
+
+        #ifdef SEARCHINFO
+        tt->overwrites = 0;
+        tt->collisions = 0;
+        tt->shallow_collisions = 0;
+        tt->fills = 0;
+        #endif
     }
 }
 
@@ -120,9 +127,20 @@ void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode
 
     if(existingEntry->data)
     {
-        //Don't overwrite existing with unknown nodes, unless they are from an older search
+
+        #ifdef SEARCHINFO
+        tt->collisions++;
+        #endif
+
+        //Don't overwrite existing with unknown nodes
         if(entry.nodeType == NODE_BOUND_UNKNOWN)
+        {
+            #ifdef SEARCHINFO
+            tt->shallow_collisions++;
+            #endif
             return;
+        }
+
 
         //Same position replacement rules
         if(entry.hashMSB == existingEntry->hashMSB)
@@ -136,8 +154,16 @@ void transposition_table_set(hashtable_tt* tt, tt_entry entry, uint64_t hashCode
             
             if(!entry.bestMove.raw)
                 entry.bestMove = existingEntry->bestMove;
+            
+            #ifdef SEARCHINFO
+            tt->overwrites++;
+            #endif
         }
     }
+    #ifdef SEARCHINFO
+    else
+        tt->fills++;
+    #endif
 
 
     if(entry.evaluation >= MIN_MATE_SCORE) entry.evaluation += ply; 

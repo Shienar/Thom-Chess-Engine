@@ -73,6 +73,13 @@ typedef struct hashtable_tt {
     tt_bucket* array;
     size_t capacity;
     uint16_t age : 7;
+    
+    #ifdef SEARCHINFO
+    uint64_t overwrites; //writing new data for same position
+    uint64_t collisions; //replacing old data from different position with new data from new position
+    uint64_t shallow_collisions; //the new collision data is shallow
+    uint64_t fills; //writing to an empty slot
+    #endif
 } hashtable_tt;
 
 typedef struct repetitionVector {
@@ -108,7 +115,6 @@ typedef struct bitboard {
     uint8_t canKingsideCastle_b  : 1;
     uint8_t canQueensideCastle_b : 1;
     uint8_t in_check             : 1;
-    uint8_t in_book              : 1;
     uint8_t turn                 : 1;
 } bitboard;
 
@@ -228,6 +234,14 @@ typedef struct threadContext {
 
     uint64_t pvsSearchedMoves;
     uint64_t pvsSearchedPositions;
+
+    uint64_t singularSearches;
+    uint64_t tripleExtensions;
+    uint64_t doubleExtensions;
+    uint64_t singleExtensions;
+    uint64_t multicutPrunes;
+    uint64_t negativeExtensions;
+    uint64_t failedExtensions;
 
     uint64_t evaluations;
 

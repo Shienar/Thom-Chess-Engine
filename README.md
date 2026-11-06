@@ -30,7 +30,6 @@ This repository also contains a trainer for the NNUE. It was designed specifical
     - Threads, default 1 [1, 64]
     - Hash, default 256 [1, 4096]
     - Ponder, default off
-    - OwnBook, default off
     - SyzygyPath, default ""
     - SyzygyProbeLimit, default 5 [3, 7]
     - SyzygyProbeDepth, default 6 [5, 32]
@@ -162,7 +161,6 @@ This repository also contains a trainer for the NNUE. It was designed specifical
 
 ## ACKNOWLEDGEMENTS:
 
-- The engine currently uses the [komodo.bin](https://komodochess.com/downloads.htm) polyglot book truncated to ply 6
 - Ronald de Man's syzygy tablebase is used for endgame analysis.
 - Andrew Grant's syzygy probing tool [Pyrrhic](https://github.com/AndyGrant/Pyrrhic) is used to probe the syzygy files.
 - [Andrew Grant's modernized texel tuning method](https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf) was used for tuning the HCE weights. 
