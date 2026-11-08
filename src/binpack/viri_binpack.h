@@ -77,6 +77,8 @@ typedef struct readerDetails {
 
     uint64_t positionIndex;
     uint64_t gameIndex;
+
+    Viri_MoveScorePair nextPair;
 } readerDetails;
 
 typedef struct binpackDetails {

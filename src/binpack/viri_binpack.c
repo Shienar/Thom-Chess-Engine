@@ -326,6 +326,12 @@ int readPackedBoard(binpackDetails* details)
 
     rDetails->gameIndex++;
     rDetails->positionIndex++;
+
+    memcpy(&rDetails->nextPair, rDetails->current_ptr, sizeof(Viri_MoveScorePair));
+    rDetails->current_ptr += sizeof(Viri_MoveScorePair);
+    rDetails->nextPair.move.raw = littleEndian16(rDetails->nextPair.move.raw);
+    rDetails->nextPair.whiteScore = littleEndian16(rDetails->nextPair.whiteScore);
+
     return packedBoardToBoard(rDetails->board, rDetails->packedBoard);
 }
 
@@ -448,15 +454,14 @@ void binpack_close(binpackDetails* details)
 int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int isCleaner, int minimumFENSkips)
 {
     readerDetails* rDetails = details->readerInfo;
-
-    Viri_MoveScorePair pair = {0};
+    Viri_MoveScorePair pair;
     int skippedUnusable = 0;
     int skippedUsable = 0;
 
     //Break once we find a good move.
     while(1)
     {
-        int isCapture = 0;
+        pair = details->readerInfo->nextPair;
         if(rDetails->current_ptr + sizeof(Viri_MoveScorePair) > details->end_ptr)
         {
             if(loop)
@@ -466,17 +471,14 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                 rDetails->gameIndex = 0;
                 if(readPackedBoard(details) == NO_BOARD_CORRUPTED)
                     continue;
+                pair.move.raw = 0;
+                pair.whiteScore = rDetails->packedBoard->whiteScore;
             }
             else
                 return (skippedUnusable + skippedUsable > 0) ? skippedUnusable + skippedUsable : NO_BOARD_END_OF_FILE;
         }
         else
         {
-            memcpy(&pair, rDetails->current_ptr, sizeof(Viri_MoveScorePair));
-            rDetails->current_ptr += sizeof(Viri_MoveScorePair);
-
-            pair.move.raw = littleEndian16(pair.move.raw);
-
             if(pair.raw == 0)
             {
                 int result = readPackedBoard(details);
@@ -487,8 +489,11 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
             }
             else
             {
+                memcpy(&details->readerInfo->nextPair, rDetails->current_ptr, sizeof(Viri_MoveScorePair));
+                rDetails->current_ptr += sizeof(Viri_MoveScorePair);
 
                 //For the purpose of speed, bypass the legal-move checks in moveFromStruct
+                //The cleaner can double-check the legality on its own, but avoid the cost during trainer.
                 move m = {
                     .startSquare = pair.move.startSquare,
                     .endSquare = pair.move.endSquare
@@ -511,8 +516,6 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                         else
                             m.endSquare = m.startSquare - 2;
                     }
-                    else
-                        isCapture = 1; //Doesn't include en passant, but that is handled by move type.
                 }
                 
                 if(movePiece(rDetails->board, m, NULL))
@@ -535,9 +538,15 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
 
         if(!isCleaner)
         {
-            if(!isCapture &&
+            int isBestCapture = 0;
+            int toPc = findPieceOnSquare(rDetails->board, rDetails->nextPair.move.endSquare);
+            int fromPc = findPieceOnSquare(rDetails->board, rDetails->nextPair.move.startSquare);
+            if(toPc != EMPTY_PIECE && !(ISKING(fromPc) && ISROOK(toPc) && COLOR(fromPc) == COLOR(toPc)))
+                isBestCapture = 1;
+
+            if(!isBestCapture &&
                 abs(pair.whiteScore) <= 2000 && 
-                pair.move.moveType == 0 &&
+                rDetails->nextPair.move.moveType == 0 &&
                 !rDetails->board->in_check &&
                 rDetails->board->halfMoveCount >= 16)
                 {
@@ -669,7 +678,8 @@ void binpackPrintInfo(const char* fileName)
 //A couple of games were written wrong and can throw errors. 
 //We must clean them out while preserving as many games as possible.
 //
-// Example Reduction: 34,621,051 positions -> 34,620,903 positions (0.000427485%)
+// 1 in a million games seem to get corrupted somehow.
+//
 void binpackClean(const char* fileName)
 {
     binpackDetails details =  {0};
@@ -702,7 +712,7 @@ void binpackClean(const char* fileName)
     printf("Started cleaning binpack - %s\n", fileName);
     while((temp = binpack_next(&details, &b, &s, &r, 0, 1, 0)) != NO_BOARD_END_OF_FILE)
     {
-        if(temp == CORRUPTED_POSITION)
+        if(temp == CORRUPTED_POSITION || !b.pieces[BLACK_KING] || !b.pieces[WHITE_KING] || isThreatened(&b, b.kingSquare[FLIP_COLOR(b.turn)], FLIP_COLOR(b.turn)))
             invalidGamePtr = rDetails->gameStartPtr;
         else if(invalidGamePtr && rDetails->gameStartPtr != lastPrintPtr)
         {
