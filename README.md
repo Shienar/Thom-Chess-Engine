@@ -15,7 +15,7 @@ A release version of the engine should be compiled with 'make -j'.
 - 'make -j VERIFY=1' will include assertions to double-check the validity of efficient accumulator updates & hash code updates. Requires DEBUG=1.
 - 'make -j SPSA=1' will compile with uci options for SPSA tuning
 
-This repository also contains a trainer for the NNUE. It was designed specifically for my (AMD) hardware & network architecture as a fun side project, and I make no guarantees about its compilability or effectiveness on other GPUs.
+This repository also contains a trainer for the NNUE. It's primarily designed for HIP, but it can fall back onto OpenCL. It is untested on NVIDIA GPUs.
 - 'make -j TRAIN=1' will compile the trainer.
 - 'make =j TRAIN=1 KPERFT=1' will allow for performance tracking of the training kernels.
 </details>

@@ -52,20 +52,39 @@ SRCFILES = $(wildcard src/*.c) \
 		   $(wildcard src/analyze/hce/*.c) \
 		   $(wildcard src/analyze/nnue/*.c)
 
+# Note: NVIDIA HIP has not been tested.
 ifdef TRAIN
-	ifdef HIP_PATH
-	HIP_ROOT = $(subst \,/,$(HIP_PATH))
-	CFLAGS += -I"$(HIP_ROOT)/include"
-	LIBS = -L"$(HIP_ROOT)/lib" -lamdhip64
-
-	KC = hipcc
-	KFLAGS = -ffast-math -O3 --genco --offload-arch=native -D__HIP_PLATFORM_AMD__ -mprintf-kind=buffered 
-	KTARGET = $(OBJ_DIR)/train/kernels.hsaco
-	endif
-
 	SRCFILES += $(wildcard src/train/*.c)
 	CFLAGS += -DTRAIN
+	ifdef HIP_PATH
 
+		SRCFILES += $(wildcard src/train/hip/*.c)
+
+		HIP_ROOT = $(subst \,/,$(HIP_PATH))
+		CFLAGS += -I"$(HIP_ROOT)/include" 
+		LIBS += -L"$(HIP_ROOT)/lib"
+		KFLAGS = -ffast-math -O3 --genco --offload-arch=native -mprintf-kind=buffered 
+		KC = hipcc
+		
+
+		ifneq ($(shell which nvcc 2>/dev/null),)
+			CFLAGS +=  -D__HIP_PLATFORM_NVIDIA__
+			LIBS += -lcuda -lcudart
+			KTARGET = $(OBJ_DIR)/train/hip/kernels.ptx
+		else
+			CFLAGS += -D__HIP_PLATFORM_AMD__
+			LIBS += -lamdhip64
+			KTARGET = $(OBJ_DIR)/train/hip/kernels.hsaco
+		endif
+
+
+	else
+		SRCFILES += $(wildcard src/train/opencl/*.c)
+		CFLAGS += -DUSE_OPENCL
+		LIBS += -lOpenCL
+		CFLAGS := $(filter-out -static,$(CFLAGS))
+	endif
+	
 	ifdef KPERFT
 		CFLAGS += -DPERFT_KERNELS
 	endif
@@ -101,16 +120,16 @@ $(TARGET): $(OBJFILES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | directories
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $< $(LIBS)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.s import/weights.bin | directories
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $< $(LIBS)
 
 directories:
 	@mkdir -p $(OBJ_DIRS)
 
-$(KTARGET): src/train/kernels.hip
-	$(KC) $(KFLAGS) src/train/kernels.hip -o $(KTARGET)
+$(KTARGET): src/train/hip/kernels.hip
+	$(KC) $(KFLAGS) src/train/hip/kernels.hip -o $(KTARGET)
 
 ifdef TRAIN
 clean:

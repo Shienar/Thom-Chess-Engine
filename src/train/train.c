@@ -4,9 +4,13 @@
 #include "analyze/search.h"
 #include "train/train.h"
 #include "binpack/viri_binpack.h"
-#include "train/gpu_trainer.h"
 #include <string.h>
-#include <float.h>
+
+#ifdef USE_OPENCL
+#include "opencl/gpu_cl.h"
+#else
+#include "hip/gpu_hip.h"
+#endif
 
 uint64_t max_cosine_anneal_timestamp = 10 * MINIBATCHES_PER_EPOCH;
 float max_lr = 3e-3f;
@@ -190,13 +194,13 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
 
     float* loss_buffer = NULL;
 
-    int cl_errorcode = initHIP(kernelFileName, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
-    if(cl_errorcode != hipSuccess) 
+    int errorcode = initKernels(kernelFileName, &activeInputs_A, &expectedOutputs_A, &outputBuckets_A, &activeInputs_B, &expectedOutputs_B, &outputBuckets_B, &loss_buffer);
+    if(errorcode)
     {
-        printf("Failed to init kernels - Error Code: %d\n%s", cl_errorcode, hipGetErrorString(cl_errorcode));
-        return;
+        printf("Failed to init kernels with error code %d\n", errorcode);
+        exit(1);
     }
-    
+
     binpackDetails trainingBinpack;
     binpack_open(&trainingBinpack, binpackFileName, 1);
     
@@ -222,7 +226,7 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
                                     activeInputs_B, expectedOutputs_B, outputBuckets_B);
 
             enqueueKernels(inputGroup);
-            hipEventSynchronize(hip_events.readLoss);
+            waitForLossRead();
             
             float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
@@ -241,7 +245,7 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
         saveGPUWeights();
     } while(totalEpochs < epochs);
 
-    freeHIP();
+    freeKernels();
     binpack_close(&trainingBinpack);
 
 }

@@ -557,7 +557,9 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                 //Multicut pruning, but we just take the strong singular and assume that there's going to be more.
                 else if(singularScore >= beta && abs(singularScore) < MIN_MATE_SCORE)
                 {
-                    RECORD_SEARCH(context->multicutPrunes++;);
+                    RECORD_SEARCH(context->multicutPrunes++;
+                                    context->pvsSearchedMoves++;
+                                    context->pvsSearchedPositions++;);
                     return singularScore;
                 }
                 //Negative Extension

@@ -1,4 +1,4 @@
-#include "gpu_trainer.h"
+#include "gpu_hip.h"
 #include <string.h>
 
 hipContext hip_context = {
@@ -83,7 +83,7 @@ unsigned char* loadCompiledKernels(size_t* size, const char* fileName)
     *size = ftell(input);
     rewind(input);
 
-    unsigned char* binary = malloc(*size);
+    unsigned char* binary = malloc(*size + 1);
     if(!binary) 
     { 
         DEBUG_ERROR("Failed malloc.");
@@ -98,12 +98,12 @@ unsigned char* loadCompiledKernels(size_t* size, const char* fileName)
         return NULL;
     }
     
+    binary[*size] = '\0';
     fclose(input);
-
     return binary;
 }
 
-hipError_t initHIP(const char* compiledKernelPath,
+hipError_t initKernels(const char* compiledKernelPath,
                     short** h_active_A, float** h_expected_A, char** h_bucket_A,
                     short** h_active_B, float** h_expected_B, char** h_bucket_B,
                     float** h_lossbuffer)
@@ -261,18 +261,6 @@ hipError_t initHIP(const char* compiledKernelPath,
     //output_bias
     hipMemcpyAsync(hip_mem.mem.output_bias_slow, (void*)host_training_weights->output_bias,     output_bias_size, hipMemcpyHostToDevice, hip_context.queue);
     hipMemcpyAsync(hip_mem.mem.output_bias_fast, hip_mem.mem.output_bias_slow,                  output_bias_size, hipMemcpyDeviceToDevice, hip_context.queue);
-    //First moments 
-    hipMemcpyAsync(hip_mem.mem.m_factorizer_weights,    (void*)host_first_moments->factorizer_weights,  factorizer_weights_size,    hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.m_accumulator_weights,   (void*)host_first_moments->accumulator_weights, accumulator_weights_size,   hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.m_accumulator_bias,      (void*)host_first_moments->accumulator_bias,    accumulator_bias_size,      hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.m_output_weights,        (void*)host_first_moments->output_weights,      output_weights_size,        hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.m_output_bias,           (void*)host_first_moments->output_bias,         output_bias_size,           hipMemcpyHostToDevice,  hip_context.queue);
-    //Second moments
-    hipMemcpyAsync(hip_mem.mem.v_factorizer_weights,    (void*)host_second_moments->factorizer_weights,     factorizer_weights_size,   hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.v_accumulator_weights,   (void*)host_second_moments->accumulator_weights,    accumulator_weights_size,  hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.v_accumulator_bias,      (void*)host_second_moments->accumulator_bias,       accumulator_bias_size,     hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.v_output_weights,        (void*)host_second_moments->output_weights,         output_weights_size,       hipMemcpyHostToDevice,  hip_context.queue);
-    hipMemcpyAsync(hip_mem.mem.v_output_bias,           (void*)host_second_moments->output_bias,            output_bias_size,          hipMemcpyHostToDevice,  hip_context.queue);
 
     /** ZEROING **/
     //Gradients
@@ -281,6 +269,18 @@ hipError_t initHIP(const char* compiledKernelPath,
     hipMemsetAsync(hip_mem.mem.accumulator_bias_gradient_sum,       0, accumulator_bias_size,       hip_context.queue);
     hipMemsetAsync(hip_mem.mem.output_weights_gradient_sum,         0, output_weights_size,         hip_context.queue);
     hipMemsetAsync(hip_mem.mem.output_bias_gradient_sum,            0, output_bias_size,            hip_context.queue);
+    //First moments 
+    hipMemsetAsync(hip_mem.mem.m_factorizer_weights,     0, factorizer_weights_size,     hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.m_accumulator_weights,    0, accumulator_weights_size,    hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.m_accumulator_bias,       0, accumulator_bias_size,       hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.m_output_weights,         0, output_weights_size,         hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.m_output_bias,            0, output_bias_size,            hip_context.queue);
+    //Second moments
+    hipMemsetAsync(hip_mem.mem.v_factorizer_weights,     0, factorizer_weights_size,     hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.v_accumulator_weights,    0, accumulator_weights_size,    hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.v_accumulator_bias,       0, accumulator_bias_size,       hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.v_output_weights,         0, output_weights_size,         hip_context.queue);
+    hipMemsetAsync(hip_mem.mem.v_output_bias,            0, output_bias_size,            hip_context.queue);
 
     hipStreamSynchronize(hip_context.queue);
 
@@ -353,7 +353,7 @@ hipError_t initHIP(const char* compiledKernelPath,
     return hipSuccess;
 }
 
-void freeHIP()
+void freeKernels()
 {
     hipEventDestroy(hip_events.readLoss); 
     hip_events.readLoss = NULL;
@@ -423,6 +423,8 @@ float print_prof(const char* name, hipEvent_t start, hipEvent_t stop)
         return 0.0f;
     }
 }
+
+void waitForLossRead() { hipEventSynchronize(hip_events.readLoss); }
 
 void enqueueKernels(int bufferSide)
 {

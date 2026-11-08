@@ -16,11 +16,6 @@
     #define ENQUEUE_EVENT(event, queue)
 #endif
 
-//Ping-pong buffers
-#define INPUT_GROUP(block) (block&1)
-#define INPUT_GROUP_A 0
-#define INPUT_GROUP_B 1
-
 #define KERNEL_COUNT 9
 #define MEM_COUNT 36
 #define EVENT_TRACKED_KERNELS (KERNEL_COUNT - 1)
@@ -149,11 +144,11 @@ extern hipContext hip_context;
 extern hipKernelArgs hip_args;
 extern hipEvents hip_events;
 
-hipError_t initHIP(const char* compiledKernelPath,
+hipError_t initKernels(const char* compiledKernelPath,
                     short** h_active_A, float** h_expected_A, char** h_bucket_A,
                     short** h_active_B, float** h_expected_B, char** h_bucket_B,
                     float** h_lossbuffer);
-void freeHIP();
+void freeKernels();
 
 #define LOOKAHEAD_UPDATE(fastWeights, slowWeights, size) \
     do { \
@@ -165,4 +160,5 @@ void freeHIP();
     }while(0)
 
 void enqueueKernels(int bufferSide);
+void waitForLossRead();
 void saveGPUWeights();

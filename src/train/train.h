@@ -19,6 +19,11 @@ extern uint64_t max_cosine_anneal_timestamp;
 
 #define FEN_SKIP_TRAINING 3
 
+//Ping-pong buffers
+#define INPUT_GROUP(block) (block&1)
+#define INPUT_GROUP_A 0
+#define INPUT_GROUP_B 1
+
 void initializeTrainingWeights(training_weights* raw_weights);
 void quantizeWeights(training_weights* raw, nnue_weights* quantized);
 void saveRawWeights(training_weights* weights, const char* path);
