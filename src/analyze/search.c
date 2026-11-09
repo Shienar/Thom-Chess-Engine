@@ -397,21 +397,30 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             score = context->evalHistory[ply];
         else
         {
-            score = evaluate(context, ply);
-            score += getCorrectionHistoryOffset(context, curBoard);
-
-            tt_entry shallowEntry = {
-                .depth = 0,
-                .nodeType = NODE_BOUND_UNKNOWN,
-                .evaluation = score
-            };
-            transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
-
             //TT Reductions
+            //Try to generate some history values and a tt move using a shallow search, then continue with a reduced depth
             if(depth > tt_reduction_depth)
             {
-                RECORD_SEARCH(context->tt_reductions++;);
+                score = principalVariationSearch(context, alpha, beta, 1, ply, &childPV, pvNode, cutNode);
+
+                old_tt_entry = transposition_table_get(curBoard, context->tt, &tt_hit, ply);
+                temp = old_tt_entry.bestMove;
+                tt_move = &temp;
+
                 depth--;
+                RECORD_SEARCH(context->tt_reductions++;);
+            }
+            else
+            {
+                score = evaluate(context, ply);
+                score += getCorrectionHistoryOffset(context, curBoard);
+
+                tt_entry shallowEntry = {
+                    .depth = 0,
+                    .nodeType = NODE_BOUND_UNKNOWN,
+                    .evaluation = score
+                };
+                transposition_table_set(context->tt, shallowEntry, curBoard->hashCode, ply);
             }
         }
     }
