@@ -496,6 +496,7 @@ moveIterator* create_move_iterator(threadContext* context, int genType, int ply,
         while(context->searchedMoves[iter->count].raw)
             iter->count++;
         scoreMoves(iter, 0, iter->count);
+        iter->stage = ITER_STAGE_REQUIRED;
     }
     else
     {
@@ -704,6 +705,7 @@ move* iterate_next_move(moveIterator* iter)
             }
             else
                 iter->stage = ITER_STAGE_DONE;
+            break;
         default:
             __builtin_unreachable(); 
             break;
