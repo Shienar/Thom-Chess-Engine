@@ -17,7 +17,14 @@ void getFromPyrrhic(bitboard* board, move* dest, unsigned result)
 void filterSyzygyMoves(bitboard* board, move* requiredMoves)
 {
     //3-n man syzygy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || board->in_check) return;
+    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || 
+        board->in_check || 
+        board->halfmoveClock || 
+        board->canKingsideCastle_b ||
+        board->canKingsideCastle_w ||
+        board->canQueensideCastle_b ||
+        board->canQueensideCastle_w) 
+            return;
 
     //Don't probe syzygy if the GUI assigned required search moves.
     if(requiredMoves[0].raw) return;
@@ -64,7 +71,13 @@ void filterSyzygyMoves(bitboard* board, move* requiredMoves)
 int getSyzygyResult(bitboard* board)
 {
     //3-n man syzygy endgame with no castling rights.
-    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || board->in_check) return -1;
+    if(__builtin_popcountll(board->pieces_all) > syzygyProbeLimit || 
+        board->in_check || 
+        board->halfmoveClock || 
+        board->canKingsideCastle_b ||
+        board->canKingsideCastle_w ||
+        board->canQueensideCastle_b ||
+        board->canQueensideCastle_w) return -1;
 
     uint32_t ep = board->enPassantSquare;
     if(ep == -1) ep = 0;

@@ -16,6 +16,7 @@ fastchess.exe -engine cmd=../../target/$ENGINE_ONE name=$ENGINE_ONE_NAME \
                 -engine cmd=../../target/$ENGINE_TWO name=$ENGINE_TWO_NAME \
                 -each tc=8+0.08 \
                 -each option.Hash=4 \
+                -each option.SyzygyPath=C:/Syzygy
                 -rounds 1000 \
                 -repeat \
                 -tb C:/Syzygy/ \

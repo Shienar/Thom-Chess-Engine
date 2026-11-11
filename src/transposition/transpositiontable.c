@@ -88,10 +88,15 @@ tt_entry transposition_table_get(bitboard* board, hashtable_tt* tt, uint8_t* hit
             *hit = 1;
             tt->array[index].entries[i].age = tt->age;
 
-            if(bucket_entries[i].evaluation >= MIN_MATE_SCORE) bucket_entries[i].evaluation -= ply;
-            else if(bucket_entries[i].evaluation <= -MIN_MATE_SCORE) bucket_entries[i].evaluation += ply;
+            //Create a copy to make evaluation editing safe.
+            tt_entry returnedEntry = bucket_entries[i];
 
-            return bucket_entries[i];
+            if(returnedEntry.evaluation >= MIN_MATE_SCORE) 
+                returnedEntry.evaluation -= ply;
+            else if(returnedEntry.evaluation <= -MIN_MATE_SCORE) 
+                returnedEntry.evaluation += ply;
+
+            return returnedEntry;
         }
     }
     
