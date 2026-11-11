@@ -26,9 +26,18 @@ depth=$1
 counter=$(git rev-list --all --count)
 fi
 
+
 mkdir -p "$TEMP_DIR"
 mkdir -p "$OUTPUT_DIR"
 cd $TEMP_DIR
+
+cleanup() {
+    cd $TEMP_DIR
+    cd ..
+    rm -rf $TEMP_DIR
+    echo "Finished Cleanup."
+}
+trap cleanup EXIT
 
 git clone --depth $depth https://github.com/Shienar/Thom-Chess-Engine
 cd Thom-Chess-Engine
@@ -57,7 +66,3 @@ for HASH in $COMMITS; do
 done
 
 echo "Finished compilations"
-cd $TEMP_DIR
-cd ..
-rm -rf $TEMP_DIR
-echo "Finished Cleanup."

@@ -139,8 +139,6 @@ int shouldAbortSearch(threadContext* context, int ply)
 
 int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pvNode)
 {
-    context->countedNodes++;
-    RECORD_SEARCH(context->qs_nodes++;);
     bitboard* curBoard = &context->boardStack[ply];
 
     if(shouldAbortSearch(context, ply))
@@ -226,6 +224,10 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
             tt_prefetch(context->tt, nextBoard->hashCode);
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
+            
+            context->countedNodes++;
+            RECORD_SEARCH(context->qs_nodes++;);
+
             int score = -quiescentSearch(context, -beta, -alpha, ply + 1, pvNode);
 
             if(score > best)
@@ -264,8 +266,6 @@ int quiescentSearch(threadContext* context, int alpha, int beta, int ply, int pv
 int principalVariationSearch(threadContext* context, int alpha, int beta, int depth, int ply, PVar *myPV, int pvNode, int cutNode)
 {
     assert(context);
-    context->countedNodes++;
-    RECORD_SEARCH(context->pvs_nodes++;);
     bitboard* curBoard = &context->boardStack[ply];
 
     myPV->length = 0;
@@ -620,6 +620,9 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
 
+            context->countedNodes++;
+            RECORD_SEARCH(context->pvs_nodes++;);
+            
             if(pvNode && (validMovesVisited == 0 || score > alpha))
                 score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);
             else
