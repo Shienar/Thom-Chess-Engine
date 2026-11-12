@@ -1,12 +1,14 @@
 #include "analyze/search.h"
-#include "board/moves.h"
-#include "board/bitboard.h"
 #include "debug.h"
 #include "analyze/syzygy.h"
-#include "pyrrhic/tbprobe.h"
+#include "analyze/cuckoo.h"
+#include "board/bitboard.h"
+#include "board/moves.h"
+#include "pyrrhic/tbconfig.h"
 #include "analyze/nnue/neuralnet.h"
 #include "analyze/hce/hce.h"
-#include <string.h>
+#include <inttypes.h>
+#include <stdio.h>
 #include <math.h>
 
 int threadCount = 1;
@@ -695,14 +697,10 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
         //We know its not a (stale-)mate position if an excluded move exists at this ply.
         if(context->excludedMove[ply].raw)
             return alpha;
-
-        int victor = getMateResult(curBoard);
-        if(victor == VICTOR_WHITE)
-            return (curBoard->turn == WHITE) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
-        else if(victor == VICTOR_BLACK)
-            return (curBoard->turn == BLACK) ? (SCORE_WIN - ply) : -(SCORE_WIN - ply);
-        else
+        else if(getMateResult(curBoard) == VICTOR_DRAW)
             return 0;
+        else
+            return -SCORE_WIN + ply;
     }
 
     new_tt_entry.nodeType = (bestScore >= beta) ? NODE_BOUND_LOWER : ((bestScore > lowestBound) ? NODE_BOUND_EXACT : NODE_BOUND_UPPER);

@@ -1,6 +1,10 @@
+#include "compatibility.h"
 #include "analyze/cuckoo.h"
-#include "board/bitboard.h"
 #include "board/moves.h"
+#include "board/bitboard.h"
+#include "board/magic.h"
+#include "transposition/hash.h"
+#include <string.h>
 
 uint64_t betweenSquares[64][64];
 uint64_t cuckooHashes[CUCKOO_SIZE] = {0};
@@ -43,7 +47,7 @@ void initCuckooMoveTable()
             //Non-pawn moves are symmetrical in from/to.
             for(int to = from + 1; to < 64; to++)
             {
-                if(!(attacks & singleBitMask(to)))
+                if(!(attacks & (1ull << (to))))
                     continue;
                 
                 move m = {
@@ -78,9 +82,9 @@ void initCuckooMoveTable()
         for(int b = 0; b < 64; b++)
         {
             if(getRow(a) == getRow(b) || getColumn(a) == getColumn(b))
-                betweenSquares[a][b] = rookMoves(singleBitMask(b), 0, a) & rookMoves(singleBitMask(a), 0, b);
-            else if(bishopMoves(0, 0, a) & singleBitMask(b))
-                betweenSquares[a][b] = bishopMoves(singleBitMask(b), 0, a) & bishopMoves(singleBitMask(a), 0, b);
+                betweenSquares[a][b] = rookMoves((1ull << (b)), 0, a) & rookMoves((1ull << (a)), 0, b);
+            else if(bishopMoves(0, 0, a) & (1ull << (b)))
+                betweenSquares[a][b] = bishopMoves((1ull << (b)), 0, a) & bishopMoves((1ull << (a)), 0, b);
         }
     }
 

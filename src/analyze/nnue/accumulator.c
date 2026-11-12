@@ -1,32 +1,6 @@
 #include "analyze/nnue/accumulator.h"
-#include "analyze/nnue/neuralnet.h"
-#include "debug.h"
-#include "board/bitboard.h"
-#include "board/moves.h"
-#include "analyze/search.h"
-#include <math.h>
 #include <immintrin.h>
 #include <string.h>
-
-/**
- * - Index X contains the king bucket index at square X.
- * - Created for white's perspective; must be flipped for black.
- * - Mirrored accross middle of board, split between d/e files.
- *      - When king column > d, the squares & masks of all pieces get mirrored.
- * 
- * topleft: a1
- * bottomright: h8
- */
-int kingBuckets[64] = {
-    0, 1, 2, 3,     3, 2, 1, 0,
-    4, 4, 5, 5,     5, 5, 4, 4,
-    6, 6, 6, 6,     6, 6, 6, 6,
-    7, 7, 7, 7,     7, 7, 7, 7,
-    8, 8, 8, 8,     8, 8, 8, 8,
-    8, 8, 8, 8,     8, 8, 8, 8,
-    9, 9, 9, 9,     9, 9, 9, 9,
-    9, 9, 9, 9,     9, 9, 9, 9,
-};
 
 //full refresh of raw values.
 void calculateAccumulator(uint64_t* inputNodes, int16_t* outputValues, int kingBucketOffset)
@@ -318,7 +292,7 @@ void updateBoardAccumulator(bitboard* currentBoard, bitboard* accumulatorBoard, 
 
             int featureIndex = (64 * (PIECE_COUNT * kingBuckets[ksq] + piece)) + square;
 
-            char wasAdded = curBoard[piece]&singleBitMask(square) ? 1 : 0;
+            char wasAdded = curBoard[piece]&(1ull << (square)) ? 1 : 0;
 
             int16_t* targetAcc = acc->rawValues[color];
             int16_t* targetWeights = weights->accumulator_weights[featureIndex];

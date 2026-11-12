@@ -1,7 +1,6 @@
 #include "transposition/hash.h"
 #include "board/bitboard.h"
-#include "debug.h"
-#include <string.h>
+#include <stdint.h>
 
 /**
  * - Indexes 0-767 are for piece-square values.
@@ -51,8 +50,8 @@ uint64_t getEnPassantHash(bitboard* board)
 
     int capturedPawnSquare = (epRow == 5) ? epSquare - 8 : epSquare + 8;
 
-    if(getColumn(capturedPawnSquare) > 0) borderingPawnMask |= singleBitMask(capturedPawnSquare - 1);
-    if(getColumn(capturedPawnSquare) < 7) borderingPawnMask |= singleBitMask(capturedPawnSquare + 1);
+    if(getColumn(capturedPawnSquare) > 0) borderingPawnMask |= (1ull << (capturedPawnSquare - 1));
+    if(getColumn(capturedPawnSquare) < 7) borderingPawnMask |= (1ull << (capturedPawnSquare + 1));
 
     if(epRow == 5)
     {

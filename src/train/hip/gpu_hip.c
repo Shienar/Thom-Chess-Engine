@@ -1,5 +1,12 @@
-#include "gpu_hip.h"
-#include <string.h>
+#include "train/hip/gpu_hip.h"
+#include "debug.h"
+#include "compatibility.h"
+#include "train/train.h"
+#include "analyze/nnue/neuralnet.h"
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <math.h>
 
 hipContext hip_context = {
     .deviceID = 0,
@@ -431,7 +438,7 @@ void enqueueKernels(int bufferSide)
     //cosine annealing
     cosineTimestamp = _min(cosineTimestamp + 1, max_cosine_anneal_timestamp);
     lr = min_lr + 0.5 * (max_lr - min_lr) * (1.0 + cos(PI * (cosineTimestamp) / max_cosine_anneal_timestamp));
-    lr = clamp(lr, min_lr, max_lr);
+    lr = _min(max_lr, _max(min_lr, lr));
 
     hipMemcpyAsync( (bufferSide == INPUT_GROUP_A) ? hip_mem.mem.activeInputs_A  : hip_mem.mem.activeInputs_B, 
                     (bufferSide == INPUT_GROUP_A) ? host_activeInputs_A         : host_activeInputs_B, 

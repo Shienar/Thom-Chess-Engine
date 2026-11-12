@@ -1,8 +1,13 @@
-#include "tuner.h"
-#include "analyze/search.h"
-#include <math.h>
+#include "compatibility.h"
+#include "board/moves.h"
+#include "analyze/hce/tuner.h"
+#include "train/train.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <inttypes.h>
 #include <float.h>
-
+#include <math.h>
+#include <string.h>
 
 evalParameters_fp currentParameters;
 tuningEntry* tuner_entries = NULL;
@@ -289,7 +294,7 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
         //outpost
 		if(row >= 4 && row <= 6 && 
 		   board->pieces[WHITE_PAWN] && board_rank[row - 1] &&
-		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~(singleBitMask(sq + 7) - 1))) == 0)
+		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~((1ull << (sq + 7)) - 1))) == 0)
 			{	
                 UPDATE_COEFFICIENTS(knightOutpostBonus, 1, +=,);
 			}
@@ -320,7 +325,7 @@ void initKnightCoefficients(bitboard* board, evalParameters* coefficients, evalP
         //outpost
 		if(row >= 1 && row <= 3 &&
 		   board->pieces[BLACK_PAWN] && board_rank[row + 1] &&
-		   (bordering_files[column] & board->pieces[WHITE_PAWN] & ((singleBitMask(sq - 6) - 1))) == 0)
+		   (bordering_files[column] & board->pieces[WHITE_PAWN] & (((1ull << (sq - 6)) - 1))) == 0)
 			{	
                 UPDATE_COEFFICIENTS(knightOutpostBonus, 1, -=,);
 			}
@@ -742,7 +747,7 @@ void initSingleEntry(tuningEntry* entry, bitboard* board)
     {
         phase -= gamephasePieceValues[pc] * __builtin_popcountll(board->pieces[pc]);
     }
-	phase = clamp(phase, 0, 24);
+	phase = _min(24, _max(0, phase));
 
     entry->phaseFactors.mg = 1.0 - phase / 24.0;
     entry->phaseFactors.eg = phase / 24.0;
@@ -1064,7 +1069,7 @@ void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t
         if(epoch < end_lr_epoch)
         {
             lr = min_lr + 0.5 * (max_lr -  min_lr) * (1.0 + cos(PI * (epoch) / end_lr_epoch));
-            lr = clamp(lr, min_lr, max_lr);
+            lr = _min(max_lr, _max(min_lr, lr));
         }
 
         evalParameters_fp gradient = {0};

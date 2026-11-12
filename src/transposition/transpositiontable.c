@@ -1,13 +1,11 @@
 #include "transposition/transpositiontable.h"
-#include "debug.h"
-#include "board/bitboard.h"
-#include "board/moves.h"
-#include <string.h>
+#include "analyze/search.h"
+#include <stdint.h>
 
 hashtable_tt* transpositionTable = NULL;
 uint64_t tt_bytes = 1024 * 1024 * 256;
 
-const uint64_t indexMask = singleBitMask(48) - 1;
+const uint64_t indexMask = (1ull << (48)) - 1;
 
 hashtable_tt* create_hashTable_tt()
 {

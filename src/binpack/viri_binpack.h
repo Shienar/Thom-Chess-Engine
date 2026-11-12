@@ -1,7 +1,9 @@
 #pragma once
 
-#include "types.h"
-#include "debug.h"
+#include "compatibility.h"
+#include "board/bitboard.h"
+#include <stdio.h>
+#include <time.h>
 
 //Reusing the format from https://github.com/cosmobobak/viriformat
 

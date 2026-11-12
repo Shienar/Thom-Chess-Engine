@@ -5,9 +5,6 @@
 #endif
 
 #include <hip/hip_runtime_api.h>
-#include "debug.h"
-#include "analyze/nnue/neuralnet.h"
-#include "train/train.h"
 
 //Profiling
 #ifdef PERFT_KERNELS

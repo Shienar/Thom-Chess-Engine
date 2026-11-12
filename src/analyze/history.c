@@ -1,5 +1,6 @@
 #include "analyze/history.h"
-#include "board/moves.h"
+#include "board/bitboard.h"
+#include "analyze/search.h"
 
 int historyBonusScale = 266;
 int historyBonusOffset = 181;
@@ -27,8 +28,8 @@ int getHistoryValue(threadContext* context, int turn, int piece, int to)
 
 void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth)
 {
-    int bonus = clamp(historyBonusScale * depth + historyBonusOffset, -MAX_HISTORY_SCORE, MAX_HISTORY_SCORE);
-    int penalty = -clamp(historyPenaltyScale * depth + historyPenaltyOffset, -MAX_HISTORY_SCORE, MAX_HISTORY_SCORE);
+    int bonus = _min(MAX_HISTORY_SCORE, _max(-MAX_HISTORY_SCORE, historyBonusScale * depth + historyBonusOffset));
+    int penalty = -_min(MAX_HISTORY_SCORE, _max(-MAX_HISTORY_SCORE, historyPenaltyScale * depth + historyPenaltyOffset));
 
     historyTable[boostedIndex] += bonus - historyTable[boostedIndex] * abs(bonus) / MAX_HISTORY_SCORE;
     for(int i = 0; i < searchedQuietCount; i++)
@@ -97,7 +98,7 @@ void applyCaptureHistoryPenalty(int16_t* dest, int depth)
 
 void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int staticScore)
 {
-    *oldHist = clamp(*oldHist + depth * depth * (searchScore - staticScore), -MAX_CORRHIST_VAL, MAX_CORRHIST_VAL);
+    *oldHist = _min(MAX_CORRHIST_VAL, _max(-MAX_CORRHIST_VAL, *oldHist + depth * depth * (searchScore - staticScore)));
 }
 
 int getCorrectionHistoryOffset(threadContext* context, bitboard* board)

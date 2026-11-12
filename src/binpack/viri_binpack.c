@@ -1,9 +1,12 @@
-#define _GNU_SOURCE
 #include "binpack/viri_binpack.h"
+#include "debug.h"
+#include "compatibility.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
-#include "debug.h"
-#include <string.h>
+#include <stdio.h>
+#include <time.h>
+#include <inttypes.h>
+#include <stdint.h>
 
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -251,7 +254,7 @@ int packedBoardToBoard(bitboard* board, Viri_PackedBoard* packedBoard)
 
         piece = pieceMappingsFromViri[piece];
 
-        uint64_t sqMask = singleBitMask(sq);
+        uint64_t sqMask = (1ull << (sq));
         board->pieces_all |= sqMask;
         board->pieces_side[COLOR(piece)] |= sqMask;
         board->pieces[piece] |= sqMask;

@@ -1,5 +1,5 @@
 #include "board/magic.h"
-#include "debug.h"
+#include "board/bitboard.h"
 
 magic bishopMagics[64] = {0};
 magic rookMagics[64]= {0};
@@ -54,48 +54,48 @@ uint64_t naiveBishop(int square, uint64_t occupancy, int useOccupancy)
         //Topleft
         for(int r = row + 1, c = column - 1; r <= 7 && c >= 0; r++, c--)
         {
-            potentialMoves |= singleBitMask(8 * r + c);
-            if(singleBitMask(8 * r + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + c));
+            if((1ull << (8 * r + c)) & occupancy) break;
         }
 
         //Topright
         for(int r = row + 1, c = column + 1; r <= 7 && c <= 7; r++, c++)
         {
-            potentialMoves |= singleBitMask(8 * r + c);
-            if(singleBitMask(8 * r + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + c));
+            if((1ull << (8 * r + c)) & occupancy) break;
         }
 
         //Bottomleft
         for(int r = row - 1, c = column - 1; r >= 0 && c >= 0; r--, c--)
         {
-            potentialMoves |= singleBitMask(8 * r + c);
-            if(singleBitMask(8 * r + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + c));
+            if((1ull << (8 * r + c)) & occupancy) break;
         }
 
         //Bottomright
         for(int r = row - 1, c = column + 1; r >= 0 && c <= 7; r--, c++)
         {
-            potentialMoves |= singleBitMask(8 * r + c);
-            if(singleBitMask(8 * r + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + c));
+            if((1ull << (8 * r + c)) & occupancy) break;
         }
     }
     else
     {
         //Topleft
         for(int r = row + 1, c = column - 1; r <= 6 && c >= 1; r++, c--) 
-            potentialMoves |= singleBitMask(8 * r + c);
+            potentialMoves |= (1ull << (8 * r + c));
 
         //Topright
         for(int r = row + 1, c = column + 1; r <= 6 && c <= 6; r++, c++) 
-            potentialMoves |= singleBitMask(8 * r + c);
+            potentialMoves |= (1ull << (8 * r + c));
 
         //Bottomleft
         for(int r = row - 1, c = column - 1; r >= 1 && c >= 1; r--, c--) 
-            potentialMoves |= singleBitMask(8 * r + c);
+            potentialMoves |= (1ull << (8 * r + c));
 
         //Bottomright
         for(int r = row - 1, c = column + 1; r >= 1 && c <= 6; r--, c++) 
-            potentialMoves |= singleBitMask(8 * r + c);
+            potentialMoves |= (1ull << (8 * r + c));
     }
 
     return potentialMoves;
@@ -113,48 +113,48 @@ uint64_t naiveRook(int square, uint64_t occupancy, int useOccupancy)
         //Right
         for(int c = column + 1; c <= 7; c++)
         {
-            potentialMoves |= singleBitMask(8 * row + c);
-            if(singleBitMask(8 * row + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * row + c));
+            if((1ull << (8 * row + c)) & occupancy) break;
         }
 
         //Left
         for(int c = column - 1; c >= 0; c--)
         {
-            potentialMoves |= singleBitMask(8 * row + c);
-            if(singleBitMask(8 * row + c) & occupancy) break;
+            potentialMoves |= (1ull << (8 * row + c));
+            if((1ull << (8 * row + c)) & occupancy) break;
         }
 
         //Above
         for(int r = row + 1; r <= 7; r++)
         {
-            potentialMoves |= singleBitMask(8 * r + column);
-            if(singleBitMask(8 * r + column) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + column));
+            if((1ull << (8 * r + column)) & occupancy) break;
         }
 
         //Below
         for(int r = row - 1; r >= 0; r--)
         {
-            potentialMoves |= singleBitMask(8 * r + column);
-            if(singleBitMask(8 * r + column) & occupancy) break;
+            potentialMoves |= (1ull << (8 * r + column));
+            if((1ull << (8 * r + column)) & occupancy) break;
         }
     }
     else
     {
         //Right
         for(int c = column + 1; c <= 6; c++) 
-            potentialMoves |= singleBitMask(8 * row + c);
+            potentialMoves |= (1ull << (8 * row + c));
 
         //Left
         for(int c = column - 1; c >= 1; c--) 
-            potentialMoves |= singleBitMask(8 * row + c);
+            potentialMoves |= (1ull << (8 * row + c));
 
         //Above
         for(int r = row + 1; r <= 6; r++) 
-            potentialMoves |= singleBitMask(8 * r + column);
+            potentialMoves |= (1ull << (8 * r + column));
 
         //Below
         for(int r = row - 1; r >= 1; r--) 
-            potentialMoves |= singleBitMask(8 * r + column);
+            potentialMoves |= (1ull << (8 * r + column));
     }
 
     return potentialMoves;
@@ -225,14 +225,14 @@ void initPawnAttacks()
 
         if(row < 7)
         {
-            if(column > 0) pawnAttacks[WHITE][square] |= singleBitMask(square+7);
-            if(column < 7) pawnAttacks[WHITE][square] |= singleBitMask(square+9);
+            if(column > 0) pawnAttacks[WHITE][square] |= (1ull << (square+7));
+            if(column < 7) pawnAttacks[WHITE][square] |= (1ull << (square+9));
         }
 
         if(row > 0)
         {
-            if(column > 0) pawnAttacks[BLACK][square] |= singleBitMask(square-9);
-            if(column < 7) pawnAttacks[BLACK][square] |= singleBitMask(square-7);
+            if(column > 0) pawnAttacks[BLACK][square] |= (1ull << (square-9));
+            if(column < 7) pawnAttacks[BLACK][square] |= (1ull << (square-7));
         }
     }
 }
@@ -264,21 +264,21 @@ void initKnightMoveTable()
         */
 
         if(column - 2 >= 0 && row + 1 <= 7) 
-            knightAttacks[square]|=singleBitMask(square+6);
+            knightAttacks[square]|=(1ull << (square+6));
         if(column - 1 >= 0 && row + 2 <= 7) 
-            knightAttacks[square]|=singleBitMask(square+15);
+            knightAttacks[square]|=(1ull << (square+15));
         if(column + 1 <= 7 && row + 2 <= 7) 
-            knightAttacks[square]|=singleBitMask(square+17);
+            knightAttacks[square]|=(1ull << (square+17));
         if(column + 2 <= 7 && row + 1 <= 7)
-            knightAttacks[square]|=singleBitMask(square+10);
+            knightAttacks[square]|=(1ull << (square+10));
         if(column + 2 <= 7 && row - 1 >= 0)
-            knightAttacks[square]|=singleBitMask(square-6);
+            knightAttacks[square]|=(1ull << (square-6));
         if(column + 1 <= 7 && row - 2 >= 0)
-            knightAttacks[square]|=singleBitMask(square-15);
+            knightAttacks[square]|=(1ull << (square-15));
         if(column - 1 >= 0 && row - 2 >= 0)
-            knightAttacks[square]|=singleBitMask(square-17);
+            knightAttacks[square]|=(1ull << (square-17));
         if(column - 2 >= 0 && row - 1 >= 0)
-            knightAttacks[square]|=singleBitMask(square-10);
+            knightAttacks[square]|=(1ull << (square-10));
     }
 }
 
@@ -308,20 +308,20 @@ void initKingMoveTable()
         *  8: endSquare = square - 7
         */
         if(column - 1 >= 0 && row + 1 <= 7) 
-            kingAttacks[square]|=singleBitMask(square+7);
+            kingAttacks[square]|=(1ull << (square+7));
         if(row + 1 <= 7) 
-            kingAttacks[square]|=singleBitMask(square+8);
+            kingAttacks[square]|=(1ull << (square+8));
         if(column + 1 <= 7 && row + 1 <= 7) 
-            kingAttacks[square]|=singleBitMask(square+9);
+            kingAttacks[square]|=(1ull << (square+9));
         if(column - 1 >= 0) 
-            kingAttacks[square]|=singleBitMask(square-1);
+            kingAttacks[square]|=(1ull << (square-1));
         if(column + 1 <= 7) 
-            kingAttacks[square]|=singleBitMask(square+1);
+            kingAttacks[square]|=(1ull << (square+1));
         if(column - 1 >= 0 && row - 1 >= 0) 
-            kingAttacks[square]|=singleBitMask(square-9);
+            kingAttacks[square]|=(1ull << (square-9));
         if(row - 1 >= 0) 
-            kingAttacks[square]|=singleBitMask(square-8);
+            kingAttacks[square]|=(1ull << (square-8));
         if(column + 1 <= 7 && row - 1 >= 0) 
-            kingAttacks[square]|=singleBitMask(square-7);
+            kingAttacks[square]|=(1ull << (square-7));
     }
 }

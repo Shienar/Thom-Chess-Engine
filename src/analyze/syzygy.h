@@ -1,8 +1,6 @@
 #pragma once
 
-#include "types.h"
-#include "board/bitboard.h"
-#include "pyrrhic/tbprobe.h"
+#include "board/board.h"
 
 int getSyzygyResult(bitboard* board);
 void filterSyzygyMoves(bitboard* board, move* requiredMoves);

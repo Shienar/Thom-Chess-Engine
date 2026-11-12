@@ -1,6 +1,6 @@
 #pragma once
 
-#include "board/moves.h"
+#include <stdint.h>
 #include "board/bitboard.h"
 
 #define SEMI_OPEN_FILE 0

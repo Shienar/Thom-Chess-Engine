@@ -1,5 +1,13 @@
 #pragma once
-#include "board/bitboard.h"
+
+#include <stdint.h>
+
+typedef struct magic {
+    uint64_t mask;
+    uint64_t magic;
+    uint64_t* attacks;
+    int8_t shiftOffset;
+} magic;
 
 //Fancy magic bitboards
 //Hashed Index = relevantOccupancy * squareMagic >> squareShiftOffset

@@ -1,4 +1,9 @@
+#include "debug.h"
 #include "analyze/syzygy.h"
+#include "board/bitboard.h"
+#include "pyrrhic/tbconfig.h"
+#include "pyrrhic/tbprobe.h"
+#include "analyze/search.h"
 
 void getFromPyrrhic(bitboard* board, move* dest, unsigned result)
 {

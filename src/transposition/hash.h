@@ -1,6 +1,7 @@
 #pragma once
-#include "types.h"
+
 #include <stdint.h>
+#include "board/board.h"
 
 extern uint64_t zobrist_keys[781];
 extern uint64_t zobrist_piece_keys[PIECE_COUNT][64];

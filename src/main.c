@@ -1,15 +1,25 @@
-#include "board/moves.h"
-#include "board/bitboard.h"
+#include "compatibility.h"
 #include "debug.h"
-#include "transposition/transpositiontable.h"
 #include "pyrrhic/tbprobe.h"
-#include "analyze/search.h"
-#include "binpack/generate.h"
+#include "board/bitboard.h"
+#include "board/magic.h"
+#include "transposition/transpositiontable.h"
+#include "analyze/cuckoo.h"
+#include "analyze/hce/hce.h"
 #include "analyze/hce/tuner.h"
 #include "analyze/nnue/neuralnet.h"
-#include "train/train.h"
+#include "analyze/search.h"
+#include "binpack/viri_binpack.h"
+#include "binpack/generate.h"
+#include <inttypes.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <omp.h>
-#include <string.h>
+
+#ifdef TRAIN
+#include "train/train.h"
+#endif
+
 
 #ifdef SPSA
 
@@ -179,7 +189,7 @@ int main(int argc, char** argv)
                                 break;
                             }
                             sscanf(str, "%d", &threadCount);
-                            threadCount = clamp(threadCount, MIN_THREADS, MAX_THREADS);
+                            threadCount = _min(MAX_THREADS, _max(MIN_THREADS, threadCount));
                             omp_set_num_threads(threadCount);
                         }
                         
@@ -254,7 +264,7 @@ int main(int argc, char** argv)
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
                             sscanf(str, "%d", &syzygyProbeLimit);
-                            syzygyProbeLimit = clamp(syzygyProbeLimit, MIN_PROBE_LIMIT, MAX_PROBE_LIMIT);
+                            syzygyProbeLimit = _min(MAX_PROBE_LIMIT, _max(MIN_PROBE_LIMIT, syzygyProbeLimit));
                         }
                         break;
                     }
@@ -263,7 +273,7 @@ int main(int argc, char** argv)
                         if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
                         {
                             if(str) sscanf(str, "%d", &syzygyProbeDepth);
-                            syzygyProbeDepth = clamp(syzygyProbeDepth, MIN_PROBE_DEPTH, MAX_PROBE_DEPTH);
+                            syzygyProbeDepth = _min(MAX_PROBE_DEPTH, _max(MIN_PROBE_DEPTH, syzygyProbeDepth));
                         }
                         break;
                     }
@@ -409,7 +419,7 @@ int main(int argc, char** argv)
                             context->searchedMoves[searchedMoveCount++] = getStructFromString(board, str);
                 }
 
-                context->maxDepth = clamp(context->maxDepth, 1, MAX_PLY);
+                context->maxDepth = _min(MAX_PLY, _max(1, context->maxDepth));
 
                 //Finished parsing command modifers, setup & launch thread.
                 context->startTime = clock();

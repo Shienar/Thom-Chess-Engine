@@ -1,8 +1,8 @@
 #pragma once
 
-#include "types.h"
+#include "board/board.h"
 #include "transposition/hash.h"
-#include "debug.h"
+#include <assert.h>
 
 #define WHITE 0
 #define BLACK 1
@@ -45,9 +45,6 @@
 #define ISROOK(piece) ((piece&0xE) == ROOK)
 #define ISQUEEN(piece) ((piece&0xE) == QUEEN)
 #define ISKING(piece) ((piece&0xE) == KING)
-
-#define SCORE_WIN 32000
-#define MIN_MATE_SCORE (SCORE_WIN - MAX_PLY)
 
 #define NO_EP_SQUARE 64
 
@@ -111,9 +108,9 @@ static inline void board_clear_square(bitboard* board, int square)
     int pieceType = findPieceOnSquare(board, square);
     if(pieceType == EMPTY_PIECE) return;
 
-    board->pieces[pieceType] &= ~singleBitMask(square);
-    board->pieces_side[COLOR(pieceType)] &= ~singleBitMask(square);
-    board->pieces_all &= ~singleBitMask(square);
+    board->pieces[pieceType] &= ~(1ull << (square));
+    board->pieces_side[COLOR(pieceType)] &= ~(1ull << (square));
+    board->pieces_all &= ~(1ull << (square));
     board->pieceArr[square] = EMPTY_PIECE;
     board->hashCode ^= zobrist_piece_keys[pieceType][square];
     if(ISPAWN(pieceType))
@@ -129,9 +126,9 @@ static inline void board_set(bitboard* board, int square, int piece)
     assert(square >= 0 && square <= 63);
     assert(piece != EMPTY_PIECE);
     
-    board->pieces[piece] |= singleBitMask(square);
-    board->pieces_side[COLOR(piece)] |= singleBitMask(square);
-    board->pieces_all |= singleBitMask(square);
+    board->pieces[piece] |= (1ull << (square));
+    board->pieces_side[COLOR(piece)] |= (1ull << (square));
+    board->pieces_all |= (1ull << (square));
     board->pieceArr[square] = piece;
     board->hashCode ^= zobrist_piece_keys[piece][square];
 
@@ -154,12 +151,12 @@ static inline void board_move_piece(bitboard* board, int from, int to)
     else
         board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
-    uint64_t mask = singleBitMask(from) | singleBitMask(to);
+    uint64_t mask = (1ull << (from)) | (1ull << (to));
     board->pieces[piece] ^= mask;
     board->pieces_side[COLOR(piece)] ^= mask;
 
-    board->pieces_all &= ~singleBitMask(from);
-    board->pieces_all |= singleBitMask(to);
+    board->pieces_all &= ~(1ull << (from));
+    board->pieces_all |= (1ull << (to));
     
     if(targetPiece != EMPTY_PIECE)
     {
@@ -169,8 +166,8 @@ static inline void board_move_piece(bitboard* board, int from, int to)
         else
             board->nonPawnHash[COLOR(targetPiece)]^=zobrist_piece_keys[targetPiece][to];
 
-        board->pieces_side[COLOR(targetPiece)] &= ~singleBitMask(to);
-        board->pieces[targetPiece] &= ~singleBitMask(to);
+        board->pieces_side[COLOR(targetPiece)] &= ~(1ull << (to));
+        board->pieces[targetPiece] &= ~(1ull << (to));
     }   
     
     board->pieceArr[to] = piece;
@@ -190,7 +187,7 @@ static inline void board_move_piece_quietly(bitboard* board, int from, int to)
         board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
     
     
-    uint64_t mask = singleBitMask(from) | singleBitMask(to);
+    uint64_t mask = (1ull << (from)) | (1ull << (to));
     board->pieces[piece] ^= mask;
     board->pieces_side[COLOR(piece)] ^= mask;
     board->pieces_all ^= mask;

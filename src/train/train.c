@@ -1,15 +1,15 @@
-#include "debug.h"
-#include "board/bitboard.h"
-#include "board/moves.h"
-#include "analyze/search.h"
 #include "train/train.h"
+#include "compatibility.h"
+#include "board/bitboard.h"
 #include "binpack/viri_binpack.h"
-#include <string.h>
+#include <stdio.h>
+#include <time.h>
+#include <math.h>
 
 #ifdef USE_OPENCL
-#include "opencl/gpu_cl.h"
+#include "train/opencl/gpu_cl.h"
 #else
-#include "hip/gpu_hip.h"
+#include "train/hip/gpu_hip.h"
 #endif
 
 uint64_t max_cosine_anneal_timestamp = 10 * MINIBATCHES_PER_EPOCH;
@@ -38,12 +38,12 @@ void initializeTrainingWeights(training_weights* raw_weights)
 
     for(int i = 0; i < INPUT_BITS_PER_SIDE; i++)
         for(int j = 0; j < ACCUMULATOR_NODES_PER_SIDE; j++)
-            raw_weights->accumulator_weights[i][j] = clamp(sampleNormalDistribution(0.0, stddev), -1.98f / 2, 1.98f / 2);
+            raw_weights->accumulator_weights[i][j] = _min(MAX_WEIGHT / 2, _max(MIN_WEIGHT / 2, sampleNormalDistribution(0.0, stddev)));
 
     stddev = sqrtf(2.0 / ACCUMULATOR_NODES);
     for(int b = 0; b < OUTPUT_BUCKETS; b++)
         for(int i = 0; i < ACCUMULATOR_NODES; i++)
-            raw_weights->output_weights[b][i] = clamp(sampleNormalDistribution(0.0, stddev), -1.98f, 1.98f);
+            raw_weights->output_weights[b][i] = _min(MAX_WEIGHT / 2, _max(MIN_WEIGHT / 2, sampleNormalDistribution(0.0, stddev)));
 }
 
 void saveRawWeights(training_weights* weights, const char* path)

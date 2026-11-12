@@ -1,9 +1,11 @@
+#include "compatibility.h"
 #include "debug.h"
 #include "board/bitboard.h"
 #include "board/moves.h"
-#include "transposition/hash.h"
+#include <inttypes.h>
+#include <stdio.h>
 #include <string.h>
-#include <math.h>
+#include <stdlib.h>
 
 uint64_t board_file[COLUMN_COUNT] = {
     (0x0101010101010101ULL << 0),
@@ -255,64 +257,64 @@ void load_fen_string_to_board(bitboard* board, const char* fenString, repetition
                     int square = columnOffset + 8*row;
                     if(currentChar == 'K')
                     {
-                        board->pieces[WHITE_KING]|=singleBitMask(square);
+                        board->pieces[WHITE_KING]|=(1ull << (square));
                         board->kingSquare[WHITE] = square;
                         board->pieceArr[square] = KING|WHITE;
                     }
                     else if(currentChar == 'k')
                     {
-                        board->pieces[BLACK_KING]|=singleBitMask(square);
+                        board->pieces[BLACK_KING]|=(1ull << (square));
                         board->kingSquare[BLACK] = square;
                         board->pieceArr[square] = KING|BLACK;
                     }
                     else if(currentChar == 'Q') 
                     {
-                        board->pieces[WHITE_QUEEN]|=singleBitMask(square);
+                        board->pieces[WHITE_QUEEN]|=(1ull << (square));
                         board->pieceArr[square] = QUEEN|WHITE;
                     }
                     else if(currentChar == 'q') 
                     {
-                        board->pieces[BLACK_QUEEN]|=singleBitMask(square);
+                        board->pieces[BLACK_QUEEN]|=(1ull << (square));
                         board->pieceArr[square] = QUEEN|BLACK;
                     }
                     else if(currentChar == 'R') 
                     {
-                        board->pieces[WHITE_ROOK]|=singleBitMask(square);
+                        board->pieces[WHITE_ROOK]|=(1ull << (square));
                         board->pieceArr[square] = ROOK|WHITE;
                     }
                     else if(currentChar == 'r') 
                     {
-                        board->pieces[BLACK_ROOK]|=singleBitMask(square);
+                        board->pieces[BLACK_ROOK]|=(1ull << (square));
                         board->pieceArr[square] = ROOK|BLACK;
                     }
                     else if(currentChar == 'N') 
                     {
-                        board->pieces[WHITE_KNIGHT]|=singleBitMask(square);
+                        board->pieces[WHITE_KNIGHT]|=(1ull << (square));
                         board->pieceArr[square] = KNIGHT|WHITE;
                     }
                     else if(currentChar == 'n') 
                     {
-                        board->pieces[BLACK_KNIGHT]|=singleBitMask(square);
+                        board->pieces[BLACK_KNIGHT]|=(1ull << (square));
                         board->pieceArr[square] = KNIGHT|BLACK;
                     }
                     else if(currentChar == 'B') 
                     {
-                        board->pieces[WHITE_BISHOP]|=singleBitMask(square);
+                        board->pieces[WHITE_BISHOP]|=(1ull << (square));
                         board->pieceArr[square] = BISHOP|WHITE;
                     }
                     else if(currentChar == 'b') 
                     {
-                        board->pieces[BLACK_BISHOP]|=singleBitMask(square);
+                        board->pieces[BLACK_BISHOP]|=(1ull << (square));
                         board->pieceArr[square] = BISHOP|BLACK;
                     }
                     else if(currentChar == 'P') 
                     {
-                        board->pieces[WHITE_PAWN]|=singleBitMask(square);
+                        board->pieces[WHITE_PAWN]|=(1ull << (square));
                         board->pieceArr[square] = PAWN|WHITE;
                     }
                     else if(currentChar == 'p') 
                     {
-                        board->pieces[BLACK_PAWN]|=singleBitMask(square);
+                        board->pieces[BLACK_PAWN]|=(1ull << (square));
                         board->pieceArr[square] = PAWN|BLACK;
                     }
                     columnOffset++;

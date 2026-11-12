@@ -1,5 +1,11 @@
-#include "gpu_cl.h"
+#include "train/opencl/gpu_cl.h"
+#include "compatibility.h"
+#include "debug.h"
+#include "analyze/nnue/neuralnet.h"
+#include "train/train.h"
+#include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 openCLContext openCL_context = {
     .platform = 0,
@@ -399,7 +405,7 @@ void enqueueKernels(int bufferSide)
     //cosine annealing
     cosineTimestamp = _min(cosineTimestamp + 1, max_cosine_anneal_timestamp);
     lr = min_lr + 0.5 * (max_lr - min_lr) * (1.0 + cos(PI * (cosineTimestamp) / max_cosine_anneal_timestamp));
-    lr = clamp(lr, min_lr, max_lr);
+    lr = _min(max_lr, _max(min_lr, lr));
 
     clEnqueueWriteBuffer(openCL_context.queue, (bufferSide == INPUT_GROUP_A) ? cl_args.mem.activeInputs_A : cl_args.mem.activeInputs_B, CL_FALSE, 0, activeInputs_size, 
                             (bufferSide == INPUT_GROUP_A) ? host_activeInputs_A : host_activeInputs_B, 0, NULL, NULL);

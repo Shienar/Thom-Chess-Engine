@@ -63,7 +63,7 @@ ifdef TRAIN
 		HIP_ROOT = $(subst \,/,$(HIP_PATH))
 		CFLAGS += -I"$(HIP_ROOT)/include" 
 		LIBS += -L"$(HIP_ROOT)/lib"
-		KFLAGS = -ffast-math -O3 --genco --offload-arch=native -mprintf-kind=buffered 
+		KFLAGS = -ffast-math -O3 --genco --offload-arch=native -mprintf-kind=buffered -I$(SRC_DIR)
 		KC = hipcc
 		
 

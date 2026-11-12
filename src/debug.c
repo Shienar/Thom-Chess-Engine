@@ -1,11 +1,15 @@
 #include "debug.h"
+#include "compatibility.h"
+#include <stdio.h>
+#include <inttypes.h>
+#include <time.h>
+#include <string.h>
 
 int printDebugMessages = 0;
 char debugLogFile[1024];
 FILE* dbg_file = NULL;
 
 int this_pid;
-
 
 void enableDebugMessages() 
 {

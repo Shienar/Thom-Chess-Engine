@@ -1,7 +1,9 @@
 #include "binpack/generate.h"
+#include "binpack/viri_binpack.h"
 #include "analyze/search.h"
-#include "board/bitboard.h"
-#include "analyze/nnue/neuralnet.h"
+#include "board/moves.h"
+#include "debug.h"
+#include <stdio.h>
 
 binpackDetails details;
 int exitWhile;

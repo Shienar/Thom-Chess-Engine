@@ -2,7 +2,7 @@
 //http://web.archive.org/web/20201107002606/https://marcelk.net/2013-04-06/paper/upcoming-rep-v2.pdf
 #pragma once
 
-#include "types.h"
+#include "board/board.h"
 
 #define CUCKOO_SIZE 8192
 #define CUCKOO_BITS 8191

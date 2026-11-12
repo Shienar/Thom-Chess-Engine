@@ -1,5 +1,7 @@
 #include "analyze/hce/hce.h"
+#include "board/magic.h"
 #include "board/moves.h"
+#include "analyze/search.h"
 
 /**
  * For simplicity, this represents white's view of the board when
@@ -189,12 +191,12 @@ void init_HCE_tables()
             if(target_column >= 0 && target_column <= 7) 
 			{
                 // Ranks 2 & 3 
-                kingPawnShieldMask[WHITE][column] |= singleBitMask(1 * 8 + target_column);
-                kingPawnShieldMask[WHITE][column] |= singleBitMask(2 * 8 + target_column);
+                kingPawnShieldMask[WHITE][column] |= (1ull << (1 * 8 + target_column));
+                kingPawnShieldMask[WHITE][column] |= (1ull << (2 * 8 + target_column));
                 
 				//Ranks 7 & 6
-                kingPawnShieldMask[BLACK][column] |= singleBitMask(6 * 8 + target_column);
-                kingPawnShieldMask[BLACK][column] |= singleBitMask(5 * 8 + target_column);
+                kingPawnShieldMask[BLACK][column] |= (1ull << (6 * 8 + target_column));
+                kingPawnShieldMask[BLACK][column] |= (1ull << (5 * 8 + target_column));
             }
         }
 
@@ -203,8 +205,8 @@ void init_HCE_tables()
 
 	for(int sq = 0; sq < 64; sq++)
 	{
-		kingZone[WHITE][sq] = singleBitMask(sq) | kingAttacks[sq];
-		kingZone[BLACK][sq] = singleBitMask(sq) | kingAttacks[sq];
+		kingZone[WHITE][sq] = (1ull << (sq)) | kingAttacks[sq];
+		kingZone[BLACK][sq] = (1ull << (sq)) | kingAttacks[sq];
 
 		if(sq < 16)
 			kingZone[WHITE][sq] |= kingAttacks[sq + 8];
@@ -324,7 +326,7 @@ void evaluateKnights(bitboard* board, eval_t* score, evalContext* context)
 		//outpost
 		if(row >= 4 && row <= 6 && 
 		   board->pieces[WHITE_PAWN] && board_rank[row - 1] &&
-		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~(singleBitMask(sq + 7) - 1))) == 0)
+		   (bordering_files[column] & board->pieces[BLACK_PAWN] & (~((1ull << (sq + 7)) - 1))) == 0)
 				EVAL_ADD(eval, hce_params.knightOutpostBonus);
 
 		mask &= mask - 1;
@@ -351,7 +353,7 @@ void evaluateKnights(bitboard* board, eval_t* score, evalContext* context)
 		//outpost
 		if(row >= 1 && row <= 3 &&
 		   board->pieces[BLACK_PAWN] && board_rank[row + 1] &&
-		   (bordering_files[column] & board->pieces[WHITE_PAWN] & ((singleBitMask(sq - 6) - 1))) == 0)
+		   (bordering_files[column] & board->pieces[WHITE_PAWN] & (((1ull << (sq - 6)) - 1))) == 0)
 				EVAL_SUB(eval, hce_params.knightOutpostBonus);
 
 		mask &= mask - 1;
@@ -717,7 +719,7 @@ int evaluatePhasedScore(bitboard* board, eval_t eval)
     {
         phase -= gamephasePieceValues[pc] * __builtin_popcountll(board->pieces[pc]);
     }
-	phase = clamp(phase, 0, 24);
+	phase = _min(24, _max(0, phase));
 
 	int eg_phase = (phase * 256 + 12) / 24;
 	int mg_phase = 256 - eg_phase;
@@ -742,6 +744,6 @@ int hce_eval(bitboard* board)
     evaluateKings(board, &eval, &context);
 
     int phasedEval = evaluatePhasedScore(board, eval);
-	phasedEval = clamp(phasedEval, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
+	phasedEval = _min(MIN_MATE_SCORE - 1, _max(-(MIN_MATE_SCORE - 1), phasedEval));
 	return (ISWHITE(board->turn)) ? phasedEval : -phasedEval;
 }

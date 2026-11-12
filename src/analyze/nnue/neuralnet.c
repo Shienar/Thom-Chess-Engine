@@ -1,10 +1,28 @@
 #include "analyze/nnue/neuralnet.h"
-#include "debug.h"
 #include "board/bitboard.h"
-#include "board/moves.h"
 #include "analyze/search.h"
-#include <float.h>
-#include <string.h>
+#include <immintrin.h>
+
+
+/**
+ * - Index X contains the king bucket index at square X.
+ * - Created for white's perspective; must be flipped for black.
+ * - Mirrored accross middle of board, split between d/e files.
+ *      - When king column > d, the squares & masks of all pieces get mirrored.
+ * 
+ * topleft: a1
+ * bottomright: h8
+ */
+int kingBuckets[64] = {
+    0, 1, 2, 3,     3, 2, 1, 0,
+    4, 4, 5, 5,     5, 5, 4, 4,
+    6, 6, 6, 6,     6, 6, 6, 6,
+    7, 7, 7, 7,     7, 7, 7, 7,
+    8, 8, 8, 8,     8, 8, 8, 8,
+    8, 8, 8, 8,     8, 8, 8, 8,
+    9, 9, 9, 9,     9, 9, 9, 9,
+    9, 9, 9, 9,     9, 9, 9, 9,
+};
 
 int isNetworkLoaded = 1;
 int useNNUE = 1;
@@ -109,5 +127,5 @@ int forwardPropagate(threadContext* context, int ply)
                                       weights->output_weights[bucket], 
                                       weights->output_bias[bucket]);
 
-    return clamp(output, -(MIN_MATE_SCORE - 1), MIN_MATE_SCORE - 1);
+    return _min(MIN_MATE_SCORE - 1, _max(-(MIN_MATE_SCORE - 1), output));
 }

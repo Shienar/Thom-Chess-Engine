@@ -1,8 +1,10 @@
-#include "board/bitboard.h"
-#include "board/moves.h" 
+#include "board/moves.h"
 #include "debug.h"
-#include "analyze/history.h"
-#include <string.h>
+#include "board/bitboard.h"
+#include "board/magic.h"
+#include "analyze/search.h"
+#include <stdio.h>
+#include <inttypes.h>
 
 // All "" end up pointing to the same address. 
 //[0] amd [PIECE] indexes are the only ones that expect usage.
@@ -130,7 +132,7 @@ int generateMoveList(move* movesList, bitboard* board, int genType)
             
             if(board->enPassantSquare != NO_EP_SQUARE)
             {
-                mask = EN_PASSANT_ATTACKERS_WHITE(singleBitMask(board->enPassantSquare), board);
+                mask = EN_PASSANT_ATTACKERS_WHITE((1ull << (board->enPassantSquare)), board);
                 while(mask)
                 {
                     int startSquare = __builtin_ctzll(mask);
@@ -227,7 +229,7 @@ int generateMoveList(move* movesList, bitboard* board, int genType)
             
             if(board->enPassantSquare != NO_EP_SQUARE)
             {
-                uint64_t epMask = singleBitMask(board->enPassantSquare);
+                uint64_t epMask = (1ull << (board->enPassantSquare));
                 mask = EN_PASSANT_ATTACKERS_BLACK(epMask, board);
                 while(mask)
                 {
@@ -350,7 +352,7 @@ int staticExchangeEvaluation(bitboard* board, move m)
         gain += pieceValuesSEE[m.promoteTo] - pieceValuesSEE[PAWN];
     }
 
-    uint64_t occupied = board->pieces_all & ~singleBitMask(m.startSquare);
+    uint64_t occupied = board->pieces_all & ~(1ull << (m.startSquare));
     uint64_t attackers = (pawnAttacks[WHITE][m.endSquare] & board->pieces[BLACK_PAWN]) |
                          (pawnAttacks[BLACK][m.endSquare] & board->pieces[WHITE_PAWN]) |
                          (knightMoves(0, m.endSquare) & (board->pieces[WHITE_KNIGHT] | board->pieces[BLACK_KNIGHT])) |
@@ -394,7 +396,7 @@ int staticExchangeEvaluation(bitboard* board, move m)
         if(gain < 0)
             return (side == board->turn) ? gain : -gain;
 
-        occupied &= ~singleBitMask(attackerSquare);
+        occupied &= ~(1ull << (attackerSquare));
         attackers |= (bishopMoves(0, occupied, m.endSquare) & bishopqueen) | (rookMoves(0, occupied, m.endSquare) & rookqueen);
         attackers &= occupied;
         
@@ -522,7 +524,7 @@ int isMoveUsable(bitboard* board, move m)
     if(piece == EMPTY_PIECE || COLOR(piece) != board->turn)
         return 0;
 
-    uint64_t destMask = singleBitMask(m.endSquare);
+    uint64_t destMask = (1ull << (m.endSquare));
 
     switch(PIECE(piece))
     {
@@ -545,7 +547,7 @@ int isMoveUsable(bitboard* board, move m)
             if(ISWHITE(piece))
             {
                 //Single pushes
-                uint64_t singlePushMask = (singleBitMask(m.startSquare) << 8)&(~board->pieces_all);
+                uint64_t singlePushMask = ((1ull << (m.startSquare)) << 8)&(~board->pieces_all);
                 if(destMask & singlePushMask)
                     return 1;
 
@@ -558,7 +560,7 @@ int isMoveUsable(bitboard* board, move m)
             else
             {
                 //Single pushes
-                uint64_t singlePushMask = (singleBitMask(m.startSquare) >> 8)&(~board->pieces_all);
+                uint64_t singlePushMask = ((1ull << (m.startSquare)) >> 8)&(~board->pieces_all);
                 if(destMask & singlePushMask)
                     return 1;
 
@@ -723,11 +725,11 @@ int isThreatened(bitboard* board, int square, int defendingColor)
     int attackingColor = FLIP_COLOR(defendingColor);
 
     if(pawnAttacks[defendingColor][square] & board->pieces[PAWN | attackingColor])
-        return THREAT_TYPE_PAWN;
+        return 1;
     if(knightAttacks[square] & board->pieces[KNIGHT | attackingColor])
-        return THREAT_TYPE_KNIGHT;
+        return 1;
     if(kingAttacks[square] & board->pieces[KING | attackingColor])
-        return THREAT_TYPE_KING;
+        return 1;
         
     uint64_t bishopqueen = board->pieces[BISHOP | attackingColor] | board->pieces[QUEEN | attackingColor];
     uint64_t rookqueen = board->pieces[ROOK | attackingColor] | board->pieces[QUEEN | attackingColor];
@@ -736,11 +738,11 @@ int isThreatened(bitboard* board, int square, int defendingColor)
     uint64_t allyPieces = board->pieces_side[defendingColor];
 
     if(bishopMoves(allyPieces, enemyPieces, square)&(bishopqueen)) 
-        return THREAT_TYPE_BISHOPQUEEN;
+        return 1;
     if(rookMoves(allyPieces, enemyPieces, square)&(rookqueen)) 
-        return THREAT_TYPE_ROOKQUEEN;
+        return 1;
 
-    return THREAT_TYPE_NONE;
+    return 0;
 }
 
 uint64_t pyrrhicPawnAttacks(int square, int color)

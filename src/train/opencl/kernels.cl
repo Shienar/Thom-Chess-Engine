@@ -1,8 +1,6 @@
 #define MINIBATCH_SIZE 16384
-#define KING_BUCKETS 10
 #define OUTPUT_BUCKETS 8
 #define BITS_PER_KING_BUCKET 768
-#define INPUT_BITS_PER_SIDE (BITS_PER_KING_BUCKET * KING_BUCKETS)
 #define ACCUMULATOR_NODES 512
 #define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
 #define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 4)
@@ -12,17 +10,14 @@
 #define ADAM_EPSILON 1e-8
 #define ADAM_WEIGHT_DECAY 1e-2f
 
-#define EVAL_SCALE 400.0f
-
 #define LOOKAHEAD_ALPHA 0.5f
 
-#define QA 255.0f
-#define QB 64.0f
-#define QA_QB 16320.0f
+#define QA 255
+#define QB 64
 
 //Bound requirement for lizard screlu
-#define MIN_WEIGHT -1.98f
 #define MAX_WEIGHT 1.98f
+#define MIN_WEIGHT -MAX_WEIGHT
 
 /******* UTIL *******/
 
@@ -49,8 +44,8 @@ inline float sigmoid(float x) { return 1.0f / (1.0f + native_exp(-x)); }
 
 #define QAT
 #ifdef QAT
-inline float fake_quantize(float val, float scale) { return rint(val * scale) / scale; }
-inline void fake_quantize4(float4* val, float scale) {
+inline float fake_quantize(float val, int scale) { return rint(val * scale) / scale; }
+inline void fake_quantize4(float4* val, int scale) {
     val->x = fake_quantize(val->x, scale);
     val->y = fake_quantize(val->y, scale);
     val->z = fake_quantize(val->z, scale);
@@ -58,8 +53,8 @@ inline void fake_quantize4(float4* val, float scale) {
     return;
 }
 #else
-inline float fake_quantize(float val, float scale) { return val; }
-inline void fake_quantize4(float4* val, float scale) { return; }
+inline float fake_quantize(float val, int scale) { return val; }
+inline void fake_quantize4(float4* val, int scale) { return; }
 #endif
 
 /******* Forward Propagation *******/
@@ -159,7 +154,7 @@ __kernel void calculateOutput(__global const float* accumulatorOutput,
 
     if(localID == 0)
     {
-        float finalOutput = outputContributions[localID] + fake_quantize(output_bias[bucket], QA_QB);
+        float finalOutput = outputContributions[localID] + fake_quantize(output_bias[bucket], (QA * QB));
         outputs[batchIndex] = sigmoid(finalOutput);
     }
 }

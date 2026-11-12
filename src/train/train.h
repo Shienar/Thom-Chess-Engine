@@ -1,20 +1,31 @@
 #pragma once
+
+#include <stdint.h>
 #include "analyze/nnue/neuralnet.h"
 
+#define PI 3.14159265358979323846
+#define MINIBATCH_SIZE 16384
+
+#define ADAM_BETA1 0.9f
+#define ADAM_BETA2 0.999f
+#define ADAM_EPSILON 1e-8
+#define ADAM_WEIGHT_DECAY 1e-2f
+
 #define LOOKAHEAD_RANGE 10
+#define LOOKAHEAD_ALPHA 0.5f
+
+//Bound requirement for lizard screlu
+#define MAX_WEIGHT 1.98f
+#define MIN_WEIGHT -MAX_WEIGHT
 
 extern float max_lr;
 extern float min_lr;
 extern uint64_t max_cosine_anneal_timestamp;
 
-#define ADAM_BETA1 0.9f
-#define ADAM_BETA2 0.999f
-
 #define WDL_BLEND(lambda, cp, relativeResult) (lambda * SIGMOID((float) cp / EVAL_SCALE) + (1 - lambda) * relativeResult)
 #define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
 
 // 6,104 * 16,384 = 100,007,936
-#define MINIBATCH_SIZE 16384
 #define MINIBATCHES_PER_EPOCH 6104
 
 #define FEN_SKIP_TRAINING 3

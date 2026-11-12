@@ -1,10 +1,7 @@
 #pragma once
 
 #include "analyze/hce/hce.h"
-
-#define ADAM_BETA1 0.9f
-#define ADAM_BETA2 0.999f
-#define ADAM_EPSILON 1e-8f
+#include "board/bitboard.h"
 
 typedef struct evalfp_t {
     double mg;

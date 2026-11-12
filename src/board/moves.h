@@ -1,6 +1,6 @@
 #pragma once
-#include "types.h"
-#include "board/magic.h"
+
+#include "board/board.h"
 
 #define GET_ALL_MOVES 0
 #define GET_NOISY_MOVES 1 //Captures + Direct Checks + Promotions
@@ -16,13 +16,6 @@
 #define ITER_STAGE_BAD_NOISY 7
 #define ITER_STAGE_DONE 8
 #define ITER_STAGE_REQUIRED 9
-
-#define THREAT_TYPE_NONE 0
-#define THREAT_TYPE_PAWN 1
-#define THREAT_TYPE_KNIGHT 2
-#define THREAT_TYPE_BISHOPQUEEN 3
-#define THREAT_TYPE_ROOKQUEEN 4
-#define THREAT_TYPE_KING 5
 
 #define WHITE_PAWN_PUSH_MASK(board) ((board->pieces[WHITE_PAWN] << 8)&(~board->pieces_all))
 #define WHITE_PAWN_DOUBLEPUSH_MASK(board) (((WHITE_PAWN_PUSH_MASK(board) & board_rank[2]) << 8)&(~board->pieces_all))
@@ -44,7 +37,7 @@ extern char* promoteSymbols[16];
 
 #define COUNTERMOVE_BONUS 3000
 #define FOLLOWUPMOVE_BONUS 2000
-moveIterator* create_move_iterator(threadContext* context, int capturesOnly, int ply, move* ttMove);
+moveIterator* create_move_iterator(struct threadContext* context, int capturesOnly, int ply, move* ttMove);
 move* iterate_next_move(moveIterator* iter);
 
 int isThreatened(bitboard* board, int square, int defendingColor);

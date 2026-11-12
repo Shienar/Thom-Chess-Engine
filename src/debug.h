@@ -1,11 +1,6 @@
 #pragma once
 
-#include "types.h"
-#include <stdlib.h>
-#include <stdarg.h>
-#include <stdio.h>
-
-#include <assert.h>
+#include <stdint.h>
 
 extern int printDebugMessages;
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "types.h"
-#include "binpack/viri_binpack.h"
+#include "compatibility.h"
+#include <stdint.h>
 
 void generate(const char* path);
 uint32_t rng_xorshift32(uint32_t* seed);

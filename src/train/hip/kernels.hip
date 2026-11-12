@@ -1,31 +1,6 @@
 #include <hip/hip_runtime.h>
-#include <cstdint>
-
-#define MINIBATCH_SIZE 16384
-#define KING_BUCKETS 10
-#define OUTPUT_BUCKETS 8
-#define BITS_PER_KING_BUCKET 768
-#define INPUT_BITS_PER_SIDE (BITS_PER_KING_BUCKET * KING_BUCKETS)
-#define ACCUMULATOR_NODES 512
-#define ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES / 2)
-#define VECTOR_ACCUMULATOR_NODES_PER_SIDE (ACCUMULATOR_NODES_PER_SIDE / 4)
-
-#define ADAM_BETA1 0.9f
-#define ADAM_BETA2 0.999f
-#define ADAM_EPSILON 1e-8
-#define ADAM_WEIGHT_DECAY 1e-2f
-
-#define EVAL_SCALE 400.0f
-
-#define LOOKAHEAD_ALPHA 0.5f
-
-#define QA 255.0f
-#define QB 64.0f
-#define QA_QB 16320.0f
-
-//Bound requirement for lizard screlu
-#define MIN_WEIGHT -1.98f
-#define MAX_WEIGHT 1.98f
+#include "analyze/nnue/neuralnet.h"
+#include "train/train.h"
 
 /******* UTIL *******/
 
@@ -36,8 +11,8 @@ __device__ inline float sigmoid(float x) { return 1.0f / (1.0f + __expf(-x)); }
 
 #define QAT
 #ifdef QAT
-__device__ inline float fake_quantize(float val, float scale) { return rintf(val * scale) / scale; }
-__device__ inline void fake_quantize4(float4* val, float scale) {
+__device__ inline float fake_quantize(float val, int scale) { return rintf(val * scale) / scale; }
+__device__ inline void fake_quantize4(float4* val, int scale) {
     val->x = fake_quantize(val->x, scale);
     val->y = fake_quantize(val->y, scale);
     val->z = fake_quantize(val->z, scale);
@@ -141,7 +116,7 @@ extern "C" __global__ void calculateOutput(const float* accumulatorOutput,
 
     if(localID == 0)
     {
-        float finalOutput = myOutputContribution + fake_quantize(output_bias[bucket], QA_QB);
+        float finalOutput = myOutputContribution + fake_quantize(output_bias[bucket], (QA * QB));
         outputs[batchIndex] = sigmoid(finalOutput);
     }
 }
