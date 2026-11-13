@@ -9,6 +9,7 @@
 #include "analyze/hce/hce.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
 int threadCount = 1;
@@ -273,7 +274,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
     myPV->length = 0;
     PVar childPV;
 
-    depth = _min(depth, MAX_PLY - 1);
+    depth = _min(depth, MAX_PLY - 1 - ply);
 
     move* tt_move = NULL;
     move temp; //Copy in from TT instead of saving a ptr to a volatile TT slot.

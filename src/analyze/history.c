@@ -1,6 +1,7 @@
 #include "analyze/history.h"
 #include "board/bitboard.h"
 #include "analyze/search.h"
+#include <stdlib.h>
 
 int historyBonusScale = 266;
 int historyBonusOffset = 181;

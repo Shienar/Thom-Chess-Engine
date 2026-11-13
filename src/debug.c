@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <time.h>
 #include <string.h>
+#include <stdarg.h>
 
 int printDebugMessages = 0;
 char debugLogFile[1024];

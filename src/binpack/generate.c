@@ -4,6 +4,7 @@
 #include "board/moves.h"
 #include "debug.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 binpackDetails details;
 int exitWhile;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "board/board.h"
+#include <stdlib.h>
 
 #define MAX_TT_AGE 127
 #define TT_AGE_MASK 0x7F

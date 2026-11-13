@@ -1,6 +1,7 @@
 #include "transposition/transpositiontable.h"
 #include "analyze/search.h"
 #include <stdint.h>
+#include <stdlib.h>
 
 hashtable_tt* transpositionTable = NULL;
 uint64_t tt_bytes = 1024 * 1024 * 256;

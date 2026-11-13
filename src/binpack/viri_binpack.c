@@ -1,3 +1,4 @@
+#include "compatibility.h"
 #include "binpack/viri_binpack.h"
 #include "debug.h"
 #include "compatibility.h"
@@ -7,6 +8,7 @@
 #include <time.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 
 #if defined(_WIN32) || defined(_WIN64)

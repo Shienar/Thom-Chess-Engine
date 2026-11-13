@@ -46,6 +46,7 @@
     #define alignedFree(ptr) _aligned_free(ptr)
     
 #else
+    #define _GNU_SOURCE
     #include <pthread.h>
     #include <unistd.h>
     #include <sys/param.h>
@@ -87,7 +88,7 @@
         size_t size;
     } mmap_handle_t;
     
-    #define alignedAlloc(ptr, alignment, size) posix_memalign(&ptr, alignment, size)
+    #define alignedAlloc(ptr, alignment, size) posix_memalign((void**)&ptr, alignment, size)
     #define alignedFree(ptr) free(ptr)
 #endif
 

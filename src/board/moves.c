@@ -4,6 +4,7 @@
 #include "board/magic.h"
 #include "analyze/search.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <inttypes.h>
 
 // All "" end up pointing to the same address. 
