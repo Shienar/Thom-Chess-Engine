@@ -26,7 +26,7 @@ for index, info in enumerate(fen_list):
                 fail_count = fail_count + 1
                 print("\033[2K\rERROR:")
                 print(f"\t{info.fenStr}")
-                print(f"\tExpected {expectedOutput} nodes at depth {depth}, but got {output} in output.")
+                print(f"\tExpected {expectedOutput:,} nodes at depth {depth}, but got {output:,} in output.")
                 
 
 

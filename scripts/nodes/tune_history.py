@@ -50,7 +50,7 @@ def getNodeCount(values, func):
         nodelist[index] = func(rounded_values, fen.fenStr)
     nodes = np.sum(nodelist)
 
-    print(f"\033[1A\033[2K[{iteration}]: Values {rounded_values} reached a nodecount of {nodes} | Best Values {best_values} reached a nodecount of {lowest_nodecount}")
+    print(f"\033[1A\033[2K[{iteration}]: Values {rounded_values} reached a nodecount of {nodes:,} | Best Values {best_values} reached a nodecount of {lowest_nodecount:,}")
 
     return nodes
 

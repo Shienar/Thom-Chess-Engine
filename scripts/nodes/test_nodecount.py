@@ -35,5 +35,5 @@ for index, fen in enumerate(fen_list):
     
 nodes = np.sum(nodelist)
 avg = np.average(nodelist)
-print(f"\033[2K\rTotal Nodes: {nodes}")
-print(f"Average: {avg}")
+print(f"\033[2K\rTotal Nodes: {nodes:,}")
+print(f"Average: {avg:,}")

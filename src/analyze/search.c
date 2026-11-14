@@ -32,6 +32,8 @@ const int nullmove_pruning_depth = 3;
 const int tt_reduction_depth = 4;
 const int singular_extension_depth = 7;
 
+const int max_double_extends = INT_MAX; //TODO
+
 //ax^2 + b
 int razoring_a = 122;
 int razoring_b = 63;
@@ -433,6 +435,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
     bitboard* nextBoard = &context->boardStack[ply + 1];
 
+    context->multiExtensions[ply] = (ply == 0) ? 0 : context->multiExtensions[ply - 1];
 
     //Improving/Worsening
     int staticScore = score;
@@ -550,15 +553,31 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
                 if(singularScore < sBeta)
                 {
-                    if(singularScore + 25 * depth < sBeta)
+                    if(singularScore + 85 < sBeta)
                     {
                         RECORD_SEARCH(context->tripleExtensions++;);
                         next_depth += 3;
+                        context->multiExtensions[ply] += 2;
+                        if(context->multiExtensions[ply] > max_double_extends)
+                        {
+                            int overflow = context->multiExtensions[ply] - max_double_extends;
+                            context->multiExtensions[ply] -= overflow;
+                            next_depth -= overflow;
+                            RECORD_SEARCH(context->extensionOverflow += overflow;);
+                        }
                     }
-                    else if(singularScore + 10 * depth < sBeta)
+                    else if(singularScore + 15 < sBeta)
                     {
                         RECORD_SEARCH(context->doubleExtensions++;);
                         next_depth += 2;
+                        context->multiExtensions[ply] += 1;
+                        if(context->multiExtensions[ply] > max_double_extends)
+                        {
+                            int overflow = context->multiExtensions[ply] - max_double_extends;
+                            context->multiExtensions[ply] -= overflow;
+                            next_depth -= overflow;
+                            RECORD_SEARCH(context->extensionOverflow += overflow;);
+                        }
                     }
                     else
                     {
@@ -917,29 +936,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     memset(context->captureHistoryTable, 0, sizeof(context->captureHistoryTable));
     memset(context->countermove, 0, sizeof(context->countermove));
     memset(context->followUpMove, 0, sizeof(context->followUpMove));
-    RECORD_SEARCH(context->pvs_nodes = 0;
-                  context->qs_nodes = 0;
-                  context->tt_hits = 0;
-                  context->tt_cutoffs = 0;
-                  context->tt_misses = 0;
-                  context->quiescentSearchedMoves = 0;
-                  context->quiescentSearchedPositions = 0;
-                  context->pvsSearchedMoves = 0;
-                  context->pvsSearchedPositions = 0;
-                  context->singularSearches = 0;
-                  context->tripleExtensions = 0;
-                  context->doubleExtensions = 0;
-                  context->singleExtensions = 0;
-                  context->multicutPrunes = 0;
-                  context->negativeExtensions = 0;
-                  context->failedExtensions = 0;
-                  context->evaluations = 0;
-                  context->stable_reductions = 0;
-                  context->worsening_reductions = 0;
-                  context->tt_reductions = 0;
-                  context->rfp_prunes = 0;
-                  context->razoring_prunes = 0;
-                  context->nmp_prunes = 0;);
+    RECORD_SEARCH(memset(context->rawSearchData, 0, sizeof(context->rawSearchData)););
 
     tt_age(context->tt);
 
@@ -1143,6 +1140,7 @@ THREAD_RETURN calculateBestMove(THREAD_PARAM param)
     printf("\t%-25s %18s (%05.2f%%)\n", "Multicut Prunes:", commaDelimitNumber(buf, context->multicutPrunes), (100.0 * context->multicutPrunes) / context->singularSearches);
     printf("\t%-25s %18s (%05.2f%%)\n", "Negative Extensions:", commaDelimitNumber(buf, context->negativeExtensions), (100.0 * context->negativeExtensions) / context->singularSearches);
     printf("\t%-25s %18s (%05.2f%%)\n", "Failed Singulars:", commaDelimitNumber(buf, context->failedExtensions), (100.0 * context->failedExtensions) / context->singularSearches);
+    printf("\t%-25s %18s\n", "Extension Overflow:", commaDelimitNumber(buf, context->extensionOverflow));
     printf("\n");
     printf("\t%-25s %18s\n", "Evaluations:", commaDelimitNumber(buf, context->evaluations));
     printf("\n");

@@ -62,6 +62,9 @@ typedef struct threadContext {
     int8_t improving[MAX_PLY]; // 0 or 1
     int8_t worsening[MAX_PLY]; // >= 0
 
+    //Double/Triple extension tracking.
+    uint8_t multiExtensions[MAX_PLY];
+
     //Killer heuristic
     move killerMoves[MAX_PLY][2];
 
@@ -78,35 +81,42 @@ typedef struct threadContext {
     int16_t nonPawnCorrHist[2][2][CORRHIST_SIZE]; //[color][turn]
 
     #ifdef SEARCHINFO
-    uint64_t pvs_nodes;
-    uint64_t qs_nodes;
+    union {
+        struct {
+            uint64_t pvs_nodes;
+            uint64_t qs_nodes;
 
-    uint64_t tt_hits;
-    uint64_t tt_cutoffs;
-    uint64_t tt_misses;
+            uint64_t tt_hits;
+            uint64_t tt_cutoffs;
+            uint64_t tt_misses;
 
-    uint64_t quiescentSearchedMoves;
-    uint64_t quiescentSearchedPositions;
+            uint64_t quiescentSearchedMoves;
+            uint64_t quiescentSearchedPositions;
 
-    uint64_t pvsSearchedMoves;
-    uint64_t pvsSearchedPositions;
+            uint64_t pvsSearchedMoves;
+            uint64_t pvsSearchedPositions;
 
-    uint64_t singularSearches;
-    uint64_t tripleExtensions;
-    uint64_t doubleExtensions;
-    uint64_t singleExtensions;
-    uint64_t multicutPrunes;
-    uint64_t negativeExtensions;
-    uint64_t failedExtensions;
+            uint64_t extensionOverflow;
+            uint64_t singularSearches;
+            uint64_t tripleExtensions;
+            uint64_t doubleExtensions;
+            uint64_t singleExtensions;
+            uint64_t multicutPrunes;
+            uint64_t negativeExtensions;
+            uint64_t failedExtensions;
 
-    uint64_t evaluations;
+            uint64_t evaluations;
 
-    uint64_t stable_reductions;
-    uint64_t worsening_reductions;
-    uint64_t tt_reductions;
-    uint64_t rfp_prunes;
-    uint64_t razoring_prunes;
-    uint64_t nmp_prunes;
+            uint64_t stable_reductions;
+            uint64_t worsening_reductions;
+            uint64_t tt_reductions;
+            uint64_t rfp_prunes;
+            uint64_t razoring_prunes;
+            uint64_t nmp_prunes;
+        };
+
+        uint8_t rawSearchData[24 * sizeof(uint64_t)];
+    };
     #endif
 } threadContext;
 

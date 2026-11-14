@@ -219,7 +219,7 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
                     min_lambda;
 
         startTime = clock();
-        for(int minibatchNumber = 0; minibatchNumber < MINIBATCHES_PER_EPOCH; minibatchNumber++)
+        for(int minibatchNumber = 1; minibatchNumber <= MINIBATCHES_PER_EPOCH; minibatchNumber++)
         {
             prepareMinibatchData(&trainingBinpack, inputGroup, &board,
                                     activeInputs_A, expectedOutputs_A, outputBuckets_A,
@@ -231,8 +231,8 @@ void train(int epochs, float min_learningRate, float max_learningRate, const cha
             float loss = sumLoss(loss_buffer);
             totalLoss+=loss;
             
-            if((minibatchNumber + 1) % 25 == 0) 
-                printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber + 1, MINIBATCHES_PER_EPOCH, 0.5 * loss / MINIBATCH_SIZE);
+            if(minibatchNumber % 25 == 0) 
+                printf("\33[2K\r\tAnalyzed block %d/%d; Loss = %e", minibatchNumber, MINIBATCHES_PER_EPOCH, 0.5 * loss / MINIBATCH_SIZE);
             inputGroup ^= 1;
         }
         endTime = clock();
