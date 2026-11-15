@@ -2,6 +2,7 @@ import subprocess
 import re
 import numpy as np
 
+fen_regex = re.compile(r"FEN:\s*(.*)")
 class EngineProcess:
     def __init__(self, path):
         self.process = subprocess.Popen(
@@ -40,6 +41,17 @@ class EngineProcess:
         self.process.stdin.write(cmd)
         self.process.stdin.flush()
 
+    def read_until(self, keyword):
+        output_lines = []
+        while True:
+            line = self.process.stdout.readline().rstrip("\n")
+            if not line:
+                break
+            output_lines.append(line)
+            if keyword in line:
+                break
+        return output_lines
+    
     def updateHistories(self, values):
         self.process.stdin.write(f"setoption name historyBonusScale value {values[0]}\n")
         self.process.stdin.write(f"setoption name historyBonusOffset value {values[1]}\n")
@@ -50,17 +62,24 @@ class EngineProcess:
         self.process.stdin.write(f"setoption name captureHistoryPenaltyScale value {values[6]}\n")
         self.process.stdin.write(f"setoption name captureHistoryPenaltyOffset value {values[7]}\n")
         self.process.stdin.flush()
+    
+    def setFEN(self, fen, moveList=None):
+        cmd = f"position fen {fen}"
+        if moveList is not None and len(moveList) > 0:
+            cmd += " moves"
+            for move in moveList:
+                cmd += f" {move}"
+        self.process.stdin.write(f"{cmd}\n")
+        self.process.stdin.flush()
+        return cmd
 
-    def read_until(self, keyword):
-        output_lines = []
-        while True:
-            line = self.process.stdout.readline()
-            if not line:
-                break
-            output_lines.append(line)
-            if keyword in line:
-                break
-        return output_lines
+    def getFEN(self):
+        self.send_command("print\n")
+        output_lines = self.read_until("FEN")
+        fen_info = fen_regex.search(output_lines[-1])
+        if not fen_info:
+            return "Invalid FEN"
+        return fen_info.group(1)
 
     def close(self):
         try:

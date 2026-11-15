@@ -32,7 +32,7 @@ const int nullmove_pruning_depth = 3;
 const int tt_reduction_depth = 4;
 const int singular_extension_depth = 7;
 
-const int max_double_extends = INT_MAX; //TODO
+const int max_extensions = 6;
 
 //ax^2 + b
 int razoring_a = 122;
@@ -435,7 +435,7 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
     bitboard* nextBoard = &context->boardStack[ply + 1];
 
-    context->multiExtensions[ply] = (ply == 0) ? 0 : context->multiExtensions[ply - 1];
+    context->extensions[ply] = (ply == 0) ? 0 : context->extensions[ply - 1];
 
     //Improving/Worsening
     int staticScore = score;
@@ -557,27 +557,11 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
                     {
                         RECORD_SEARCH(context->tripleExtensions++;);
                         next_depth += 3;
-                        context->multiExtensions[ply] += 2;
-                        if(context->multiExtensions[ply] > max_double_extends)
-                        {
-                            int overflow = context->multiExtensions[ply] - max_double_extends;
-                            context->multiExtensions[ply] -= overflow;
-                            next_depth -= overflow;
-                            RECORD_SEARCH(context->extensionOverflow += overflow;);
-                        }
                     }
                     else if(singularScore + 15 < sBeta)
                     {
                         RECORD_SEARCH(context->doubleExtensions++;);
                         next_depth += 2;
-                        context->multiExtensions[ply] += 1;
-                        if(context->multiExtensions[ply] > max_double_extends)
-                        {
-                            int overflow = context->multiExtensions[ply] - max_double_extends;
-                            context->multiExtensions[ply] -= overflow;
-                            next_depth -= overflow;
-                            RECORD_SEARCH(context->extensionOverflow += overflow;);
-                        }
                     }
                     else
                     {
@@ -639,11 +623,26 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
             if(!pvNode && moveScore < 0)
                 next_depth -= 2;
 
+            //Limit extensions
+            int ext = next_depth - (depth - 1);
+            if(ext > 0)
+            {
+                context->extensions[ply] += ext;
+                if(context->extensions[ply] > max_extensions)
+                {
+                    int overflow = context->extensions[ply] - max_extensions;
+                    context->extensions[ply] -= overflow;
+                    next_depth -= overflow;
+                    RECORD_SEARCH(context->extensionOverflow += overflow;);
+                }
+            }
+
             context->isAccClean[ply + 1] = 0;
             context->lastCleanPly = _min(context->lastCleanPly, ply);
 
             context->countedNodes++;
             RECORD_SEARCH(context->pvs_nodes++;);
+            
             
             if(pvNode && (validMovesVisited == 0 || score > alpha))
                 score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);

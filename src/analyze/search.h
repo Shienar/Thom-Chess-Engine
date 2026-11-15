@@ -63,7 +63,7 @@ typedef struct threadContext {
     int8_t worsening[MAX_PLY]; // >= 0
 
     //Double/Triple extension tracking.
-    uint8_t multiExtensions[MAX_PLY];
+    uint8_t extensions[MAX_PLY];
 
     //Killer heuristic
     move killerMoves[MAX_PLY][2];

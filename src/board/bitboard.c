@@ -380,15 +380,9 @@ void piece_print(char boardArray[8][9], uint64_t piece, char printChar)
     }
 }
 
-void board_print(bitboard* board, int printValues)
+void board_print(bitboard* board)
 {
-    if(!board)
-    {
-        DEBUG_ERROR("No board.");
-        return;
-    }
-    
-    if(printValues) values_print(board);
+    assert(board);
 
     int lastMoveStartSquare = -1;
     int lastMoveEndSquare = -1;
@@ -414,7 +408,6 @@ void board_print(bitboard* board, int printValues)
     piece_print(boardArray, board->pieces[WHITE_KING], 'k');
     piece_print(boardArray, board->pieces[BLACK_KING], 'K');
 
-    printf("\n");
     printf(TEXT_BOLD "\t\t%% - - - - - - - - - - %%\n\t\t|                     |\n" TEXT_NONE);
     for(int row = 7; row >= 0; row--)
     {
@@ -451,45 +444,12 @@ void board_print(bitboard* board, int printValues)
         printf(TEXT_NONE TEXT_BOLD"  |" TEXT_NONE "\n ");
     }
     printf(TEXT_BOLD "\t\t|                     |\n \t\t%% - a b c d e f g h - %%\n" TEXT_NONE);
-}
 
-
-void values_print(bitboard* board)
-{
-    assert(board);
-
-    printf("ALL: %016" PRIx64 "\n", board->pieces_all);
-    printf("WHITE/BLACK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces_side[WHITE], board->pieces_side[BLACK]);
-    if(board->pieces[WHITE_PAWN] || board->pieces[BLACK_PAWN]) printf("PAWN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_PAWN], board->pieces[BLACK_PAWN]);
-    if(board->pieces[WHITE_KNIGHT] || board->pieces[BLACK_KNIGHT]) printf("KNIGHT: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_KNIGHT], board->pieces[BLACK_KNIGHT]);
-    if(board->pieces[WHITE_BISHOP] || board->pieces[BLACK_BISHOP]) printf("BISHOP: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_BISHOP], board->pieces[BLACK_BISHOP]);
-    if(board->pieces[WHITE_ROOK] || board->pieces[BLACK_ROOK]) printf("ROOK: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_ROOK], board->pieces[BLACK_ROOK]);
-    if(board->pieces[WHITE_QUEEN] || board->pieces[BLACK_QUEEN]) printf("QUEEN: %016" PRIx64 " | %016" PRIx64 "\n", board->pieces[WHITE_QUEEN], board->pieces[BLACK_QUEEN]);
-    printf("KING: %016" PRIx64 " | %016" PRIx64 "\n\t(%d) (%d)\n", board->pieces[WHITE_KING], board->pieces[BLACK_KING], board->kingSquare[WHITE], board->kingSquare[BLACK]);
-    
-    printf("Castling Rights: ");
-    if(board->canKingsideCastle_w) printf("K");
-    if(board->canQueensideCastle_w) printf("Q");
-    if(board->canKingsideCastle_b) printf("k");
-    if(board->canQueensideCastle_b) printf("q");
-    printf("\n");
-
-    if(board->in_check)
-    {
-        printf("Check: ");
-        if(ISWHITE(board->turn)) printf("W\n");
-        else printf("B\n");
-        printf("\n");
-    }
-
-    printf("HALF-MOVES-SINCE-LAST-CHANGE: %d\n", board->halfmoveClock);
-    if(board->enPassantSquare != NO_EP_SQUARE) printf("En passant square: %d\n", board->enPassantSquare);
-    printf("Hashcode: 0x%016" PRIx64 "\n", board->hashCode);
-    char FEN[128];
-    export_fen_from_board(board, FEN);  
+    char FEN[128] = {'\0'};
+    export_fen_from_board(board, FEN);
     printf("FEN: %s\n", FEN);
+    fflush(stdout);
 }
-
 
 void bitmask_print(uint64_t mask, char fill)
 {

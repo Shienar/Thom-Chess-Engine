@@ -527,7 +527,7 @@ int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8
                 {
                     if(!isCleaner)
                     {
-                        board_print(rDetails->board, 1);
+                        board_print(rDetails->board);
                         printf("Move error detected within binpack:\n");
                         printf("Position #%" PRId64 " | Game #%" PRId64 "\n", rDetails->positionIndex, rDetails->gameIndex);
                         printf("\tOffset: 0x%" PRIx64 "\n", rDetails->current_ptr - details->start_ptr);

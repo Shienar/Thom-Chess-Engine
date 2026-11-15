@@ -2,12 +2,17 @@ import re
 from scipy.optimize import minimize
 import numpy as np
 from engine_wrapper import EngineProcess
-from fen_loader import fen_list
+from fen_loader import getFENList
+import os
 
 ENGINE_PATH = "./target/Thom.exe"
 DEPTH = 8
 
 engine = EngineProcess(ENGINE_PATH)
+
+file_dir = os.path.dirname(os.path.abspath(__file__))
+fen_path = os.path.join(file_dir, 'middlegame.epd')
+fen_list = getFENList(fen_path)
 
 values = np.copy(engine.defaultHistoryValues)
 best_values = np.copy(values)
@@ -24,7 +29,7 @@ def testFEN(values, fen):
 
     engine.updateHistories(values)
     engine.send_command("ucinewgame\n")
-    engine.send_command(f"position fen {fen}\n")
+    engine.setFEN(fen)
     engine.send_command(f"go depth {DEPTH}\n")
     
     output_lines = engine.read_until("bestmove")

@@ -502,7 +502,8 @@ int main(int argc, char** argv)
             }
             else if(strcmp(str, "print") == 0)
             {
-                board_print(board, 1);
+                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
+                board_print(board);
                 break;
             }
             else if(strcmp(str, "eval") == 0)

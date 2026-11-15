@@ -2,18 +2,24 @@ from concurrent.futures import ThreadPoolExecutor
 import re
 import queue
 from engine_wrapper import EngineProcess
-from fen_loader import fen_list
+from fen_loader import getFENList
 import numpy as np
+import os
 
 ENGINE_PATH = "./target/Thom.exe"
-DEPTH = 12
+DEPTH = 10
 engine = EngineProcess(ENGINE_PATH)
+
+file_dir = os.path.dirname(os.path.abspath(__file__))
+fen_path = os.path.join(file_dir, 'middlegame.epd')
+fen_list = getFENList(fen_path)
+
 
 def testFEN(fen):
     global engine
 
     engine.send_command("ucinewgame\n")
-    engine.send_command(f"position fen {fen}\n")
+    engine.setFEN(fen)
     engine.send_command(f"go depth {DEPTH}\n")
     
     output_lines = engine.read_until("bestmove")

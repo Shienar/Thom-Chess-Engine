@@ -1,6 +1,7 @@
-from fen_loader import fen_list
+from fen_loader import getFENList
 from engine_wrapper import EngineProcess
 import re
+import os
 
 MIN_DEPTH = 1
 MAX_DEPTH = 6
@@ -8,11 +9,15 @@ MAX_NODES = 10_000_000
 ENGINE_PATH = "./target/Thom.exe"
 engine = EngineProcess(ENGINE_PATH)
 
+file_dir = os.path.dirname(os.path.abspath(__file__))
+fen_path = os.path.join(file_dir, 'standard.epd')
+fen_list = getFENList(fen_path)
+
 nodes_regex  = re.compile(r"(\d+)")
 fail_count = 0
 for index, info in enumerate(fen_list):
     print(f"\033[2K\rSearching FEN {index + 1}/{len(fen_list)}", end='')
-    engine.send_command(f"position fen {info.fenStr}\n")
+    engine.setFEN(info.fenStr)
     
     for depth, expectedOutput in enumerate(info.perftResults):
         if expectedOutput != 0 and expectedOutput <= MAX_NODES and depth >= MIN_DEPTH and depth <= MAX_DEPTH :
