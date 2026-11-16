@@ -553,12 +553,12 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
                 if(singularScore < sBeta)
                 {
-                    if(singularScore + 85 < sBeta)
+                    if(!pvNode && singularScore + 67 * sDepth < sBeta)
                     {
                         RECORD_SEARCH(context->tripleExtensions++;);
                         next_depth += 3;
                     }
-                    else if(singularScore + 15 < sBeta)
+                    else if(!pvNode && singularScore + 32 * sDepth < sBeta)
                     {
                         RECORD_SEARCH(context->doubleExtensions++;);
                         next_depth += 2;
@@ -642,7 +642,6 @@ int principalVariationSearch(threadContext* context, int alpha, int beta, int de
 
             context->countedNodes++;
             RECORD_SEARCH(context->pvs_nodes++;);
-            
             
             if(pvNode && (validMovesVisited == 0 || score > alpha))
                 score = -principalVariationSearch(context, -beta, -alpha, next_depth, ply + 1, &childPV, 1, 0);

@@ -26,6 +26,6 @@ fastchess.exe -engine cmd=../../target/$ENGINE_ONE name=$ENGINE_ONE_NAME \
                 -recover \
                 -ratinginterval 3 \
                 -resign movecount=4 score=1000 twosided=true \
-                -openings file=UHO_Lichess_4852_v1.epd format=epd \
+                -openings file=UHO_Lichess_4852_v1.epd format=epd order=random \
                 -sprt elo0=0 elo1=1 alpha=0.05 beta=0.05 \
                 -log file=fastchess.log
