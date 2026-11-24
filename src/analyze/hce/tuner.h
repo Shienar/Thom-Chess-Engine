@@ -3,71 +3,71 @@
 #include "analyze/hce/hce.h"
 #include "board/bitboard.h"
 
-typedef struct evalfp_t {
-    double mg;
-    double eg;
-} evalfp_t;
+typedef struct phased_eval_fp {
+	double mg;
+	double eg;
+} phased_eval_fp;
 
-#define UPDATE_COEFFICIENTS(var, val, op, index) \
-    do { \
-        (coefficients->var)index.mg op val; \
-        (coefficients->var)index.eg op val; \
-        score->mg op val * (params.var)index.mg; \
-        score->eg op val * (params.var)index.eg; \
-    } while(0)
+#define UPDATE_COEFFICIENTS(var, val, op, index) 	\
+	do { 											\
+		(coefficients->var)index.mg op val; 		\
+		(coefficients->var)index.eg op val; 		\
+		score->mg op val * (params.var)index.mg; 	\
+		score->eg op val * (params.var)index.eg; 	\
+	} while (0)
 
-typedef struct tuningTuple {
-    int index;
-    int coefficient; //White - black
-} tuningTuple;
+typedef struct tuning_tuple {
+	int index;
+	int coefficient; //White - black
+} tuning_tuple;
 
-typedef struct tuningEntry {
-    double heuristic_eval;
-    evalfp_t score;
-    eval_t phase;
-    double result;
-    evalfp_t phaseFactors;
-    tuningTuple* activeTuples;
-    int activeTupleCount;
-} tuningEntry;
+typedef struct tuning_entry {
+	double heuristic_eval;
+	phased_eval_fp score;
+	phased_eval phase;
+	double result;
+	phased_eval_fp phase_factors;
+	tuning_tuple *active_tuples;
+	int active_tuple_count;
+} tuning_entry;
 
-typedef union evalParameters_fp {
-    struct {
-        evalfp_t genericPieceValues[PIECE_TYPE_COUNT];
-        evalfp_t rawPieceTables[PIECE_TYPE_COUNT][64];
+typedef union eval_parameters_fp {
+	struct {
+		phased_eval_fp generic_piece_values[PIECE_TYPE_COUNT];
+		phased_eval_fp raw_piece_tables[PIECE_TYPE_COUNT][64];
 
-        evalfp_t knightMobilityBonus[9];
-        evalfp_t bishopMobilityBonus[14];
-        evalfp_t rookMobilityBonus[15];
-        evalfp_t queenMobilityBonus[28];
-        evalfp_t virtualMobilityBonus[28];
-        
-        evalfp_t minorPawnCover;
-        evalfp_t passedPawnBonus[ROW_COUNT];
-        evalfp_t connectedPawnBonus[ROW_COUNT];
-        evalfp_t neighborPawnBonus[ROW_COUNT];
-        evalfp_t doubledPawnBonus[COLUMN_COUNT];
-        evalfp_t isolatedPawnBonus[COLUMN_COUNT];
+		phased_eval_fp knight_mobility_bonus[9];
+		phased_eval_fp bishop_mobility_bonus[14];
+		phased_eval_fp rook_mobility_bonus[15];
+		phased_eval_fp queen_mobility_bonus[28];
+		phased_eval_fp virtual_mobility_bonus[28];
 
-        evalfp_t knightOutpostBonus;
+		phased_eval_fp minor_pawn_cover;
+		phased_eval_fp passed_pawn_bonus[ROW_COUNT];
+		phased_eval_fp connected_pawn_bonus[ROW_COUNT];
+		phased_eval_fp neighbor_pawn_bonus[ROW_COUNT];
+		phased_eval_fp doubled_pawn_bonus[COLUMN_COUNT];
+		phased_eval_fp isolated_pawn_bonus[COLUMN_COUNT];
 
-        evalfp_t bishopPairBonus;
-        evalfp_t badBishopBonus;
-        
-        evalfp_t openRookFileBonus[2];
-        evalfp_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
+		phased_eval_fp knight_outpost_bonus;
 
-        evalfp_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
+		phased_eval_fp bishop_pair_bonus;
+		phased_eval_fp bad_bishop_bonus;
 
-        evalfp_t kingPawnShieldBonus[COLUMN_COUNT];
-        evalfp_t kingPawnStormBonus[ROW_COUNT];
-        evalfp_t openKingFile[2];
-        evalfp_t kingSafety[100];
-        
-        evalfp_t tempo;
-    };
-    evalfp_t parameters[0];
-} evalParameters_fp;
+		phased_eval_fp open_rook_file_bonus[2];
+		phased_eval_fp connected_rook_bonus[MAX_ROOK_CONNECTIONS];
+
+		phased_eval_fp connected_queen_bonus[MAX_QUEEN_CONNECTIONS];
+
+		phased_eval_fp king_shield_bonus[COLUMN_COUNT];
+		phased_eval_fp king_storm_bonus[ROW_COUNT];
+		phased_eval_fp open_king_file[2];
+		phased_eval_fp king_safety[100];
+
+		phased_eval_fp tempo;
+	};
+	phased_eval_fp parameters[0];
+} eval_parameters_fp;
 
 #define sigmoidK(val, K) (1.0 / (1.0 + exp(-val * K / 400.0)))
 
@@ -75,4 +75,4 @@ typedef union evalParameters_fp {
 //  - base algorithm, was horribly slow.
 //https://github.com/AndyGrant/Ethereal/blob/master/Tuning.pdf
 //  - much faster algorithm, used here.
-void Tune(const char* dataPath, const char* outputPath, double forcedK, uint64_t epochs, double max_lr, double min_lr);
+void tune(const char *data_path, const char *output_path, double forced_k, uint64_t epochs, double max_lr, double min_lr);

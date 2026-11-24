@@ -8,28 +8,28 @@
 #define MAX_CORRHIST_VAL 256
 #define CORRHIST_SCALE 32
 
-extern int historyBonusScale;
-extern int historyBonusOffset;
-extern int historyPenaltyScale;
-extern int historyPenaltyOffset;
+extern int history_bonus_scale;
+extern int history_bonus_offset;
+extern int history_penalty_scale;
+extern int history_penalty_offset;
 
-extern int captureHistoryBonusScale;
-extern int captureHistoryBonusOffset;
-extern int captureHistoryPenaltyScale;
-extern int captureHistoryPenaltyOffset;
+extern int capture_history_bonus_scale;
+extern int capture_history_bonus_offset;
+extern int capture_history_penalty_scale;
+extern int capture_history_penalty_offset;
 
-void updateKillerMoves(struct threadContext* context, move currentMove, int ply);
+void update_killer_moves(struct thread_context *context, move current_move, int ply);
 
-int  getHistoryValue(struct threadContext* context, int turn, int piece, int to);
-void updateHistoryValues(int16_t* historyTable, int boostedIndex, int searchedQuietIndices[MAX_MOVES], int searchedQuietCount, int depth);
+int  get_history_value(struct thread_context *context, int turn, int piece, int to);
+void update_history_values(int16_t *history_table, int boosted_index, int searched_quiet_indices[MAX_MOVES], int searched_quiet_count, int depth);
 
-void updateContinuationHistory(struct threadContext* context, move currentMove, int ply);
-move getCounterMove(struct threadContext* context, int ply);
-move getFollowupMove(struct threadContext* context, int ply);
+void update_continuation_history(struct thread_context *context, move current_move, int ply);
+move get_counter_move(struct thread_context *context, int ply);
+move get_followup_move(struct thread_context *context, int ply);
 
-int  getCaptureHistoryOffset(struct threadContext* context, int piece, int to, int capturedPiece);
-void applyCaptureHistoryBonus(int16_t* dest, int depth);
-void applyCaptureHistoryPenalty(int16_t* dest, int depth);
+int  get_capture_history_offset(struct thread_context *context, int piece, int to, int captured_piece);
+void apply_capture_history_bonus(int16_t *dest, int depth);
+void apply_capture_history_penalty(int16_t *dest, int depth);
 
-void updateCorrectionHistory(int16_t* oldHist, int depth, int searchScore, int staticScore);
-int  getCorrectionHistoryOffset(struct threadContext* context, bitboard* board);
+void update_correction_history(int16_t *old_hist, int depth, int search_score, int static_score);
+int  get_correction_history_offset(struct thread_context *context, bitboard *board);

@@ -6,130 +6,130 @@
 #include "transposition/hash.h"
 #include <string.h>
 
-uint64_t betweenSquares[64][64];
-uint64_t cuckooHashes[CUCKOO_SIZE] = {0};
-move     cuckooMoves[CUCKOO_SIZE]  = {0};
+uint64_t between_squares[64][64];
+uint64_t cuckoo_hashes[CUCKOO_SIZE] = {0};
+move	 cuckoo_moves[CUCKOO_SIZE]  = {0};
 
-//Also initializes betweenSquares since only cuckootables use them
-void initCuckooMoveTable()
+//Also initializes between_squares since only cuckootables use them
+void init_cuckoo_move_table(void)
 {
-    memset(cuckooHashes, 0, sizeof(cuckooHashes));
-    memset(cuckooMoves, 0, sizeof(cuckooMoves));
+	memset(cuckoo_hashes, 0, sizeof(cuckoo_hashes));
+	memset(cuckoo_moves, 0, sizeof(cuckoo_moves));
 
-    uint64_t stm_hash = zobrist_keys[780];
-    for(int pc = WHITE_KNIGHT; pc <= BLACK_KING; pc++)
-    {
-        for(int from = 0; from < 64; from++)
-        {
-            uint64_t attacks;
-            switch(PIECE(pc))
-            {
-                case KNIGHT:
-                    attacks = knightMoves(0, from);
-                    break;
-                case BISHOP:
-                    attacks = bishopMoves(0, 0, from);
-                    break;
-                case ROOK:
-                    attacks = rookMoves(0, 0, from);
-                    break;
-                case QUEEN:
-                    attacks = queenMoves(0, 0, from);
-                    break;
-                case KING:
-                    //Castling moves aren't reversible or symmetrical.
-                    attacks = kingAttacks[from];
-                    break;
-                default:
-                    attacks = 0;
-                    break;
-            }
-            //Non-pawn moves are symmetrical in from/to.
-            for(int to = from + 1; to < 64; to++)
-            {
-                if(!(attacks & (1ull << (to))))
-                    continue;
-                
-                move m = {
-                    .startSquare = from, 
-                    .endSquare = to
-                };
-                uint64_t moveHash = zobrist_piece_keys[pc][from] ^ zobrist_piece_keys[pc][to] ^ stm_hash;
+	uint64_t stm_hash = zobrist_keys[780];
 
-                int index = CUCKOO_HASH1(moveHash);
+	for (int pc = WHITE_KNIGHT; pc <= BLACK_KING; pc++) {
+		for (int from = 0; from < 64; from++) {
+			uint64_t attacks;
 
-                while(1)
-                {
-                    uint64_t tempHash = cuckooHashes[index];
-                    cuckooHashes[index] = moveHash;
-                    moveHash = tempHash;
+			switch (PIECE(pc)) {
+			case KNIGHT:
+				attacks = knight_moves(0, from);
+				break;
+			case BISHOP:
+				attacks = bishop_moves(0, 0, from);
+				break;
+			case ROOK:
+				attacks = rook_moves(0, 0, from);
+				break;
+			case QUEEN:
+				attacks = queen_moves(0, 0, from);
+				break;
+			case KING:
+				//Castling moves aren't reversible or symmetrical.
+				attacks = king_attacks[from];
+				break;
+			default:
+				attacks = 0;
+				break;
+			}
 
-                    move tempMove = cuckooMoves[index];
-                    cuckooMoves[index] = m;
-                    m = tempMove;
+			//Non-pawn moves are symmetrical in from/to.
+			for (int to = from + 1; to < 64; to++) {
+				if (!(attacks & (1ull << (to))))
+					continue;
 
-                    if(!m.raw)
-                        break;
-                    
-                    index = (index == CUCKOO_HASH1(moveHash)) ? CUCKOO_HASH2(moveHash) : CUCKOO_HASH1(moveHash);
-                }
-            }
-        }
-    }
+				move m = {
+					.start_square = from,
+					.end_square = to
+				};
+				uint64_t move_hash = zobrist_piece_keys[pc][from] ^ zobrist_piece_keys[pc][to] ^ stm_hash;
 
-    for(int a = 0; a < 64; a++)
-    {
-        for(int b = 0; b < 64; b++)
-        {
-            if(getRow(a) == getRow(b) || getColumn(a) == getColumn(b))
-                betweenSquares[a][b] = rookMoves((1ull << (b)), 0, a) & rookMoves((1ull << (a)), 0, b);
-            else if(bishopMoves(0, 0, a) & (1ull << (b)))
-                betweenSquares[a][b] = bishopMoves((1ull << (b)), 0, a) & bishopMoves((1ull << (a)), 0, b);
-        }
-    }
+				int index = CUCKOO_HASH1(move_hash);
+
+				while (1) {
+					uint64_t temp_hash = cuckoo_hashes[index];
+
+					cuckoo_hashes[index] = move_hash;
+					move_hash = temp_hash;
+
+					move temp_move = cuckoo_moves[index];
+
+					cuckoo_moves[index] = m;
+					m = temp_move;
+
+					if (!m.raw)
+						break;
+
+					index = (index == CUCKOO_HASH1(move_hash)) ? CUCKOO_HASH2(move_hash) : CUCKOO_HASH1(move_hash);
+				}
+			}
+		}
+	}
+
+	for (int a = 0; a < 64; a++) {
+		for (int b = 0; b < 64; b++) {
+			if (get_row(a) == get_row(b) || get_column(a) == get_column(b))
+				between_squares[a][b] = rook_moves((1ull << (b)), 0, a) & rook_moves((1ull << (a)), 0, b);
+			else if (bishop_moves(0, 0, a) & (1ull << (b)))
+				between_squares[a][b] = bishop_moves((1ull << (b)), 0, a) & bishop_moves((1ull << (a)), 0, b);
+		}
+	}
 
 }
 
-int isUpcomingRepetition(bitboard* board, repetitionVector repetitions, int ply)
+int is_upcoming_repetition(bitboard *board, repetition_vector repetitions, int ply)
 {
-    int halfmoves = _min(board->halfmoveClock, board->pliesFromNull);
+	int halfmoves = _min(board->halfmove_clock, board->plies_from_null);
 
-    if(halfmoves < 3)
-        return 0;
- 
-    uint64_t turnHash = zobrist_keys[780];
+	if (halfmoves < 3)
+		return 0;
 
-    uint64_t originalHash = repetitions.hashCodes[board->halfMoveCount]; 
-    uint64_t prevHash     = repetitions.hashCodes[board->halfMoveCount - 1];
+	uint64_t turn_hash = zobrist_keys[780];
 
-    uint64_t other = originalHash ^ prevHash ^ turnHash;
+	uint64_t original_hash = repetitions.hash_codes[board->half_move_count];
+	uint64_t prev_hash	 = repetitions.hash_codes[board->half_move_count - 1];
 
-    for(int i = 3; i <= halfmoves; i+=2)
-    {
-        uint64_t currentHash = repetitions.hashCodes[board->halfMoveCount - i];
-        other ^= currentHash ^ repetitions.hashCodes[board->halfMoveCount - (i - 1)] ^ turnHash;
+	uint64_t other = original_hash ^ prev_hash ^ turn_hash;
 
-        if(!other) continue;
+	for (int i = 3; i <= halfmoves; i += 2) {
+		uint64_t current_hash = repetitions.hash_codes[board->half_move_count - i];
 
-        uint64_t diff = originalHash ^ currentHash;
-        int cuckooIndex = CUCKOO_HASH1(diff);
-        if(diff != cuckooHashes[cuckooIndex])
-            cuckooIndex = CUCKOO_HASH2(diff);
-        if(diff != cuckooHashes[cuckooIndex])
-            continue;
-        
-        move m = cuckooMoves[cuckooIndex];
-        
-        if(!(betweenSquares[m.startSquare][m.endSquare] & board->pieces_all))
-        {
-            if(ply > i)
-                return 1;
+		other ^= current_hash ^ repetitions.hash_codes[board->half_move_count - (i - 1)] ^ turn_hash;
 
-            int pc = findPieceOnSquare(board, m.startSquare);
-            if(pc == EMPTY_PIECE)
-                pc = findPieceOnSquare(board, m.endSquare);
-            return COLOR(pc) == board->turn;
-        }
-    }
-    return 0;
+		if (!other)
+			continue;
+
+		uint64_t diff = original_hash ^ current_hash;
+		int cuckoo_index = CUCKOO_HASH1(diff);
+
+		if (diff != cuckoo_hashes[cuckoo_index])
+			cuckoo_index = CUCKOO_HASH2(diff);
+		if (diff != cuckoo_hashes[cuckoo_index])
+			continue;
+
+		move m = cuckoo_moves[cuckoo_index];
+
+		if (!(between_squares[m.start_square][m.end_square] & board->pieces_all)) {
+			if (ply > i)
+				return 1;
+
+			int pc = (board->piece_arr[m.start_square]);
+
+			if (pc == EMPTY_PIECE)
+				pc = (board->piece_arr[m.end_square]);
+			return COLOR(pc) == board->turn;
+		}
+	}
+	return 0;
 }

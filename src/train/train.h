@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "analyze/nnue/neuralnet.h"
+#include <math.h>
 
 #define PI 3.14159265358979323846
 #define MINIBATCH_SIZE 16384
@@ -22,8 +23,15 @@ extern float max_lr;
 extern float min_lr;
 extern uint64_t max_cosine_anneal_timestamp;
 
-#define WDL_BLEND(lambda, cp, relativeResult) (lambda * SIGMOID((float) cp / EVAL_SCALE) + (1 - lambda) * relativeResult)
-#define SIGMOID(x) (1.0 / (1.0 + exp(-(x))))
+static inline float sigmoid(float x)
+{
+    return (1.0f / (1.0f + expf(-(x))));
+}
+
+static inline float wdl_blend(float lambda, float cp, float relative_result)
+{
+    return (lambda * sigmoid(cp / EVAL_SCALE) + (1.0f - lambda) * relative_result);
+}
 
 // 6,104 * 16,384 = 100,007,936
 #define MINIBATCHES_PER_EPOCH 6104
@@ -35,21 +43,21 @@ extern uint64_t max_cosine_anneal_timestamp;
 #define INPUT_GROUP_A 0
 #define INPUT_GROUP_B 1
 
-void initializeTrainingWeights(training_weights* raw_weights);
-void quantizeWeights(training_weights* raw, nnue_weights* quantized);
-void saveRawWeights(training_weights* weights, const char* path);
-void saveQuantizedWeights(nnue_weights* weights, const char* path);
+void initialize_training_weights(training_weights *raw_weights);
+void quantize_weights(training_weights *raw, nnue_weights *quantized);
+void save_raw_weights(training_weights *weights, const char *path);
+void save_quantize_weights(nnue_weights *weights, const char *path);
 
 /**
  * References / Algorithms:
- *      Ranger
- *          - https://arxiv.org/pdf/2106.13731
- *      - Adaptive Moment Estimation 
- *          - https://arxiv.org/abs/1412.6980v8
- *      - Weight Decay
- *      - RAdam
- *          - https://arxiv.org/pdf/1908.03265
- *      - Lookahead
- *          - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
+ *	  Ranger
+ *		  - https://arxiv.org/pdf/2106.13731
+ *	  - Adaptive Moment Estimation
+ *		  - https://arxiv.org/abs/1412.6980v8
+ *	  - Weight Decay
+ *	  - RAdam
+ *		  - https://arxiv.org/pdf/1908.03265
+ *	  - Lookahead
+ *		  - https://proceedings.neurips.cc/paper_files/paper/2019/file/90fd4f88f588ae64038134f1eeaa023f-Paper.pdf
  */
-void train(int epochs, float min_learningRate, float max_learningRate, const char* binpackFileName, const char* kernelFileName);
+void train(int epochs, float min_lr, float max_lr, const char *binpack_file_name, const char *kernel_file_name);

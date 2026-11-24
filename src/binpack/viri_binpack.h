@@ -8,7 +8,7 @@
 //Reusing the format from https://github.com/cosmobobak/viriformat
 
 //White-relative always.
-typedef int16_t Viri_Score; 
+typedef int16_t viri_score;
 
 #define VIRI_PAWN 0
 #define VIRI_KNIGHT 1
@@ -25,8 +25,8 @@ typedef int16_t Viri_Score;
 
 #define VIRI_MOVE_TYPE_NONE 0
 #define VIRI_MOVE_TYPE_ENPASSANT 1
-#define VIRI_MOVE_TYPE_CASTLING 2 
-#define VIRI_MOVE_TYPE_PROMOTIONS 3 //includes captures 
+#define VIRI_MOVE_TYPE_CASTLING 2
+#define VIRI_MOVE_TYPE_PROMOTIONS 3 //includes captures
 #define VIRI_PROMOTETO_KNIGHT 0
 #define VIRI_PROMOTETO_BISHOP 1
 #define VIRI_PROMOTETO_ROOK 2
@@ -39,90 +39,90 @@ typedef int16_t Viri_Score;
 #define CORRUPTED_POSITION -2
 
 #pragma pack(push, 1)
-typedef struct Viri_PackedBoard {
-    uint64_t occupancy;
-    uint8_t pieces[16];
-    uint8_t ep : 7;
-    uint8_t stm  : 1;
-    uint8_t halfmoveClock; //50-move rule tracking
-    uint16_t fullMoveCounter;
-    Viri_Score whiteScore;
-    uint8_t result;
-    uint8_t padding;
-} Viri_PackedBoard;
-typedef union Viri_Move {
-    uint16_t raw;
-    struct {
-        uint16_t startSquare : 6;
-        uint16_t endSquare : 6;
-        uint16_t promotePiece : 2;
-        uint16_t moveType : 2;
-    };
-} Viri_Move;
+typedef struct viri_packed_board {
+	uint64_t occupancy;
+	uint8_t pieces[16];
+	uint8_t ep : 7;
+	uint8_t stm  : 1;
+	uint8_t halfmove_clock; //50-move rule tracking
+	uint16_t full_move_counter;
+	viri_score white_score;
+	uint8_t result;
+	uint8_t padding;
+} viri_packed_board;
+typedef union viri_move {
+	uint16_t raw;
+	struct {
+		uint16_t start_square : 6;
+		uint16_t end_square : 6;
+		uint16_t promote_piece : 2;
+		uint16_t move_type : 2;
+	};
+} viri_move;
 
-typedef union Viri_MoveScorePair {
-    uint32_t raw;
-    struct {
-        Viri_Move move;
-        Viri_Score whiteScore;
-    };
-} Viri_MoveScorePair;
+typedef union viri_move_score_pair {
+	uint32_t raw;
+	struct {
+		viri_move move;
+		viri_score white_score;
+	};
+} viri_move_score_pair;
 #pragma pack(pop)
 
-typedef struct readerDetails {
-    bitboard* board;
-    Viri_PackedBoard* packedBoard;
-    uint8_t currentGameWinner;
-    
-    uint8_t* current_ptr;
-    uint8_t* gameStartPtr;
+typedef struct reader_details {
+	bitboard *board;
+	viri_packed_board *packed_board;
+	uint8_t current_game_winner;
 
-    uint64_t positionIndex;
-    uint64_t gameIndex;
+	uint8_t *current_ptr;
+	uint8_t *game_start_ptr;
 
-    Viri_MoveScorePair nextPair;
-} readerDetails;
+	uint64_t position_index;
+	uint64_t game_index;
 
-typedef struct binpackDetails {
-    uint8_t isReader;
-    readerDetails* readerInfo;
+	viri_move_score_pair next_pair;
+} reader_details;
 
-    //Reading (Global)
-    mmap_handle_t mmap_file;
-    uint8_t* start_ptr;
-    uint8_t* end_ptr;
+typedef struct binpack_details {
+	uint8_t is_reader;
+	reader_details *reader_info;
 
-    //Writing
-    FILE* binpack; 
-    mutex_t lock;
-    int writtenThisSession;
-    clock_t lastPrintTime;
-    clock_t startTime;
-} binpackDetails;  
+	//Reading (Global)
+	mmap_handle_t mmap_file;
+	uint8_t *start_ptr;
+	uint8_t *end_ptr;
+
+	//Writing
+	FILE *binpack;
+	mutex_t lock;
+	int written_this_session;
+	clock_t last_print_time;
+	clock_t start_time;
+} binpack_details;
 
 //Avoids some thread contention for writes after each individual game.
 #define MAX_POSITIONS_PER_GAME 100
 #define VIRI_WRITEBUFFER_SIZE 32
-typedef struct generatedGameBuffer {
-    Viri_PackedBoard packedBoards[VIRI_WRITEBUFFER_SIZE];
-    Viri_MoveScorePair pairLists[VIRI_WRITEBUFFER_SIZE][MAX_POSITIONS_PER_GAME];
-    int movesThisGame[VIRI_WRITEBUFFER_SIZE];
-} generatedGameBuffer;
+typedef struct generated_game_buffer {
+	viri_packed_board packed_boards[VIRI_WRITEBUFFER_SIZE];
+	viri_move_score_pair pair_lists[VIRI_WRITEBUFFER_SIZE][MAX_POSITIONS_PER_GAME];
+	int moves_this_game[VIRI_WRITEBUFFER_SIZE];
+} generated_game_buffer;
 
-extern uint8_t pieceMappingsFromViri[16];
-extern uint8_t pieceMappingsToViri[16];
-extern uint8_t promoteMappingsFromViri[4];
-extern uint8_t promoteMappingsToViri[10];
-extern uint8_t rookSqToFlag[64];
+extern uint8_t piece_mappings_from_viri[16];
+extern uint8_t piece_mappings_to_viri[16];
+extern uint8_t promote_mappings_from_viri[4];
+extern uint8_t promote_mappings_to_viri[10];
+extern uint8_t rook_sq_to_flag[64];
 
 //Same file pointer for all functions. The assumption is that you will either only read or only write.
-void binpack_open(binpackDetails* details, const char* fileName, int isReader);
-void binpack_close(binpackDetails* details);
-int binpack_next(binpackDetails* details, bitboard* brd, Viri_Score* eval, uint8_t* result, int loop, int smartFENSkip, int minimumFENSkips);
+void binpack_open(binpack_details *details, const char *file_name, int is_reader);
+void binpack_close(binpack_details *details);
+int binpack_next(binpack_details *details, bitboard *brd, viri_score *eval, uint8_t *result, int loop, int smart_fen_skip, int minimum_fen_skips);
 
-int readPackedBoard(binpackDetails* details);
-void boardToPackedBoard(bitboard* board, Viri_PackedBoard* packedBoard);
-void binpack_write(binpackDetails* details, generatedGameBuffer* buffer);
+int read_packed_board(binpack_details *details);
+void board_to_packed_board(bitboard *board, viri_packed_board *packed_board);
+void binpack_write(binpack_details *details, generated_game_buffer *buffer);
 
-void binpackPrintInfo(const char* fileName);
-void binpackClean(const char* fileName);
+void binpack_print_info(const char *file_name);
+void binpack_clean(const char *file_name);

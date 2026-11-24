@@ -6,322 +6,315 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-binpackDetails details;
-int exitWhile;
+binpack_details details;
+int exit_while;
 
-void generate(const char* path)
+void generate(const char *path)
 {
-    exitWhile = 0;
-    int concurrency = threadCount;
-    threadCount = 1;
-    
-    int wasDebugEnabled = printDebugMessages;
-    if(wasDebugEnabled) 
-        disableDebugMessages();
+	exit_while = 0;
+	int concurrency = thread_count;
 
-    suppressUCIMessages = 1;
-    threadContext* contextList = calloc(concurrency, sizeof(threadContext));
+	thread_count = 1;
 
-    THREADTYPE* threadList = calloc(concurrency, sizeof(THREADTYPE));
-    binpack_open(&details, path, 0);
-    details.startTime = clock();
+	int was_debug_enabled = print_debug_messages;
 
-    for(int i = 0; i < concurrency; i++)
-    {
-        contextList[i].startTime = 0,
-        contextList[i].hardEndTime = LONG_MAX,
-        contextList[i].softEndTime = LONG_MAX,
-        contextList[i].maxDepth = 9;
-        contextList[i].hardMaxNodes = 5000;
-        contextList[i].softMaxNodes = 5000;
-        contextList[i].abortFlag = calloc(1, sizeof(uint8_t));
-        contextList[i].deepeningSkip = (rand() << 16) | rand(); //Used as rng seed & reset to zero by worker thread.
+	if (was_debug_enabled)
+		disable_debug_messages();
 
-        if(useNNUE)
-        {
-            contextList[i].accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
-            contextList[i].refreshTable = calloc(1, sizeof(accumulatorRefreshTable));;
-        }
+	suppress_uci_messages = 1;
+	thread_context *context_list = calloc(concurrency, sizeof(thread_context));
 
-        contextList[i].tt = create_hashTable_tt();
+	THREADTYPE *thread_list = calloc(concurrency, sizeof(THREADTYPE));
 
-        THREAD_START(threadList[i], generateWorkerThread, &contextList[i]);
-    }
+	binpack_open(&details, path, 0);
+	details.start_time = clock();
 
-    printf("Started generating data. Type 'stop' to stop.\n");
-    char buffer[128];
-    char* strtok_ptr;
-    const char* delim = " \t\r\n";
+	for (int i = 0; i < concurrency; i++) {
+		context_list[i].start_time = 0,
+		context_list[i].hard_end_time = LONG_MAX,
+		context_list[i].soft_end_time = LONG_MAX,
+		context_list[i].max_depth = 9;
+		context_list[i].hard_max_nodes = 5000;
+		context_list[i].soft_max_nodes = 5000;
+		context_list[i].abort_flag = calloc(1, sizeof(uint8_t));
+		context_list[i].deepening_skip = (rand() << 16) | rand(); //Used as rng seed & reset to zero by worker thread.
 
-    while(fgets(buffer, sizeof(buffer), stdin) != NULL)
-    {
-        char* token = _strtok(buffer, delim, &strtok_ptr);
-        while(token != NULL) 
-        {
-            if(strcmp(token, "stop") == 0) 
-                goto cleanup;
-            
-            token = _strtok(NULL, delim, &strtok_ptr);
-        }
-    }
+		if (use_nnue) {
+			context_list[i].accumulator_stack = calloc(MAX_PLY + 1, sizeof(accumulator));
+			context_list[i].refresh_table = calloc(1, sizeof(accumulator_refresh_table));
+		}
 
-    cleanup:
-    exitWhile = 1;
+		context_list[i].tt = create_tt_table();
 
-    printf("Stopping all threads...\n");
-    for(int i = 0; i < concurrency; i++) 
-    {
-        *contextList[i].abortFlag = 1;
-        THREAD_WAIT(threadList[i]);
-        destroy_hashTable_tt(contextList[i].tt);
-        free(contextList[i].abortFlag);
-        
-        if(useNNUE)
-        {
-            free(contextList[i].accumulatorStack);
-            free(contextList[i].refreshTable);
-        }
-    }
-    
-    threadCount = concurrency;
-    suppressUCIMessages = 0;
-    
-    binpack_close(&details);
-    if(wasDebugEnabled) 
-        enableDebugMessages();
-    printf("Stopped generating data.\n");
-    
-    binpackPrintInfo(path);
+		THREAD_START(thread_list[i], generate_worker_thread, &context_list[i]);
+	}
+
+	printf("Started generating data. Type 'stop' to stop.\n");
+	char buffer[128];
+	char *strtok_ptr;
+	const char *delim = " \t\r\n";
+
+	while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+		char *token = _strtok(buffer, delim, &strtok_ptr);
+
+		while (token != NULL) {
+			if (strcmp(token, "stop") == 0)
+				goto cleanup;
+
+			token = _strtok(NULL, delim, &strtok_ptr);
+		}
+	}
+
+cleanup:
+	exit_while = 1;
+
+	printf("Stopping all threads...\n");
+	for (int i = 0; i < concurrency; i++) {
+		*context_list[i].abort_flag = 1;
+		THREAD_WAIT(thread_list[i]);
+		destroy_tt_table(context_list[i].tt);
+		free(context_list[i].abort_flag);
+
+		if (use_nnue) {
+			free(context_list[i].accumulator_stack);
+			free(context_list[i].refresh_table);
+		}
+	}
+
+	thread_count = concurrency;
+	suppress_uci_messages = 0;
+
+	binpack_close(&details);
+	if (was_debug_enabled)
+		enable_debug_messages();
+	printf("Stopped generating data.\n");
+
+	binpack_print_info(path);
 }
 
-uint32_t rng_xorshift32(uint32_t* seed) 
+uint32_t rng_xorshift32(uint32_t *seed)
 {
-    uint32_t x = *seed;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    *seed = x;
-    return x;
+	uint32_t x = *seed;
+
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	*seed = x;
+	return x;
 }
 
 /**
- * Make eight random moves on the board, creating some random opening position. 
- * Do a search on this position, returning me a score and a move. 
+ * Make eight random moves on the board, creating some random opening position.
+ * Do a search on this position, returning me a score and a move.
  * The score gets applied to the current position and the move creates the next position.
  * The final move of the game doesn't get included in the binpack.
- * 
+ *
  * If the initial position is noisy (abs(cp) > 300), skip that game and try another opening.
- * 
+ *
  * If one side is dominant (> 2000 cp) for 5 moves, adjudicate an early win.
  * If both sides are tied for 5 moves after move 40 (cp in [-10, +10]), adjudicate an early draw
- * 
+ *
  * If the score is a mate score, we can terminate early & don't need to play out the full continuation.
  */
-THREAD_RETURN generateWorkerThread(THREAD_PARAM param)
+THREAD_RETURN generate_worker_thread(THREAD_PARAM param)
 {
-    threadContext* context = (threadContext*) param;
-    bitboard* board = &context->boardStack[0];
-    bitboard tempBoard;
+	thread_context *context = (thread_context *) param;
+	bitboard *board = &context->board_stack[0];
+	bitboard temp_board;
 
-    int isNewGame = 1;
+	int is_new_game = 1;
 
-    generatedGameBuffer* writeBuffer = calloc(1, sizeof(generatedGameBuffer));
+	generated_game_buffer *write_buffer = calloc(1, sizeof(generated_game_buffer));
 
-    for(int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
-        writeBuffer->packedBoards[i].whiteScore = INT16_MAX;
+	for (int i = 0; i < VIRI_WRITEBUFFER_SIZE; i++)
+		write_buffer->packed_boards[i].white_score = INT16_MAX;
 
-    int curGameIndex = 0;
-    int movesThisGame = 0;
+	int cur_game_index = 0;
+	int moves_this_game = 0;
 
-    uint32_t seed = context->deepeningSkip;
-    context->deepeningSkip = 0;
-    
-    //Adjudication
-    int consecutiveHighScores = 0;
-    int consecutiveLowScores = 0;
-    int consecutiveDrawScores = 0;
+	uint32_t seed = context->deepening_skip;
 
-    while(!exitWhile)
-    {
-        Viri_PackedBoard* packedBoard = &writeBuffer->packedBoards[curGameIndex];
-        Viri_MoveScorePair* pairList = writeBuffer->pairLists[curGameIndex];
+	context->deepening_skip = 0;
 
-        if(isNewGame)
-        {
-            newgame:
-            load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
+	//Adjudication
+	int consecutive_high_scores = 0;
+	int consecutive_low_scores = 0;
+	int consecutive_draw_scores = 0;
 
-            //Play some random moves
-            for(int i = 0; i < 8; i++)
-            {
-                move moveList[MAX_MOVES] = {0};
-                int count = generateMoveList(moveList, board, GET_ALL_MOVES);
-                if(!count)
-                    goto newgame;
-                int index = rng_xorshift32(&seed) % count;
-                if(moveFromStruct(board, &tempBoard, moveList[index], &context->repetitions))
-                {
-                    int foundLegal = 0;
-                    for(int j = (index + 1) % count; j != index; j = (j + 1) % count)
-                    {
-                        if(!moveFromStruct(board, &tempBoard, moveList[j], &context->repetitions))
-                        {
-                            foundLegal = 1;
-                            break;
-                        }
-                    }
-                    if(!foundLegal)
-                        goto newgame;
-                }
-                memcpy(board, &tempBoard, sizeof(bitboard));
-            }
+	while (!exit_while) {
+		viri_packed_board *packed_board = &write_buffer->packed_boards[cur_game_index];
+		viri_move_score_pair *pair_list = write_buffer->pair_lists[cur_game_index];
 
-            isNewGame = 0;
-            movesThisGame = 0;
-            consecutiveHighScores = 0;
-            consecutiveLowScores = 0;
-            consecutiveDrawScores = 0;
+		if (is_new_game) {
+newgame:
+			load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
 
-            boardToPackedBoard(board, packedBoard);
-            packedBoard->result = UINT8_MAX;
-            clear_tt(context->tt);
-            continue;
-        }
+			//Play some random moves
+			for (int i = 0; i < 8; i++) {
+				move move_list[MAX_MOVES] = {0};
+				int count = generate_move_list(move_list, board, GET_ALL_MOVES);
 
-        assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
+				if (!count)
+					goto newgame;
+				int index = rng_xorshift32(&seed) % count;
 
-        calculateBestMove(param);
+				if (move_from_struct(board, &temp_board, move_list[index], &context->repetitions)) {
+					int found_legal = 0;
 
-        move bestMove = context->pv.line[0];
+					for (int j = (index + 1) % count; j != index; j = (j + 1) % count) {
+						if (!move_from_struct(board, &temp_board, move_list[j], &context->repetitions)) {
+							found_legal = 1;
+							break;
+						}
+					}
+					if (!found_legal)
+						goto newgame;
+				}
+				memcpy(board, &temp_board, sizeof(bitboard));
+			}
 
-        int whiteEval = (ISWHITE(board->turn)) ? context->score : -context->score;
+			is_new_game = 0;
+			moves_this_game = 0;
+			consecutive_high_scores = 0;
+			consecutive_low_scores = 0;
+			consecutive_draw_scores = 0;
 
-        if(movesThisGame == 0 && abs(whiteEval) > 300)
-        {
-            //Reject noisy opening.
-            isNewGame = 1;
-            continue;
-        }
+			board_to_packed_board(board, packed_board);
+			packed_board->result = UINT8_MAX;
+			clear_tt(context->tt);
+			continue;
+		}
 
-        if(whiteEval >= MIN_MATE_SCORE)
-            packedBoard->result = VIRI_WHITE_WIN;
-        else if(whiteEval <= -MIN_MATE_SCORE)
-            packedBoard->result = VIRI_BLACK_WIN;
+		assert(board->pieces[WHITE_KING] && board->pieces[BLACK_KING]);
 
-        consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
-        consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
-        consecutiveDrawScores = (movesThisGame > 32 && whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+		calculate_best_move(param);
 
-        if(consecutiveHighScores > 5) packedBoard->result = VIRI_WHITE_WIN;
-        else if(consecutiveLowScores > 5) packedBoard->result = VIRI_BLACK_WIN;
-        else if(consecutiveDrawScores > 5) packedBoard->result = VIRI_DRAW;
+		move best_move = context->pv.line[0];
 
-        if(packedBoard->result < UINT8_MAX)
-        {
-            adjudication:
+		int white_eval = (ISWHITE(board->turn)) ? context->score : -context->score;
 
-            writeBuffer->movesThisGame[curGameIndex] = movesThisGame;
-            curGameIndex++; 
-            if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
-            {
-                binpack_write(&details, writeBuffer);
-                curGameIndex = 0;
-            }
-            isNewGame = 1;
-            continue;
-        }
+		if (moves_this_game == 0 && abs(white_eval) > 300) {
+			//Reject noisy opening.
+			is_new_game = 1;
+			continue;
+		}
 
-        if(bestMove.raw == 0)
-            goto gameover;
+		if (white_eval >= MIN_MATE_SCORE)
+			packed_board->result = VIRI_WHITE_WIN;
+		else if (white_eval <= -MIN_MATE_SCORE)
+			packed_board->result = VIRI_BLACK_WIN;
 
-        int piece = findPieceOnSquare(board, bestMove.startSquare);
-        int difference = bestMove.endSquare - bestMove.startSquare;
+		consecutive_high_scores = (white_eval > 2000) ? consecutive_high_scores + 1 : 0;
+		consecutive_low_scores = (white_eval < -2000) ? consecutive_low_scores + 1 : 0;
+		consecutive_draw_scores = (moves_this_game > 32 && white_eval > -10 && white_eval < 10) ? consecutive_draw_scores + 1 : 0;
 
-        pairList[movesThisGame].move.endSquare = bestMove.endSquare;
-        pairList[movesThisGame].move.startSquare = bestMove.startSquare;
-        pairList[movesThisGame].move.promotePiece = promoteMappingsToViri[bestMove.promoteTo];
-        if(bestMove.promoteTo) 
-            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_PROMOTIONS;
-        else if(ISKING(piece) && abs(difference) == 2)
-        {
-            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_CASTLING;
+		if (consecutive_high_scores > 5)
+			packed_board->result = VIRI_WHITE_WIN;
+		else if (consecutive_low_scores > 5)
+			packed_board->result = VIRI_BLACK_WIN;
+		else if (consecutive_draw_scores > 5)
+			packed_board->result = VIRI_DRAW;
 
-            //Reformat move as king-takes rook (Assumes standard variant)
-            int rowOffset = getRow(bestMove.startSquare) * 8;
-            if(bestMove.endSquare > bestMove.startSquare)
-                pairList[movesThisGame].move.endSquare = rowOffset + 7;
-            else
-                pairList[movesThisGame].move.endSquare = rowOffset;
-        }
-        else if(ISPAWN(piece) && bestMove.endSquare == board->enPassantSquare)
-            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_ENPASSANT;
-        else
-            pairList[movesThisGame].move.moveType = VIRI_MOVE_TYPE_NONE;
+		if (packed_board->result < UINT8_MAX) {
+adjudication:
 
-        pairList[movesThisGame].whiteScore = whiteEval;
+			write_buffer->moves_this_game[cur_game_index] = moves_this_game;
+			cur_game_index++;
+			if (cur_game_index >= VIRI_WRITEBUFFER_SIZE) {
+				binpack_write(&details, write_buffer);
+				cur_game_index = 0;
+			}
+			is_new_game = 1;
+			continue;
+		}
 
-        movesThisGame++;
-        if(movesThisGame >= MAX_POSITIONS_PER_GAME)
-        {
-            //Determine game result without saving extra moves.
-            do
-            {
-                calculateBestMove(param);
-                int whiteEval = (ISWHITE(board->turn)) ? context->score : -context->score;
+		if (best_move.raw == 0)
+			goto gameover;
 
-                consecutiveHighScores = (whiteEval > 2000) ? consecutiveHighScores + 1 : 0;
-                consecutiveLowScores = (whiteEval < -2000) ? consecutiveLowScores + 1 : 0;
-                consecutiveDrawScores = (whiteEval > -10 && whiteEval < 10) ? consecutiveDrawScores + 1 : 0;
+		int piece = (board->piece_arr[best_move.start_square]);
+		int difference = best_move.end_square - best_move.start_square;
 
-                if(consecutiveHighScores > 5 || whiteEval >= MIN_MATE_SCORE) packedBoard->result = VIRI_WHITE_WIN;
-                else if(consecutiveLowScores > 5 || whiteEval <= -MIN_MATE_SCORE) packedBoard->result = VIRI_BLACK_WIN;
-                else if(consecutiveDrawScores > 5) packedBoard->result = VIRI_DRAW;
-                
-                if(packedBoard->result < UINT8_MAX)
-                    goto adjudication;
-        
+		pair_list[moves_this_game].move.end_square = best_move.end_square;
+		pair_list[moves_this_game].move.start_square = best_move.start_square;
+		pair_list[moves_this_game].move.promote_piece = promote_mappings_to_viri[best_move.promote_to];
+		if (best_move.promote_to)
+			pair_list[moves_this_game].move.move_type = VIRI_MOVE_TYPE_PROMOTIONS;
+		else if (ISKING(piece) && abs(difference) == 2) {
+			pair_list[moves_this_game].move.move_type = VIRI_MOVE_TYPE_CASTLING;
 
-            } while(!moveFromStruct(board, board, context->pv.line[0], &context->repetitions));
-            goto gameover;
-        }
+			//Reformat move as king-takes rook (Assumes standard variant)
+			int row_offset = get_row(best_move.start_square) * 8;
 
-        //End of game
-        if(moveFromStruct(board, board, bestMove, &context->repetitions))
-        {
-            gameover:
+			if (best_move.end_square > best_move.start_square)
+				pair_list[moves_this_game].move.end_square = row_offset + 7;
+			else
+				pair_list[moves_this_game].move.end_square = row_offset;
+		} else if (ISPAWN(piece) && best_move.end_square == board->ep_square)
+			pair_list[moves_this_game].move.move_type = VIRI_MOVE_TYPE_ENPASSANT;
+		else
+			pair_list[moves_this_game].move.move_type = VIRI_MOVE_TYPE_NONE;
 
-            if(isDraw(board, &context->repetitions))
-                packedBoard->result = VIRI_DRAW;
-            else
-            {
-                //Should get detected early, this is a fallback.
-                packedBoard->result = getMateResult(board);
-                switch(packedBoard->result)
-                {
-                    case VICTOR_BLACK:
-                        packedBoard->result = VIRI_BLACK_WIN;
-                        break;
-                    case VICTOR_WHITE:
-                        packedBoard->result = VIRI_WHITE_WIN;
-                        break;
-                    default:
-                        packedBoard->result = VIRI_DRAW;
-                        break;
-                }
-            }
+		pair_list[moves_this_game].white_score = white_eval;
 
-            writeBuffer->movesThisGame[curGameIndex] = movesThisGame;
-            curGameIndex++;
-            if(curGameIndex >= VIRI_WRITEBUFFER_SIZE)
-            {
-                binpack_write(&details, writeBuffer);
-                curGameIndex = 0;
-            }
-            isNewGame = 1;
-            continue;
-        }
-    }
+		moves_this_game++;
+		if (moves_this_game >= MAX_POSITIONS_PER_GAME) {
+			//Determine game result without saving extra moves.
+			do {
+				calculate_best_move(param);
+				int white_eval = (ISWHITE(board->turn)) ? context->score : -context->score;
 
-    free(writeBuffer);
-    return 0;
+				consecutive_high_scores = (white_eval > 2000) ? consecutive_high_scores + 1 : 0;
+				consecutive_low_scores = (white_eval < -2000) ? consecutive_low_scores + 1 : 0;
+				consecutive_draw_scores = (white_eval > -10 && white_eval < 10) ? consecutive_draw_scores + 1 : 0;
+
+				if (consecutive_high_scores > 5 || white_eval >= MIN_MATE_SCORE)
+					packed_board->result = VIRI_WHITE_WIN;
+				else if (consecutive_low_scores > 5 || white_eval <= -MIN_MATE_SCORE)
+					packed_board->result = VIRI_BLACK_WIN;
+				else if (consecutive_draw_scores > 5)
+					packed_board->result = VIRI_DRAW;
+
+				if (packed_board->result < UINT8_MAX)
+					goto adjudication;
+
+
+			} while (!move_from_struct(board, board, context->pv.line[0], &context->repetitions));
+			goto gameover;
+		}
+
+		//End of game
+		if (move_from_struct(board, board, best_move, &context->repetitions)) {
+gameover:
+
+			if (is_draw(board, &context->repetitions))
+				packed_board->result = VIRI_DRAW;
+			else {
+				//Should get detected early, this is a fallback.
+				packed_board->result = get_mate_result(board);
+				switch (packed_board->result) {
+				case VICTOR_BLACK:
+					packed_board->result = VIRI_BLACK_WIN;
+					break;
+				case VICTOR_WHITE:
+					packed_board->result = VIRI_WHITE_WIN;
+					break;
+				default:
+					packed_board->result = VIRI_DRAW;
+					break;
+				}
+			}
+
+			write_buffer->moves_this_game[cur_game_index] = moves_this_game;
+			cur_game_index++;
+			if (cur_game_index >= VIRI_WRITEBUFFER_SIZE) {
+				binpack_write(&details, write_buffer);
+				cur_game_index = 0;
+			}
+			is_new_game = 1;
+			continue;
+		}
+	}
+
+	free(write_buffer);
+	return 0;
 }

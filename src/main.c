@@ -23,697 +23,623 @@
 
 #ifdef SPSA
 
-#define SET_SPA_OPTION_INT(name) \
-    else if(strcmp(str, #name) == 0) \
-    { \
-        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
-        { \
-            sscanf(str, "%d", &name); \
-            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
-        } \
-        break; \
-    }
+#define SET_SPA_OPTION_INT(name)																													\
+	else if (strcmp(str, #name) == 0) {																												\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \																																			\
+			sscanf(str, "%d", &name);																												\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+		}																																			\
+		break;																																		\
+	}
 
-#define SET_SPA_OPTION_LONGLONG(name) \
-    else if(strcmp(str, #name) == 0) \
-    { \
-        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
-        { \
-            sscanf(str, "%lld", &name); \
-            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
-        } \
-        break; \
-    }
-    
-#define SET_SPA_OPTION_FLOAT(name) \
-    else if(strcmp(str, #name) == 0) \
-    { \
-        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) \
-        { \
-            int temp; \
-            sscanf(str, "%d", &temp); \
-            name = temp / 1000.0; \
-            readyUp(&isPathDirty, &isReady, SyzygyPath, context); \
-        } \
-        break; \
-    }
+#define SET_SPA_OPTION_LONGLONG(name)																												\
+	else if (strcmp(str, #name) == 0) {																												\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \																																			\
+			sscanf(str, "%lld", &name);																												\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+		}																																			\
+		break;																																		\
+	}
+
+#define SET_SPA_OPTION_FLOAT(name)																													\
+	else if (strcmp(str, #name) == 0) {																												\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {	\																																	\
+			int temp;																																\
+			sscanf(str, "%d", &temp);																												\
+			name = temp / 1000.0;																													\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+		}																																			\
+		break;																																		\
+	}
 
 #endif
 
-void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* context);
+void ready_up(int *is_path_dirty, int *is_ready, char *SyzygyPath, thread_context * context);
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-    omp_set_num_threads(threadCount);
-    srand(time(NULL));
-    
-    char buffer[4096] = {'\0'};
-    const char* delim = " \t\r\n";
-    char* str = NULL;
-    char* strtok_ptr = NULL;
+	omp_set_num_threads(thread_count);
+	srand(time(NULL));
 
-    int quit = 0;
-    int isReady = 0;
-    
-    char SyzygyPath[1024] = {'\0'};
-    int isPathDirty = 1; //Has syzygy been initialized with the current path?
+	char buffer[4096] = {'\0'};
+	const char *delim = " \t\r\n";
+	char *str = NULL;
+	char *strtok_ptr = NULL;
 
-    char debugLogPath[1024] = {'\0'};
+	int quit = 0;
+	int is_ready = 0;
 
-    threadContext* context = calloc(1, sizeof(threadContext));
-    bitboard* board = &context->boardStack[0];
-    context->maxDepth = MAX_PLY;
-    context->hardMaxNodes = INT32_MAX;
-    context->softMaxNodes = INT32_MAX;
-    context->abortFlag = &abortFlag;
+	char SyzygyPath[1024] = {'\0'};
+	int is_path_dirty = 1; //Has syzygy been initialized with the current path?
 
-    THREADTYPE calculateThread = THREAD_INIT;
+	char debug_log_path[1024] = {'\0'};
 
-    while(!quit)
-    {
-        memset(buffer, 0, 4096 * sizeof(char));
-        while(fgets(buffer, 4096, stdin) == NULL);
-        str = _strtok(buffer, delim, &strtok_ptr);
-        while(str != NULL)
-        {
-            if(strcmp(str, "uci") == 0) 
-            {
-                printf("id name Thom v1.1.0\n");
-                printf("id author Grant Vizaniaris\n");
-                printf("option name Hash type spin default 256 min 1 max 4096\n");
-                printf("option name Threads type spin default 1 min 1 max 64\n");
-                printf("option name Ponder type check default false\n");
-                printf("option name UseNNUE type check default true\n");
-                printf("option name LogFilePath type string default <empty>\n");
-                printf("option name SyzygyPath type string default <empty>\n");
-                printf("option name SyzygyProbeLimit type spin default 5 min 3 max 7\n"); //n-man syzygy tablebase.
-                printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe syzygy at non-root if at least n depth remaining in search.
-                #ifdef SPSA
-                printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
-                printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
+	thread_context *context = calloc(1, sizeof(thread_context));
+	bitboard *board = &context->board_stack[0];
 
-                printf("option name razoring_a type spin default %d min 25 max 250\n", razoring_a);
-                printf("option name razoring_b type spin default %d min 25 max 250\n", razoring_b);
+	context->max_depth = MAX_PLY;
+	context->hard_max_nodes = INT32_MAX;
+	context->soft_max_nodes = INT32_MAX;
+	context->abort_flag = &abort_flag;
 
-                printf("option name futility_margin type spin default %d min 25 max 250\n", futility_margin);
-                printf("option name futility_depth_margin type spin default %d min 25 max 250\n", futility_depth_margin);
+	THREADTYPE calculate_thread = THREAD_INIT;
+
+	while (!quit) {
+		memset(buffer, 0, 4096 * sizeof(char));
+		while (fgets(buffer, 4096, stdin) == NULL);
+		str = _strtok(buffer, delim, &strtok_ptr);
+		while (str != NULL) {
+			if (strcmp(str, "uci") == 0) {
+				printf("id name Thom v1.1.0\n");
+				printf("id author Grant Vizaniaris\n");
+				printf("option name Hash type spin default 256 min 1 max 4096\n");
+				printf("option name Threads type spin default 1 min 1 max 64\n");
+				printf("option name Ponder type check default false\n");
+				printf("option name UseNNUE type check default true\n");
+				printf("option name LogFilePath type string default <empty>\n");
+				printf("option name SyzygyPath type string default <empty>\n");
+				printf("option name SyzygyProbeLimit type spin default 5 min 3 max 7\n"); //n-man syzygy tablebase.
+				printf("option name SyzygyProbeDepth type spin default 6 min 5 max 32\n"); //Probe syzygy at non-root if at least n depth remaining in search.
+				#ifdef SPSA
+				printf("option name initial_aspiration_margin type spin default %d min 10 max 100\n", initial_aspiration_margin);
+				printf("option name aspiration_margin_mult_factor type spin default %d min 1200 max 3000\n", (int) (aspiration_margin_mult_factor * 1000));
+
+				printf("option name razoring_a type spin default %d min 25 max 250\n", razoring_a);
+				printf("option name razoring_b type spin default %d min 25 max 250\n", razoring_b);
+
+				printf("option name futility_margin type spin default %d min 25 max 250\n", futility_margin);
+				printf("option name futility_depth_margin type spin default %d min 25 max 250\n", futility_depth_margin);
 
 
-                printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
-                printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
-                
-                //History values most closely affect branching factor and nodecount. Intead of SPSA tuning them with
-                //weather factory, I modify them with a scipy.minimize() script to minimize nodecount at a fixed depth 
-                //across a perft suite, then verify the results with a SPRT, which is a much faster tuning method.
-                printf("option name historyBonusScale type spin default %d min 1 max 600\n", historyBonusScale);
-                printf("option name historyBonusOffset type spin default %d min 1 max 600\n", historyBonusOffset);
-                printf("option name historyPenaltyScale type spin default %d min 1 max 600\n", historyPenaltyScale);
-                printf("option name historyPenaltyOffset type spin default %d min 1 max 600\n", historyPenaltyOffset);
+				printf("option name reverse_futility_margin type spin default %d min 100 max 400\n", reverse_futility_margin);
+				printf("option name reverse_futility_margin_improving type spin default %d min 50 max 200\n", reverse_futility_margin_improving);
 
-                printf("option name captureHistoryBonusScale type spin default %d min 1 max 600\n", captureHistoryBonusScale);
-                printf("option name captureHistoryBonusOffset type spin default %d min 1 max 600\n", captureHistoryBonusOffset);
-                printf("option name captureHistoryPenaltyScale type spin default %d min 1 max 600\n", captureHistoryPenaltyScale);
-                printf("option name captureHistoryPenaltyOffset type spin default %d min 1 max 600\n", captureHistoryPenaltyOffset);
+				//History values most closely affect branching factor and nodecount. Intead of SPSA tuning them with
+				//weather factory, I modify them with a scipy.minimize() script to minimize nodecount at a fixed depth
+				//across a perft suite, then verify the results with a SPRT, which is a much faster tuning method.
+				printf("option name history_bonus_scale type spin default %d min 1 max 600\n", history_bonus_scale);
+				printf("option name history_bonus_offset type spin default %d min 1 max 600\n", history_bonus_offset);
+				printf("option name history_penalty_scale type spin default %d min 1 max 600\n", history_penalty_scale);
+				printf("option name history_penalty_offset type spin default %d min 1 max 600\n", history_penalty_offset);
 
-                printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
-                printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));
-                
-                printf("option name lmp_a type spin default %d min 500 max 7000\n", (int) (lmp_a * 1000));
-                printf("option name lmp_b type spin default %d min 500 max 7000\n", (int) (lmp_b * 1000));
-                printf("option name lmp_improving_a type spin default %d min 500 max 7000\n", (int) (lmp_improving_a * 1000));
-                printf("option name lmp_improving_b type spin default %d min 500 max 7000\n", (int) (lmp_improving_b * 1000));
-                
-                printf("option name stable_eval_margin type spin default %d min 0 max 75\n", stable_eval_margin);
-                #endif
-                printf("uciok\n");
-                fflush(stdout);
-                break;
-            }
-            else if(strcmp(str, "ucinewgame") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                if(isSearching)
-                {
-                    abortFlag = 1;
-                    THREAD_WAIT(calculateThread);
-                }
-                clear_tt(transpositionTable);
-                memset(context->pawnCorrHist, 0, sizeof(context->pawnCorrHist));
-                memset(context->nonPawnCorrHist, 0, sizeof(context->nonPawnCorrHist));
-                break;
-            }
-            else if(strcmp(str, "setoption") == 0) 
-            {
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "name") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    if(strcmp(str, "Hash") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            uint64_t byteSize;
-                            sscanf(str, "%" PRIu64 "", &byteSize);
-                            tt_bytes = (byteSize * 1024 * 1024);
-                            destroy_hashTable_tt(transpositionTable);
-                            transpositionTable = create_hashTable_tt();
-                            context->tt = transpositionTable;
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "Threads") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(isSearching)
-                            {
-                                DEBUG_ERROR("Cannot change thread count while calculating.");
-                                break;
-                            }
-                            sscanf(str, "%d", &threadCount);
-                            threadCount = _min(MAX_THREADS, _max(MIN_THREADS, threadCount));
-                            omp_set_num_threads(threadCount);
-                        }
-                        
-                        break;
-                    }
-                    else if(strcmp(str, "Ponder") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(strcmp(str, "true") == 0) { enablePonder = 1; }
-                            else { enablePonder = 0; }
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "UseNNUE") == 0 && isNetworkLoaded)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(strcmp(str, "true") == 0) { useNNUE = 1; }
-                            else { useNNUE = 0; }
-                        }
-                        readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                        break;
-                    }
-                    else if(strcmp(str, "Clear") == 0)
-                    {
-                        str = _strtok(NULL, delim, &strtok_ptr);
-                        if(str && strcmp(str, "Hash") == 0)
-                        {
-                            clear_tt(transpositionTable);
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "LogFilePath") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(strcmp(str, "<empty>") == 0)
-                                debugLogPath[0] = '\0';
-                            else
-                            {
-                                strncpy(debugLogPath, str, 1023);
-                                debugLogPath[1023] = '\0';
-                            }
-                            if(printDebugMessages)
-                            {
-                                disableDebugMessages();
-                                enableDebugMessages();
-                            }
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "SyzygyPath") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(strcmp(str, "<empty>") == 0)
-                                debugLogPath[0] = '\0';
-                            else
-                            {
-                                strncpy(SyzygyPath, str, 1023);
-                                SyzygyPath[1023] = '\0';
-                            }
-                            isPathDirty = 1;
-                            if(isReady)
-                                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "SyzygyProbeLimit") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            sscanf(str, "%d", &syzygyProbeLimit);
-                            syzygyProbeLimit = _min(MAX_PROBE_LIMIT, _max(MIN_PROBE_LIMIT, syzygyProbeLimit));
-                        }
-                        break;
-                    }
-                    else if(strcmp(str, "SyzygyProbeDepth") == 0)
-                    {
-                        if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            if(str) sscanf(str, "%d", &syzygyProbeDepth);
-                            syzygyProbeDepth = _min(MAX_PROBE_DEPTH, _max(MIN_PROBE_DEPTH, syzygyProbeDepth));
-                        }
-                        break;
-                    }
-                    #ifdef SPSA
-                    SET_SPA_OPTION_INT(initial_aspiration_margin)
-                    SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
-                    SET_SPA_OPTION_INT(razoring_a)
-                    SET_SPA_OPTION_INT(razoring_b)
-                    SET_SPA_OPTION_INT(reverse_futility_margin)
-                    SET_SPA_OPTION_INT(reverse_futility_margin_improving)
-                    SET_SPA_OPTION_INT(futility_margin)
-                    SET_SPA_OPTION_INT(futility_depth_margin)
-                    SET_SPA_OPTION_INT(historyBonusScale)
-                    SET_SPA_OPTION_INT(historyBonusOffset)
-                    SET_SPA_OPTION_INT(historyPenaltyScale)
-                    SET_SPA_OPTION_INT(historyPenaltyOffset)
-                    SET_SPA_OPTION_INT(captureHistoryBonusScale)
-                    SET_SPA_OPTION_INT(captureHistoryBonusOffset)
-                    SET_SPA_OPTION_INT(captureHistoryPenaltyScale)
-                    SET_SPA_OPTION_INT(captureHistoryPenaltyOffset)
-                    SET_SPA_OPTION_INT(stable_eval_margin)
-                    SET_SPA_OPTION_FLOAT(lmr_a)
-                    SET_SPA_OPTION_FLOAT(lmr_b)
-                    SET_SPA_OPTION_FLOAT(lmp_a)
-                    SET_SPA_OPTION_FLOAT(lmp_b)
-                    SET_SPA_OPTION_FLOAT(lmp_improving_a)
-                    SET_SPA_OPTION_FLOAT(lmp_improving_b)
-                    #endif
-                    break;
-                }
-            }
-            else if(strcmp(str, "isready") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                printf("readyok\n");
-                fflush(stdout);
-            }
-            else if(strcmp(str, "debug") == 0)
-            {
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    if(strcmp(str, "on") == 0) enableDebugMessages();
-                    else if(strcmp(str, "off") == 0) disableDebugMessages();
-                }
-                break;
-            }
-            else if(strcmp(str, "position") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                if(isSearching)
-                {
-                    abortFlag = 1;
-                    THREAD_WAIT(calculateThread);
-                }
+				printf("option name capture_history_bonus_scale type spin default %d min 1 max 600\n", capture_history_bonus_scale);
+				printf("option name capture_history_bonus_offset type spin default %d min 1 max 600\n", capture_history_bonus_offset);
+				printf("option name capture_history_penalty_scale type spin default %d min 1 max 600\n", capture_history_penalty_scale);
+				printf("option name capture_history_penalty_offset type spin default %d min 1 max 600\n", capture_history_penalty_offset);
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    if(strcmp(str, "fen") == 0)
-                    {
-                        char FEN[128] = {'\0'};
-                        short insertIndex = 0;
-                        short length = 0;
+				printf("option name lmr_a type spin default %d min 100 max 2000\n", (int) (lmr_a * 1000));
+				printf("option name lmr_b type spin default %d min 1000 max 5000\n", (int) (lmr_b * 1000));
 
-                        for(int i = 0; i < 6; i++)
-                        {
-                            if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL) break; //Invalid FEN
+				printf("option name lmp_a type spin default %d min 500 max 7000\n", (int) (lmp_a * 1000));
+				printf("option name lmp_b type spin default %d min 500 max 7000\n", (int) (lmp_b * 1000));
+				printf("option name lmp_improving_a type spin default %d min 500 max 7000\n", (int) (lmp_improving_a * 1000));
+				printf("option name lmp_improving_b type spin default %d min 500 max 7000\n", (int) (lmp_improving_b * 1000));
 
-                            length = strlen(str);
-                            strncpy(&FEN[insertIndex], str, 127 - insertIndex);
-                            FEN[127] = '\0';
-                            insertIndex+=length;
-                            if(i < 5) FEN[insertIndex++] = ' ';
-                        }
-                        if(!str) break; //Invalid FEN
-                        load_fen_string_to_board(board, FEN, &context->repetitions);
-                    }
-                    else if(strcmp(str, "startpos") == 0)
-                        load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
+				printf("option name stable_eval_margin type spin default %d min 0 max 75\n", stable_eval_margin);
+				#endif
+				printf("uciok\n");
+				fflush(stdout);
+				break;
+			} else if (strcmp(str, "ucinewgame") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				if (is_searching) {
+					abort_flag = 1;
+					THREAD_WAIT(calculate_thread);
+				}
+				clear_tt(transposition_table);
+				memset(context->pawn_corrhist, 0, sizeof(context->pawn_corrhist));
+				memset(context->nonpawn_corrhist, 0, sizeof(context->nonpawn_corrhist));
+				break;
+			} else if (strcmp(str, "setoption") == 0) {
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "name") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+					if (strcmp(str, "Hash") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							uint64_t byte_size;
 
-                    if((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0)
-                    {
-                        move m;
-                        bitboard tempBoard = *board;
-                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        {
-                            m = getStructFromString(board, str);
-                            if(moveFromStruct(board, board, m, &context->repetitions))
-                            {
-                                //Recover from illegal move
-                                memcpy(board, &tempBoard, sizeof(bitboard));
-                                break;
-                            }
+							sscanf(str, "%" PRIu64 "", &byte_size);
+							tt_bytes = (byte_size * 1024 * 1024);
+							destroy_tt_table(transposition_table);
+							transposition_table = create_tt_table();
+							context->tt = transposition_table;
+						}
+						break;
+					} else if (strcmp(str, "Threads") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (is_searching) {
+								DEBUG_ERROR("Cannot change thread count while calculating.");
+								break;
+							}
+							sscanf(str, "%d", &thread_count);
+							thread_count = _min(MAX_THREADS, _max(MIN_THREADS, thread_count));
+							omp_set_num_threads(thread_count);
+						}
 
-                            memcpy(&tempBoard, board, sizeof(bitboard));
-                        }
-                    }
-                }
-                break; 
-            }
-            else if(strcmp(str, "go") == 0)
-            {
-                if(isSearching) 
-                {
-                    DEBUG_INFO("Aborting search in progress.");
-                    abortFlag = 1;
-                    THREAD_WAIT(calculateThread);
-                }
-                isSearching = 1;
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
+						break;
+					} else if (strcmp(str, "Ponder") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (strcmp(str, "true") == 0)
+								enable_ponder = 1;
+							else
+								enable_ponder = 0;
+						}
+						break;
+					} else if (strcmp(str, "UseNNUE") == 0 && is_network_loaded) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (strcmp(str, "true") == 0)
+								use_nnue = 1;
+							else
+								use_nnue = 0;
+						}
+						ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+						break;
+					} else if (strcmp(str, "Clear") == 0) {
+						str = _strtok(NULL, delim, &strtok_ptr);
+						if (str && strcmp(str, "Hash") == 0)
+							clear_tt(transposition_table);
+						break;
+					} else if (strcmp(str, "LogFilePath") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (strcmp(str, "<empty>") == 0)
+								debug_log_path[0] = '\0';
+							else {
+								strncpy(debug_log_path, str, 1023);
+								debug_log_path[1023] = '\0';
+							}
+							if (print_debug_messages) {
+								disable_debug_messages();
+								enable_debug_messages();
+							}
+						}
+						break;
+					} else if (strcmp(str, "SyzygyPath") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (strcmp(str, "<empty>") == 0)
+								debug_log_path[0] = '\0';
+							else {
+								strncpy(SyzygyPath, str, 1023);
+								SyzygyPath[1023] = '\0';
+							}
+							is_path_dirty = 1;
+							if (is_ready)
+								ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+						}
+						break;
+					} else if (strcmp(str, "SyzygyProbeLimit") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							sscanf(str, "%d", &syzygyProbeLimit);
+							syzygyProbeLimit = _min(MAX_PROBE_LIMIT, _max(MIN_PROBE_LIMIT, syzygyProbeLimit));
+						}
+						break;
+					} else if (strcmp(str, "SyzygyProbeDepth") == 0) {
+						if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							if (str)
+								sscanf(str, "%d", &syzygyProbeDepth);
+							syzygyProbeDepth = _min(MAX_PROBE_DEPTH, _max(MIN_PROBE_DEPTH, syzygyProbeDepth));
+						}
+						break;
+					}
+					#ifdef SPSA
+					SET_SPA_OPTION_INT(initial_aspiration_margin)
+					SET_SPA_OPTION_FLOAT(aspiration_margin_mult_factor)
+					SET_SPA_OPTION_INT(razoring_a)
+					SET_SPA_OPTION_INT(razoring_b)
+					SET_SPA_OPTION_INT(reverse_futility_margin)
+					SET_SPA_OPTION_INT(reverse_futility_margin_improving)
+					SET_SPA_OPTION_INT(futility_margin)
+					SET_SPA_OPTION_INT(futility_depth_margin)
+					SET_SPA_OPTION_INT(history_bonus_scale)
+					SET_SPA_OPTION_INT(history_bonus_offset)
+					SET_SPA_OPTION_INT(history_penalty_scale)
+					SET_SPA_OPTION_INT(history_penalty_offset)
+					SET_SPA_OPTION_INT(capture_history_bonus_scale)
+					SET_SPA_OPTION_INT(capture_history_bonus_offset)
+					SET_SPA_OPTION_INT(capture_history_penalty_scale)
+					SET_SPA_OPTION_INT(capture_history_penalty_offset)
+					SET_SPA_OPTION_INT(stable_eval_margin)
+					SET_SPA_OPTION_FLOAT(lmr_a)
+					SET_SPA_OPTION_FLOAT(lmr_b)
+					SET_SPA_OPTION_FLOAT(lmp_a)
+					SET_SPA_OPTION_FLOAT(lmp_b)
+					SET_SPA_OPTION_FLOAT(lmp_improving_a)
+					SET_SPA_OPTION_FLOAT(lmp_improving_b)
+					#endif
+					break;
+				}
+			} else if (strcmp(str, "isready") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				printf("readyok\n");
+				fflush(stdout);
+			} else if (strcmp(str, "debug") == 0) {
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+					if (strcmp(str, "on") == 0)
+						enable_debug_messages();
+					else if (strcmp(str, "off") == 0)
+						disable_debug_messages();
+				}
+				break;
+			} else if (strcmp(str, "position") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				if (is_searching) {
+					abort_flag = 1;
+					THREAD_WAIT(calculate_thread);
+				}
 
-                int timeLeft = INT32_MAX;
-                int increment = 0;
-                int fixedMoveTime = 0;
-                int isInfinite = 0;
-                isPonder = 0;
-                context->hardMaxNodes = INT32_MAX;
-                context->softMaxNodes = INT32_MAX;
-                memset(context->searchedMoves, 0, MAX_REQUIRED_MOVES * sizeof(move));
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+					if (strcmp(str, "fen") == 0) {
+						char fen[128] = {'\0'};
+						short insert_index = 0;
+						short length = 0;
 
-                short searchedMoveCount = 0;
-                while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    if(strcmp(str, "infinite") == 0)
-                        isInfinite = 1;
-                    else if(strcmp(str, "ponder") == 0)
-                        isPonder = 1;
-                    else if(strcmp(str, "wtime") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &timeLeft);
-                    else if(strcmp(str, "btime") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &timeLeft);
-                    else if(strcmp(str, "winc") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &increment);
-                    else if(strcmp(str, "binc") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &increment);
-                    else if(strcmp(str, "depth") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &context->maxDepth);
-                    else if(strcmp(str, "nodes") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &context->hardMaxNodes);
-                    else if(strcmp(str, "movetime") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                        sscanf(str, "%d", &fixedMoveTime);
-                    else if(strcmp(str, "searchmoves") == 0) //Assume this is the final command in list.
-                        while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searchedMoveCount < MAX_REQUIRED_MOVES) 
-                            context->searchedMoves[searchedMoveCount++] = getStructFromString(board, str);
-                }
+						for (int i = 0; i < 6; i++) {
+							if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+								break;
 
-                context->maxDepth = _min(MAX_PLY, _max(1, context->maxDepth));
+							length = strlen(str);
+							strncpy(&fen[insert_index], str, 127 - insert_index);
+							fen[127] = '\0';
+							insert_index += length;
+							if (i < 5)
+								fen[insert_index++] = ' ';
+						}
 
-                //Finished parsing command modifers, setup & launch thread.
-                context->startTime = clock();
-                if(fixedMoveTime)
-                    context->softEndTime = context->hardEndTime = context->startTime + (fixedMoveTime * CLOCKS_PER_SEC) / 1000;
-                else if(isInfinite)
-                {
-                    context->softEndTime = context->hardEndTime = INT_MAX;
-                    context->maxDepth = MAX_PLY;
-                }
-                else
-                {
-                    int uciOverhead = _min(25, timeLeft / 2);
-                    clock_t softEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
-                    clock_t hardEndTime = timeLeft / 20 + increment / 2 - uciOverhead;
-                    context->softEndTime = (context->startTime + (softEndTime * CLOCKS_PER_SEC) / 1000);
-                    context->hardEndTime = (context->startTime + (hardEndTime * CLOCKS_PER_SEC) / 1000);
-                }
+						//Invalid fen
+						if (!str)
+							break;
 
-                THREAD_START(calculateThread, calculateBestMove, context);
-                break;
-            }
-            else if(strcmp(str, "ponderhit") == 0)
-            {
-                if(isSearching)
-                {
-                    isPonder = 0;
-                    THREAD_WAIT(calculateThread);
-                }
-                else
-                {
-                    isPonder = 0;
-                    THREAD_START(calculateThread, calculateBestMove, context);
-                }
-            }
-            else if(strcmp(str, "stop") == 0)
-            {
-                //Reap the thread, which will print out its results as it terminates.
-                if(isSearching)
-                {
-                    isPonder = 0;
-                    abortFlag = 1;
-                    THREAD_WAIT(calculateThread);
-                }
-                
-            }
-            else if(strcmp(str, "perft") == 0)
-            {
-                //Format: "perft <depth> [--verbose | -v] [--iterator | -iter]"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
+						load_fen_string_to_board(board, fen, &context->repetitions);
+					} else if (strcmp(str, "startpos") == 0)
+						load_fen_string_to_board(board, STARTPOS_FEN, &context->repetitions);
 
-                int pdepth = 1;
-                int verbose = 0;
-                int useIterator = 0;
+					if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "moves") == 0) {
+						move m;
+						bitboard temp_board = *board;
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                sscanf(str, "%d", &pdepth);
+						while ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+							m = get_struct_from_string(board, str);
+							if (move_from_struct(board, board, m, &context->repetitions)) {
+								//Recover from illegal move
+								memcpy(board, &temp_board, sizeof(bitboard));
+								break;
+							}
 
-                while((str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
-                {
-                    if(strcmp(str, "--verbose") == 0 || strcmp(str, "-v") == 0)
-                        verbose = 1;
-                    else if(strcmp(str, "--iterator") == 0 || strcmp(str, "-iter") == 0)
-                        useIterator = 1;
-                }
+							memcpy(&temp_board, board, sizeof(bitboard));
+						}
+					}
+				}
+				break;
+			} else if (strcmp(str, "go") == 0) {
+				if (is_searching) {
+					DEBUG_INFO("Aborting search in progress.");
+					abort_flag = 1;
+					THREAD_WAIT(calculate_thread);
+				}
+				is_searching = 1;
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
 
-                clock_t startTime = clock();
-                uint64_t result;
-                if(!useIterator) 
-                    result = perft(board, pdepth, verbose);
-                else
-                    result = iterator_perft(context, pdepth, 0, verbose);
-                clock_t duration = clock() - startTime;
-                double seconds = ((double) duration / CLOCKS_PER_SEC);
-                double NPS = result / seconds;
-                printf("Searched through %" PRId64 " nodes in %f seconds at %f NPS.\n", result, seconds, NPS);
-                fflush(stdout);
-                break;
-            }
-            else if(strcmp(str, "print") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                board_print(board);
-                break;
-            }
-            else if(strcmp(str, "eval") == 0)
-            {
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                if(useNNUE)
-                    updateAccumulatorFromTable(board, &context->accumulatorStack[0], context->refreshTable);
-                printf("%d\n", useNNUE ? forwardPropagate(context, 0) : hce_eval(board));
-                break;
-            }
-            else if(strcmp(str, "tune") == 0)
-            {
-                //Format: 'tune <double forcedK (0 for auto)> <uint64_t epochs> <double max_lr> <double min_lr> "<inputPath>" "<outputPath>"'
+				int time_left = INT32_MAX;
+				int increment = 0;
+				int fixed_move_time = 0;
+				int is_infinite = 0;
 
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                
-                char inputPath[256] = {'\0'};
-                char outputPath[256] = {'\0'};
-                double forcedK;
-                uint64_t epochs;
-                double max_lr;
-                double min_lr;
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                
-                sscanf(str, "%lf", &forcedK);
+				is_ponder = 0;
+				context->hard_max_nodes = INT32_MAX;
+				context->soft_max_nodes = INT32_MAX;
+				memset(context->searched_moves, 0, MAX_REQUIRED_MOVES * sizeof(move));
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				short searched_move_count = 0;
 
-                sscanf(str, "%" PRId64" ", &epochs);
+				while ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+					if (strcmp(str, "infinite") == 0)
+						is_infinite = 1;
+					else if (strcmp(str, "ponder") == 0)
+						is_ponder = 1;
+					else if (strcmp(str, "wtime") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &time_left);
+					else if (strcmp(str, "btime") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &time_left);
+					else if (strcmp(str, "winc") == 0 && ISWHITE(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &increment);
+					else if (strcmp(str, "binc") == 0 && ISBLACK(board->turn) && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &increment);
+					else if (strcmp(str, "depth") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &context->max_depth);
+					else if (strcmp(str, "nodes") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &context->hard_max_nodes);
+					else if (strcmp(str, "movetime") == 0 && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL)
+						sscanf(str, "%d", &fixed_move_time);
+					else if (strcmp(str, "searchmoves") == 0) //Assume this is the final command in list.
+						while ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && searched_move_count < MAX_REQUIRED_MOVES)
+							context->searched_moves[searched_move_count++] = get_struct_from_string(board, str);
+				}
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                    
-                sscanf(str, "%lf", &max_lr);
+				context->max_depth = _min(MAX_PLY, _max(1, context->max_depth));
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                    
-                sscanf(str, "%lf", &min_lr);
+				//Finished parsing command modifers, setup & launch thread.
+				context->start_time = clock();
+				if (fixed_move_time)
+					context->soft_end_time = context->hard_end_time = context->start_time + (fixed_move_time * CLOCKS_PER_SEC) / 1000;
+				else if (is_infinite) {
+					context->soft_end_time = context->hard_end_time = INT_MAX;
+					context->max_depth = MAX_PLY;
+				} else {
+					int uci_overhead = _min(25, time_left / 2);
+					clock_t soft_end_time = time_left / 20 + increment / 2 - uci_overhead;
+					clock_t hard_end_time = time_left / 20 + increment / 2 - uci_overhead;
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+					context->soft_end_time = (context->start_time + (soft_end_time * CLOCKS_PER_SEC) / 1000);
+					context->hard_end_time = (context->start_time + (hard_end_time * CLOCKS_PER_SEC) / 1000);
+				}
 
-                sscanf(str, "\"%[^\"]", inputPath);
+				THREAD_START(calculate_thread, calculate_best_move, context);
+				break;
+			} else if (strcmp(str, "ponderhit") == 0) {
+				if (is_searching) {
+					is_ponder = 0;
+					THREAD_WAIT(calculate_thread);
+				} else {
+					is_ponder = 0;
+					THREAD_START(calculate_thread, calculate_best_move, context);
+				}
+			} else if (strcmp(str, "stop") == 0) {
+				//Reap the thread, which will print out its results as it terminates.
+				if (is_searching) {
+					is_ponder = 0;
+					abort_flag = 1;
+					THREAD_WAIT(calculate_thread);
+				}
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                
-                sscanf(str, "\"%[^\"]", outputPath);
-                Tune(inputPath, outputPath, forcedK, epochs, max_lr, min_lr);
-                
+			} else if (strcmp(str, "perft") == 0) {
+				//Format: "perft <depth> [--verbose | -v] [--iterator | -iter]"
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
 
-                break;
-            }
-            else if(strcmp(str, "generate") == 0)
-            {
-                //Format: 'generate "<outputFilePath>"'
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				int pdepth = 1;
+				int verbose = 0;
+				int use_iterator = 0;
 
-                generate(str);
-                break;
-            }
-            else if(strcmp(str, "binpackinfo") == 0)
-            {
-                //Format: 'binpackinfo "<binpackFilePath>"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+				sscanf(str, "%d", &pdepth);
 
-                binpackPrintInfo(str);
-                break;
-            }
-            else if(strcmp(str, "cleanbinpack") == 0)
-            {
-                //Format: 'cleanbinpack "<cleanbinpack>"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				while ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {
+					if (strcmp(str, "--verbose") == 0 || strcmp(str, "-v") == 0)
+						verbose = 1;
+					else if (strcmp(str, "--iterator") == 0 || strcmp(str, "-iter") == 0)
+						use_iterator = 1;
+				}
 
-                binpackClean(str);
-                break;
-            }
-            #ifdef TRAIN
-            else if(strcmp(str, "train") == 0)
-            {
-                //Format: "train <epochs> <min_lr> <max_lr> <binpack file path> <kernel file path>"
-                readyUp(&isPathDirty, &isReady, SyzygyPath, context);
-                
-                int epochCount;
-                float minimumLR;
-                float maximumLR;
-                char binpackPath[256] = {'\0'};
-                char kernelPath[256] = {'\0'};
+				clock_t start_time = clock();
+				uint64_t result;
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                    
-                sscanf(str, "%d", &epochCount);
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
-                    
-                sscanf(str, "%f", &minimumLR);
-                    
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				if (!use_iterator)
+					result = perft(board, pdepth, verbose);
+				else
+					result = iterator_perft(context, pdepth, 0, verbose);
 
-                sscanf(str, "%f", &maximumLR);
-                
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				clock_t duration = clock() - start_time;
+				double seconds = ((double) duration / CLOCKS_PER_SEC);
+				double nps = result / seconds;
 
-                sscanf(str, "%s", binpackPath);
+				printf("Searched through %" PRId64 " nodes in %f seconds at %f nps.\n", result, seconds, nps);
+				fflush(stdout);
+				break;
+			} else if (strcmp(str, "print") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				board_print(board);
+				break;
+			} else if (strcmp(str, "eval") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				if (use_nnue)
+					update_accumulator_from_table(board, &context->accumulator_stack[0], context->refresh_table);
+				printf("%d\n", use_nnue ? forward_propagate(context, 0) : hce_eval(board));
+				break;
+			} else if (strcmp(str, "tune") == 0) {
+				//Format: 'tune <double forced_k (0 for auto)> <uint64_t epochs> <double max_lr> <double min_lr> "<input_path>" "<output_path>"'
 
-                if((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
-                    break;
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
 
-                sscanf(str, "%s", kernelPath);
+				char input_path[256] = {'\0'};
+				char output_path[256] = {'\0'};
+				double forced_k;
+				uint64_t epochs;
+				double max_lr;
+				double min_lr;
 
-                train(epochCount, minimumLR, maximumLR, binpackPath, kernelPath);
-                break;
-            }
-            #endif
-            else if(strcmp(str, "quit") == 0) 
-            {
-                quit = 1;
-                if(isSearching)
-                {
-                    isPonder = 0;
-                    abortFlag = 1;
-                    THREAD_WAIT(calculateThread);
-                }
-                break;
-            }
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
 
-            str = _strtok(NULL, delim, &strtok_ptr);
-        }
-    }
+				sscanf(str, "%lf", &forced_k);
 
-    if(context->accumulatorStack)
-        free(context->accumulatorStack);
-    if(context->refreshTable)
-        free(context->refreshTable);
-    if(context) 
-        free(context);
-    destroy_hashTable_tt(transpositionTable);
-    tb_free();
-    disableDebugMessages();  //closes file if open.
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%" PRId64" ", &epochs);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%lf", &max_lr);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%lf", &min_lr);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "\"%[^\"]", input_path);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "\"%[^\"]", output_path);
+				tune(input_path, output_path, forced_k, epochs, max_lr, min_lr);
+
+
+				break;
+			} else if (strcmp(str, "generate") == 0) {
+				//Format: 'generate "<outputFilePath>"'
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				generate(str);
+				break;
+			} else if (strcmp(str, "binpackinfo") == 0) {
+				//Format: 'binpackinfo "<binpackFilePath>"
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				binpack_print_info(str);
+				break;
+			} else if (strcmp(str, "cleanbinpack") == 0) {
+				//Format: 'cleanbinpack "<cleanbinpack>"
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				binpack_clean(str);
+				break;
+			}
+			#ifdef TRAIN
+			else if (strcmp(str, "train") == 0) {
+				//Format: "train <epochs> <min_lr> <max_lr> <binpack file path> <kernel file path>"
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+
+				int epoch_count;
+				float min_lr;
+				float max_lr;
+				char binpack_path[256] = {'\0'};
+				char kernel_path[256] = {'\0'};
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%d", &epoch_count);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%f", &min_lr);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%f", &max_lr);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%s", binpack_path);
+
+				if ((str = _strtok(NULL, delim, &strtok_ptr)) == NULL)
+					break;
+
+				sscanf(str, "%s", kernel_path);
+
+				train(epoch_count, min_lr, max_lr, binpack_path, kernel_path);
+				break;
+			}
+			#endif
+			else if (strcmp(str, "quit") == 0) {
+				quit = 1;
+				if (is_searching) {
+					is_ponder = 0;
+					abort_flag = 1;
+					THREAD_WAIT(calculate_thread);
+				}
+				break;
+			}
+
+			str = _strtok(NULL, delim, &strtok_ptr);
+		}
+	}
+
+	if (context->accumulator_stack)
+		free(context->accumulator_stack);
+	if (context->refresh_table)
+		free(context->refresh_table);
+	if (context)
+		free(context);
+	destroy_tt_table(transposition_table);
+	tb_free();
+	disable_debug_messages();  //closes file if open.
 }
 
-void readyUp(int *isPathDirty, int *isReady, char* SyzygyPath, threadContext* context)
+void ready_up(int *is_path_dirty, int *is_ready, char *SyzygyPath, thread_context *context)
 {
-    if(*isReady) return;
+	if (*is_ready)
+		return;
 
-    *isReady = 1;
-    if(zobrist_piece_keys[0][0] == 0) 
-        initZobristPieceKeys();
-    
-    initSearchTables();
+	*is_ready = 1;
+	if (zobrist_piece_keys[0][0] == 0)
+		init_zobrist_piece_keys();
 
-    if(rookTable[0] == 0) initMagics();
-    if(pawnAttacks[0][0] == 0) initPawnAttacks();
-    if(knightAttacks[0] == 0) initKnightMoveTable();
-    if(kingAttacks[0] == 0) initKingMoveTable();
-    
-    initCuckooMoveTable();
+	init_search_tables();
 
-    init_HCE_tables();
+	if (rook_table[0] == 0)
+		initMagics();
+	if (pawn_attacks[0][0] == 0)
+		init_pawn_attacks();
+	if (knight_attacks[0] == 0)
+		init_knight_move_table();
+	if (king_attacks[0] == 0)
+		init_king_move_table();
 
-    if(!transpositionTable)
-    {
-        transpositionTable = create_hashTable_tt();
-        context->tt = transpositionTable;
-    }
+	init_cuckoo_move_table();
 
-    initNNUE();
-    if(useNNUE)
-    {
-        if(!context->accumulatorStack)
-            context->accumulatorStack = calloc(MAX_PLY + 1, sizeof(accumulator));
-        if(!context->refreshTable)
-            context->refreshTable = calloc(1, sizeof(accumulatorRefreshTable));
-    }
-    else
-    {
-        if(context->accumulatorStack)
-        {
-            free(context->accumulatorStack);
-            context->accumulatorStack = NULL;
-        }
-        if(context->refreshTable)
-        {
-            free(context->refreshTable);
-            context->refreshTable = NULL;
-        }
-    }
-    
-    if(*isPathDirty)
-    {
-        tb_init(SyzygyPath);
-        isPathDirty = 0;
-    }
-    
-    load_fen_string_to_board(&context->boardStack[0], STARTPOS_FEN, &context->repetitions);
+	init_hce_tables();
+
+	if (!transposition_table) {
+		transposition_table = create_tt_table();
+		context->tt = transposition_table;
+	}
+
+	init_nnue();
+	if (use_nnue) {
+		if (!context->accumulator_stack)
+			context->accumulator_stack = calloc(MAX_PLY + 1, sizeof(accumulator));
+		if (!context->refresh_table)
+			context->refresh_table = calloc(1, sizeof(accumulator_refresh_table));
+	} else {
+		if (context->accumulator_stack) {
+			free(context->accumulator_stack);
+			context->accumulator_stack = NULL;
+		}
+		if (context->refresh_table) {
+			free(context->refresh_table);
+			context->refresh_table = NULL;
+		}
+	}
+
+	if (*is_path_dirty) {
+		tb_init(SyzygyPath);
+		is_path_dirty = 0;
+	}
+
+	load_fen_string_to_board(&context->board_stack[0], STARTPOS_FEN, &context->repetitions);
 }

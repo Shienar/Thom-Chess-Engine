@@ -8,7 +8,7 @@ ifdef DEBUG
 else
 
 ifdef VERIFY
-$(error VERIFY cannot be compiled without DEBUG)	
+$(error VERIFY cannot be compiled without DEBUG)
 endif
 	CFLAGS += -O3
 	CFLAGS += -DNDEBUG
@@ -61,11 +61,11 @@ ifdef TRAIN
 		SRCFILES += $(wildcard src/train/hip/*.c)
 
 		HIP_ROOT = $(subst \,/,$(HIP_PATH))
-		CFLAGS += -I"$(HIP_ROOT)/include" 
+		CFLAGS += -I"$(HIP_ROOT)/include"
 		LIBS += -L"$(HIP_ROOT)/lib"
 		KFLAGS = -ffast-math -O3 --genco --offload-arch=native -mprintf-kind=buffered -I$(SRC_DIR)
 		KC = hipcc
-		
+
 
 		ifneq ($(shell which nvcc 2>/dev/null),)
 			CFLAGS +=  -D__HIP_PLATFORM_NVIDIA__
@@ -84,7 +84,7 @@ ifdef TRAIN
 		LIBS += -lOpenCL
 		CFLAGS := $(filter-out -static,$(CFLAGS))
 	endif
-	
+
 	ifdef KPERFT
 		CFLAGS += -DPERFT_KERNELS
 	endif
@@ -134,7 +134,7 @@ $(KTARGET): src/train/hip/kernels.hip
 ifdef TRAIN
 clean:
 	rm -f $(OBJFILES) $(DEPS) $(TARGET) $(KTARGET)
-else 
+else
 clean:
 	rm -f $(OBJFILES) $(DEPS) $(TARGET)
 endif

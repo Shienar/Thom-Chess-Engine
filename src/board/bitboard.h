@@ -55,7 +55,7 @@
 
 #define STARTPOS_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-#define columnNames "abcdefgh"
+#define COLUMN_NAMES "abcdefgh"
 
 #define DARK_SQUARES 0xAA55AA55AA55AA55
 #define LIGHT_SQUARES 0x55AA55AA55AA55AA
@@ -82,131 +82,141 @@ extern uint64_t bordering_files[COLUMN_COUNT];
 #define TEXT_COLOR_SOURCE_BLACK_PIECE "\033[48;2;130;130;50;38;2;255;100;100m"
 #define TEXT_NONE "\033[0m"
 
-#define getColumn(square) (square%8)
-#define getRow(square) (square/8)
+static inline int get_column(int square)
+{
+	return square % 8;
+}
+static inline int get_row(int square)
+{
+	return square / 8;
+}
 
-void getSquareName(int square, char* target);
-char* getMoveSquareName(move m);
-int getSquareNumber(char* squareName);
-#define findPieceOnSquare(board, square) (board->pieceArr[square])
+void get_square_name(int square, char *target);
+char *get_move_square_name(move m);
+int get_square_number(char *square_name);
 
-int isDraw(bitboard* board, repetitionVector* repetitions);
-int getMateResult(bitboard* board);
+int is_draw(bitboard * board, repetition_vector * repetitions);
+int get_mate_result(bitboard *board);
 
 //Required by pyrrhic.
 //Return index of popped bit in range [0,63]
-int popLSB(uint64_t *bitboard);
+int pop_lsb(uint64_t *bitboard);
 
-void export_fen_from_board(bitboard* board, char* outputFenString);
-void load_fen_string_to_board(bitboard* board, const char* fenString, repetitionVector* repetitions);
+void export_fen_from_board(bitboard *board, char *output_fen_string);
+void load_fen_string_to_board(bitboard *board, const char *fen_string, repetition_vector *repetitions);
 
-static inline void board_clear_square(bitboard* board, int square)
+static inline void board_clear_square(bitboard *board, int square)
 {
-    assert(board);
-    assert(square >= 0 && square <= 63);
+	assert(board);
+	assert(square >= 0 && square <= 63);
 
-    int pieceType = findPieceOnSquare(board, square);
-    if(pieceType == EMPTY_PIECE) return;
+	int piece_type = (board->piece_arr[square]);
 
-    board->pieces[pieceType] &= ~(1ull << (square));
-    board->pieces_side[COLOR(pieceType)] &= ~(1ull << (square));
-    board->pieces_all &= ~(1ull << (square));
-    board->pieceArr[square] = EMPTY_PIECE;
-    board->hashCode ^= zobrist_piece_keys[pieceType][square];
-    if(ISPAWN(pieceType))
-        board->pawnHash ^= zobrist_piece_keys[pieceType][square];
-    else
-        board->nonPawnHash[COLOR(pieceType)] ^= zobrist_piece_keys[pieceType][square];
+	if (piece_type == EMPTY_PIECE)
+		return;
+
+	board->pieces[piece_type] &= ~(1ull << (square));
+	board->pieces_side[COLOR(piece_type)] &= ~(1ull << (square));
+	board->pieces_all &= ~(1ull << (square));
+	board->piece_arr[square] = EMPTY_PIECE;
+	board->hash_code ^= zobrist_piece_keys[piece_type][square];
+	if (ISPAWN(piece_type))
+		board->pawn_hash ^= zobrist_piece_keys[piece_type][square];
+	else
+		board->nonpawn_hash[COLOR(piece_type)] ^= zobrist_piece_keys[piece_type][square];
 }
 
 //Assumes the target square is empty.
-static inline void board_set(bitboard* board, int square, int piece)
+static inline void board_set(bitboard *board, int square, int piece)
 {
-    assert(board);
-    assert(square >= 0 && square <= 63);
-    assert(piece != EMPTY_PIECE);
-    
-    board->pieces[piece] |= (1ull << (square));
-    board->pieces_side[COLOR(piece)] |= (1ull << (square));
-    board->pieces_all |= (1ull << (square));
-    board->pieceArr[square] = piece;
-    board->hashCode ^= zobrist_piece_keys[piece][square];
+	assert(board);
+	assert(square >= 0 && square <= 63);
+	assert(piece != EMPTY_PIECE);
 
-    if(ISPAWN(piece))
-        board->pawnHash ^= zobrist_piece_keys[piece][square];
-    else
-        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][square];
+	board->pieces[piece] |= (1ull << (square));
+	board->pieces_side[COLOR(piece)] |= (1ull << (square));
+	board->pieces_all |= (1ull << (square));
+	board->piece_arr[square] = piece;
+	board->hash_code ^= zobrist_piece_keys[piece][square];
+
+	if (ISPAWN(piece))
+		board->pawn_hash ^= zobrist_piece_keys[piece][square];
+	else
+		board->nonpawn_hash[COLOR(piece)] ^= zobrist_piece_keys[piece][square];
 }
 
 //Allows for capture.
-static inline void board_move_piece(bitboard* board, int from, int to)
+static inline void board_move_piece(bitboard *board, int from, int to)
 {
-    int targetPiece = findPieceOnSquare(board, to);
-    int piece = findPieceOnSquare(board, from);
-    assert(piece != EMPTY_PIECE);
+	int targetPiece = (board->piece_arr[to]);
+	int piece = (board->piece_arr[from]);
 
-    board->hashCode ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    if(ISPAWN(piece))
-        board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    else
-        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    
-    uint64_t mask = (1ull << (from)) | (1ull << (to));
-    board->pieces[piece] ^= mask;
-    board->pieces_side[COLOR(piece)] ^= mask;
+	assert(piece != EMPTY_PIECE);
 
-    board->pieces_all &= ~(1ull << (from));
-    board->pieces_all |= (1ull << (to));
-    
-    if(targetPiece != EMPTY_PIECE)
-    {
-        board->hashCode ^= zobrist_piece_keys[targetPiece][to];
-        if(ISPAWN(targetPiece))
-            board->pawnHash ^= zobrist_piece_keys[targetPiece][to];
-        else
-            board->nonPawnHash[COLOR(targetPiece)]^=zobrist_piece_keys[targetPiece][to];
+	board->hash_code ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+	if (ISPAWN(piece))
+		board->pawn_hash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+	else
+		board->nonpawn_hash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
 
-        board->pieces_side[COLOR(targetPiece)] &= ~(1ull << (to));
-        board->pieces[targetPiece] &= ~(1ull << (to));
-    }   
-    
-    board->pieceArr[to] = piece;
-    board->pieceArr[from] = EMPTY_PIECE;
+	uint64_t mask = (1ull << (from)) | (1ull << (to));
+
+	board->pieces[piece] ^= mask;
+	board->pieces_side[COLOR(piece)] ^= mask;
+
+	board->pieces_all &= ~(1ull << (from));
+	board->pieces_all |= (1ull << (to));
+
+	if (targetPiece != EMPTY_PIECE) {
+		board->hash_code ^= zobrist_piece_keys[targetPiece][to];
+		if (ISPAWN(targetPiece))
+			board->pawn_hash ^= zobrist_piece_keys[targetPiece][to];
+		else
+			board->nonpawn_hash[COLOR(targetPiece)] ^= zobrist_piece_keys[targetPiece][to];
+
+		board->pieces_side[COLOR(targetPiece)] &= ~(1ull << (to));
+		board->pieces[targetPiece] &= ~(1ull << (to));
+	}
+
+	board->piece_arr[to] = piece;
+	board->piece_arr[from] = EMPTY_PIECE;
 }
 
-//We know that some moves aren't captures. (e.g. castle, pawn pushes, unmoves) 
-static inline void board_move_piece_quietly(bitboard* board, int from, int to)
+//We know that some moves aren't captures. (e.g. castle, pawn pushes, unmoves)
+static inline void board_move_piece_quietly(bitboard *board, int from, int to)
 {
-    int piece = findPieceOnSquare(board, from);
-    assert(piece != EMPTY_PIECE);
+	int piece = (board->piece_arr[from]);
 
-    board->hashCode ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    if(ISPAWN(piece))
-        board->pawnHash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    else
-        board->nonPawnHash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
-    
-    
-    uint64_t mask = (1ull << (from)) | (1ull << (to));
-    board->pieces[piece] ^= mask;
-    board->pieces_side[COLOR(piece)] ^= mask;
-    board->pieces_all ^= mask;
-    
-    board->pieceArr[to] = piece;
-    board->pieceArr[from] = EMPTY_PIECE;
+	assert(piece != EMPTY_PIECE);
+
+	board->hash_code ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+	if (ISPAWN(piece))
+		board->pawn_hash ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+	else
+		board->nonpawn_hash[COLOR(piece)] ^= zobrist_piece_keys[piece][from] ^ zobrist_piece_keys[piece][to];
+
+
+	uint64_t mask = (1ull << (from)) | (1ull << (to));
+
+	board->pieces[piece] ^= mask;
+	board->pieces_side[COLOR(piece)] ^= mask;
+	board->pieces_all ^= mask;
+
+	board->piece_arr[to] = piece;
+	board->piece_arr[from] = EMPTY_PIECE;
 }
 
-void piece_print(char boardArray[8][9], uint64_t piece, char printChar);
-void board_print(bitboard* board);
-void values_print(bitboard* board);
+void piece_print(char board_array[8][9], uint64_t piece, char print_char);
+void board_print(bitboard *board);
+void values_print(bitboard *board);
 void bitmask_print(uint64_t mask, char fill);
 
-static inline void createCompactMove(move* m, int startSquare, int endSquare, int promoteTo)
+static inline void create_compact_move(move *m, int start_square, int end_square, int promote_to)
 {
-    assert(m);
-    m->startSquare = startSquare;
-    m->endSquare = endSquare;
-    m->promoteTo = promoteTo;
+	assert(m);
+	m->start_square = start_square;
+	m->end_square = end_square;
+	m->promote_to = promote_to;
 }
 
-int countRepetitions(bitboard* board, repetitionVector* repetitions);
+int count_repetitions(bitboard *board, repetition_vector *repetitions);

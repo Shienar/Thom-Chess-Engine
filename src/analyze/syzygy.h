@@ -2,5 +2,5 @@
 
 #include "board/board.h"
 
-int getSyzygyResult(bitboard* board);
-void filterSyzygyMoves(bitboard* board, move* requiredMoves);
+int get_syzygy_result(bitboard *board);
+void filter_syzygy_moves(bitboard *board, move *required_moves);

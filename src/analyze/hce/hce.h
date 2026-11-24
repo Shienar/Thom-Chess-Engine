@@ -17,85 +17,85 @@
 #define ROOK_ATTACK_WEIGHT 3
 #define QUEEN_ATTACK_WEIGHT 5
 
-typedef struct eval_t {
-    int32_t mg;
-    int32_t eg;
-} eval_t;
+typedef struct phased_eval {
+	int32_t mg;
+	int32_t eg;
+} phased_eval;
 
 #define P(mg, eg) {mg, eg}
 
-#define EVAL_ADD(dest, val) \
-    do { \
-        (dest).mg += (val).mg; \
-        (dest).eg += (val).eg; \
-    } while(0)
-    
-#define EVAL_MADD(dest, val, mul) \
-    do { \
-        (dest).mg += mul * (val).mg; \
-        (dest).eg += mul * (val).eg; \
-    } while(0)
+static inline void eval_add(phased_eval *dest, phased_eval val)
+{
+	dest->mg += val.mg;
+	dest->eg += val.eg;
+}
 
-#define EVAL_SUB(dest, val) \
-    do { \
-        (dest).mg -= (val).mg; \
-        (dest).eg -= (val).eg; \
-    } while(0)
+static inline void eval_madd(phased_eval *dest, phased_eval val, int mul)
+{
+	dest->mg += mul * val.mg;
+	dest->eg += mul * val.eg;
+}
 
-typedef struct evalContext {
-    uint64_t kingZone[2];
-    int32_t attackWeight[2];
-} evalContext;
+static inline void eval_sub(phased_eval *dest, phased_eval val)
+{
+	dest->mg -= val.mg;
+	dest->eg -= val.eg;
+}
+
+typedef struct eval_context {
+	uint64_t king_zone[2];
+	int32_t attack_weight[2];
+} eval_context;
 
 //Externally visible for tuning.
 //Everything is a bonus and everything gets added. Some bonuses happen to be negative.
-typedef union evalParameters {
-    struct {
-        eval_t genericPieceValues[PIECE_TYPE_COUNT];
-        eval_t rawPieceTables[PIECE_TYPE_COUNT][64];
+typedef union eval_parameters {
+	struct {
+		phased_eval generic_piece_values[PIECE_TYPE_COUNT];
+		phased_eval raw_piece_tables[PIECE_TYPE_COUNT][64];
 
-        eval_t knightMobilityBonus[9];
-        eval_t bishopMobilityBonus[14];
-        eval_t rookMobilityBonus[15];
-        eval_t queenMobilityBonus[28];
-        eval_t virtualMobilityBonus[28];
-        
-        eval_t minorPawnCover;
-        eval_t passedPawnBonus[ROW_COUNT];
-        eval_t connectedPawnBonus[ROW_COUNT];
-        eval_t neighborPawnBonus[ROW_COUNT];
-        eval_t doubledPawnBonus[COLUMN_COUNT];
-        eval_t isolatedPawnBonus[COLUMN_COUNT];
+		phased_eval knight_mobility_bonus[9];
+		phased_eval bishop_mobility_bonus[14];
+		phased_eval rook_mobility_bonus[15];
+		phased_eval queen_mobility_bonus[28];
+		phased_eval virtual_mobility_bonus[28];
 
-        eval_t knightOutpostBonus;
+		phased_eval minor_pawn_cover;
+		phased_eval passed_pawn_bonus[ROW_COUNT];
+		phased_eval connected_pawn_bonus[ROW_COUNT];
+		phased_eval neighbor_pawn_bonus[ROW_COUNT];
+		phased_eval doubled_pawn_bonus[COLUMN_COUNT];
+		phased_eval isolated_pawn_bonus[COLUMN_COUNT];
 
-        eval_t bishopPairBonus;
-        eval_t badBishopBonus;
-        
-        eval_t openRookFileBonus[2];
-        eval_t connectedRookBonus[MAX_ROOK_CONNECTIONS];
+		phased_eval knight_outpost_bonus;
 
-        eval_t connectedQueenBonus[MAX_QUEEN_CONNECTIONS];
+		phased_eval bishop_pair_bonus;
+		phased_eval bad_bishop_bonus;
 
-        eval_t kingPawnShieldBonus[COLUMN_COUNT];
-        eval_t kingPawnStormBonus[ROW_COUNT];
-        eval_t openKingFile[2];
-        eval_t kingSafety[100];
+		phased_eval open_rook_file_bonus[2];
+		phased_eval connected_rook_bonus[MAX_ROOK_CONNECTIONS];
 
-        eval_t tempo;
-    };
-    eval_t parameters[0];
-} evalParameters;
+		phased_eval connected_queen_bonus[MAX_QUEEN_CONNECTIONS];
 
-#define PARAMETER_COUNT (sizeof(evalParameters) / sizeof(eval_t))
+		phased_eval king_shield_bonus[COLUMN_COUNT];
+		phased_eval king_storm_bonus[ROW_COUNT];
+		phased_eval open_king_file[2];
+		phased_eval king_safety[100];
 
-extern evalParameters hce_params; 
-extern int gamephasePieceValues[PIECE_COUNT];
-extern uint64_t kingPawnShieldMask[2][COLUMN_COUNT];
-extern uint64_t kingPawnStormMask[COLUMN_COUNT];
-extern uint64_t kingZone[2][64];
-extern int attackWeight[8];
+		phased_eval tempo;
+	};
+	phased_eval parameters[0];
+} eval_parameters;
 
-void init_HCE_tables();
-int evaluatePhasedScore(bitboard* board, eval_t eval);
-int hce_eval(bitboard* board);
+#define PARAMETER_COUNT (sizeof(eval_parameters) / sizeof(phased_eval))
+
+extern eval_parameters hce_params;
+extern int gamephase_piece_values[PIECE_COUNT];
+extern uint64_t king_shield_mask[2][COLUMN_COUNT];
+extern uint64_t king_storm_mask[COLUMN_COUNT];
+extern uint64_t king_zone[2][64];
+extern int attack_weight[8];
+
+void init_hce_tables(void);
+int evaluate_phased_score(bitboard *board, phased_eval eval);
+int hce_eval(bitboard *board);

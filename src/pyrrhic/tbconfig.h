@@ -46,14 +46,14 @@
 #define PYRRHIC_LSB(x)                   (__builtin_ctzll(x))
 
 //Returns index of popped bit.
-#define PYRRHIC_POPLSB(x)                popLSB(x)
+#define PYRRHIC_POPLSB(x)                pop_lsb(x)
 
-#define PYRRHIC_PAWN_ATTACKS(sq, c)      (pyrrhicPawnAttacks(sq, c))
-#define PYRRHIC_KNIGHT_ATTACKS(sq)       (knightMoves(0, sq))
-#define PYRRHIC_BISHOP_ATTACKS(sq, occ)  (bishopMoves(0, occ, sq))
-#define PYRRHIC_ROOK_ATTACKS(sq, occ)    (rookMoves(0, occ, sq))
-#define PYRRHIC_QUEEN_ATTACKS(sq, occ)   (queenMoves(0, occ, sq))
-#define PYRRHIC_KING_ATTACKS(sq)         (pyrrhicKingAttacks(sq))
+#define PYRRHIC_PAWN_ATTACKS(sq, c)      (pyrrhic_pawn_attacks(sq, c))
+#define PYRRHIC_KNIGHT_ATTACKS(sq)       (knight_moves(0, sq))
+#define PYRRHIC_BISHOP_ATTACKS(sq, occ)  (bishop_moves(0, occ, sq))
+#define PYRRHIC_ROOK_ATTACKS(sq, occ)    (rook_moves(0, occ, sq))
+#define PYRRHIC_QUEEN_ATTACKS(sq, occ)   (queen_moves(0, occ, sq))
+#define PYRRHIC_KING_ATTACKS(sq)         (pyrrhic_king_attacks(sq))
 
 #define MIN_PROBE_LIMIT 3
 #define MAX_PROBE_LIMIT 7

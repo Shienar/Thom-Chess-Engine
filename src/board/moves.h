@@ -27,33 +27,33 @@
 #define BLACK_PAWN_LEFTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~board_file[7])) >> 7) & board->pieces_side[WHITE])
 #define BLACK_PAWN_RIGHTATTACKS(board)  (((board->pieces[BLACK_PAWN] & (~board_file[0])) >> 9) & board->pieces_side[WHITE])
 
-#define EN_PASSANT_ATTACKERS_WHITE(epMask, board) ((((epMask >> 7) & (~board_file[0])) | ((epMask >> 9) & (~board_file[7]))) & board->pieces[WHITE_PAWN])
-#define EN_PASSANT_ATTACKERS_BLACK(epMask, board) ((((epMask << 7) & (~board_file[7])) | ((epMask << 9) & (~board_file[0]))) & board->pieces[BLACK_PAWN])
+#define EN_PASSANT_ATTACKERS_WHITE(ep_mask, board) ((((ep_mask >> 7) & (~board_file[0])) | ((ep_mask >> 9) & (~board_file[7]))) & board->pieces[WHITE_PAWN])
+#define EN_PASSANT_ATTACKERS_BLACK(ep_mask, board) ((((ep_mask << 7) & (~board_file[7])) | ((ep_mask << 9) & (~board_file[0]))) & board->pieces[BLACK_PAWN])
 
-int generateMoveList(move* movesList, bitboard* board, int capturesOnly);
+int generate_move_list(move * moves_list, bitboard * board, int captures_only);
 
-extern const int pieceValuesSEE[15];
-extern char* promoteSymbols[16];
+extern const int piece_values_see[15];
+extern char *promote_symbols[16];
 
 #define COUNTERMOVE_BONUS 3000
 #define FOLLOWUPMOVE_BONUS 2000
-moveIterator* create_move_iterator(struct threadContext* context, int capturesOnly, int ply, move* ttMove);
-move* iterate_next_move(moveIterator* iter);
+move_iterator *create_move_iterator(struct thread_context *context, int captures_only, int ply, move *tt_move);
+move *iterate_next_move(move_iterator *iter);
 
-int isThreatened(bitboard* board, int square, int defendingColor);
+int is_threatened(bitboard *board, int square, int defending_color);
 
 //Includes illegal moves (in regards to check)
-uint64_t pyrrhicPawnAttacks(int square, int color);
-uint64_t bishopMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
-uint64_t knightMoves(uint64_t allyPieces, int square);
-uint64_t rookMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
-uint64_t queenMoves(uint64_t allyPieces, uint64_t enemyPieces, int square);
-uint64_t pyrrhicKingAttacks(int square);
-uint64_t kingMoves(bitboard* board, int square, int color);
+uint64_t pyrrhic_pawn_attacks(int square, int color);
+uint64_t bishop_moves(uint64_t ally_pieces, uint64_t enemy_pieces, int square);
+uint64_t knight_moves(uint64_t ally_pieces, int square);
+uint64_t rook_moves(uint64_t ally_pieces, uint64_t enemy_pieces, int square);
+uint64_t queen_moves(uint64_t ally_pieces, uint64_t enemy_pieces, int square);
+uint64_t pyrrhic_king_attacks(int square);
+uint64_t king_moves(bitboard *board, int square, int color);
 
-int movePiece(bitboard* board, move compactMove, repetitionVector* repetitions);
+int move_piece(bitboard *board, move compact_move, repetition_vector *repetitions);
 
-int moveFromStruct(bitboard* board, bitboard* newBoard, move m, repetitionVector* repetitions);
-move getStructFromString(bitboard* board, char* str);
+int move_from_struct(bitboard *board, bitboard *new_board, move m, repetition_vector *repetitions);
+move get_struct_from_string(bitboard *board, char *str);
 
-void applyNullMove(bitboard* board, bitboard* newBoard, repetitionVector* repetitions);
+void apply_null_move(bitboard *board, bitboard *new_board, repetition_vector *repetitions);

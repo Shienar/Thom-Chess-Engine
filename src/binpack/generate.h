@@ -3,6 +3,6 @@
 #include "compatibility.h"
 #include <stdint.h>
 
-void generate(const char* path);
-uint32_t rng_xorshift32(uint32_t* seed);
-THREAD_RETURN generateWorkerThread(THREAD_PARAM param);
+void generate(const char *path);
+uint32_t rng_xorshift32(uint32_t *seed);
+THREAD_RETURN generate_worker_thread(THREAD_PARAM param);
