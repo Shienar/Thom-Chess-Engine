@@ -14,15 +14,11 @@ file_dir = os.path.dirname(os.path.abspath(__file__))
 fen_path = os.path.join(file_dir, 'middlegame.epd')
 fen_list = getFENList(fen_path)
 
-values = np.copy(engine.defaultHistoryValues)
+values = np.copy(engine.default_history_values)
 best_values = np.copy(values)
 min_limits = np.clip(values - 50, min=1)
 max_limits = np.clip(values + 50, max=600)
 bounds = [(min, max) for min, max in zip(min_limits, max_limits)]
-
-print(f"Default values: {values}\n")
-
-lowest_nodecount = int(1e9)
 
 def testFEN(values, fen):
     global engine
@@ -31,42 +27,49 @@ def testFEN(values, fen):
     engine.send_command("ucinewgame\n")
     engine.setFEN(fen)
     engine.send_command(f"go depth {DEPTH}\n")
-    
+
     output_lines = engine.read_until("bestmove")
 
     nodes_regex = re.compile(r"nodes (\d+)")
     nodes = 0
-    
+
     nodecount_info = nodes_regex.search(output_lines[-2])
     if nodecount_info:
         nodes = int(nodecount_info.group(1))
-            
+
     return nodes
 
-def getNodeCount(values, func):
+lowest_nodecount = 0
+def get_node_count(values, func):
     global iteration
     global best_values
     global lowest_nodecount
 
     rounded_values = [round(p) for p in values]
-    
+
     nodelist = np.zeros(len(fen_list))
     for index, fen in enumerate(fen_list):
-        nodelist[index] = func(rounded_values, fen.fenStr)
+        nodelist[index] = func(rounded_values, fen.fen_string)
     nodes = np.sum(nodelist)
 
-    print(f"\033[1A\033[2K[{iteration}]: Values {rounded_values} reached a nodecount of {nodes:,} | Best Values {best_values} reached a nodecount of {lowest_nodecount:,}")
+    if lowest_nodecount != 0:
+        print(f"\033[1A\033[2K[{iteration}]: Values {rounded_values} reached a nodecount of {nodes:,} | Best Values {best_values} reached a nodecount of {lowest_nodecount:,}")
+
+    if nodes < lowest_nodecount:
+        best_values = rounded_values[:]
+        lowest_nodecount = nodes
 
     return nodes
 
-iterations_since_improvement = 0
 iteration = 0
-lowest_nodecount = getNodeCount(best_values, testFEN)
+lowest_nodecount = get_node_count(best_values, testFEN)
 rng = np.random.default_rng()
+print(f"Default values: {values} reached a nodecount of {lowest_nodecount:,}\n")
 while True:
     iteration = iteration + 1
+    pre_nodecount = lowest_nodecount
     result = minimize(
-        getNodeCount,
+        get_node_count,
         values,
         args=testFEN,
         method='Powell',
@@ -78,19 +81,10 @@ while True:
         }
     )
     rounded_values = np.array([round(p) for p in result.x])
-    if result.fun < lowest_nodecount:
-        lowest_nodecount = result.fun
-        best_values = rounded_values[:]
-        iterations_since_improvement = 0
-
-        min_limits = np.clip(rounded_values - 50, min=1)
-        max_limits = np.clip(rounded_values + 50, max=600)
-        bounds = [(min, max) for min, max in zip(min_limits, max_limits)]
-    else:
-        iterations_since_improvement = iterations_since_improvement + 1
-
-    if iterations_since_improvement > 10:
+    if pre_nodecount <= lowest_nodecount:
         break
 
-    values = rounded_values[:] + rng.normal(loc=0, scale=5, size=values.shape)
-    values = np.clip(values, min_limits, max_limits)
+    min_limits = np.clip(rounded_values - 50, min=1)
+    max_limits = np.clip(rounded_values + 50, max=600)
+    bounds = [(min, max) for min, max in zip(min_limits, max_limits)]
+    values = best_values[:]

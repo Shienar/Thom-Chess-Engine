@@ -458,6 +458,8 @@ int principal_variation_search(thread_context *context, int alpha, int beta, int
 			if (q_score < alpha) {
 				RECORD_SEARCH(context->razoring_prunes++;);
 				return q_score;
+			} else {
+				RECORD_SEARCH(context->failed_razoring_prunes++;);
 			}
 		}
 
@@ -484,6 +486,9 @@ int principal_variation_search(thread_context *context, int alpha, int beta, int
 					return null_score;
 				else
 					return beta;
+			}
+			else {
+				RECORD_SEARCH(context->failed_nmp_prunes++;);
 			}
 		}
 	}
@@ -1093,7 +1098,9 @@ THREAD_RETURN calculate_best_move(THREAD_PARAM param)
 	printf("\t%-25s %18s\n", "TT Reductions:", comma_delimit_number(buf, context->tt_reductions));
 	printf("\t%-25s %18s\n", "RFP Prunes:", comma_delimit_number(buf, context->rfp_prunes));
 	printf("\t%-25s %18s\n", "Razoring Prunes:", comma_delimit_number(buf, context->razoring_prunes));
+	printf("\t%-25s %18s\n", "Failed Razorings:", comma_delimit_number(buf, context->failed_razoring_prunes));
 	printf("\t%-25s %18s\n", "NMP Prunes:", comma_delimit_number(buf, context->nmp_prunes));
+	printf("\t%-25s %18s\n", "Failed NMP Search:", comma_delimit_number(buf, context->failed_nmp_prunes));
 #endif
 
 	print_resulting_moves(best_move, ponder_move);

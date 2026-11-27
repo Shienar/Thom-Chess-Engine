@@ -17,9 +17,9 @@ nodes_regex  = re.compile(r"(\d+)")
 fail_count = 0
 for index, info in enumerate(fen_list):
     print(f"\033[2K\rSearching FEN {index + 1}/{len(fen_list)}", end='')
-    engine.setFEN(info.fenStr)
-    
-    for depth, expectedOutput in enumerate(info.perftResults):
+    engine.setFEN(info.fen_string)
+
+    for depth, expectedOutput in enumerate(info.perft_results):
         if expectedOutput != 0 and expectedOutput <= MAX_NODES and depth >= MIN_DEPTH and depth <= MAX_DEPTH :
             engine.send_command(f"perft {depth}\n")
             line = engine.process.stdout.readline()
@@ -30,9 +30,9 @@ for index, info in enumerate(fen_list):
             if output != expectedOutput:
                 fail_count = fail_count + 1
                 print("\033[2K\rERROR:")
-                print(f"\t{info.fenStr}")
+                print(f"\t{info.fen_string}")
                 print(f"\tExpected {expectedOutput:,} nodes at depth {depth}, but got {output:,} in output.")
-                
+
 
 
 print(f"\033[2K\rPERFT TEST FINISHED, {fail_count} FAILS")

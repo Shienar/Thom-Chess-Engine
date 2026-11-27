@@ -25,29 +25,29 @@
 
 #define SET_SPA_OPTION_INT(name)																													\
 	else if (strcmp(str, #name) == 0) {																												\
-		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \																																			\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \
 			sscanf(str, "%d", &name);																												\
-			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																				\
 		}																																			\
 		break;																																		\
 	}
 
 #define SET_SPA_OPTION_LONGLONG(name)																												\
 	else if (strcmp(str, #name) == 0) {																												\
-		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \																																			\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) { \
 			sscanf(str, "%lld", &name);																												\
-			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																				\
 		}																																			\
 		break;																																		\
 	}
 
 #define SET_SPA_OPTION_FLOAT(name)																													\
 	else if (strcmp(str, #name) == 0) {																												\
-		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {	\																																	\
+		if ((str = _strtok(NULL, delim, &strtok_ptr)) != NULL && strcmp(str, "value") == 0  && (str = _strtok(NULL, delim, &strtok_ptr)) != NULL) {	\
 			int temp;																																\
 			sscanf(str, "%d", &temp);																												\
 			name = temp / 1000.0;																													\
-			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																					\
+			ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);																				\
 		}																																			\
 		break;																																		\
 	}

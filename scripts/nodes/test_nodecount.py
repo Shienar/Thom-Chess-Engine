@@ -21,7 +21,7 @@ def testFEN(fen):
     engine.send_command("ucinewgame\n")
     engine.setFEN(fen)
     engine.send_command(f"go depth {DEPTH}\n")
-    
+
     output_lines = engine.read_until("bestmove")
 
     nodes_regex = re.compile(r"nodes\s*(\d+)")
@@ -37,8 +37,8 @@ nodelist = np.zeros(len(fen_list))
 
 for index, fen in enumerate(fen_list):
     print(f"\033[2K\r{index+1}/{len(fen_list)}", end = '')
-    nodelist[index] = testFEN(fen.fenStr)
-    
+    nodelist[index] = testFEN(fen.fen_string)
+
 nodes = np.sum(nodelist)
 avg = np.average(nodelist)
 print(f"\033[2K\rTotal Nodes: {nodes:,}")

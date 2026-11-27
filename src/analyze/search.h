@@ -112,6 +112,8 @@ typedef struct thread_context {
 			uint64_t tt_reductions;
 			uint64_t rfp_prunes;
 			uint64_t razoring_prunes;
+			uint64_t failed_razoring_prunes;
+			uint64_t failed_nmp_prunes;
 			uint64_t nmp_prunes;
 		};
 

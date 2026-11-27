@@ -3,9 +3,9 @@
 #include "analyze/search.h"
 #include <stdlib.h>
 
-int history_bonus_scale = 266;
-int history_bonus_offset = 181;
-int history_penalty_scale = 431;
+int history_bonus_scale = 226;
+int history_bonus_offset = 155;
+int history_penalty_scale = 405;
 int history_penalty_offset = 194;
 
 int capture_history_bonus_scale = 346;

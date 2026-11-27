@@ -12,12 +12,12 @@ nodes_regex  = re.compile(r"(\d+)")
 fen = ""
 results = np.zeros(6, dtype=np.int64)
 
-with open(TARGET_FILE, "w", encoding="utf-8") as outputFile:
-    with open(SOURCE_FILE, "r", encoding="utf-8") as inputFile:
-        for lineNum, line in enumerate(inputFile):
+with open(TARGET_FILE, "w", encoding="utf-8") as output_file:
+    with open(SOURCE_FILE, "r", encoding="utf-8") as input_file:
+        for line_num, line in enumerate(input_file):
             if line.lstrip()[:1] == "#":
-                print(f"{lineNum} | {line}", end='')
-                outputFile.write(line)
+                print(f"{line_num} | {line}", end='')
+                output_file.write(line)
                 continue
 
             fen = line.rstrip()
@@ -30,6 +30,6 @@ with open(TARGET_FILE, "w", encoding="utf-8") as outputFile:
                 results[depth - 1] = int(regex_info.group(1))
 
             # depth 6 is too big for most middlegame positions. Billions of positions is the norm, and I don't want to spend an hour on this.
-            print(f"{lineNum} | {fen} ;D1 {results[0]} ;D2 {results[1]} ;D3 {results[2]} ;D4 {results[3]} ;D5 {results[4]} ;D6 0")
-            outputFile.write(f"{fen} ;D1 {results[0]} ;D2 {results[1]} ;D3 {results[2]} ;D4 {results[3]} ;D5 {results[4]} ;D6 0\n")
-            outputFile.flush()
+            print(f"{line_num} | {fen} ;D1 {results[0]} ;D2 {results[1]} ;D3 {results[2]} ;D4 {results[3]} ;D5 {results[4]} ;D6 0")
+            output_file.write(f"{fen} ;D1 {results[0]} ;D2 {results[1]} ;D3 {results[2]} ;D4 {results[3]} ;D5 {results[4]} ;D6 0\n")
+            output_file.flush()

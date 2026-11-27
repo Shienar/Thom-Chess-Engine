@@ -16,53 +16,52 @@ stm = WHITE
 
 score_regex = re.compile(r"score cp (-?\d+)")
 
-with open(BOOK_FILE, "r", encoding="utf-8") as bookFile:
-    with open(OUTPUT_FILE, "a", encoding="utf-8") as outputFile:
+with open(BOOK_FILE, "r", encoding="utf-8") as book_file:
+    with open(OUTPUT_FILE, "a", encoding="utf-8") as output_file:
 
-        lines = bookFile.readlines()
+        lines = book_file.readlines()
         random.shuffle(lines)
 
         # Add a white-to-move FEN on even, else black.
-        fensWritten = 0
+        fens_written = 0
 
-        for openingFEN in lines:
-            if fensWritten >= MAX_FENS:
+        for opening_fen in lines:
+            if fens_written >= MAX_FENS:
                 break
-            
-            openingFEN = openingFEN.rstrip("\n")
+
+            opening_fen = opening_fen.rstrip("\n")
 
             engine.send_command("ucinewgame\n")
             moves = []
-            engine.setFEN(openingFEN, moves)
+            engine.setFEN(opening_fen, moves)
 
-            words = openingFEN.split()
+            words = opening_fen.split()
             stm = WHITE if words[-5] == 'w' else BLACK
-            halfMoveCount = 2 * int(words[-1])
-            initialHalfMoveCount = halfMoveCount
+            half_move_count = 2 * int(words[-1])
             if stm == BLACK:
-                halfMoveCount = halfMoveCount + 1
+                half_move_count = half_move_count + 1
 
             score = 0
             while abs(score) < 35:
-                cmd = engine.setFEN(openingFEN, moves)
+                cmd = engine.setFEN(opening_fen, moves)
                 engine.send_command(f"go depth {DEPTH}\n")
                 output_lines = engine.read_until("bestmove")
                 moves.append(output_lines[-1].split()[-1])
-                
+
                 score_info = score_regex.search(output_lines[-2])
                 if not score_info:
                     break
                 score = int(score_info.group(1))
 
-                if len(moves) > 6 and abs(score) < 25 and stm == fensWritten % 2:
-                    fenStr = engine.getFEN()
-                    fensWritten += 1
-                    print(f"\033[2K\r[{fensWritten}] - {fenStr}")
-                    outputFile.write(f"\n{fenStr}")
-                    outputFile.flush()
+                if len(moves) > 6 and abs(score) < 25 and stm == fens_written % 2:
+                    fen_string = engine.getFEN()
+                    fens_written += 1
+                    print(f"\033[2K\r[{fens_written}] - {fen_string}")
+                    output_file.write(f"\n{fen_string}")
+                    output_file.flush()
                     break
 
 
-                halfMoveCount = halfMoveCount + 1
-                stm = halfMoveCount % 2
+                half_move_count = half_move_count + 1
+                stm = half_move_count % 2
 
