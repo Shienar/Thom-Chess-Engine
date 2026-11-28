@@ -8,7 +8,12 @@
 #include "compatibility.h"
 
 extern uint8_t abort_flag;
+
 extern volatile uint8_t is_ponder;
+
+extern uint8_t ponder_locks_initialized;
+extern cond_var ponder_cond_var;
+extern mutex ponder_lock;
 
 #ifdef SEARCHINFO
 #define RECORD_SEARCH(x) do { x } while (0)

@@ -328,20 +328,22 @@ int main(int argc, char **argv)
 				}
 				break;
 			} else if (strcmp(str, "go") == 0) {
+				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
+				is_ponder = 0;
+
 				if (is_searching) {
 					DEBUG_INFO("Aborting search in progress.");
 					abort_flag = 1;
+					BROADCAST_COND_VAR(ponder_cond_var);
 					THREAD_WAIT(calculate_thread);
 				}
 				is_searching = 1;
-				ready_up(&is_path_dirty, &is_ready, SyzygyPath, context);
 
 				int time_left = INT32_MAX;
 				int increment = 0;
 				int fixed_move_time = 0;
 				int is_infinite = 0;
 
-				is_ponder = 0;
 				context->hard_max_nodes = INT32_MAX;
 				context->soft_max_nodes = INT32_MAX;
 				memset(context->searched_moves, 0, MAX_REQUIRED_MOVES * sizeof(move));
@@ -395,6 +397,7 @@ int main(int argc, char **argv)
 			} else if (strcmp(str, "ponderhit") == 0) {
 				if (is_searching) {
 					is_ponder = 0;
+					BROADCAST_COND_VAR(ponder_cond_var);
 					THREAD_WAIT(calculate_thread);
 				} else {
 					is_ponder = 0;
@@ -404,6 +407,7 @@ int main(int argc, char **argv)
 				//Reap the thread, which will print out its results as it terminates.
 				if (is_searching) {
 					is_ponder = 0;
+					BROADCAST_COND_VAR(ponder_cond_var);
 					abort_flag = 1;
 					THREAD_WAIT(calculate_thread);
 				}
@@ -569,6 +573,7 @@ int main(int argc, char **argv)
 				quit = 1;
 				if (is_searching) {
 					is_ponder = 0;
+					BROADCAST_COND_VAR(ponder_cond_var);
 					abort_flag = 1;
 					THREAD_WAIT(calculate_thread);
 				}
@@ -585,6 +590,10 @@ int main(int argc, char **argv)
 		free(context->refresh_table);
 	if (context)
 		free(context);
+	if(ponder_locks_initialized) {
+		DESTROY_COND_VAR(ponder_cond_var);
+		DESTROY_MUTEX(ponder_lock);
+	}
 	destroy_tt_table(transposition_table);
 	tb_free();
 	disable_debug_messages();  //closes file if open.
@@ -642,4 +651,8 @@ void ready_up(int *is_path_dirty, int *is_ready, char *SyzygyPath, thread_contex
 	}
 
 	load_fen_string_to_board(&context->board_stack[0], STARTPOS_FEN, &context->repetitions);
+
+	ponder_locks_initialized = 1;
+	CREATE_COND_VAR(ponder_cond_var);
+	CREATE_MUTEX(ponder_lock);
 }

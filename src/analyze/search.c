@@ -17,6 +17,10 @@ int enable_ponder = 0;
 int is_searching = 0;
 int suppress_uci_messages = 0;
 
+uint8_t ponder_locks_initialized = 0;
+cond_var ponder_cond_var;
+mutex ponder_lock;
+
 //Global flag. Each context's abort flag will
 //point to this with the exception of data generation
 //since that involves multiple games from one process.
@@ -1102,6 +1106,10 @@ THREAD_RETURN calculate_best_move(THREAD_PARAM param)
 	printf("\t%-25s %18s\n", "NMP Prunes:", comma_delimit_number(buf, context->nmp_prunes));
 	printf("\t%-25s %18s\n", "Failed NMP Search:", comma_delimit_number(buf, context->failed_nmp_prunes));
 #endif
+
+	while (is_ponder) {
+		WAIT_COND_VAR(ponder_cond_var, ponder_lock);
+	}
 
 	print_resulting_moves(best_move, ponder_move);
 	is_searching = 0;

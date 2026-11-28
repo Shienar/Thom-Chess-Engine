@@ -94,7 +94,7 @@ typedef struct binpack_details {
 
 	//Writing
 	FILE *binpack;
-	mutex_t lock;
+	mutex lock;
 	int written_this_session;
 	clock_t last_print_time;
 	clock_t start_time;

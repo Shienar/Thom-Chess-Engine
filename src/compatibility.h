@@ -33,11 +33,18 @@
 
 	#define THREAD_START(thread, func, arg) thread = CreateThread(NULL, 0, func, arg, 0, NULL)
 
-	#define mutex_t CRITICAL_SECTION
+	#define mutex CRITICAL_SECTION
 	#define CREATE_MUTEX(mutex) InitializeCriticalSection(&mutex)
 	#define LOCK_MUTEX(mutex) EnterCriticalSection(&mutex)
 	#define UNLOCK_MUTEX(mutex) LeaveCriticalSection(&mutex)
 	#define DESTROY_MUTEX(mutex) DeleteCriticalSection(&mutex)
+
+	#define cond_var CONDITION_VARIABLE
+	#define CREATE_COND_VAR(cond_var) InitializeConditionVariable(&cond_var)
+	#define DESTROY_COND_VAR(cond_var)
+	#define WAIT_COND_VAR(cond_var, mutex) SleepConditionVariableCS(&cond_var, &mutex, INFINITE)
+	#define SIGNAL_COND_VAR(cond_var) WakeConditionVariable(&cond_var)
+	#define BROADCAST_COND_VAR(cond_var) WakeAllConditionVariable(&cond_var)
 
 	typedef struct mmap_handle_t {
 		HANDLE file_handle;
@@ -80,11 +87,18 @@
 	#define THREAD_START(thread, func, arg) pthread_create(&thread, NULL, func, (void *)arg)
 	#define THREAD_WAIT(thread) pthread_join(thread, NULL)
 
-	#define mutex_t pthread_mutex_t
+	#define mutex pthread_mutex_t
 	#define CREATE_MUTEX(mutex) pthread_mutex_init(&mutex, NULL)
 	#define LOCK_MUTEX(mutex) pthread_mutex_lock(&mutex)
 	#define UNLOCK_MUTEX(mutex) pthread_mutex_unlock(&mutex)
 	#define DESTROY_MUTEX(mutex) pthread_mutex_destroy(&mutex)
+
+	#define cond_var pthread_cond_t
+	#define CREATE_COND_VAR(cond_var) pthread_cond_init(&cond_var, NULL)
+	#define DESTROY_COND_VAR(cond_var) pthread_cond_destroy(&cond_var)
+	#define WAIT_COND_VAR(cond_var, mutex) pthread_cond_wait(&cond_var, &mutex)
+	#define SIGNAL_COND_VAR(cond_var) pthread_cond_signal(&cond_var)
+	#define BROADCAST_COND_VAR(cond_var) pthread_cond_broadcast(&cond_var)
 
 	typedef struct mmap_handle_t {
 		int fd;
